@@ -12,6 +12,9 @@ and rolls back to the previously active managed or external VPN after failure.
 The primary command is `mazzy-vpn`. The installer also creates the compatibility
 aliases `vpnctl` and `mazzyvpn`.
 
+[Architecture and operation diagrams](docs/ARCHITECTURE.en.md) ·
+[Архитектура на русском](docs/ARCHITECTURE.ru.md)
+
 ## Install
 
 ```bash

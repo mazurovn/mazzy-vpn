@@ -11,6 +11,9 @@ endpoint, запускает только один управляемый тун
 
 Основная команда — `mazzy-vpn`. Совместимые aliases: `vpnctl` и `mazzyvpn`.
 
+[Архитектура и схемы работы](docs/ARCHITECTURE.ru.md) ·
+[Architecture in English](docs/ARCHITECTURE.en.md)
+
 ## Установка
 
 ```bash

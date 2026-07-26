@@ -7,6 +7,9 @@ Mazzy VPN은 AmneziaWG, WireGuard, OpenVPN 및 NetworkManager L2TP/IPsec을
 하나로 관리하는 Linux VPN 도구입니다. 대화형 TUI, 자동화용 CLI, 안전한 설정
 가져오기, 연결 검사, 자동 롤백이 포함된 실제 터널 테스트를 제공합니다.
 
+[영문 아키텍처 및 동작 다이어그램](docs/ARCHITECTURE.en.md) ·
+[러시아어 아키텍처 다이어그램](docs/ARCHITECTURE.ru.md)
+
 ## 설치 및 언어
 
 ```bash

@@ -8,6 +8,9 @@ NetworkManager L2TP/IPsec. Er bietet eine interaktive TUI, eine skriptfähige
 CLI, sichere Profilimporte, Verbindungsprüfungen und transaktionale Live-Tests
 mit automatischem Rollback.
 
+[Architekturdiagramme auf Englisch](docs/ARCHITECTURE.en.md) ·
+[Architektur auf Russisch](docs/ARCHITECTURE.ru.md)
+
 ## Installation und Sprache
 
 ```bash

@@ -26,6 +26,9 @@ live tests and restores the previously working connection after a failure.
 [Deutsch](README.de.md) · [中文](README.zh.md) ·
 [日本語](README.ja.md) · [한국어](README.ko.md)
 
+[Architecture diagrams](docs/ARCHITECTURE.en.md) ·
+[Схемы архитектуры](docs/ARCHITECTURE.ru.md)
+
 - Live CLI/TUI dashboard with connection checks, selected location, default
   config, handshake, public IP, autostart and health-monitor state.
 - Quick connection through the saved default profile: `mazzy-vpn quick`.
