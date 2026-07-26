@@ -2,6 +2,13 @@
 
 All notable changes to Mazzy VPN are documented here.
 
+## Unreleased
+
+- Added English and Russian architecture documentation with component,
+  connection, recovery and transactional rollback diagrams.
+- Updated the installer and post-install checks to preserve the architecture
+  documentation in `/usr/local/lib/mazzy-vpn/docs`.
+
 ## 1.0.0 — 2026-07-26
 
 - Introduced the `mazzy-vpn` CLI/TUI with `vpnctl` and `mazzyvpn` aliases.

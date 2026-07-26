@@ -770,9 +770,11 @@ stage="$TMP/stage"
    -f "$stage/usr/local/lib/mazzy-vpn/README.zh.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/README.ja.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/README.ko.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.en.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/LICENSE" &&
    -f "$stage/usr/local/lib/mazzy-vpn/AUTHORS.md" ]] ||
-    fail "six-language documentation was not staged"
+    fail "six-language and architecture documentation was not staged"
 [[ -f "$stage/usr/local/share/bash-completion/completions/mazzy-vpn" ]] ||
     fail "Mazzy VPN completion was not staged"
 for protocol_dir in amneziawg wireguard openvpn l2tp; do

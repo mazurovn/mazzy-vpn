@@ -161,7 +161,8 @@ validate_source_tree() {
     local required
     for required in mazzy-vpn install.sh LICENSE AUTHORS.md CHANGELOG.md SECURITY.md \
         README.md README.ru.md README.en.md README.de.md README.zh.md \
-        README.ja.md README.ko.md tests/run.sh tests/audit-public.sh \
+        README.ja.md README.ko.md docs/ARCHITECTURE.en.md \
+        docs/ARCHITECTURE.ru.md tests/run.sh tests/audit-public.sh \
         completions/mazzy-vpn systemd/vpnctl.service \
         systemd/vpnctl-health.service systemd/vpnctl-health.timer \
         systemd/vpnctl-test-recovery.service; do
@@ -235,6 +236,8 @@ post_install_checks() {
        -r /usr/local/lib/mazzy-vpn/README.zh.md &&
        -r /usr/local/lib/mazzy-vpn/README.ja.md &&
        -r /usr/local/lib/mazzy-vpn/README.ko.md &&
+       -r /usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.en.md &&
+       -r /usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.ru.md &&
        -r /usr/local/lib/mazzy-vpn/LICENSE &&
        -r /usr/local/lib/mazzy-vpn/AUTHORS.md &&
        -r /usr/local/share/bash-completion/completions/mazzy-vpn ]] ||
@@ -443,11 +446,13 @@ copy_profiles() {
 install_files() {
     local bin_dir="$DESTDIR/usr/local/bin"
     local lib_dir="$DESTDIR/usr/local/lib/mazzy-vpn"
+    local docs_dir="$lib_dir/docs"
     local config_dir="$DESTDIR/etc/vpnctl/profiles"
     local unit_dir="$DESTDIR/etc/systemd/system"
     local completion_dir="$DESTDIR/usr/local/share/bash-completion/completions"
 
-    run install -d -m 755 "$bin_dir" "$lib_dir" "$unit_dir" "$completion_dir"
+    run install -d -m 755 "$bin_dir" "$lib_dir" "$docs_dir" \
+        "$unit_dir" "$completion_dir"
     run install -d -m 700 "$DESTDIR/etc/vpnctl" "$config_dir" \
         "$config_dir/amneziawg" "$config_dir/wireguard" \
         "$config_dir/openvpn" "$config_dir/l2tp"
@@ -467,6 +472,10 @@ install_files() {
     run install -m 644 "$SCRIPT_DIR/README.zh.md" "$lib_dir/README.zh.md"
     run install -m 644 "$SCRIPT_DIR/README.ja.md" "$lib_dir/README.ja.md"
     run install -m 644 "$SCRIPT_DIR/README.ko.md" "$lib_dir/README.ko.md"
+    run install -m 644 "$SCRIPT_DIR/docs/ARCHITECTURE.en.md" \
+        "$docs_dir/ARCHITECTURE.en.md"
+    run install -m 644 "$SCRIPT_DIR/docs/ARCHITECTURE.ru.md" \
+        "$docs_dir/ARCHITECTURE.ru.md"
     run install -m 644 "$SCRIPT_DIR/LICENSE" "$lib_dir/LICENSE"
     run install -m 644 "$SCRIPT_DIR/AUTHORS.md" "$lib_dir/AUTHORS.md"
     run install -m 644 "$SCRIPT_DIR/CHANGELOG.md" "$lib_dir/CHANGELOG.md"
@@ -494,6 +503,7 @@ install_files() {
             "$lib_dir/README.md" "$lib_dir/README.ru.md" "$lib_dir/README.en.md" \
             "$lib_dir/README.de.md" "$lib_dir/README.zh.md" \
             "$lib_dir/README.ja.md" "$lib_dir/README.ko.md" \
+            "$docs_dir/ARCHITECTURE.en.md" "$docs_dir/ARCHITECTURE.ru.md" \
             "$lib_dir/LICENSE" "$lib_dir/AUTHORS.md" "$lib_dir/CHANGELOG.md" \
             "$lib_dir/SECURITY.md" \
             "$unit_dir/vpnctl.service" \
