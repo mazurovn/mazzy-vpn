@@ -1,15 +1,18 @@
-# Mazzy VPN 1.0.0
+# Mazzy VPN 1.1.0
 
 Copyright (C) 2026 Nik m ([@mazurovn](https://github.com/mazurovn)).
 
 ## English
 
-The first stable release of Mazzy VPN, a transactional Linux CLI/TUI for
-AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec profiles.
+Mazzy VPN 1.1.0 adds a secure Desktop Dashboard and system tray to the
+transactional Linux CLI/TUI for AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec.
 
 Highlights:
 
 - interactive terminal menu and the `mazzy-vpn` command;
+- Tauri 2 Desktop Dashboard and tray with functional Linux AppImage, DEB and
+  RPM bundles;
+- sanitized JSON status cache with no endpoint, profile path or VPN secret;
 - live dashboard, selected location and saved default-config quick connection;
 - Russian, English, German, Chinese, Japanese and Korean interface selection;
 - automatic profile discovery and folder import with safe permissions;
@@ -19,7 +22,9 @@ Highlights:
   recovery of an inactive desired service and reconnect after two confirmed
   traffic failures;
 - optional AdGuard VPN fallback without publishing personal credentials;
-- installation and usage documentation in six languages.
+- installation and usage documentation in six languages;
+- macOS and Windows UI preview builds, clearly marked as non-functional until
+  native VPN backends and signing are implemented.
 
 Install:
 
@@ -36,12 +41,14 @@ release. Import your own folder with
 
 ## Русский
 
-Первый стабильный выпуск Mazzy VPN — транзакционного CLI/TUI-клиента Linux для
-профилей AmneziaWG, WireGuard, OpenVPN и L2TP/IPsec.
+Mazzy VPN 1.1.0 добавляет безопасный Desktop Dashboard и системный tray к
+транзакционному Linux CLI/TUI для AmneziaWG, WireGuard, OpenVPN и L2TP/IPsec.
 
 Основные возможности:
 
 - интерактивное терминальное меню и команда `mazzy-vpn`;
+- Tauri 2 Desktop Dashboard и tray с рабочими Linux AppImage, DEB и RPM;
+- очищенный JSON status cache без endpoint, пути профиля и VPN-секретов;
 - единый dashboard, выбранная локация и быстрое подключение default-конфига;
 - выбор русского, английского, немецкого, китайского, японского или корейского;
 - автоматическое распознавание профилей и импорт папок с безопасными правами;
@@ -51,7 +58,9 @@ release. Import your own folder with
   остановленный сервис запускается сразу, а две подтверждённые ошибки трафика
   вызывают переподключение;
 - необязательный резерв через AdGuard VPN без публикации личных данных;
-- инструкции по установке и использованию на шести языках.
+- инструкции по установке и использованию на шести языках;
+- preview-сборки macOS и Windows, явно отмеченные как нерабочие до реализации
+  нативных VPN backends и подписи.
 
 Установка:
 

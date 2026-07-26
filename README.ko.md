@@ -51,6 +51,15 @@ mazzy-vpn quick
 `mazzy-vpn quick`은 다시 선택하지 않고 저장된 기본 설정으로 연결합니다. 기본
 설정이 없으면 프로필 선택 화면을 열고 선택한 값을 새 기본값으로 저장합니다.
 
+### Desktop 대시보드와 트레이
+
+Tauri Desktop은 Quick Connect, Reconnect, Disconnect, Refresh,
+Self-diagnostics를 창과 시스템 트레이에서 제공합니다. Linux 버전은 설치된
+CLI와 함께 실제로 동작하며 AppImage, DEB, RPM으로 제공됩니다. macOS와
+Windows는 네이티브 VPN 백엔드가 구현되기 전까지 UI 미리보기입니다. GUI는
+프로필이나 키를 읽지 않습니다. 자세한 내용:
+[Desktop guide (English)](docs/DESKTOP.en.md).
+
 ## 주요 명령
 
 ```bash

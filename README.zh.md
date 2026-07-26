@@ -50,6 +50,14 @@ mazzy-vpn quick
 `mazzy-vpn quick` 无需再次选择即可连接已保存的默认配置。如果尚未设置默认
 配置，Mazzy VPN 会打开配置选择界面，并把本次选择保存为默认值。
 
+### 桌面仪表板与托盘
+
+Tauri 桌面应用在现代窗口和系统托盘中提供快速连接、重新连接、断开、
+刷新和自我诊断。Linux 版本可与已安装的 CLI 正常配合，并提供 AppImage、
+DEB 和 RPM。macOS 与 Windows 目前仅为界面预览，原生 VPN 后端尚未实现。
+GUI 不读取配置文件或密钥。详情见
+[Desktop guide (English)](docs/DESKTOP.en.md)。
+
 ## 常用命令
 
 ```bash

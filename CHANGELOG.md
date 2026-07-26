@@ -2,12 +2,26 @@
 
 All notable changes to Mazzy VPN are documented here.
 
-## Unreleased
+## 1.1.0 — 2026-07-26
 
 - Added English and Russian architecture documentation with component,
   connection, recovery and transactional rollback diagrams.
 - Updated the installer and post-install checks to preserve the architecture
   documentation in `/usr/local/lib/mazzy-vpn/docs`.
+- Added a sanitized machine-readable `status --json` cache that exposes no VPN
+  endpoint, profile path, private key or configuration directive.
+- Added a Tauri 2 Desktop Dashboard with six UI languages, connection health,
+  default location, protocol, interface, handshake, public-IP privacy toggle,
+  profile counts and activity state.
+- Added a system tray menu for Quick Connect, Reconnect, Disconnect, Refresh,
+  Self-diagnostics and Quit.
+- Added functional Linux AppImage, DEB and RPM bundle builds. macOS and Windows
+  bundles are explicitly labeled as UI previews until native VPN backends are
+  implemented.
+- Added pinned multi-platform GitHub Actions, Rust unit tests, Clippy checks and
+  npm dependency auditing for Desktop.
+- Added bilingual Desktop guides, updated all six project guides and added
+  Dashboard images for the repository and Wiki.
 
 ## 1.0.0 — 2026-07-26
 

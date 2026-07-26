@@ -1,0 +1,18 @@
+{
+  "name": "mazzy-vpn-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Mazzy VPN Desktop dashboard and tray companion for Mazzy VPN CLI",
+  "author": "Nik m (@mazurovn)",
+  "license": "AGPL-3.0-or-later",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "build:release": "node scripts/build-release.mjs",
+    "check": "cargo check --manifest-path src-tauri/Cargo.toml",
+    "test": "cargo test --manifest-path src-tauri/Cargo.toml"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.2"
+  }
+}

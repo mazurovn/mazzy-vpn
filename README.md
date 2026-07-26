@@ -13,7 +13,7 @@
   <a href="LICENSE"><img alt="License: AGPL-3.0-or-later" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-8f7dff"></a>
   <a href="https://github.com/mazurovn/mazzy-vpn/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mazurovn/mazzy-vpn/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Linux" src="https://img.shields.io/badge/platform-Linux-65e7ff">
-  <img alt="Version 1.0.0" src="https://img.shields.io/badge/version-1.0.0-ef70ff">
+  <img alt="Version 1.1.0" src="https://img.shields.io/badge/version-1.1.0-ef70ff">
 </p>
 
 Mazzy VPN is a Linux VPN manager with a guided terminal UI and an
@@ -27,10 +27,18 @@ live tests and restores the previously working connection after a failure.
 [日本語](README.ja.md) · [한국어](README.ko.md)
 
 [Architecture diagrams](docs/ARCHITECTURE.en.md) ·
-[Схемы архитектуры](docs/ARCHITECTURE.ru.md)
+[Схемы архитектуры](docs/ARCHITECTURE.ru.md) ·
+[Desktop Dashboard](docs/DESKTOP.en.md) ·
+[Desktop Dashboard на русском](docs/DESKTOP.ru.md) ·
+[Project Wiki](https://github.com/mazurovn/mazzy-vpn/wiki)
+
+![Mazzy VPN Desktop Dashboard](docs/images/dashboard-connected-preview.png)
 
 - Live CLI/TUI dashboard with connection checks, selected location, default
   config, handshake, public IP, autostart and health-monitor state.
+- Tauri 2 Desktop Dashboard and tray. Linux is a functional CLI companion with
+  AppImage, DEB and RPM bundles; macOS and Windows builds are explicitly marked
+  as UI previews until native VPN backends are implemented.
 - Quick connection through the saved default profile: `mazzy-vpn quick`.
 - Two-layer unattended recovery: systemd restarts an exited process, while an
   independent 20-second health monitor reconnects a stalled tunnel.

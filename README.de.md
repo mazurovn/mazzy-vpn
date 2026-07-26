@@ -54,6 +54,15 @@ Profilanzahlen.
 `mazzy-vpn quick` verbindet die gespeicherte Standardkonfiguration ohne erneute
 Auswahl. Ist noch kein Standard vorhanden, öffnet Mazzy VPN die Profilauswahl.
 
+### Desktop Dashboard und Tray
+
+Die Tauri-Desktop-App bietet Quick Connect, Reconnect, Disconnect, Refresh und
+Selbstdiagnose in einem modernen Fenster und im System-Tray. Unter Linux ist sie
+ein funktionsfähiger Begleiter des installierten CLI und wird als AppImage, DEB
+und RPM gebaut. macOS und Windows sind UI-Vorschauen, bis native VPN-Backends
+implementiert sind. Die GUI liest keine Profile oder Schlüssel. Details:
+[Desktop guide (English)](docs/DESKTOP.en.md).
+
 ## Wichtige Befehle
 
 ```bash

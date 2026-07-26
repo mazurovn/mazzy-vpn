@@ -107,6 +107,7 @@ sudo mazzy-vpn connect amneziawg 1
 sudo mazzy-vpn disconnect
 sudo mazzy-vpn reconnect
 mazzy-vpn status
+mazzy-vpn status --json
 mazzy-vpn diagnose
 mazzy-vpn validate all
 mazzy-vpn probe all --timeout 3
@@ -130,6 +131,21 @@ autostart, health monitor, fallback and profile counts.
 If no default exists, the TUI asks for a profile and saves it as the default.
 Change the language immediately with menu item 16 or
 `mazzy-vpn language ru|en|de|zh|ja|ko`.
+
+## Desktop Dashboard and tray
+
+![Mazzy VPN Desktop Dashboard](docs/images/dashboard-connected-preview.png)
+
+The Tauri Desktop provides the main actions in a polished window and system
+tray: Quick Connect, Reconnect, Disconnect, Refresh and Self-diagnostics. The
+Linux application is a functional companion to the installed CLI and ships as
+AppImage, DEB and RPM. macOS and Windows are UI previews until native VPN
+backends are implemented.
+
+The GUI does not read profiles or keys. It consumes a sanitized status cache
+without endpoints and can invoke only a fixed CLI action allowlist. See the
+[Desktop guide](docs/DESKTOP.en.md) for installation, limitations and
+troubleshooting.
 
 ## Safe live tests and rollback
 

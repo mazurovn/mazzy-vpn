@@ -72,6 +72,7 @@ sudo mazzy-vpn connect openvpn "Example Server"
 sudo mazzy-vpn reconnect
 sudo mazzy-vpn disconnect
 mazzy-vpn status
+mazzy-vpn status --json
 mazzy-vpn diagnose
 mazzy-vpn validate all
 mazzy-vpn probe all --timeout 3
@@ -87,8 +88,8 @@ mazzy-vpn language en
 
 Без аргументов `mazzy-vpn` открывает интерактивное меню. `autostart on` включает
 подключение выбранного профиля после загрузки. Watchdog текущего соединения
-работает независимо и перезапускает сервис только после трёх последовательных
-ошибок, а не после единичного тайм-аута.
+работает независимо и перезапускает сервис после двух подтверждённых
+последовательных ошибок, а не после единичного тайм-аута.
 
 Над интерактивным меню расположен единый dashboard. Он выполняет короткую
 проверку реального подключения и показывает состояние туннеля и интернета,
@@ -111,6 +112,20 @@ ping серверов, emergency recovery, doctor, автозапуск и жу�
 установленного меню или команды, которой нужен `/etc/vpnctl`, CLI автоматически
 переходит через `sudo`; пароль вводится стандартному `sudo`, а не самому
 `mazzy-vpn`.
+
+## Desktop Dashboard и tray
+
+![Mazzy VPN Desktop Dashboard](docs/images/dashboard-connected-preview.png)
+
+Tauri Desktop даёт те же основные действия в красивом окне и системном tray:
+Quick Connect, Reconnect, Disconnect, Refresh и Self-diagnostics. Linux-версия
+работает поверх установленного CLI и выпускается как AppImage, DEB и RPM.
+macOS и Windows пока являются только preview интерфейса до реализации нативных
+VPN backends.
+
+GUI не читает конфиги или ключи: он получает очищенный status cache без endpoint
+и запускает только фиксированный набор CLI-команд. Подробная установка,
+ограничения и диагностика: [Desktop-инструкция](docs/DESKTOP.ru.md).
 
 ## Безопасное тестирование
 

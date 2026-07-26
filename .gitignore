@@ -5,3 +5,7 @@ conf
 dist/
 *.tar.gz
 *.sha256
+
+# Tauri / Node build outputs.
+desktop/node_modules/
+desktop/src-tauri/target/

@@ -6,7 +6,7 @@ set -uo pipefail
 PRODUCT_NAME="Mazzy VPN"
 CLI_COMMAND="mazzy-vpn"
 COMPAT_COMMAND="vpnctl"
-VERSION="1.0.0"
+VERSION="1.1.0"
 
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd -- "$(dirname -- "$SELF")" && pwd)"
@@ -22,6 +22,8 @@ HEALTH_FAILURE_LIMIT="${VPNCTL_HEALTH_FAILURE_LIMIT:-2}"
 HEALTH_PROBE_TIMEOUT="${VPNCTL_HEALTH_PROBE_TIMEOUT:-4}"
 HEALTH_FALLBACK_PROBE_URL="${VPNCTL_HEALTH_FALLBACK_PROBE_URL:-https://1.1.1.1/cdn-cgi/trace}"
 PROBE_URL="${VPNCTL_PROBE_URL:-https://api.ipify.org}"
+DASHBOARD_DIR="${VPNCTL_DASHBOARD_DIR:-/run/mazzy-vpn}"
+DASHBOARD_FILE="$DASHBOARD_DIR/status.json"
 TEST_BACKUP="$STATE_DIR/test.previous"
 TEST_BACKUP_EXISTS="$STATE_DIR/test.previous.exists"
 TEST_BACKUP_ACTIVE="$STATE_DIR/test.previous.active"
@@ -2469,6 +2471,12 @@ cmd_emergency() (
 cmd_status() {
     local protocol profile desired mode state interface endpoint handshake now age ip autostart deadline
     local fallback=""
+    if [[ "${1:-}" == "--json" ]]; then
+        shift
+        (($# == 0)) || die "Использование: $CLI_COMMAND status --json"
+        cmd_status_json
+        return
+    fi
     require_profile_access status "$@"
     fallback="$(detect_external_fallback || true)"
     if ! selected_from_state; then
@@ -2527,6 +2535,146 @@ cmd_status() {
         [[ -n "$ip" ]] && printf 'Public IP: %s\n' "$ip"
     fi
     [[ "$state" == "active" ]]
+}
+
+json_escape() {
+    local value="${1:-}"
+    value="${value//\\/\\\\}"
+    value="${value//\"/\\\"}"
+    value="${value//$'\n'/\\n}"
+    value="${value//$'\r'/\\r}"
+    value="${value//$'\t'/\\t}"
+    printf '%s' "$value"
+}
+
+dashboard_json_live() {
+    local timestamp service_state="inactive" desired="unknown" mode="normal"
+    local protocol="" protocol_name="" profile="" interface="" handshake_age=""
+    local tunnel_active=false internet_state="unknown" public_ip_value=""
+    local autostart=false health_monitor=false fallback="" fallback_name=""
+    local failure_count=0 healthy=false selected=false count profile_protocol
+    local awg_count=0 wg_count=0 ovpn_count=0 l2tp_count=0 now handshake
+
+    timestamp="$(date +%s)"
+    service_active && service_state="active"
+    systemctl_quiet is-enabled "$SERVICE_NAME" && autostart=true
+    systemctl_quiet is-active "$HEALTH_TIMER" && health_monitor=true
+    desired="$(state_get DESIRED 2>/dev/null || printf 'unknown')"
+    mode="$(state_get MODE 2>/dev/null || printf 'normal')"
+    fallback="$(detect_external_fallback || true)"
+    [[ -z "$fallback" ]] || fallback_name="$(external_fallback_title "$fallback")"
+    if [[ -r "$RUN_DIR/health.failures" ]]; then
+        read -r failure_count <"$RUN_DIR/health.failures" || failure_count=0
+        [[ "$failure_count" =~ ^[0-9]+$ ]] || failure_count=0
+    fi
+
+    if selected_from_state; then
+        selected=true
+        protocol="$SELECTED_PROTOCOL"
+        protocol_name="$(protocol_title "$protocol")"
+        profile="$(profile_name "$SELECTED_PROFILE")"
+        interface="$(interface_for_protocol "$protocol")"
+        if [[ "$service_state" == "active" ]] && connection_local_ok "$protocol"; then
+            tunnel_active=true
+            public_ip_value="$(public_ip "$interface" 2 || true)"
+            if [[ -n "$public_ip_value" ]]; then
+                internet_state="up"
+            else
+                internet_state="down"
+            fi
+            if [[ "$protocol" == "amneziawg" || "$protocol" == "wireguard" ]]; then
+                handshake="$(latest_handshake "$protocol" "$interface")"
+                if [[ "$handshake" =~ ^[0-9]+$ ]] && ((handshake > 0)); then
+                    now="$(date +%s)"
+                    handshake_age=$((now - handshake))
+                fi
+            fi
+        elif [[ "$desired" == "up" ]]; then
+            internet_state="down"
+        fi
+    fi
+
+    for profile_protocol in amneziawg wireguard openvpn l2tp; do
+        load_profiles "$profile_protocol"
+        count="${#PROFILES[@]}"
+        case "$profile_protocol" in
+            amneziawg) awg_count="$count" ;;
+            wireguard) wg_count="$count" ;;
+            openvpn) ovpn_count="$count" ;;
+            l2tp) l2tp_count="$count" ;;
+        esac
+    done
+    if [[ "$tunnel_active" == true && "$internet_state" == "up" &&
+          "$failure_count" -eq 0 ]]; then
+        healthy=true
+    fi
+
+    printf '{'
+    printf '"schema_version":1,'
+    printf '"generated_at":%s,' "$timestamp"
+    printf '"product":"%s","version":"%s",' \
+        "$(json_escape "$PRODUCT_NAME")" "$(json_escape "$VERSION")"
+    printf '"language":"%s",' "$(json_escape "$UI_LANG")"
+    printf '"selected":%s,' "$selected"
+    printf '"service_state":"%s","desired":"%s","mode":"%s",' \
+        "$(json_escape "$service_state")" "$(json_escape "$desired")" \
+        "$(json_escape "$mode")"
+    printf '"tunnel_active":%s,"internet":"%s","healthy":%s,' \
+        "$tunnel_active" "$(json_escape "$internet_state")" "$healthy"
+    printf '"protocol":"%s","protocol_name":"%s",' \
+        "$(json_escape "$protocol")" "$(json_escape "$protocol_name")"
+    printf '"profile":"%s","location":"%s","interface":"%s",' \
+        "$(json_escape "$profile")" "$(json_escape "$profile")" \
+        "$(json_escape "$interface")"
+    if [[ "$handshake_age" =~ ^[0-9]+$ ]]; then
+        printf '"handshake_age":%s,' "$handshake_age"
+    else
+        printf '"handshake_age":null,'
+    fi
+    printf '"public_ip":"%s",' "$(json_escape "$public_ip_value")"
+    printf '"autostart":%s,"health_monitor":%s,' "$autostart" "$health_monitor"
+    printf '"fallback":{"active":%s,"name":"%s"},' \
+        "$([[ -n "$fallback" ]] && printf true || printf false)" \
+        "$(json_escape "$fallback_name")"
+    printf '"health_failures":%s,' "$failure_count"
+    printf '"profiles":{"amneziawg":%s,"wireguard":%s,"openvpn":%s,"l2tp":%s}' \
+        "$awg_count" "$wg_count" "$ovpn_count" "$l2tp_count"
+    printf '}\n'
+}
+
+write_dashboard_cache() {
+    local tmp
+    ((EUID == 0)) || [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]] ||
+        return 1
+    mkdir -p -- "$DASHBOARD_DIR" || return 1
+    chmod 755 -- "$DASHBOARD_DIR" || return 1
+    tmp="$DASHBOARD_DIR/.status.$$"
+    umask 077
+    dashboard_json_live >"$tmp" || {
+        rm -f -- "$tmp"
+        return 1
+    }
+    chmod 644 -- "$tmp" || {
+        rm -f -- "$tmp"
+        return 1
+    }
+    mv -f -- "$tmp" "$DASHBOARD_FILE"
+}
+
+cmd_status_json() {
+    if [[ -r "$DASHBOARD_FILE" ]]; then
+        cat -- "$DASHBOARD_FILE"
+        return 0
+    fi
+    if ((EUID == 0)) || [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]]; then
+        write_dashboard_cache || return 1
+        cat -- "$DASHBOARD_FILE"
+        return 0
+    fi
+    printf '{"schema_version":1,"generated_at":0,"product":"Mazzy VPN",'
+    printf '"version":"%s","available":false,"error":"status cache is not ready"}\n' \
+        "$(json_escape "$VERSION")"
+    return 1
 }
 
 check_command() {
@@ -3395,6 +3543,7 @@ health_check() {
     local desired interface mode deadline token now
     mkdir -p "$RUN_DIR"
     chmod 700 "$RUN_DIR"
+    trap 'write_dashboard_cache >/dev/null 2>&1 || true' EXIT
     exec 9>"$RUN_DIR/.health.lock"
     flock -n 9 || return 0
     desired="$(state_get DESIRED 2>/dev/null || true)"
@@ -3842,6 +3991,14 @@ main() {
     local command="${1:-}"
     [[ $# -eq 0 ]] || shift
     case "$command" in
+        connect|up|start|switch|quick|fast|disconnect|down|stop|\
+        reconnect|restart|autostart|auto|test|check|test-all|check-all|\
+        emergency|recover|import|add|import-dir|add-dir|scan-dir|\
+        remove|delete|rm|language|lang|locale)
+            trap 'write_dashboard_cache >/dev/null 2>&1 || true' EXIT
+            ;;
+    esac
+    case "$command" in
         "") interactive_menu ;;
         help|-h|--help) usage ;;
         version|-V|--version)
@@ -3871,6 +4028,10 @@ main() {
         language|lang|locale) cmd_language "$@" ;;
         _service-run) service_run ;;
         _health-check) health_check ;;
+        _refresh-dashboard-cache)
+            require_root _refresh-dashboard-cache
+            write_dashboard_cache
+            ;;
         _test-timeout) test_timeout_handler "${1:-}" ;;
         _recover-stale-test) recover_stale_test_state ;;
         _dedupe-quick-policy)

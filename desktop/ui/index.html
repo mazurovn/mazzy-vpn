@@ -1,0 +1,204 @@
+<!doctype html>
+<!-- Copyright (C) 2026 Nik m (@mazurovn) -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="author" content="Nik m (@mazurovn)">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <title>Mazzy VPN</title>
+    <link rel="icon" href="mazzy-vpn-logo.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="app.css">
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <div class="aurora aurora-one"></div>
+    <div class="aurora aurora-two"></div>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <img src="mazzy-vpn-logo.svg" alt="" class="brand-mark">
+          <div>
+            <p class="eyebrow">PRIVATE NETWORK</p>
+            <h1>Mazzy VPN</h1>
+          </div>
+          <span class="cli-pill">CLI ENGINE</span>
+        </div>
+        <div class="top-actions">
+          <label class="select-wrap">
+            <span class="sr-only" data-i18n="language">Язык</span>
+            <select id="language-select" aria-label="Language">
+              <option value="ru">RU · Русский</option>
+              <option value="en">EN · English</option>
+              <option value="de">DE · Deutsch</option>
+              <option value="zh">ZH · 中文</option>
+              <option value="ja">JA · 日本語</option>
+              <option value="ko">KO · 한국어</option>
+            </select>
+          </label>
+          <button class="icon-button" id="refresh-button" type="button"
+                  data-tooltip="Refresh" aria-label="Refresh">
+            <span aria-hidden="true">↻</span>
+          </button>
+          <button class="icon-button" id="hide-button" type="button"
+                  data-tooltip="Hide to tray" aria-label="Hide to tray">
+            <span aria-hidden="true">⌄</span>
+          </button>
+        </div>
+      </header>
+
+      <section class="hero glass">
+        <div class="connection-orb-wrap">
+          <div class="connection-orb" id="connection-orb" aria-hidden="true">
+            <div class="orb-scan"></div>
+            <div class="orb-core">
+              <svg viewBox="0 0 64 64" role="presentation">
+                <path d="M32 6 52 13v15c0 13-8 23-20 29C20 51 12 41 12 28V13Z"/>
+                <path d="M23 38V21l9 10 9-10v17"/>
+              </svg>
+            </div>
+          </div>
+          <div class="connection-copy">
+            <div class="status-line">
+              <span class="status-dot" id="status-dot"></span>
+              <span id="status-label" data-i18n="checking">Проверяем соединение</span>
+            </div>
+            <h2 id="location-label">—</h2>
+            <p class="muted" id="connection-summary" data-i18n="waiting">
+              Ожидаем данные Mazzy VPN CLI
+            </p>
+          </div>
+        </div>
+
+        <div class="hero-details">
+          <div class="detail">
+            <span class="detail-icon">◇</span>
+            <div><span data-i18n="protocol">Протокол</span><strong id="protocol-value">—</strong></div>
+          </div>
+          <div class="detail">
+            <span class="detail-icon">↳</span>
+            <div><span data-i18n="interface">Интерфейс</span><strong id="interface-value">—</strong></div>
+          </div>
+          <div class="detail">
+            <span class="detail-icon">◷</span>
+            <div><span data-i18n="handshake">Handshake</span><strong id="handshake-value">—</strong></div>
+          </div>
+          <div class="detail">
+            <span class="detail-icon">◎</span>
+            <div>
+              <span data-i18n="publicIp">Публичный IP</span>
+              <strong id="ip-value">—</strong>
+            </div>
+            <button class="privacy-button" id="privacy-button" type="button"
+                    aria-label="Hide public IP">◉</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="quick-actions" aria-label="VPN actions">
+        <button class="action primary" type="button" data-action="quick">
+          <span class="action-icon">◆</span>
+          <span><strong data-i18n="quickConnect">Быстро подключить</strong>
+          <small data-i18n="useDefault">Default-конфиг</small></span>
+        </button>
+        <button class="action" type="button" data-action="reconnect">
+          <span class="action-icon">↻</span>
+          <span><strong data-i18n="reconnect">Переподключить</strong>
+          <small data-i18n="safeRestart">Безопасный restart</small></span>
+        </button>
+        <button class="action danger" type="button" data-action="disconnect">
+          <span class="action-icon">◇</span>
+          <span><strong data-i18n="disconnect">Отключить</strong>
+          <small data-i18n="stopTunnel">Остановить туннель</small></span>
+        </button>
+        <button class="action" type="button" data-action="doctor">
+          <span class="action-icon">✦</span>
+          <span><strong data-i18n="doctor">Самодиагностика</strong>
+          <small data-i18n="checkSystem">Проверить систему</small></span>
+        </button>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="glass card health-card">
+          <div class="card-heading">
+            <div>
+              <p class="eyebrow" data-i18n="protection">PROTECTION</p>
+              <h3 data-i18n="systemHealth">Состояние системы</h3>
+            </div>
+            <span class="health-badge" id="health-badge" data-i18n="checkingShort">CHECK</span>
+          </div>
+          <div class="health-list">
+            <div class="health-row">
+              <span class="health-icon">⚡</span>
+              <div><strong data-i18n="autoConnect">Автоподключение</strong>
+                <small data-i18n="startsOnBoot">Запуск при загрузке</small></div>
+              <span class="mini-state" id="autostart-state">—</span>
+            </div>
+            <div class="health-row">
+              <span class="health-icon">♥</span>
+              <div><strong data-i18n="healthMonitor">Health monitor</strong>
+                <small data-i18n="autoHealing">Автопроверка и лечение</small></div>
+              <span class="mini-state" id="monitor-state">—</span>
+            </div>
+            <div class="health-row">
+              <span class="health-icon">⇄</span>
+              <div><strong data-i18n="fallback">Резервный VPN</strong>
+                <small data-i18n="conflictGuard">Защита от конфликтов</small></div>
+              <span class="mini-state" id="fallback-state">—</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="glass card profile-card">
+          <div class="card-heading">
+            <div>
+              <p class="eyebrow" data-i18n="configurations">CONFIGURATIONS</p>
+              <h3 data-i18n="vpnProfiles">VPN-профили</h3>
+            </div>
+            <span class="total-count" id="profile-total">0</span>
+          </div>
+          <div class="profile-bars">
+            <div class="profile-row" data-protocol="amneziawg">
+              <div><span>AmneziaWG</span><strong id="count-amneziawg">0</strong></div>
+              <div class="bar"><i id="bar-amneziawg"></i></div>
+            </div>
+            <div class="profile-row" data-protocol="wireguard">
+              <div><span>WireGuard</span><strong id="count-wireguard">0</strong></div>
+              <div class="bar"><i id="bar-wireguard"></i></div>
+            </div>
+            <div class="profile-row" data-protocol="openvpn">
+              <div><span>OpenVPN</span><strong id="count-openvpn">0</strong></div>
+              <div class="bar"><i id="bar-openvpn"></i></div>
+            </div>
+            <div class="profile-row" data-protocol="l2tp">
+              <div><span>L2TP/IPsec</span><strong id="count-l2tp">0</strong></div>
+              <div class="bar"><i id="bar-l2tp"></i></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="glass card activity-card">
+          <div class="card-heading">
+            <div>
+              <p class="eyebrow" data-i18n="activity">ACTIVITY</p>
+              <h3 data-i18n="eventLog">События</h3>
+            </div>
+            <span class="live-indicator"><i></i> LIVE</span>
+          </div>
+          <div class="event-list" id="event-list" aria-live="polite">
+            <div class="empty-event" data-i18n="noEvents">Событий пока нет</div>
+          </div>
+        </article>
+      </section>
+
+      <footer>
+        <span id="engine-version">Mazzy VPN CLI</span>
+        <span id="freshness-label" data-i18n="neverUpdated">Данные ещё не получены</span>
+        <span class="platform-note" id="platform-note"></span>
+      </footer>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

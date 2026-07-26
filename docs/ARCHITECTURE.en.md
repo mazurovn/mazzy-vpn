@@ -4,10 +4,11 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
 [Русская версия](ARCHITECTURE.ru.md) · [Project README](../README.md)
 
-Mazzy VPN is a Bash CLI/TUI and a small set of systemd units. It keeps protocol
-profiles outside the source tree, uses one canonical desired-state file and
-delegates tunnel lifetime to systemd. The interactive menu and automation
-commands use the same functions, validation rules and state transitions.
+Mazzy VPN is a Bash CLI/TUI, a Tauri Desktop Dashboard and a small set of
+systemd units. It keeps protocol profiles outside the source tree, uses one
+canonical desired-state file and delegates tunnel lifetime to systemd. The
+terminal menu, Desktop and automation commands share one validated CLI control
+plane and the same state transitions.
 
 ## Component architecture
 
@@ -18,6 +19,8 @@ flowchart TB
     subgraph UX["CLI and terminal UI"]
         Entry["mazzy-vpn command dispatcher"]
         TUI["Interactive menu and dashboard"]
+        Desktop["Tauri Desktop Dashboard"]
+        Tray["System tray with a fixed menu"]
         Commands["connect, quick, test, doctor, import"]
     end
 
@@ -26,6 +29,7 @@ flowchart TB
         ActionLock["Exclusive action lock"]
         State["Desired state and selected default<br/>/var/lib/vpnctl/active"]
         Runtime["Ephemeral counters, locks and test data<br/>/run/vpnctl"]
+        StatusCache["Sanitized status without keys or endpoint<br/>/run/mazzy-vpn/status.json"]
     end
 
     subgraph Supervisor["systemd supervision"]
@@ -52,9 +56,13 @@ flowchart TB
     External["Optional external fallback<br/>legacy or AdGuard"]
 
     User --> Entry
+    User --> Desktop
     Entry --> TUI
     Entry --> Commands
     TUI --> Commands
+    Tray --> Desktop
+    Desktop --> StatusCache
+    Desktop -. fixed allowlist through pkexec .-> Entry
     Commands --> Validation
     Validation --> Profiles
     Commands --> ActionLock
@@ -64,6 +72,7 @@ flowchart TB
     Timer --> Health
     Health --> State
     Health --> Runtime
+    Health --> StatusCache
     Health --> Service
     BootRecovery --> State
     BootRecovery --> Service
@@ -83,6 +92,43 @@ flowchart TB
 The control plane never embeds a provider key in source code. The public
 repository contains the manager, tests and documentation only. Operational
 profiles stay root-readable with mode `600`.
+
+## Desktop Dashboard and tray
+
+![Mazzy VPN Desktop Dashboard — preview data](images/dashboard-connected-preview.png)
+
+Desktop never opens a VPN profile or reads a key. A root CLI process atomically
+updates a mode-`644` JSON cache. It contains service state, the selected display
+name, protocol, interface, handshake age, public VPN address, autostart and
+health-monitor state, and profile counts. Profile paths, server endpoints and
+configuration directives are not exported.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as Tauri Dashboard / tray
+    participant Cache as /run/mazzy-vpn/status.json
+    participant PK as pkexec
+    participant CLI as mazzy-vpn
+    participant SD as systemd
+
+    loop every 5 seconds
+        UI->>Cache: read sanitized status
+        Cache-->>UI: JSON schema v1
+    end
+    User->>UI: Quick / Reconnect / Disconnect / Doctor
+    UI->>PK: fixed command, no shell
+    PK->>CLI: execute an allowed action
+    CLI->>SD: change the managed tunnel
+    CLI->>Cache: atomically refresh status
+    Cache-->>UI: new state
+```
+
+Closing the window hides it to the tray. Connect, reconnect, disconnect,
+refresh and diagnostics remain in the context menu. On Linux this is a
+functional companion to the installed CLI. macOS and Windows builds are UI
+previews and are not advertised as working VPN clients until native backends
+exist.
 
 ## Normal connection flow
 
@@ -210,6 +256,7 @@ previous connection has been restored successfully.
 | `/var/lib/vpnctl/active` | Selected protocol, default profile, `DESIRED`, test metadata | Persistent, root-owned |
 | `/var/lib/vpnctl/test.*` | Transaction and rollback snapshot | Exists only while recovery may be needed |
 | `/run/vpnctl` | Locks, health counter and sanitized runtime log | Cleared at boot |
+| `/run/mazzy-vpn/status.json` | Sanitized Desktop status | Recreated by root, readable without keys or endpoint |
 | `vpnctl.service` | Owns the active managed tunnel | Long-running, systemd supervised |
 | `vpnctl-health.timer` | Schedules independent health checks | Enabled for unattended recovery |
 | `vpnctl-test-recovery.service` | Repairs interrupted tests after boot | Boot-time oneshot |
@@ -221,6 +268,8 @@ Security invariants:
 - no private key, credential, personal path or operational profile belongs in
   Git;
 - extended logs conceal private and AmneziaWG obfuscation parameters;
+- Desktop accepts enum actions only and never passes user input to a shell; its
+  status cache contains no endpoint or profile contents;
 - test failure never silently replaces the last known working connection;
 - external VPN fallback is optional and is not required for normal recovery.
 
@@ -230,6 +279,7 @@ Security invariants:
 |---|---|
 | Active route, DNS, interface, handshake and internet | `mazzy-vpn diagnose` |
 | Dashboard and saved default | `mazzy-vpn dashboard` |
+| Machine-readable sanitized status | `mazzy-vpn status --json` |
 | All profile formats and permissions | `mazzy-vpn validate all` |
 | Endpoint DNS and ping | `mazzy-vpn probe all --timeout 3` |
 | Installation and systemd health | `mazzy-vpn doctor` |
@@ -237,4 +287,3 @@ Security invariants:
 | Offline full check | `mazzy-vpn self-test --offline` |
 | Transactional live checks | `sudo mazzy-vpn test-all all` |
 | Public-tree leak policy | `tests/audit-public.sh` and Gitleaks in CI |
-

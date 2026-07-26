@@ -4,11 +4,11 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
 [English version](ARCHITECTURE.en.md) · [Главная страница](../README.md)
 
-Mazzy VPN состоит из Bash CLI/TUI и небольшого набора systemd units. Профили
-протоколов хранятся вне исходного кода, выбранное состояние записывается в один
-канонический файл, а временем жизни туннеля управляет systemd. Интерактивное
-меню и команды автоматизации используют одинаковые функции, правила проверки и
-переходы состояния.
+Mazzy VPN состоит из Bash CLI/TUI, Tauri Desktop Dashboard и небольшого набора
+systemd units. Профили протоколов хранятся вне исходного кода, выбранное
+состояние записывается в один канонический файл, а временем жизни туннеля
+управляет systemd. Терминальное меню, Desktop и команды автоматизации используют
+один проверяемый CLI-контур и одинаковые переходы состояния.
 
 ## Компонентная архитектура
 
@@ -19,6 +19,8 @@ flowchart TB
     subgraph UX["CLI и терминальный интерфейс"]
         Entry["Диспетчер команды mazzy-vpn"]
         TUI["Интерактивное меню и dashboard"]
+        Desktop["Tauri Desktop Dashboard"]
+        Tray["Системный tray и фиксированное меню"]
         Commands["connect, quick, test, doctor, import"]
     end
 
@@ -27,6 +29,7 @@ flowchart TB
         ActionLock["Эксклюзивная блокировка операции"]
         State["Желаемое состояние и default-профиль<br/>/var/lib/vpnctl/active"]
         Runtime["Временные счётчики, locks и данные теста<br/>/run/vpnctl"]
+        StatusCache["Очищенный статус без ключей и endpoint<br/>/run/mazzy-vpn/status.json"]
     end
 
     subgraph Supervisor["Контроль systemd"]
@@ -53,9 +56,13 @@ flowchart TB
     External["Опциональный внешний fallback<br/>legacy или AdGuard"]
 
     User --> Entry
+    User --> Desktop
     Entry --> TUI
     Entry --> Commands
     TUI --> Commands
+    Tray --> Desktop
+    Desktop --> StatusCache
+    Desktop -. фиксированный allowlist через pkexec .-> Entry
     Commands --> Validation
     Validation --> Profiles
     Commands --> ActionLock
@@ -65,6 +72,7 @@ flowchart TB
     Timer --> Health
     Health --> State
     Health --> Runtime
+    Health --> StatusCache
     Health --> Service
     BootRecovery --> State
     BootRecovery --> Service
@@ -84,6 +92,43 @@ flowchart TB
 Контур управления не содержит ключей провайдера в исходном коде. В публичном
 репозитории находятся только менеджер, тесты и документация. Рабочие профили
 остаются доступными только root и имеют права `600`.
+
+## Desktop Dashboard и tray
+
+![Mazzy VPN Desktop Dashboard — preview с тестовыми данными](images/dashboard-connected-preview.png)
+
+Desktop не открывает VPN-профили и не читает ключи. Root-процесс CLI обновляет
+атомарный JSON cache с правами `644`; в нём есть только состояние сервиса,
+выбранное отображаемое имя, протокол, интерфейс, возраст handshake, публичный
+VPN-адрес, состояния автозапуска/health monitor и счётчики профилей. Путь
+профиля, endpoint сервера и конфигурационные директивы не экспортируются.
+
+```mermaid
+sequenceDiagram
+    actor User as Пользователь
+    participant UI as Tauri Dashboard / tray
+    participant Cache as /run/mazzy-vpn/status.json
+    participant PK as pkexec
+    participant CLI as mazzy-vpn
+    participant SD as systemd
+
+    loop каждые 5 секунд
+        UI->>Cache: прочитать очищенный статус
+        Cache-->>UI: JSON schema v1
+    end
+    User->>UI: Quick / Reconnect / Disconnect / Doctor
+    UI->>PK: фиксированная команда без shell
+    PK->>CLI: выполнить разрешённое действие
+    CLI->>SD: изменить managed-туннель
+    CLI->>Cache: атомарно обновить статус
+    Cache-->>UI: новое состояние
+```
+
+Закрытие окна скрывает приложение в tray; команды подключения,
+переподключения, отключения, обновления и диагностики остаются в контекстном
+меню. На Linux tray работает как companion к установленному CLI. Сборки macOS
+и Windows пока являются preview интерфейса и не заявляются как рабочий
+VPN-клиент до реализации нативных backends.
 
 ## Обычное подключение
 
@@ -211,6 +256,7 @@ sequenceDiagram
 | `/var/lib/vpnctl/active` | Протокол, default-профиль, `DESIRED`, метаданные теста | Постоянно, root |
 | `/var/lib/vpnctl/test.*` | Снимок транзакции и rollback | Пока может понадобиться recovery |
 | `/run/vpnctl` | Locks, health-счётчик и очищенный runtime log | Очищается при загрузке |
+| `/run/mazzy-vpn/status.json` | Очищенный статус для Desktop | Пересоздаётся root, доступен для чтения, без ключей и endpoint |
 | `vpnctl.service` | Владеет активным managed-туннелем | Долгоживущий, под контролем systemd |
 | `vpnctl-health.timer` | Планирует независимые health-проверки | Включён для автовосстановления |
 | `vpnctl-test-recovery.service` | Исправляет прерванный тест после загрузки | Boot-time oneshot |
@@ -222,6 +268,8 @@ sequenceDiagram
 - приватные ключи, credentials, личные пути и рабочие профили не попадают в
   Git;
 - расширенный журнал скрывает приватные и AmneziaWG obfuscation-параметры;
+- Desktop принимает только enum-действия и не передаёт пользовательскую строку
+  в shell; cache состояния не содержит endpoint или содержимое профиля;
 - неудачный тест не заменяет молча последнее рабочее соединение;
 - внешний VPN fallback опционален и не нужен обычному автовосстановлению.
 
@@ -231,6 +279,7 @@ sequenceDiagram
 |---|---|
 | Маршрут, DNS, интерфейс, handshake и интернет | `mazzy-vpn diagnose` |
 | Dashboard и сохранённый default | `mazzy-vpn dashboard` |
+| Машиночитаемый очищенный статус | `mazzy-vpn status --json` |
 | Формат и права всех профилей | `mazzy-vpn validate all` |
 | DNS и ping endpoint | `mazzy-vpn probe all --timeout 3` |
 | Установка и systemd | `mazzy-vpn doctor` |
@@ -238,4 +287,3 @@ sequenceDiagram
 | Полная offline-проверка | `mazzy-vpn self-test --offline` |
 | Транзакционные live-тесты | `sudo mazzy-vpn test-all all` |
 | Утечки в публичном дереве | `tests/audit-public.sh` и Gitleaks в CI |
-

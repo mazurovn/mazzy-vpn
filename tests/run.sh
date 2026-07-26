@@ -224,6 +224,7 @@ export VPNCTL_ALLOW_UNPRIVILEGED=1
 export VPNCTL_CONFIG_DIR="$TMP/config"
 export VPNCTL_STATE_DIR="$TMP/state"
 export VPNCTL_RUN_DIR="$TMP/run"
+export VPNCTL_DASHBOARD_DIR="$TMP/dashboard"
 export VPNCTL_PROBE_URL="https://probe.invalid"
 export VPNCTL_ADGUARD_CLI="$TMP/fakebin/adguardvpn-cli"
 export VPNCTL_LOCALE_FILE="$TMP/system-language"
@@ -234,8 +235,8 @@ export VPNCTL_LEGACY_START="$TMP/fallback-start"
 export VPNCTL_LEGACY_STOP="$TMP/fallback-stop"
 export NO_COLOR=1
 
-"$CLI" version | grep -q '^Mazzy VPN 1\.0\.0 (mazzy-vpn; alias: vpnctl)$'
-"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.0\.0 ' ||
+"$CLI" version | grep -q '^Mazzy VPN 1\.1\.0 (mazzy-vpn; alias: vpnctl)$'
+"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.1\.0 ' ||
     fail "vpnctl compatibility wrapper is broken"
 ok "Mazzy VPN branding and compatibility alias"
 
@@ -514,6 +515,24 @@ grep -q '^Autostart: enabled$' <<<"$status_output" || fail "autostart status mis
 grep -q '^Public IP: 203.0.113.7$' <<<"$status_output" || fail "public IP missing"
 ok "status"
 
+status_json="$("$CLI" status --json)"
+python3 -m json.tool <<<"$status_json" >/dev/null ||
+    fail "structured dashboard status is not valid JSON"
+grep -q '"profile":"Test Server"' <<<"$status_json" ||
+    fail "structured dashboard status is missing the selected profile"
+grep -q '"protocol":"openvpn","protocol_name":"OpenVPN"' <<<"$status_json" ||
+    fail "structured dashboard status has inconsistent active protocol metadata"
+grep -q '"healthy":true' <<<"$status_json" ||
+    fail "structured dashboard status did not report a healthy tunnel"
+grep -q '"openvpn":1' <<<"$status_json" ||
+    fail "structured dashboard status is missing profile counts"
+grep -q '192\.0\.2\.10' <<<"$status_json" &&
+    fail "structured dashboard status leaked a VPN endpoint"
+[[ "$(stat -c %a "$VPNCTL_DASHBOARD_DIR/status.json")" == "644" ]] ||
+    fail "dashboard status cache is not safely readable"
+"$CLI" _refresh-dashboard-cache
+ok "safe structured dashboard status"
+
 dashboard_output="$("$CLI" dashboard)"
 grep -q 'M A Z Z Y' <<<"$dashboard_output" || fail "dashboard artwork is missing"
 grep -q 'Локация: Test Server' <<<"$dashboard_output" ||
@@ -770,6 +789,8 @@ stage="$TMP/stage"
    -f "$stage/usr/local/lib/mazzy-vpn/README.zh.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/README.ja.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/README.ko.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/DESKTOP.en.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/DESKTOP.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.en.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/LICENSE" &&
