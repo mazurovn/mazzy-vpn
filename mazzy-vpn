@@ -1,0 +1,3886 @@
+#!/usr/bin/env bash
+# Copyright (C) 2026 Nik m (@mazurovn)
+# SPDX-License-Identifier: AGPL-3.0-or-later
+set -uo pipefail
+
+PRODUCT_NAME="Mazzy VPN"
+CLI_COMMAND="mazzy-vpn"
+COMPAT_COMMAND="vpnctl"
+VERSION="1.0.0"
+
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd -- "$(dirname -- "$SELF")" && pwd)"
+DEFAULT_CONFIG_DIR="/etc/vpnctl/profiles"
+CONFIG_DIR="${VPNCTL_CONFIG_DIR:-}"
+STATE_DIR="${VPNCTL_STATE_DIR:-/var/lib/vpnctl}"
+STATE_FILE="$STATE_DIR/active"
+RUN_DIR="${VPNCTL_RUN_DIR:-/run/vpnctl}"
+SERVICE_NAME="${VPNCTL_SERVICE_NAME:-vpnctl.service}"
+HEALTH_TIMER="${VPNCTL_HEALTH_TIMER:-vpnctl-health.timer}"
+TEST_RECOVERY_SERVICE="${VPNCTL_TEST_RECOVERY_SERVICE:-vpnctl-test-recovery.service}"
+HEALTH_FAILURE_LIMIT="${VPNCTL_HEALTH_FAILURE_LIMIT:-2}"
+HEALTH_PROBE_TIMEOUT="${VPNCTL_HEALTH_PROBE_TIMEOUT:-4}"
+HEALTH_FALLBACK_PROBE_URL="${VPNCTL_HEALTH_FALLBACK_PROBE_URL:-https://1.1.1.1/cdn-cgi/trace}"
+PROBE_URL="${VPNCTL_PROBE_URL:-https://api.ipify.org}"
+TEST_BACKUP="$STATE_DIR/test.previous"
+TEST_BACKUP_EXISTS="$STATE_DIR/test.previous.exists"
+TEST_BACKUP_ACTIVE="$STATE_DIR/test.previous.active"
+TEST_BACKUP_FALLBACK="$STATE_DIR/test.previous.fallback"
+TEST_TRANSACTION="$STATE_DIR/test.transaction"
+TEST_FAILURE_MARKER="$RUN_DIR/test.failure"
+TEST_GUARD_UNIT="${VPNCTL_TEST_GUARD_UNIT:-vpnctl-test-guard}"
+DEFAULT_TEST_TIMEOUT="${VPNCTL_TEST_TIMEOUT:-45}"
+DEFAULT_PROBE_TIMEOUT="${VPNCTL_PROBE_TIMEOUT:-3}"
+FALLBACK_TIMEOUT="${VPNCTL_FALLBACK_TIMEOUT:-40}"
+LEGACY_FALLBACK_INTERFACE="${VPNCTL_LEGACY_INTERFACE:-wg0}"
+LEGACY_FALLBACK_START="${VPNCTL_LEGACY_START:-}"
+LEGACY_FALLBACK_STOP="${VPNCTL_LEGACY_STOP:-}"
+ADGUARD_FALLBACK_CLI="${VPNCTL_ADGUARD_CLI:-/usr/local/bin/adguardvpn-cli}"
+ADGUARD_FALLBACK_PID_FILE="${VPNCTL_ADGUARD_PID_FILE:-}"
+FALLBACK_USER="${VPNCTL_FALLBACK_USER:-}"
+SYSTEM_LOCALE_FILE="${VPNCTL_LOCALE_FILE:-/etc/vpnctl/locale}"
+USER_LOCALE_FILE=""
+LOCALE_OWNER_UID="$(id -u)"
+LOCALE_OWNER_GID="$(id -g)"
+if ((EUID == 0)) && [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" != "1" ]]; then
+    locale_caller_uid=""
+    if [[ "${SUDO_UID:-}" =~ ^[0-9]+$ && "$SUDO_UID" -ge 1000 ]]; then
+        locale_caller_uid="$SUDO_UID"
+    elif [[ "${PKEXEC_UID:-}" =~ ^[0-9]+$ && "$PKEXEC_UID" -ge 1000 ]]; then
+        locale_caller_uid="$PKEXEC_UID"
+    fi
+    if [[ -n "$locale_caller_uid" ]]; then
+        locale_caller_entry="$(getent passwd "$locale_caller_uid" 2>/dev/null || true)"
+        if [[ -n "$locale_caller_entry" ]]; then
+            IFS=: read -r _ _ LOCALE_OWNER_UID LOCALE_OWNER_GID _ locale_caller_home _ \
+                <<<"$locale_caller_entry"
+            USER_LOCALE_FILE="$locale_caller_home/.config/mazzy-vpn/language"
+        fi
+    fi
+else
+    USER_LOCALE_FILE="${VPNCTL_USER_LOCALE_FILE:-}"
+fi
+if [[ -z "$USER_LOCALE_FILE" && -n "${HOME:-}" ]]; then
+    USER_LOCALE_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/mazzy-vpn/language"
+fi
+UI_LANG="ru"
+
+normalize_language() {
+    local language="${1:-}"
+    language="${language,,}"
+    language="${language%%.*}"
+    language="${language%%_*}"
+    language="${language%%-*}"
+    case "$language" in
+        ru|rus|russian|русский) printf 'ru\n' ;;
+        en|eng|english) printf 'en\n' ;;
+        de|deu|ger|german|germany|deutsch) printf 'de\n' ;;
+        zh|zho|chi|chinese|china|中文) printf 'zh\n' ;;
+        ja|jpn|japanese|japan|日本語) printf 'ja\n' ;;
+        ko|kor|korean|korea|한국어) printf 'ko\n' ;;
+        *) return 1 ;;
+    esac
+}
+
+load_ui_language() {
+    local candidate="" file
+    if [[ -n "${VPNCTL_LANG:-}" ]]; then
+        candidate="$VPNCTL_LANG"
+    else
+        for file in "$USER_LOCALE_FILE" "$SYSTEM_LOCALE_FILE"; do
+            [[ -n "$file" && -r "$file" ]] || continue
+            IFS= read -r candidate <"$file" || candidate=""
+            [[ -n "$candidate" ]] && break
+        done
+    fi
+    UI_LANG="$(normalize_language "$candidate" 2>/dev/null || printf 'ru')"
+}
+
+language_native_name() {
+    case "$1" in
+        ru) printf 'Русский' ;;
+        en) printf 'English' ;;
+        de) printf 'Deutsch' ;;
+        zh) printf '中文' ;;
+        ja) printf '日本語' ;;
+        ko) printf '한국어' ;;
+        *) printf '%s' "$1" ;;
+    esac
+}
+
+msg() {
+    local key="$1"
+    case "$key" in
+        tagline)
+            case "$UI_LANG" in
+                ru) printf 'Быстро. Безопасно. Под контролем.' ;;
+                en) printf 'Fast. Secure. Under your control.' ;;
+                de) printf 'Schnell. Sicher. Unter Ihrer Kontrolle.' ;;
+                zh) printf '快速、安全、尽在掌控。' ;;
+                ja) printf '高速・安全・思いのまま。' ;;
+                ko) printf '빠르고 안전하게, 완벽한 제어.' ;;
+            esac
+            ;;
+        active)
+            case "$UI_LANG" in
+                ru) printf 'активен' ;; en) printf 'active' ;; de) printf 'aktiv' ;;
+                zh) printf '已连接' ;; ja) printf '接続中' ;; ko) printf '연결됨' ;;
+            esac
+            ;;
+        stopped)
+            case "$UI_LANG" in
+                ru) printf 'остановлен' ;; en) printf 'stopped' ;; de) printf 'gestoppt' ;;
+                zh) printf '已停止' ;; ja) printf '停止中' ;; ko) printf '중지됨' ;;
+            esac
+            ;;
+        selected)
+            case "$UI_LANG" in
+                ru) printf 'Выбран' ;; en) printf 'Selected' ;; de) printf 'Ausgewählt' ;;
+                zh) printf '已选择' ;; ja) printf '選択中' ;; ko) printf '선택됨' ;;
+            esac
+            ;;
+        no_profile)
+            case "$UI_LANG" in
+                ru) printf 'профиль ещё не задан' ;; en) printf 'no profile selected' ;;
+                de) printf 'noch kein Profil gewählt' ;; zh) printf '尚未选择配置' ;;
+                ja) printf 'プロファイル未選択' ;; ko) printf '프로필이 선택되지 않음' ;;
+            esac
+            ;;
+        service)
+            case "$UI_LANG" in
+                ru) printf 'сервис' ;; en) printf 'service' ;; de) printf 'Dienst' ;;
+                zh) printf '服务' ;; ja) printf 'サービス' ;; ko) printf '서비스' ;;
+            esac
+            ;;
+        fallback)
+            case "$UI_LANG" in
+                ru) printf 'Резерв' ;; en) printf 'Fallback' ;; de) printf 'Fallback' ;;
+                zh) printf '备用连接' ;; ja) printf 'フォールバック' ;; ko) printf '대체 연결' ;;
+            esac
+            ;;
+        fallback_none)
+            case "$UI_LANG" in
+                ru) printf 'внешний VPN не активен' ;; en) printf 'external VPN is inactive' ;;
+                de) printf 'externes VPN ist inaktiv' ;; zh) printf '外部 VPN 未启用' ;;
+                ja) printf '外部 VPN は停止中' ;; ko) printf '외부 VPN 비활성' ;;
+            esac
+            ;;
+        profiles)
+            case "$UI_LANG" in
+                ru) printf 'Профили' ;; en) printf 'Profiles' ;; de) printf 'Profile' ;;
+                zh) printf '配置' ;; ja) printf 'プロファイル' ;; ko) printf '프로필' ;;
+            esac
+            ;;
+        choose_action)
+            case "$UI_LANG" in
+                ru) printf 'Выберите действие [0-16]: ' ;;
+                en) printf 'Choose an action [0-16]: ' ;;
+                de) printf 'Aktion wählen [0-16]: ' ;;
+                zh) printf '请选择操作 [0-16]：' ;;
+                ja) printf '操作を選択 [0-16]: ' ;;
+                ko) printf '작업 선택 [0-16]: ' ;;
+            esac
+            ;;
+        unknown_item)
+            case "$UI_LANG" in
+                ru) printf 'Неизвестный пункт' ;; en) printf 'Unknown menu item' ;;
+                de) printf 'Unbekannter Menüpunkt' ;; zh) printf '未知菜单项' ;;
+                ja) printf '不明なメニュー項目' ;; ko) printf '알 수 없는 메뉴 항목' ;;
+            esac
+            ;;
+        choose_protocol)
+            case "$UI_LANG" in
+                ru) printf 'Выберите протокол:' ;; en) printf 'Choose a protocol:' ;;
+                de) printf 'Protokoll wählen:' ;; zh) printf '请选择协议：' ;;
+                ja) printf 'プロトコルを選択:' ;; ko) printf '프로토콜 선택:' ;;
+            esac
+            ;;
+        profile_count)
+            case "$UI_LANG" in
+                ru) printf 'профилей' ;; en) printf 'profiles' ;; de) printf 'Profile' ;;
+                zh) printf '个配置' ;; ja) printf 'プロファイル' ;; ko) printf '개 프로필' ;;
+            esac
+            ;;
+        ready)
+            case "$UI_LANG" in
+                ru) printf 'готов' ;; en) printf 'ready' ;; de) printf 'bereit' ;;
+                zh) printf '可用' ;; ja) printf '準備完了' ;; ko) printf '준비됨' ;;
+            esac
+            ;;
+        runtime_missing)
+            case "$UI_LANG" in
+                ru) printf 'нет runtime' ;; en) printf 'runtime missing' ;;
+                de) printf 'Runtime fehlt' ;; zh) printf '缺少运行组件' ;;
+                ja) printf 'ランタイムなし' ;; ko) printf '런타임 없음' ;;
+            esac
+            ;;
+        protocol_number)
+            case "$UI_LANG" in
+                ru) printf 'Номер протокола: ' ;; en) printf 'Protocol number: ' ;;
+                de) printf 'Protokollnummer: ' ;; zh) printf '协议编号：' ;;
+                ja) printf 'プロトコル番号: ' ;; ko) printf '프로토콜 번호: ' ;;
+            esac
+            ;;
+        invalid_protocol)
+            case "$UI_LANG" in
+                ru) printf 'Неверный номер протокола' ;; en) printf 'Invalid protocol number' ;;
+                de) printf 'Ungültige Protokollnummer' ;; zh) printf '协议编号无效' ;;
+                ja) printf 'プロトコル番号が無効です' ;; ko) printf '잘못된 프로토콜 번호' ;;
+            esac
+            ;;
+        server_number)
+            case "$UI_LANG" in
+                ru) printf 'Номер сервера: ' ;; en) printf 'Server number: ' ;;
+                de) printf 'Servernummer: ' ;; zh) printf '服务器编号：' ;;
+                ja) printf 'サーバー番号: ' ;; ko) printf '서버 번호: ' ;;
+            esac
+            ;;
+        continue_prompt)
+            case "$UI_LANG" in
+                ru) printf 'Продолжить? [y/N]: ' ;; en) printf 'Continue? [y/N]: ' ;;
+                de) printf 'Fortfahren? [j/N]: ' ;; zh) printf '继续？[y/N]：' ;;
+                ja) printf '続行しますか？ [y/N]: ' ;; ko) printf '계속할까요? [y/N]: ' ;;
+            esac
+            ;;
+        cancelled)
+            case "$UI_LANG" in
+                ru) printf 'Отменено.' ;; en) printf 'Cancelled.' ;; de) printf 'Abgebrochen.' ;;
+                zh) printf '已取消。' ;; ja) printf 'キャンセルしました。' ;; ko) printf '취소됨.' ;;
+            esac
+            ;;
+        choice)
+            case "$UI_LANG" in
+                ru) printf 'Выбор: ' ;; en) printf 'Choice: ' ;; de) printf 'Auswahl: ' ;;
+                zh) printf '选择：' ;; ja) printf '選択: ' ;; ko) printf '선택: ' ;;
+            esac
+            ;;
+        invalid_choice)
+            case "$UI_LANG" in
+                ru) printf 'Неверный выбор' ;; en) printf 'Invalid choice' ;;
+                de) printf 'Ungültige Auswahl' ;; zh) printf '选择无效' ;;
+                ja) printf '無効な選択です' ;; ko) printf '잘못된 선택' ;;
+            esac
+            ;;
+        config_folder)
+            case "$UI_LANG" in
+                ru) printf 'Папка с конфигами: ' ;; en) printf 'Configuration folder: ' ;;
+                de) printf 'Konfigurationsordner: ' ;; zh) printf '配置文件夹：' ;;
+                ja) printf '設定フォルダー: ' ;; ko) printf '설정 폴더: ' ;;
+            esac
+            ;;
+        no_folder)
+            case "$UI_LANG" in
+                ru) printf 'Папка не указана' ;; en) printf 'No folder specified' ;;
+                de) printf 'Kein Ordner angegeben' ;; zh) printf '未指定文件夹' ;;
+                ja) printf 'フォルダーが指定されていません' ;; ko) printf '폴더가 지정되지 않음' ;;
+            esac
+            ;;
+        new_folder)
+            case "$UI_LANG" in
+                ru) printf 'Новая папка [./mazzy-vpn-configs]: ' ;;
+                en) printf 'New folder [./mazzy-vpn-configs]: ' ;;
+                de) printf 'Neuer Ordner [./mazzy-vpn-configs]: ' ;;
+                zh) printf '新文件夹 [./mazzy-vpn-configs]：' ;;
+                ja) printf '新規フォルダー [./mazzy-vpn-configs]: ' ;;
+                ko) printf '새 폴더 [./mazzy-vpn-configs]: ' ;;
+            esac
+            ;;
+        language_title)
+            case "$UI_LANG" in
+                ru) printf 'Язык интерфейса' ;; en) printf 'Interface language' ;;
+                de) printf 'Oberflächensprache' ;; zh) printf '界面语言' ;;
+                ja) printf '表示言語' ;; ko) printf '인터페이스 언어' ;;
+            esac
+            ;;
+        language_prompt)
+            case "$UI_LANG" in
+                ru) printf 'Номер языка [1-6]: ' ;; en) printf 'Language number [1-6]: ' ;;
+                de) printf 'Sprachnummer [1-6]: ' ;; zh) printf '语言编号 [1-6]：' ;;
+                ja) printf '言語番号 [1-6]: ' ;; ko) printf '언어 번호 [1-6]: ' ;;
+            esac
+            ;;
+        language_saved)
+            case "$UI_LANG" in
+                ru) printf 'Язык сохранён' ;; en) printf 'Language saved' ;;
+                de) printf 'Sprache gespeichert' ;; zh) printf '语言已保存' ;;
+                ja) printf '言語を保存しました' ;; ko) printf '언어가 저장됨' ;;
+            esac
+            ;;
+        current_language)
+            case "$UI_LANG" in
+                ru) printf 'Текущий язык' ;; en) printf 'Current language' ;;
+                de) printf 'Aktuelle Sprache' ;; zh) printf '当前语言' ;;
+                ja) printf '現在の言語' ;; ko) printf '현재 언어' ;;
+            esac
+            ;;
+        unsupported_language)
+            case "$UI_LANG" in
+                ru) printf 'Неподдерживаемый язык' ;; en) printf 'Unsupported language' ;;
+                de) printf 'Nicht unterstützte Sprache' ;; zh) printf '不支持的语言' ;;
+                ja) printf '対応していない言語です' ;; ko) printf '지원되지 않는 언어' ;;
+            esac
+            ;;
+        connection)
+            case "$UI_LANG" in
+                ru) printf 'Подключение' ;; en) printf 'Connection' ;; de) printf 'Verbindung' ;;
+                zh) printf '连接' ;; ja) printf '接続' ;; ko) printf '연결' ;;
+            esac
+            ;;
+        internet)
+            case "$UI_LANG" in
+                ru) printf 'Интернет' ;; en) printf 'Internet' ;; de) printf 'Internet' ;;
+                zh) printf '互联网' ;; ja) printf 'インターネット' ;; ko) printf '인터넷' ;;
+            esac
+            ;;
+        location)
+            case "$UI_LANG" in
+                ru) printf 'Локация' ;; en) printf 'Location' ;; de) printf 'Standort' ;;
+                zh) printf '位置' ;; ja) printf 'ロケーション' ;; ko) printf '위치' ;;
+            esac
+            ;;
+        protocol_label)
+            case "$UI_LANG" in
+                ru) printf 'Протокол' ;; en) printf 'Protocol' ;; de) printf 'Protokoll' ;;
+                zh) printf '协议' ;; ja) printf 'プロトコル' ;; ko) printf '프로토콜' ;;
+            esac
+            ;;
+        default_config)
+            case "$UI_LANG" in
+                ru) printf 'Конфиг по умолчанию' ;; en) printf 'Default config' ;;
+                de) printf 'Standardkonfiguration' ;; zh) printf '默认配置' ;;
+                ja) printf '既定の設定' ;; ko) printf '기본 설정' ;;
+            esac
+            ;;
+        interface_label)
+            case "$UI_LANG" in
+                ru) printf 'Интерфейс' ;; en) printf 'Interface' ;; de) printf 'Schnittstelle' ;;
+                zh) printf '接口' ;; ja) printf 'インターフェース' ;; ko) printf '인터페이스' ;;
+            esac
+            ;;
+        handshake_label)
+            case "$UI_LANG" in
+                ru) printf 'Handshake' ;; en) printf 'Handshake' ;; de) printf 'Handshake' ;;
+                zh) printf '握手' ;; ja) printf 'ハンドシェイク' ;; ko) printf '핸드셰이크' ;;
+            esac
+            ;;
+        public_ip_label)
+            case "$UI_LANG" in
+                ru) printf 'Внешний IP' ;; en) printf 'Public IP' ;; de) printf 'Öffentliche IP' ;;
+                zh) printf '公网 IP' ;; ja) printf 'パブリック IP' ;; ko) printf '공인 IP' ;;
+            esac
+            ;;
+        autostart_label)
+            case "$UI_LANG" in
+                ru) printf 'Автозапуск' ;; en) printf 'Autostart' ;; de) printf 'Autostart' ;;
+                zh) printf '自动启动' ;; ja) printf '自動起動' ;; ko) printf '자동 시작' ;;
+            esac
+            ;;
+        health_label)
+            case "$UI_LANG" in
+                ru) printf 'Контроль здоровья' ;; en) printf 'Health monitor' ;;
+                de) printf 'Zustandsüberwachung' ;; zh) printf '健康监控' ;;
+                ja) printf 'ヘルス監視' ;; ko) printf '상태 모니터' ;;
+            esac
+            ;;
+        enabled)
+            case "$UI_LANG" in
+                ru) printf 'включён' ;; en) printf 'enabled' ;; de) printf 'aktiviert' ;;
+                zh) printf '已启用' ;; ja) printf '有効' ;; ko) printf '활성화' ;;
+            esac
+            ;;
+        disabled)
+            case "$UI_LANG" in
+                ru) printf 'выключен' ;; en) printf 'disabled' ;; de) printf 'deaktiviert' ;;
+                zh) printf '已禁用' ;; ja) printf '無効' ;; ko) printf '비활성화' ;;
+            esac
+            ;;
+        check_ok)
+            case "$UI_LANG" in
+                ru) printf 'работает' ;; en) printf 'working' ;; de) printf 'funktioniert' ;;
+                zh) printf '正常' ;; ja) printf '正常' ;; ko) printf '정상' ;;
+            esac
+            ;;
+        check_failed)
+            case "$UI_LANG" in
+                ru) printf 'нет доступа' ;; en) printf 'unavailable' ;; de) printf 'nicht verfügbar' ;;
+                zh) printf '不可用' ;; ja) printf '利用不可' ;; ko) printf '사용 불가' ;;
+            esac
+            ;;
+        seconds_ago)
+            case "$UI_LANG" in
+                ru) printf 'сек. назад' ;; en) printf 'sec ago' ;; de) printf 'Sek. zuvor' ;;
+                zh) printf '秒前' ;; ja) printf '秒前' ;; ko) printf '초 전' ;;
+            esac
+            ;;
+        not_available)
+            case "$UI_LANG" in
+                ru) printf 'нет данных' ;; en) printf 'not available' ;;
+                de) printf 'nicht verfügbar' ;; zh) printf '无数据' ;;
+                ja) printf 'データなし' ;; ko) printf '데이터 없음' ;;
+            esac
+            ;;
+        already_connected)
+            case "$UI_LANG" in
+                ru) printf 'Уже подключено через default-конфиг' ;;
+                en) printf 'Already connected with the default config' ;;
+                de) printf 'Bereits mit der Standardkonfiguration verbunden' ;;
+                zh) printf '已使用默认配置连接' ;;
+                ja) printf '既定の設定で接続済みです' ;;
+                ko) printf '기본 설정으로 이미 연결됨' ;;
+            esac
+            ;;
+        no_default)
+            case "$UI_LANG" in
+                ru) printf 'Default-конфиг ещё не выбран — выберите его сейчас' ;;
+                en) printf 'No default config yet — choose one now' ;;
+                de) printf 'Noch keine Standardkonfiguration — jetzt auswählen' ;;
+                zh) printf '尚未设置默认配置，请立即选择' ;;
+                ja) printf '既定の設定がありません。今すぐ選択してください' ;;
+                ko) printf '기본 설정이 없습니다. 지금 선택하세요' ;;
+            esac
+            ;;
+        *) printf '%s' "$key" ;;
+    esac
+}
+
+load_ui_language
+
+declare -a PROFILES=()
+SELECTED_PROFILE=""
+ACTIVE_TEST_TOKEN=""
+CHECK_OK=0
+CHECK_WARN=0
+CHECK_FAIL=0
+TEST_FAILURE_CODE=1
+
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+    C_RED=$'\033[31m'
+    C_GREEN=$'\033[32m'
+    C_YELLOW=$'\033[33m'
+    C_BOLD=$'\033[1m'
+    C_CYAN=$'\033[36m'
+    C_RESET=$'\033[0m'
+else
+    C_RED=""
+    C_GREEN=""
+    C_YELLOW=""
+    C_BOLD=""
+    C_CYAN=""
+    C_RESET=""
+fi
+
+say() { printf '%s\n' "$*"; }
+info() { printf '%s[INFO]%s %s\n' "$C_BOLD" "$C_RESET" "$*"; }
+warn() { printf '%s[WARN]%s %s\n' "$C_YELLOW" "$C_RESET" "$*" >&2; }
+error() { printf '%s[FAIL]%s %s\n' "$C_RED" "$C_RESET" "$*" >&2; }
+die() { error "$*"; exit 1; }
+
+check_ok() {
+    CHECK_OK=$((CHECK_OK + 1))
+    printf '%s[ OK ]%s %s\n' "$C_GREEN" "$C_RESET" "$*"
+}
+
+check_warn() {
+    CHECK_WARN=$((CHECK_WARN + 1))
+    printf '%s[WARN]%s %s\n' "$C_YELLOW" "$C_RESET" "$*"
+}
+
+check_fail() {
+    CHECK_FAIL=$((CHECK_FAIL + 1))
+    printf '%s[FAIL]%s %s\n' "$C_RED" "$C_RESET" "$*"
+}
+
+usage() {
+    case "$UI_LANG" in
+        en)
+            cat <<'EOF'
+Mazzy VPN — safe and convenient VPN control for Linux
+
+Usage:
+  mazzy-vpn                         interactive TUI with live dashboard
+  mazzy-vpn quick                   connect the saved default config
+  mazzy-vpn connect [PROTOCOL] [PROFILE|NUMBER]
+  mazzy-vpn disconnect | reconnect
+  mazzy-vpn dashboard | status | diagnose
+  mazzy-vpn list [PROTOCOL]
+  mazzy-vpn validate [PROTOCOL|all]
+  mazzy-vpn probe [PROTOCOL|all] [--timeout SEC]
+  mazzy-vpn test [PROTOCOL] [PROFILE] [--timeout SEC] [--keep]
+  mazzy-vpn test-all [PROTOCOL|all] [--timeout SEC]
+  mazzy-vpn emergency [--timeout SEC] [--protocol PROTOCOL]
+  mazzy-vpn self-test [--offline|--live] [--timeout SEC]
+  mazzy-vpn doctor [--fix]
+  mazzy-vpn autostart on|off
+  mazzy-vpn import PROTOCOL FILE
+  mazzy-vpn import-dir FOLDER [--dry-run] [--force]
+  mazzy-vpn init-config-dir [FOLDER]
+  mazzy-vpn language [ru|en|de|zh|ja|ko]
+  mazzy-vpn logs [-f] | version
+
+Protocols: amneziawg (awg), wireguard (wg), openvpn (ovpn), l2tp
+Compatible aliases: vpnctl, mazzyvpn
+EOF
+            return
+            ;;
+        de)
+            cat <<'EOF'
+Mazzy VPN — sichere und komfortable VPN-Steuerung für Linux
+
+Verwendung:
+  mazzy-vpn                         interaktives TUI mit Live-Dashboard
+  mazzy-vpn quick                   gespeicherte Standardkonfiguration verbinden
+  mazzy-vpn connect [PROTOKOLL] [PROFIL|NUMMER]
+  mazzy-vpn disconnect | reconnect
+  mazzy-vpn dashboard | status | diagnose
+  mazzy-vpn list [PROTOKOLL]
+  mazzy-vpn validate [PROTOKOLL|all]
+  mazzy-vpn probe [PROTOKOLL|all] [--timeout SEK]
+  mazzy-vpn test [PROTOKOLL] [PROFIL] [--timeout SEK] [--keep]
+  mazzy-vpn test-all [PROTOKOLL|all] [--timeout SEK]
+  mazzy-vpn emergency [--timeout SEK] [--protocol PROTOKOLL]
+  mazzy-vpn self-test [--offline|--live]
+  mazzy-vpn doctor [--fix]
+  mazzy-vpn autostart on|off
+  mazzy-vpn import PROTOKOLL DATEI
+  mazzy-vpn import-dir ORDNER [--dry-run] [--force]
+  mazzy-vpn init-config-dir [ORDNER]
+  mazzy-vpn language [ru|en|de|zh|ja|ko]
+  mazzy-vpn logs [-f] | version
+
+Protokolle: amneziawg (awg), wireguard (wg), openvpn (ovpn), l2tp
+Kompatible Aliase: vpnctl, mazzyvpn
+EOF
+            return
+            ;;
+        zh)
+            cat <<'EOF'
+Mazzy VPN — 安全便捷的 Linux VPN 管理工具
+
+用法：
+  mazzy-vpn                         带实时仪表板的交互式 TUI
+  mazzy-vpn quick                   连接已保存的默认配置
+  mazzy-vpn connect [协议] [配置|编号]
+  mazzy-vpn disconnect | reconnect
+  mazzy-vpn dashboard | status | diagnose
+  mazzy-vpn list [协议]
+  mazzy-vpn validate [协议|all]
+  mazzy-vpn probe [协议|all] [--timeout 秒]
+  mazzy-vpn test [协议] [配置] [--timeout 秒] [--keep]
+  mazzy-vpn test-all [协议|all] [--timeout 秒]
+  mazzy-vpn emergency [--timeout 秒] [--protocol 协议]
+  mazzy-vpn self-test [--offline|--live]
+  mazzy-vpn doctor [--fix]
+  mazzy-vpn autostart on|off
+  mazzy-vpn import 协议 文件
+  mazzy-vpn import-dir 文件夹 [--dry-run] [--force]
+  mazzy-vpn init-config-dir [文件夹]
+  mazzy-vpn language [ru|en|de|zh|ja|ko]
+  mazzy-vpn logs [-f] | version
+
+协议：amneziawg (awg)、wireguard (wg)、openvpn (ovpn)、l2tp
+兼容别名：vpnctl、mazzyvpn
+EOF
+            return
+            ;;
+        ja)
+            cat <<'EOF'
+Mazzy VPN — Linux 向けの安全で使いやすい VPN 管理ツール
+
+使い方:
+  mazzy-vpn                         ライブダッシュボード付き対話 TUI
+  mazzy-vpn quick                   保存済みの既定設定で接続
+  mazzy-vpn connect [プロトコル] [プロファイル|番号]
+  mazzy-vpn disconnect | reconnect
+  mazzy-vpn dashboard | status | diagnose
+  mazzy-vpn list [プロトコル]
+  mazzy-vpn validate [プロトコル|all]
+  mazzy-vpn probe [プロトコル|all] [--timeout 秒]
+  mazzy-vpn test [プロトコル] [プロファイル] [--timeout 秒] [--keep]
+  mazzy-vpn test-all [プロトコル|all] [--timeout 秒]
+  mazzy-vpn emergency [--timeout 秒] [--protocol プロトコル]
+  mazzy-vpn self-test [--offline|--live]
+  mazzy-vpn doctor [--fix]
+  mazzy-vpn autostart on|off
+  mazzy-vpn import プロトコル ファイル
+  mazzy-vpn import-dir フォルダー [--dry-run] [--force]
+  mazzy-vpn init-config-dir [フォルダー]
+  mazzy-vpn language [ru|en|de|zh|ja|ko]
+  mazzy-vpn logs [-f] | version
+
+プロトコル: amneziawg (awg)、wireguard (wg)、openvpn (ovpn)、l2tp
+互換エイリアス: vpnctl、mazzyvpn
+EOF
+            return
+            ;;
+        ko)
+            cat <<'EOF'
+Mazzy VPN — Linux용 안전하고 편리한 VPN 관리 도구
+
+사용법:
+  mazzy-vpn                         실시간 대시보드가 있는 대화형 TUI
+  mazzy-vpn quick                   저장된 기본 설정으로 연결
+  mazzy-vpn connect [프로토콜] [프로필|번호]
+  mazzy-vpn disconnect | reconnect
+  mazzy-vpn dashboard | status | diagnose
+  mazzy-vpn list [프로토콜]
+  mazzy-vpn validate [프로토콜|all]
+  mazzy-vpn probe [프로토콜|all] [--timeout 초]
+  mazzy-vpn test [프로토콜] [프로필] [--timeout 초] [--keep]
+  mazzy-vpn test-all [프로토콜|all] [--timeout 초]
+  mazzy-vpn emergency [--timeout 초] [--protocol 프로토콜]
+  mazzy-vpn self-test [--offline|--live]
+  mazzy-vpn doctor [--fix]
+  mazzy-vpn autostart on|off
+  mazzy-vpn import 프로토콜 파일
+  mazzy-vpn import-dir 폴더 [--dry-run] [--force]
+  mazzy-vpn init-config-dir [폴더]
+  mazzy-vpn language [ru|en|de|zh|ja|ko]
+  mazzy-vpn logs [-f] | version
+
+프로토콜: amneziawg (awg), wireguard (wg), openvpn (ovpn), l2tp
+호환 별칭: vpnctl, mazzyvpn
+EOF
+            return
+            ;;
+    esac
+    cat <<'EOF'
+Mazzy VPN - быстрое и безопасное управление VPN в Linux
+
+Использование:
+  mazzy-vpn                         интерактивное TUI-меню
+  mazzy-vpn list [ПРОТОКОЛ]         список серверов
+  mazzy-vpn connect [ПРОТОКОЛ] [ПРОФИЛЬ|НОМЕР]
+  mazzy-vpn quick                   быстро подключить default-конфиг
+  mazzy-vpn disconnect              отключить VPN
+  mazzy-vpn reconnect               переподключить выбранный профиль
+  mazzy-vpn dashboard               единый dashboard состояния и проверок
+  mazzy-vpn status                  краткое состояние
+  mazzy-vpn diagnose                диагностика активного соединения
+  mazzy-vpn validate [ПРОТОКОЛ|all] проверить формат всех профилей
+  mazzy-vpn probe [ПРОТОКОЛ|all] [--timeout СЕК]
+                                    DNS и ping всех VPN-серверов
+  mazzy-vpn test [ПРОТОКОЛ] [ПРОФИЛЬ] [--timeout СЕК] [--keep]
+  mazzy-vpn test-all [ПРОТОКОЛ|all] [--timeout СЕК]
+                                    живой тест каждого туннеля с откатом
+  mazzy-vpn emergency [--timeout СЕК] [--protocol ПРОТОКОЛ]
+  mazzy-vpn self-test [--offline|--live] [--timeout СЕК]
+                                    полная самодиагностика
+  mazzy-vpn doctor [--fix]          проверка установки и конфигов
+  mazzy-vpn autostart on|off        автоподключение после загрузки
+  mazzy-vpn import ПРОТОКОЛ ФАЙЛ    безопасно добавить профиль
+  mazzy-vpn import-dir ПАПКА [--dry-run] [--force]
+                                    распознать и импортировать папку
+  mazzy-vpn init-config-dir [ПАПКА] создать структуру для конфигов
+  mazzy-vpn remove ПРОТОКОЛ ПРОФИЛЬ удалить профиль
+  mazzy-vpn logs [-f]               журнал сервиса
+  mazzy-vpn language [ru|en|de|zh|ja|ko]
+                                    показать или сменить язык интерфейса
+  mazzy-vpn version
+
+Протоколы:
+  amneziawg (awg), wireguard (wg), openvpn (ovpn), l2tp (ltp)
+
+Примеры:
+  mazzy-vpn
+  mazzy-vpn list openvpn
+  sudo mazzy-vpn connect amneziawg 2
+  sudo mazzy-vpn test openvpn 2 --timeout 60
+  mazzy-vpn self-test
+  sudo mazzy-vpn test-all openvpn --timeout 30
+  sudo mazzy-vpn emergency --timeout 20
+  sudo mazzy-vpn doctor --fix
+
+Совместимые aliases: vpnctl, mazzyvpn
+EOF
+}
+
+stdin_interactive() {
+    [[ -t 0 || "${VPNCTL_FORCE_INTERACTIVE:-0}" == "1" ]]
+}
+
+canonical_protocol() {
+    case "${1,,}" in
+        amneziawg|amnezia|awg) printf 'amneziawg\n' ;;
+        wireguard|wire|wg) printf 'wireguard\n' ;;
+        openvpn|open|ovpn) printf 'openvpn\n' ;;
+        l2tp|ltp) printf 'l2tp\n' ;;
+        *) return 1 ;;
+    esac
+}
+
+protocol_title() {
+    case "$1" in
+        amneziawg) printf 'AmneziaWG' ;;
+        wireguard) printf 'WireGuard' ;;
+        openvpn) printf 'OpenVPN' ;;
+        l2tp) printf 'L2TP/IPsec' ;;
+        *) printf '%s' "$1" ;;
+    esac
+}
+
+effective_config_dir() {
+    if [[ -n "$CONFIG_DIR" ]]; then
+        printf '%s\n' "$CONFIG_DIR"
+    elif [[ -d "$DEFAULT_CONFIG_DIR" ]]; then
+        printf '%s\n' "$DEFAULT_CONFIG_DIR"
+    elif [[ -d "$SCRIPT_DIR/conf" ]]; then
+        printf '%s\n' "$SCRIPT_DIR/conf"
+    else
+        printf '%s\n' "$DEFAULT_CONFIG_DIR"
+    fi
+}
+
+protocol_dir() {
+    local protocol="$1" base
+    base="$(effective_config_dir)"
+    if [[ "$protocol" == "amneziawg" && -d "$base/AMNEZIA" ]]; then
+        printf '%s\n' "$base/AMNEZIA"
+    else
+        printf '%s/%s\n' "$base" "$protocol"
+    fi
+}
+
+load_profiles() {
+    local protocol="$1" dir path
+    PROFILES=()
+    dir="$(protocol_dir "$protocol")"
+    [[ -d "$dir" ]] || return 0
+
+    while IFS= read -r -d '' path; do
+        PROFILES+=("$path")
+    done < <(
+        case "$protocol" in
+            amneziawg|wireguard)
+                find "$dir" -maxdepth 1 -type f -name '*.conf' -print0 2>/dev/null | sort -z
+                ;;
+            openvpn)
+                find "$dir" -maxdepth 1 -type f \( -name '*.ovpn' -o -name '*.conf' \) -print0 2>/dev/null | sort -z
+                ;;
+            l2tp)
+                find "$dir" -maxdepth 1 -type f -name '*.nmconnection' -print0 2>/dev/null | sort -z
+                ;;
+        esac
+    )
+}
+
+profile_name() {
+    local name
+    name="$(basename -- "$1")"
+    case "$name" in
+        *.nmconnection) name="${name%.nmconnection}" ;;
+        *.ovpn) name="${name%.ovpn}" ;;
+        *.conf) name="${name%.conf}" ;;
+    esac
+    printf '%s\n' "$name"
+}
+
+profile_endpoint() {
+    local protocol="$1" file="$2"
+    case "$protocol" in
+        openvpn)
+            awk '$1 == "remote" {
+                port=($3 ~ /^[0-9]+$/ ? $3 : 1194)
+                print $2 ":" port
+                exit
+            }' "$file"
+            ;;
+        amneziawg|wireguard)
+            awk -F= '
+                /^[[:space:]]*Endpoint[[:space:]]*=/ {
+                    sub(/^[^=]*=[[:space:]]*/, "")
+                    sub(/[[:space:]]*$/, "")
+                    print
+                    exit
+                }
+            ' "$file"
+            ;;
+        l2tp)
+            awk -F= '
+                /^\[vpn\]$/ { in_vpn=1; next }
+                /^\[/ { in_vpn=0 }
+                in_vpn && ($1 == "gateway" || $1 == "remote") {
+                    sub(/^[^=]*=/, "")
+                    print
+                    exit
+                }
+            ' "$file"
+            ;;
+    esac
+}
+
+endpoint_host() {
+    local endpoint="$1"
+    if [[ "$endpoint" =~ ^\[([^]]+)\](:[0-9]+)?$ ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+    elif [[ "$endpoint" == *:* ]]; then
+        printf '%s\n' "${endpoint%:*}"
+    else
+        printf '%s\n' "$endpoint"
+    fi
+}
+
+endpoint_port() {
+    local endpoint="$1"
+    if [[ "$endpoint" =~ :([0-9]+)$ ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+    fi
+}
+
+validate_endpoint() {
+    local protocol="$1" file="$2" endpoint host port
+    endpoint="$(profile_endpoint "$protocol" "$file")"
+    host="$(endpoint_host "$endpoint")"
+    port="$(endpoint_port "$endpoint")"
+    [[ -n "$host" && "$host" != -* && "$host" != *[[:space:]]* ]] || return 1
+    if [[ "$protocol" != "l2tp" ]]; then
+        [[ "$port" =~ ^[0-9]+$ ]] && ((10#$port >= 1 && 10#$port <= 65535)) ||
+            return 1
+    fi
+}
+
+openvpn_parser_ok() {
+    local file="$1"
+    command -v openvpn >/dev/null 2>&1 || return 0
+    timeout 10 openvpn --config "$file" --verb 0 --show-tls >/dev/null 2>&1
+}
+
+resolve_profile() {
+    local protocol="$1" requested="${2:-}" i display exact="" index
+    load_profiles "$protocol"
+    ((${#PROFILES[@]} > 0)) || {
+        error "Для $(protocol_title "$protocol") нет профилей в $(protocol_dir "$protocol")"
+        return 1
+    }
+
+    if [[ -z "$requested" ]]; then
+        if ! stdin_interactive; then
+            error "Укажите профиль или его номер. Список: $CLI_COMMAND list $protocol"
+            return 1
+        fi
+        print_profile_list "$protocol"
+        read -r -p "$(msg server_number)" requested
+    fi
+
+    if [[ "$requested" =~ ^[0-9]+$ ]]; then
+        index=$((10#$requested))
+        if ((index >= 1 && index <= ${#PROFILES[@]})); then
+            SELECTED_PROFILE="${PROFILES[index - 1]}"
+            return 0
+        fi
+    fi
+
+    for ((i = 0; i < ${#PROFILES[@]}; i++)); do
+        display="$(profile_name "${PROFILES[i]}")"
+        if [[ "$requested" == "$display" || "$requested" == "$(basename -- "${PROFILES[i]}")" ]]; then
+            SELECTED_PROFILE="${PROFILES[i]}"
+            return 0
+        fi
+        if [[ "${requested,,}" == "${display,,}" ]]; then
+            [[ -z "$exact" ]] || {
+                error "Имя '$requested' неоднозначно; используйте точное имя или номер"
+                return 1
+            }
+            exact="${PROFILES[i]}"
+        fi
+    done
+
+    if [[ -n "$exact" ]]; then
+        SELECTED_PROFILE="$exact"
+        return 0
+    fi
+    error "Профиль '$requested' не найден для $(protocol_title "$protocol")"
+    return 1
+}
+
+print_profile_list() {
+    local protocol="$1" i endpoint
+    load_profiles "$protocol"
+    printf '\n%s%s%s\n' "$C_BOLD" "$(protocol_title "$protocol")" "$C_RESET"
+    if ((${#PROFILES[@]} == 0)); then
+        printf '  Профилей нет: %s\n' "$(protocol_dir "$protocol")"
+        return 0
+    fi
+    for ((i = 0; i < ${#PROFILES[@]}; i++)); do
+        endpoint="$(profile_endpoint "$protocol" "${PROFILES[i]}")"
+        printf '  %2d. %-42s' "$((i + 1))" "$(profile_name "${PROFILES[i]}")"
+        [[ -n "$endpoint" ]] && printf ' %s' "$endpoint"
+        printf '\n'
+    done
+}
+
+state_get() {
+    local key="$1"
+    [[ -r "$STATE_FILE" ]] || return 1
+    awk -F= -v wanted="$key" '
+        $1 == wanted {
+            sub(/^[^=]*=/, "")
+            print
+            exit
+        }
+    ' "$STATE_FILE"
+}
+
+write_state() {
+    local protocol="$1" file="$2" desired="$3" mode="${4:-normal}"
+    local test_token="${5:-}" test_deadline="${6:-}" tmp
+    mkdir -p "$STATE_DIR"
+    chmod 700 "$STATE_DIR"
+    tmp="$STATE_DIR/.active.$$"
+    umask 077
+    {
+        printf 'PROTOCOL=%s\n' "$protocol"
+        printf 'PROFILE=%s\n' "$(basename -- "$file")"
+        printf 'DESIRED=%s\n' "$desired"
+        printf 'MODE=%s\n' "$mode"
+        if [[ "$mode" == "test" ]]; then
+            printf 'TEST_TOKEN=%s\n' "$test_token"
+            printf 'TEST_DEADLINE=%s\n' "$test_deadline"
+        fi
+    } >"$tmp"
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$STATE_FILE"
+}
+
+set_desired_state() {
+    local desired="$1" protocol profile
+    protocol="$(state_get PROTOCOL 2>/dev/null || true)"
+    profile="$(state_get PROFILE 2>/dev/null || true)"
+    [[ -n "$protocol" && -n "$profile" ]] || return 1
+    resolve_profile "$protocol" "$profile" >/dev/null || return 1
+    write_state "$protocol" "$SELECTED_PROFILE" "$desired"
+}
+
+selected_from_state() {
+    local protocol profile
+    protocol="$(state_get PROTOCOL 2>/dev/null || true)"
+    profile="$(state_get PROFILE 2>/dev/null || true)"
+    [[ -n "$protocol" && -n "$profile" ]] || return 1
+    protocol="$(canonical_protocol "$protocol" 2>/dev/null)" || return 1
+    resolve_profile "$protocol" "$profile" >/dev/null || return 1
+    SELECTED_PROTOCOL="$protocol"
+    return 0
+}
+
+require_root() {
+    if ((EUID == 0)) || [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]]; then
+        return 0
+    fi
+    command -v sudo >/dev/null 2>&1 || die "Нужны права root; sudo не найден"
+    info "Для изменения VPN нужны права администратора"
+    exec sudo -- "$SELF" "$@"
+}
+
+require_profile_access() {
+    local base
+    base="$(effective_config_dir)"
+    if [[ "$base" == "$DEFAULT_CONFIG_DIR" && ! -r "$base" ]]; then
+        require_root "$@"
+    fi
+}
+
+systemd_available() {
+    command -v systemctl >/dev/null 2>&1 &&
+        [[ -d /run/systemd/system || "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]]
+}
+
+systemctl_quiet() {
+    systemctl "$@" >/dev/null 2>&1
+}
+
+validate_permissions() {
+    local file="$1" mode
+    mode="$(stat -c '%a' "$file" 2>/dev/null || printf '777')"
+    [[ "$mode" == "600" || "$mode" == "400" ]]
+}
+
+has_directive() {
+    local file="$1" directive="$2"
+    grep -Eiq "^[[:space:]]*${directive}([[:space:]=]|$)" "$file"
+}
+
+validate_profile() {
+    local protocol="$1" file="$2" quiet="${3:-0}" bad=0 unsafe
+    [[ -f "$file" ]] || {
+        ((quiet)) || check_fail "Профиль отсутствует: $file"
+        return 1
+    }
+
+    if ! validate_permissions "$file"; then
+        ((quiet)) || check_warn "Небезопасные права $(stat -c '%a' "$file" 2>/dev/null): $file"
+    elif ((quiet == 0)); then
+        check_ok "Права профиля закрыты: $(basename -- "$file")"
+    fi
+
+    case "$protocol" in
+        amneziawg|wireguard)
+            for unsafe in PreUp PostUp PreDown PostDown; do
+                if has_directive "$file" "$unsafe"; then
+                    ((quiet)) || check_fail "$file содержит выполняемую команду $unsafe"
+                    bad=1
+                fi
+            done
+            for unsafe in '\[Interface\]' PrivateKey '\[Peer\]' PublicKey AllowedIPs Endpoint; do
+                if ! grep -Eq "^[[:space:]]*${unsafe}([[:space:]=]|$)" "$file"; then
+                    ((quiet)) || check_fail "$file: отсутствует $unsafe"
+                    bad=1
+                fi
+            done
+            if [[ "$protocol" == "amneziawg" ]]; then
+                for unsafe in Jc Jmin Jmax S1 S2 H1 H2 H3 H4; do
+                    if ! has_directive "$file" "$unsafe"; then
+                        ((quiet)) || check_fail "$file: отсутствует параметр AmneziaWG $unsafe"
+                        bad=1
+                    fi
+                done
+            fi
+            ;;
+        openvpn)
+            for unsafe in up down route-up route-pre-down ipchange plugin \
+                tls-verify auth-user-pass-verify client-connect client-disconnect \
+                learn-address config tls-crypt-v2-verify client-crresponse iproute \
+                script-security management management-client-auth cd chroot daemon \
+                log log-append status writepid syslog; do
+                if has_directive "$file" "$unsafe"; then
+                    ((quiet)) || check_fail "$file содержит запрещённую выполняемую директиву $unsafe"
+                    bad=1
+                fi
+            done
+            for unsafe in client remote dev; do
+                if ! has_directive "$file" "$unsafe"; then
+                    ((quiet)) || check_fail "$file: отсутствует директива $unsafe"
+                    bad=1
+                fi
+            done
+            ;;
+        l2tp)
+            if ! grep -Eq '^[[:space:]]*type[[:space:]]*=[[:space:]]*vpn[[:space:]]*$' "$file" ||
+               ! grep -Eiq '^[[:space:]]*service-type[[:space:]]*=.*l2tp' "$file"; then
+                ((quiet)) || check_fail "$file не является профилем NetworkManager L2TP"
+                bad=1
+            fi
+            for unsafe in id gateway; do
+                if ! has_directive "$file" "$unsafe"; then
+                    ((quiet)) || check_fail "$file: отсутствует параметр L2TP $unsafe"
+                    bad=1
+                fi
+            done
+            if grep -q 'CHANGE_ME' "$file"; then
+                ((quiet)) || check_fail "$file содержит незаполненные значения CHANGE_ME"
+                bad=1
+            fi
+            ;;
+        *)
+            ((quiet)) || check_fail "Неизвестный протокол: $protocol"
+            return 1
+            ;;
+    esac
+    if ! validate_endpoint "$protocol" "$file"; then
+        ((quiet)) || check_fail "$file: endpoint отсутствует или имеет неверный host/port"
+        bad=1
+    fi
+    if [[ "$protocol" == "openvpn" && "$bad" -eq 0 ]] &&
+       ! openvpn_parser_ok "$file"; then
+        ((quiet)) || check_fail "$file: OpenVPN отклонил конфигурацию при безопасном разборе"
+        bad=1
+    fi
+    ((bad == 0))
+}
+
+requested_protocols() {
+    local requested="${1:-all}" protocol
+    if [[ "$requested" == "all" ]]; then
+        printf '%s\n' amneziawg wireguard openvpn l2tp
+        return 0
+    fi
+    protocol="$(canonical_protocol "$requested")" || return 1
+    printf '%s\n' "$protocol"
+}
+
+cmd_validate() {
+    local requested="${1:-all}" protocol file total=0 passed=0 failed=0
+    local -a protocols=()
+    require_profile_access validate "$@"
+    mapfile -t protocols < <(requested_protocols "$requested") ||
+        die "Неизвестный протокол: $requested"
+    say "Проверка VPN-профилей (формат, безопасность, права, endpoint)"
+    for protocol in "${protocols[@]}"; do
+        load_profiles "$protocol"
+        if ((${#PROFILES[@]} == 0)); then
+            warn "$(protocol_title "$protocol"): профилей нет"
+            continue
+        fi
+        for file in "${PROFILES[@]}"; do
+            total=$((total + 1))
+            if validate_profile "$protocol" "$file" 1 &&
+               validate_permissions "$file"; then
+                passed=$((passed + 1))
+                printf '[ OK ] %-11s %s\n' "$(protocol_title "$protocol")" \
+                    "$(profile_name "$file")"
+            else
+                failed=$((failed + 1))
+                printf '[FAIL] %-11s %s\n' "$(protocol_title "$protocol")" \
+                    "$(profile_name "$file")"
+                validate_profile "$protocol" "$file" 0 || true
+                validate_permissions "$file" ||
+                    check_fail "Небезопасные права: $(stat -c '%a' "$file" 2>/dev/null) $file"
+            fi
+        done
+    done
+    printf '\nИтог: profiles=%d passed=%d failed=%d\n' "$total" "$passed" "$failed"
+    ((total > 0 && failed == 0))
+}
+
+profile_transport() {
+    local protocol="$1" file="$2"
+    case "$protocol" in
+        openvpn)
+            awk '
+                $1 == "proto" { proto=tolower($2) }
+                $1 == "remote" && NF >= 4 { remote_proto=tolower($4) }
+                END {
+                    value=(remote_proto != "" ? remote_proto : proto)
+                    if (value ~ /^tcp/) print "tcp"; else print "udp"
+                }
+            ' "$file"
+            ;;
+        *) printf 'udp\n' ;;
+    esac
+}
+
+ping_host() {
+    local host="$1" timeout="$2"
+    command -v ping >/dev/null 2>&1 || return 2
+    if [[ "$host" == *:* ]]; then
+        ping -6 -n -c 1 -W "$timeout" -- "$host" >/dev/null 2>&1
+    else
+        ping -4 -n -c 1 -W "$timeout" -- "$host" >/dev/null 2>&1
+    fi
+}
+
+probe_profile() {
+    local protocol="$1" file="$2" timeout="$3"
+    local endpoint host port transport ping_rc=0
+    endpoint="$(profile_endpoint "$protocol" "$file")"
+    host="$(endpoint_host "$endpoint")"
+    port="$(endpoint_port "$endpoint")"
+    transport="$(profile_transport "$protocol" "$file")"
+
+    validate_endpoint "$protocol" "$file" || return 3
+    if ! getent ahosts "$host" >/dev/null 2>&1; then
+        return 4
+    fi
+    ping_host "$host" "$timeout" || ping_rc=$?
+    if [[ "$transport" == "tcp" && -n "$port" && -x "$(command -v nc 2>/dev/null)" ]]; then
+        nc -z -w "$timeout" "$host" "$port" >/dev/null 2>&1 || return 5
+    fi
+    return "$ping_rc"
+}
+
+cmd_probe() {
+    local requested="all" timeout="$DEFAULT_PROBE_TIMEOUT" protocol file rc
+    local total=0 dns_fail=0 tcp_fail=0 ping_ok=0 ping_blocked=0 no_ping=0
+    local -a protocols=()
+    require_profile_access probe "$@"
+    while (($#)); do
+        case "$1" in
+            --timeout)
+                shift
+                [[ $# -gt 0 ]] || die "--timeout требует число секунд"
+                timeout="$1"
+                ;;
+            --help|-h)
+                say "Использование: $CLI_COMMAND probe [ПРОТОКОЛ|all] [--timeout 3]"
+                return 0
+                ;;
+            -*)
+                die "Неизвестный параметр probe: $1"
+                ;;
+            *)
+                [[ "$requested" == "all" ]] || die "Лишний аргумент probe: $1"
+                requested="$1"
+                ;;
+        esac
+        shift
+    done
+    if ! [[ "$timeout" =~ ^[0-9]+$ ]] ||
+       ! ((timeout >= 1 && timeout <= 30)); then
+        die "Таймаут probe должен быть от 1 до 30 секунд"
+    fi
+    mapfile -t protocols < <(requested_protocols "$requested") ||
+        die "Неизвестный протокол: $requested"
+
+    say "Проверка endpoint: DNS + ICMP ping; TCP-порты проверяются дополнительно"
+    for protocol in "${protocols[@]}"; do
+        load_profiles "$protocol"
+        for file in "${PROFILES[@]}"; do
+            total=$((total + 1))
+            rc=0
+            probe_profile "$protocol" "$file" "$timeout" || rc=$?
+            case "$rc" in
+                0)
+                    ping_ok=$((ping_ok + 1))
+                    printf '[ OK ] %-11s %-36s ping OK\n' \
+                        "$(protocol_title "$protocol")" "$(profile_name "$file")"
+                    ;;
+                2)
+                    no_ping=$((no_ping + 1))
+                    printf '[WARN] %-11s %-36s ping не установлен\n' \
+                        "$(protocol_title "$protocol")" "$(profile_name "$file")"
+                    ;;
+                1)
+                    ping_blocked=$((ping_blocked + 1))
+                    printf '[WARN] %-11s %-36s DNS OK, ICMP без ответа\n' \
+                        "$(protocol_title "$protocol")" "$(profile_name "$file")"
+                    ;;
+                3)
+                    dns_fail=$((dns_fail + 1))
+                    printf '[FAIL] %-11s %-36s неверный endpoint\n' \
+                        "$(protocol_title "$protocol")" "$(profile_name "$file")"
+                    ;;
+                4)
+                    dns_fail=$((dns_fail + 1))
+                    printf '[FAIL] %-11s %-36s DNS не разрешается\n' \
+                        "$(protocol_title "$protocol")" "$(profile_name "$file")"
+                    ;;
+                5)
+                    tcp_fail=$((tcp_fail + 1))
+                    printf '[FAIL] %-11s %-36s TCP-порт недоступен\n' \
+                        "$(protocol_title "$protocol")" "$(profile_name "$file")"
+                    ;;
+            esac
+        done
+    done
+    printf '\nИтог: endpoints=%d ping_ok=%d icmp_blocked=%d no_ping=%d hard_fail=%d\n' \
+        "$total" "$ping_ok" "$ping_blocked" "$no_ping" "$((dns_fail + tcp_fail))"
+    ((total > 0 && dns_fail == 0 && tcp_fail == 0))
+}
+
+fix_profile_permissions() {
+    local file="$1"
+    chmod 600 "$file" || return 1
+    check_ok "Исправлены права: $file"
+}
+
+cmd_list() {
+    local requested="${1:-all}" protocol
+    require_profile_access list "$@"
+    if [[ "$requested" == "all" ]]; then
+        for protocol in amneziawg wireguard openvpn l2tp; do
+            print_profile_list "$protocol"
+        done
+        return 0
+    fi
+    protocol="$(canonical_protocol "$requested")" || die "Неизвестный протокол: $requested"
+    print_profile_list "$protocol"
+}
+
+choose_protocol() {
+    local answer protocol count runtime
+    stdin_interactive || {
+        error "Укажите протокол: amneziawg, wireguard, openvpn или l2tp"
+        return 1
+    }
+    printf '\n%s\n' "$(msg choose_protocol)" >&2
+    local index=1
+    for protocol in amneziawg wireguard openvpn l2tp; do
+        load_profiles "$protocol"
+        count="${#PROFILES[@]}"
+        if protocol_runtime_available "$protocol"; then
+            runtime="$(msg ready)"
+        else
+            runtime="$(msg runtime_missing)"
+        fi
+        printf '  %d. %-12s %s: %-3d %s\n' "$index" \
+            "$(protocol_title "$protocol")" "$(msg profile_count)" "$count" "$runtime" >&2
+        index=$((index + 1))
+    done
+    read -r -p "$(msg protocol_number)" answer
+    case "$answer" in
+        1) printf 'amneziawg\n' ;;
+        2) printf 'wireguard\n' ;;
+        3) printf 'openvpn\n' ;;
+        4) printf 'l2tp\n' ;;
+        *) error "$(msg invalid_protocol)"; return 1 ;;
+    esac
+}
+
+cmd_connect() (
+    local -a original=("$@")
+    local requested_protocol="${1:-}" requested_profile="${2:-}" protocol fallback=""
+    require_profile_access connect "${original[@]}"
+    if [[ -z "$requested_protocol" ]]; then
+        protocol="$(choose_protocol)" || return 1
+    else
+        protocol="$(canonical_protocol "$requested_protocol")" ||
+            die "Неизвестный протокол: $requested_protocol"
+    fi
+    resolve_profile "$protocol" "$requested_profile" || return 1
+    validate_profile "$protocol" "$SELECTED_PROFILE" 1 ||
+        die "Профиль не прошёл проверку безопасности: $SELECTED_PROFILE. Запустите $CLI_COMMAND doctor"
+    validate_permissions "$SELECTED_PROFILE" ||
+        die "У профиля небезопасные права. Исправление: chmod 600 '$SELECTED_PROFILE'"
+    require_root connect "$protocol" "$(basename -- "$SELECTED_PROFILE")"
+    systemd_available || die "systemd недоступен; выполните установку на системе с systemd"
+    acquire_action_lock
+
+    info "Выбран $(protocol_title "$protocol"): $(profile_name "$SELECTED_PROFILE")"
+    cancel_test_guard
+    discard_test_backup
+    systemctl_quiet stop "$SERVICE_NAME" || true
+    fallback="$(detect_external_fallback || true)"
+    if [[ -n "$fallback" ]]; then
+        info "Временно останавливаем внешний VPN: $(external_fallback_title "$fallback")"
+        if ! stop_external_fallbacks; then
+            error "Не удалось безопасно остановить внешний VPN"
+            start_external_fallback "$fallback" || true
+            return 1
+        fi
+    fi
+    cleanup_stale_quick_policy
+    write_state "$protocol" "$SELECTED_PROFILE" up ||
+        die "Не удалось сохранить выбранный профиль"
+    health_reset
+    systemctl_quiet start "$HEALTH_TIMER" || warn "Не удалось запустить $HEALTH_TIMER"
+    reset_service_start_limit
+
+    if ! systemctl start "$SERVICE_NAME"; then
+        error "Сервис VPN не запустился. Последние сообщения:"
+        journalctl -u "$SERVICE_NAME" -n 30 --no-pager 2>/dev/null || true
+        if [[ -n "$fallback" ]]; then
+            set_desired_state down || true
+            start_external_fallback "$fallback" ||
+                error "Не удалось автоматически вернуть $(external_fallback_title "$fallback")"
+        fi
+        return 1
+    fi
+    say "Подключение запущено. Проверка: $CLI_COMMAND diagnose"
+)
+
+cmd_disconnect() (
+    require_root disconnect
+    systemd_available || die "systemd недоступен"
+    acquire_action_lock
+    cancel_test_guard
+    discard_test_backup
+    if [[ -r "$STATE_FILE" ]]; then
+        set_desired_state down || die "Не удалось сохранить состояние отключения"
+    fi
+    health_reset
+    if systemctl_quiet stop "$SERVICE_NAME"; then
+        say "VPN отключён."
+    else
+        warn "Сервис уже остановлен или не установлен."
+    fi
+)
+
+cmd_reconnect() (
+    local fallback=""
+    require_root reconnect
+    acquire_action_lock
+    cancel_test_guard
+    discard_test_backup
+    selected_from_state || die "Сначала выберите профиль: $CLI_COMMAND connect"
+    validate_profile "$SELECTED_PROTOCOL" "$SELECTED_PROFILE" 1 ||
+        die "Выбранный профиль не прошёл проверку"
+    fallback="$(detect_external_fallback || true)"
+    if [[ -n "$fallback" ]]; then
+        info "Временно останавливаем внешний VPN: $(external_fallback_title "$fallback")"
+        if ! stop_external_fallbacks; then
+            start_external_fallback "$fallback" || true
+            die "Не удалось безопасно остановить внешний VPN"
+        fi
+    fi
+    stop_service_bounded 15 || true
+    cleanup_stale_quick_policy
+    write_state "$SELECTED_PROTOCOL" "$SELECTED_PROFILE" up ||
+        die "Не удалось обновить состояние"
+    health_reset
+    reset_service_start_limit
+    if ! systemctl start "$SERVICE_NAME"; then
+        if [[ -n "$fallback" ]]; then
+            set_desired_state down || true
+            start_external_fallback "$fallback" || true
+        fi
+        die "Не удалось перезапустить $SERVICE_NAME"
+    fi
+    say "Переподключение запущено."
+)
+
+cmd_quick_connect() {
+    local interface
+    require_profile_access quick
+    if ! selected_from_state; then
+        info "$(msg no_default)"
+        cmd_connect
+        return
+    fi
+    interface="$(interface_for_protocol "$SELECTED_PROTOCOL")"
+    if service_active && connection_local_ok "$SELECTED_PROTOCOL" &&
+       public_ip "$interface" 3 >/dev/null; then
+        say "$(msg already_connected): $(protocol_title "$SELECTED_PROTOCOL") / $(profile_name "$SELECTED_PROFILE")"
+        return 0
+    fi
+    cmd_reconnect
+}
+
+service_active() {
+    systemctl_quiet is-active "$SERVICE_NAME"
+}
+
+interface_for_protocol() {
+    case "$1" in
+        amneziawg) printf 'vpnaw0\n' ;;
+        wireguard) printf 'vpnwg0\n' ;;
+        openvpn) printf 'vpnovpn0\n' ;;
+        l2tp)
+            ip -o link show 2>/dev/null |
+                awk -F': ' '$2 ~ /^ppp[0-9]+(@.*)?$/ { sub(/@.*/, "", $2); print $2; exit }'
+            ;;
+    esac
+}
+
+latest_handshake() {
+    local protocol="$1" interface="$2" tool
+    [[ "$protocol" == "amneziawg" ]] && tool=awg || tool=wg
+    "$tool" show "$interface" latest-handshakes 2>/dev/null |
+        awk 'BEGIN { max=0 } $2 > max { max=$2 } END { print max }'
+}
+
+connection_local_ok() {
+    local protocol="$1" interface connection_id
+    interface="$(interface_for_protocol "$protocol")"
+    case "$protocol" in
+        amneziawg|wireguard|openvpn)
+            [[ -n "$interface" ]] && ip link show "$interface" >/dev/null 2>&1
+            ;;
+        l2tp)
+            connection_id="$(l2tp_connection_id "$SELECTED_PROFILE")"
+            nmcli -t -f NAME connection show --active 2>/dev/null |
+                grep -Fqx -- "$connection_id"
+            ;;
+    esac
+}
+
+public_ip() {
+    local interface="${1:-}" max_time="${2:-7}" connect_timeout=3 result
+    [[ "$max_time" =~ ^[0-9]+$ ]] || max_time=7
+    ((max_time < 1)) && return 1
+    ((max_time < connect_timeout)) && connect_timeout="$max_time"
+    local -a args=(-4 -fsS --connect-timeout "$connect_timeout" --max-time "$max_time")
+    [[ -n "$interface" ]] && args+=(--interface "$interface")
+    result="$(curl "${args[@]}" "$PROBE_URL" 2>/dev/null)" || return 1
+    ((${#result} <= 64)) && [[ "$result" =~ ^[0-9A-Fa-f:.]+$ ]] || return 1
+    printf '%s\n' "$result"
+}
+
+validate_test_timeout() {
+    local timeout="$1"
+    [[ "$timeout" =~ ^[0-9]+$ ]] || return 1
+    ((timeout >= 2 && timeout <= 600))
+}
+
+acquire_action_lock() {
+    mkdir -p "$RUN_DIR"
+    chmod 700 "$RUN_DIR"
+    exec 8>"$RUN_DIR/.action.lock"
+    flock -n 8 || die "Другая операция $PRODUCT_NAME уже выполняется"
+}
+
+acquire_recovery_lock() {
+    local wait_seconds="${1:-30}"
+    mkdir -p "$RUN_DIR"
+    chmod 700 "$RUN_DIR"
+    exec 8>"$RUN_DIR/.action.lock"
+    flock -w "$wait_seconds" 8
+}
+
+stop_service_bounded() {
+    local limit="${1:-15}"
+    if timeout "$limit" systemctl stop "$SERVICE_NAME"; then
+        systemctl_quiet reset-failed "$SERVICE_NAME" || true
+        return 0
+    fi
+    warn "$SERVICE_NAME не остановился за ${limit}s; принудительное завершение"
+    systemctl kill --kill-who=all --signal=SIGKILL "$SERVICE_NAME" 2>/dev/null || true
+    systemctl_quiet reset-failed "$SERVICE_NAME" || true
+    return 1
+}
+
+reset_service_start_limit() {
+    systemctl_quiet reset-failed "$SERVICE_NAME" || true
+}
+
+amnezia_kernel_available() {
+    command -v modprobe >/dev/null 2>&1 &&
+        (modprobe -n amneziawg >/dev/null 2>&1 || [[ -d /sys/module/amneziawg ]])
+}
+
+amnezia_userspace_available() {
+    command -v amneziawg-go >/dev/null 2>&1
+}
+
+os_release_value() {
+    local key="$1"
+    awk -F= -v wanted="$key" '
+        $1 == wanted {
+            value=substr($0, index($0, "=") + 1)
+            gsub(/^"|"$/, "", value)
+            print value
+            exit
+        }
+    ' /etc/os-release 2>/dev/null
+}
+
+broken_current_amnezia_ppa() {
+    local codename source_file
+    [[ "$(os_release_value ID)" == "ubuntu" ]] || return 1
+    codename="$(os_release_value VERSION_CODENAME)"
+    [[ -n "$codename" ]] || return 1
+    source_file="/etc/apt/sources.list.d/amnezia-ubuntu-ppa-$codename.sources"
+    if [[ ! -e "$source_file" ]] &&
+       ! grep -RqsE "ppa\.launchpadcontent\.net/amnezia/ppa/ubuntu.*[[:space:]]$codename([[:space:]]|$)" \
+           /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null; then
+        return 1
+    fi
+    ! curl -fsSI --connect-timeout 3 --max-time 5 \
+        "https://ppa.launchpadcontent.net/amnezia/ppa/ubuntu/dists/$codename/Release" \
+        >/dev/null 2>&1
+}
+
+protocol_runtime_available() {
+    local protocol="$1"
+    case "$protocol" in
+        amneziawg)
+            command -v awg >/dev/null 2>&1 &&
+                command -v awg-quick >/dev/null 2>&1 &&
+                { amnezia_kernel_available || amnezia_userspace_available; }
+            ;;
+        wireguard)
+            command -v wg >/dev/null 2>&1 && command -v wg-quick >/dev/null 2>&1
+            ;;
+        openvpn)
+            command -v openvpn >/dev/null 2>&1
+            ;;
+        l2tp)
+            command -v nmcli >/dev/null 2>&1 &&
+                {
+                    command -v nm-l2tp-service >/dev/null 2>&1 ||
+                        find /usr/lib /usr/libexec -type f -name 'nm-l2tp-service' \
+                            -print -quit 2>/dev/null | grep -q .
+                }
+            ;;
+        *) return 1 ;;
+    esac
+}
+
+quick_interfaces_active() {
+    local interfaces=""
+    if command -v awg >/dev/null 2>&1; then
+        interfaces+=" $(awg show interfaces 2>/dev/null || true)"
+    fi
+    if command -v wg >/dev/null 2>&1; then
+        interfaces+=" $(wg show interfaces 2>/dev/null || true)"
+    fi
+    [[ -n "${interfaces//[[:space:]]/}" ]]
+}
+
+cleanup_duplicate_quick_policy() {
+    local -a mark_entries=() mark_priorities=() duplicate_priorities=()
+    local -a suppress_priorities=()
+    local entry priority key index keep_count
+    local -A seen=()
+    mapfile -t mark_entries < <(
+        ip -4 rule show 2>/dev/null |
+            awk '
+                /not from all fwmark/ && /lookup 518[2-9][0-9]([[:space:]]|$)/ {
+                    priority=$1
+                    sub(/:$/, "", priority)
+                    mark=""
+                    table=""
+                    for (i=1; i<=NF; i++) {
+                        if ($i == "fwmark") mark=$(i + 1)
+                        if ($i == "lookup") table=$(i + 1)
+                    }
+                    if (priority ~ /^[0-9]+$/ && mark != "" && table != "")
+                        print priority, mark "/" table
+                }
+            '
+    )
+    ((${#mark_entries[@]} > 1)) || return 0
+    for entry in "${mark_entries[@]}"; do
+        read -r priority key <<<"$entry"
+        mark_priorities+=("$priority")
+        if [[ -n "${seen[$key]:-}" ]]; then
+            duplicate_priorities+=("$priority")
+        else
+            seen["$key"]="$priority"
+        fi
+    done
+    ((${#duplicate_priorities[@]} > 0)) || return 0
+    mapfile -t suppress_priorities < <(
+        ip -4 rule show 2>/dev/null |
+            awk '
+                /from all lookup main suppress_prefixlength 0/ {
+                    sub(/:$/, "", $1)
+                    if ($1 ~ /^[0-9]+$/) print $1
+                }
+            '
+    )
+    for priority in "${duplicate_priorities[@]}"; do
+        ip -4 rule delete priority "$priority" 2>/dev/null ||
+            warn "Не удалось удалить duplicate policy rule priority $priority"
+    done
+    if ((${#suppress_priorities[@]} == ${#mark_priorities[@]})); then
+        keep_count=$((${#suppress_priorities[@]} - ${#duplicate_priorities[@]}))
+        for ((index = keep_count; index < ${#suppress_priorities[@]}; index++)); do
+            priority="${suppress_priorities[$index]}"
+            ip -4 rule delete priority "$priority" 2>/dev/null ||
+                warn "Не удалось удалить duplicate suppress rule priority $priority"
+        done
+    fi
+    ip -4 route flush cache 2>/dev/null || true
+    info "Удалены дубли policy rules WireGuard/AmneziaWG"
+}
+
+cleanup_stale_quick_policy() {
+    local -a mark_priorities=() suppress_priorities=()
+    local priority
+    if quick_interfaces_active; then
+        cleanup_duplicate_quick_policy
+        return 0
+    fi
+    mapfile -t mark_priorities < <(
+        ip -4 rule show 2>/dev/null |
+            awk '
+                /not from all fwmark/ && /lookup 518[2-9][0-9]([[:space:]]|$)/ {
+                    sub(/:$/, "", $1)
+                    print $1
+                }
+            '
+    )
+    ((${#mark_priorities[@]} > 0)) || return 0
+    mapfile -t suppress_priorities < <(
+        ip -4 rule show 2>/dev/null |
+            awk '
+                /from all lookup main suppress_prefixlength 0/ {
+                    sub(/:$/, "", $1)
+                    print $1
+                }
+            '
+    )
+    for priority in "${mark_priorities[@]}" "${suppress_priorities[@]}"; do
+        [[ "$priority" =~ ^[0-9]+$ ]] || continue
+        ip -4 rule delete priority "$priority" 2>/dev/null ||
+            warn "Не удалось удалить orphan policy rule priority $priority"
+    done
+    ip -4 route flush cache 2>/dev/null || true
+    info "Удалены orphan policy rules от остановленных wg-quick туннелей"
+}
+
+fallback_account() {
+    local user="$FALLBACK_USER" entry candidate_uid=""
+    if [[ -z "$user" && -e "$LEGACY_FALLBACK_START" ]]; then
+        user="$(stat -c %U -- "$LEGACY_FALLBACK_START" 2>/dev/null || true)"
+    fi
+    if [[ -z "$user" ]]; then
+        if [[ "${PKEXEC_UID:-}" =~ ^[0-9]+$ ]]; then
+            candidate_uid="$PKEXEC_UID"
+        elif [[ "${SUDO_UID:-}" =~ ^[0-9]+$ ]]; then
+            candidate_uid="$SUDO_UID"
+        fi
+        if [[ -n "$candidate_uid" && "$candidate_uid" -ge 1000 ]]; then
+            user="$(getent passwd "$candidate_uid" 2>/dev/null | cut -d: -f1)"
+        fi
+    fi
+    if [[ -z "$user" ]] && command -v loginctl >/dev/null 2>&1; then
+        user="$(
+            loginctl list-users --no-legend 2>/dev/null |
+                awk '$1 ~ /^[0-9]+$/ && $1 >= 1000 { print $2; exit }'
+        )"
+    fi
+    if [[ -z "$user" || ! "$user" =~ ^[a-z_][a-z0-9_-]*[$]?$ ]]; then
+        return 1
+    fi
+    if [[ "$user" == "root" && "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" != "1" ]]; then
+        return 1
+    fi
+    entry="$(getent passwd "$user" 2>/dev/null || true)"
+    [[ -n "$entry" ]] || return 1
+    printf '%s\n' "$entry"
+}
+
+run_adguard_fallback() {
+    local limit="$1" entry uid home
+    shift
+    [[ -x "$ADGUARD_FALLBACK_CLI" ]] || return 127
+    entry="$(fallback_account)" || return 1
+    IFS=: read -r _ _ uid _ _ home _ <<<"$entry"
+    [[ "$uid" =~ ^[0-9]+$ && -d "$home" ]] || return 1
+    timeout "$limit" env HOME="$home" \
+        XDG_RUNTIME_DIR="/run/user/$uid" \
+        DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
+        "$ADGUARD_FALLBACK_CLI" "$@" 8>&- 9>&-
+}
+
+adguard_fallback_pid_file() {
+    local entry home
+    if [[ -n "$ADGUARD_FALLBACK_PID_FILE" ]]; then
+        printf '%s\n' "$ADGUARD_FALLBACK_PID_FILE"
+        return 0
+    fi
+    entry="$(fallback_account)" || return 1
+    IFS=: read -r _ _ _ _ _ home _ <<<"$entry"
+    [[ -d "$home" ]] || return 1
+    printf '%s/.local/share/adguardvpn-cli/vpn.pid\n' "$home"
+}
+
+adguard_fallback_process_pid() {
+    local pid_file pid command_line
+    pid_file="$(adguard_fallback_pid_file)" || return 1
+    [[ -r "$pid_file" ]] || return 1
+    read -r pid <"$pid_file" || return 1
+    [[ "$pid" =~ ^[0-9]+$ && "$pid" -gt 1 && -r "/proc/$pid/cmdline" ]] ||
+        return 1
+    command_line="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null)" ||
+        return 1
+    [[ "$command_line" == *adguardvpn-cli* &&
+        "$command_line" == *" connect "* ]] || return 1
+    printf '%s\n' "$pid"
+}
+
+terminate_adguard_fallback_process() {
+    local pid pgid
+    pid="$(adguard_fallback_process_pid)" || return 1
+    pgid="$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d '[:space:]')"
+    if [[ "$pgid" =~ ^[0-9]+$ && "$pgid" == "$pid" ]]; then
+        kill -TERM -- "-$pgid" 2>/dev/null || return 1
+    else
+        kill -TERM -- "$pid" 2>/dev/null || return 1
+    fi
+}
+
+legacy_fallback_active() {
+    ip link show "$LEGACY_FALLBACK_INTERFACE" >/dev/null 2>&1
+}
+
+adguard_fallback_active() {
+    local output
+    output="$(run_adguard_fallback 8 status 2>/dev/null)" || output=""
+    grep -q '^Connected to ' <<<"$output" && return 0
+    adguard_fallback_process_pid >/dev/null
+}
+
+detect_external_fallback() {
+    local legacy=0 adguard=0
+    legacy_fallback_active && legacy=1
+    adguard_fallback_active && adguard=1
+    if ((legacy && adguard)); then
+        warn "Одновременно активны $LEGACY_FALLBACK_INTERFACE и AdGuard VPN; rollback сохранит AdGuard"
+    fi
+    if ((adguard)); then
+        printf 'adguard\n'
+    elif ((legacy)); then
+        printf 'legacy\n'
+    fi
+}
+
+external_fallback_title() {
+    case "$1" in
+        legacy) printf 'legacy AmneziaWG (%s)' "$LEGACY_FALLBACK_INTERFACE" ;;
+        adguard) printf 'AdGuard VPN' ;;
+        *) printf 'неизвестный внешний VPN' ;;
+    esac
+}
+
+stop_one_external_fallback() {
+    local kind="$1" deadline
+    deadline=$(($(date +%s) + FALLBACK_TIMEOUT))
+    case "$kind" in
+        legacy)
+            [[ -x "$LEGACY_FALLBACK_STOP" ]] || {
+                error "Fallback stop-скрипт недоступен: $LEGACY_FALLBACK_STOP"
+                return 1
+            }
+            timeout "$FALLBACK_TIMEOUT" "$LEGACY_FALLBACK_STOP" 8>&- 9>&- ||
+                return 1
+            while legacy_fallback_active; do
+                (($(date +%s) < deadline)) || return 1
+                sleep 1
+            done
+            ;;
+        adguard)
+            if ! run_adguard_fallback "$FALLBACK_TIMEOUT" disconnect; then
+                adguard_fallback_process_pid >/dev/null || return 1
+            fi
+            if adguard_fallback_process_pid >/dev/null; then
+                terminate_adguard_fallback_process || return 1
+            fi
+            while adguard_fallback_active; do
+                (($(date +%s) < deadline)) || return 1
+                sleep 1
+            done
+            ;;
+        *) return 1 ;;
+    esac
+}
+
+stop_external_fallbacks() {
+    local failed=0
+    if legacy_fallback_active; then
+        stop_one_external_fallback legacy || failed=1
+    fi
+    if adguard_fallback_active; then
+        stop_one_external_fallback adguard || failed=1
+    fi
+    ((failed == 0))
+}
+
+start_external_fallback() {
+    local kind="$1" deadline
+    deadline=$(($(date +%s) + FALLBACK_TIMEOUT))
+    info "Восстанавливаем внешний VPN: $(external_fallback_title "$kind")"
+    case "$kind" in
+        legacy)
+            [[ -x "$LEGACY_FALLBACK_START" ]] || {
+                error "Fallback setup-скрипт недоступен: $LEGACY_FALLBACK_START"
+                return 1
+            }
+            timeout "$FALLBACK_TIMEOUT" "$LEGACY_FALLBACK_START" 8>&- 9>&- ||
+                return 1
+            while ! legacy_fallback_active; do
+                (($(date +%s) < deadline)) || return 1
+                sleep 1
+            done
+            ;;
+        adguard)
+            run_adguard_fallback "$FALLBACK_TIMEOUT" connect --no-progress -y ||
+                return 1
+            while ! adguard_fallback_active; do
+                (($(date +%s) < deadline)) || return 1
+                sleep 1
+            done
+            ;;
+        *) return 1 ;;
+    esac
+    info "Внешний VPN восстановлен: $(external_fallback_title "$kind")"
+}
+
+discard_test_backup() {
+    rm -f "$TEST_BACKUP" "$TEST_BACKUP_EXISTS" "$TEST_BACKUP_ACTIVE" \
+        "$TEST_BACKUP_FALLBACK" "$TEST_TRANSACTION" "$TEST_FAILURE_MARKER"
+}
+
+save_test_backup() {
+    local fallback=""
+    mkdir -p "$STATE_DIR"
+    chmod 700 "$STATE_DIR"
+    discard_test_backup
+    umask 077
+    : >"$TEST_TRANSACTION"
+    if [[ -r "$STATE_FILE" ]]; then
+        install -m 600 -- "$STATE_FILE" "$TEST_BACKUP" ||
+            die "Не удалось сохранить предыдущее состояние"
+        : >"$TEST_BACKUP_EXISTS"
+    fi
+    fallback="$(detect_external_fallback || true)"
+    if [[ -n "$fallback" ]]; then
+        printf '%s\n' "$fallback" >"$TEST_BACKUP_FALLBACK"
+        if service_active; then
+            warn "Обнаружен конфликт managed VPN и внешнего VPN; rollback оставит внешний VPN"
+        fi
+    elif service_active; then
+        : >"$TEST_BACKUP_ACTIVE"
+    fi
+    chmod 600 "$TEST_TRANSACTION" "$TEST_BACKUP_EXISTS" "$TEST_BACKUP_ACTIVE" \
+        "$TEST_BACKUP_FALLBACK" 2>/dev/null || true
+    if [[ -n "$fallback" ]]; then
+        info "TEST: останавливаем внешний VPN без потери rollback: $(external_fallback_title "$fallback")"
+        if ! stop_external_fallbacks; then
+            error "Не удалось безопасно остановить внешний VPN"
+            start_external_fallback "$fallback" || true
+            discard_test_backup
+            return 1
+        fi
+    fi
+}
+
+cancel_test_guard() {
+    local token="${1:-}" unit="$TEST_GUARD_UNIT"
+    [[ -n "$token" ]] || token="$(state_get TEST_TOKEN 2>/dev/null || true)"
+    [[ -n "$token" ]] && unit="$TEST_GUARD_UNIT-$token"
+    systemctl_quiet stop "$unit.timer" || true
+    systemctl_quiet reset-failed "$unit.service" "$unit.timer" || true
+}
+
+arm_test_guard() {
+    local timeout="$1" token="$2"
+    local unit="$TEST_GUARD_UNIT-$token"
+    cancel_test_guard "$token"
+    if ! command -v systemd-run >/dev/null 2>&1; then
+        warn "systemd-run не найден; аварийный откат зависит от процесса $PRODUCT_NAME"
+        return 1
+    fi
+    systemd-run --quiet --collect \
+        --unit="$unit" \
+        --on-active="${timeout}s" \
+        --property=Type=oneshot \
+        "$SELF" _test-timeout "$token" >/dev/null ||
+        {
+            warn "Не удалось создать systemd timeout guard"
+            return 1
+        }
+}
+
+restore_test_backup() {
+    local reason="${1:-rollback}" had_previous=0 was_active=0 token fallback=""
+    [[ -e "$TEST_TRANSACTION" ]] || return 0
+    [[ -e "$TEST_BACKUP_EXISTS" && -r "$TEST_BACKUP" ]] && had_previous=1
+    [[ -e "$TEST_BACKUP_ACTIVE" ]] && was_active=1
+    if [[ -r "$TEST_BACKUP_FALLBACK" ]]; then
+        read -r fallback <"$TEST_BACKUP_FALLBACK"
+        [[ "$fallback" == "legacy" || "$fallback" == "adguard" ]] || fallback=""
+    fi
+    token="$(state_get TEST_TOKEN 2>/dev/null || true)"
+
+    warn "TEST rollback: $reason"
+    stop_service_bounded 15 || true
+    cleanup_stale_quick_policy
+    cancel_test_guard "$token"
+    if ((had_previous)); then
+        install -m 600 -- "$TEST_BACKUP" "$STATE_FILE" ||
+            die "Не удалось восстановить предыдущее состояние"
+        if [[ -n "$fallback" ]]; then
+            set_desired_state down ||
+                warn "Не удалось отметить managed VPN отключённым при возврате fallback"
+        fi
+    else
+        rm -f "$STATE_FILE"
+    fi
+    health_reset
+
+    if ((was_active)); then
+        reset_service_start_limit
+        if timeout 20 systemctl start "$SERVICE_NAME"; then
+            info "Предыдущее VPN-соединение восстановлено"
+        else
+            error "Не удалось перезапустить предыдущее VPN-соединение"
+            return 1
+        fi
+    elif [[ -n "$fallback" ]]; then
+        start_external_fallback "$fallback" || {
+            error "Не удалось восстановить $(external_fallback_title "$fallback"); транзакция сохранена"
+            return 1
+        }
+    else
+        info "Восстановлено состояние без активного VPN"
+    fi
+    discard_test_backup
+}
+
+recover_stale_test_state() {
+    local mode token fallback="" was_active=0
+    ((EUID == 0)) || [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]] ||
+        die "_recover-stale-test требует root"
+    [[ -e "$TEST_TRANSACTION" ]] || return 0
+    acquire_recovery_lock 30 ||
+        die "BOOT RECOVERY: не удалось получить блокировку восстановления"
+    mode="$(state_get MODE 2>/dev/null || true)"
+    [[ "$mode" == "test" ]] || {
+        discard_test_backup
+        return 0
+    }
+
+    warn "BOOT RECOVERY: найден незавершённый тестовый туннель"
+    token="$(state_get TEST_TOKEN 2>/dev/null || true)"
+    cancel_test_guard "$token"
+    stop_service_bounded 15 || true
+    cleanup_stale_quick_policy
+    if [[ -e "$TEST_BACKUP_EXISTS" && -r "$TEST_BACKUP" ]]; then
+        install -m 600 -- "$TEST_BACKUP" "$STATE_FILE" ||
+            die "Не удалось восстановить state после незавершённого теста"
+    else
+        rm -f "$STATE_FILE"
+    fi
+    [[ -e "$TEST_BACKUP_ACTIVE" ]] && was_active=1
+    if [[ -r "$TEST_BACKUP_FALLBACK" ]]; then
+        read -r fallback <"$TEST_BACKUP_FALLBACK"
+        [[ "$fallback" == "legacy" || "$fallback" == "adguard" ]] || fallback=""
+    fi
+    if [[ -n "$fallback" && -r "$STATE_FILE" ]]; then
+        set_desired_state down ||
+            warn "BOOT RECOVERY: не удалось отметить managed VPN отключённым"
+    fi
+    health_reset
+    if ((was_active)); then
+        reset_service_start_limit
+        timeout 20 systemctl start "$SERVICE_NAME" ||
+            die "BOOT RECOVERY: не удалось восстановить managed VPN"
+    elif [[ -n "$fallback" ]]; then
+        start_external_fallback "$fallback" ||
+            die "BOOT RECOVERY: не удалось восстановить $(external_fallback_title "$fallback")"
+    fi
+    discard_test_backup
+    info "BOOT RECOVERY: предыдущее состояние восстановлено"
+}
+
+finalize_test_connection() {
+    local protocol="$1" profile="$2"
+    cancel_test_guard
+    write_state "$protocol" "$profile" up normal ||
+        die "Не удалось зафиксировать рабочее соединение"
+    discard_test_backup
+    health_reset
+}
+
+new_test_token() {
+    printf '%s-%s-%s\n' "$(date +%s)" "$$" "$RANDOM"
+}
+
+start_test_attempt() {
+    local protocol="$1" profile="$2" timeout="$3"
+    local token deadline
+    token="$(new_test_token)"
+    ACTIVE_TEST_TOKEN="$token"
+    deadline=$(($(date +%s) + timeout))
+    cancel_test_guard
+    stop_service_bounded 15 || true
+    cleanup_stale_quick_policy
+    rm -f "$TEST_FAILURE_MARKER"
+    write_state "$protocol" "$profile" up test "$token" "$deadline" ||
+        die "Не удалось записать тестовое состояние"
+    health_reset
+    arm_test_guard "$timeout" "$token" || true
+    info "TEST: запуск $(protocol_title "$protocol") / $(profile_name "$profile"), timeout=${timeout}s"
+    reset_service_start_limit
+    timeout "$timeout" systemctl start "$SERVICE_NAME"
+}
+
+wait_for_test_connection() {
+    local timeout="$1" expected_protocol="$2" expected_profile="$3"
+    local now elapsed remaining sleep_for interface mode token deadline
+    while true; do
+        now="$(date +%s)"
+        mode="$(state_get MODE 2>/dev/null || true)"
+        token="$(state_get TEST_TOKEN 2>/dev/null || true)"
+        deadline="$(state_get TEST_DEADLINE 2>/dev/null || true)"
+        if [[ "$mode" != "test" || "$token" != "$ACTIVE_TEST_TOKEN" ||
+              ! "$deadline" =~ ^[0-9]+$ ]]; then
+            printf '\n'
+            return 1
+        fi
+        remaining=$((deadline - now))
+        if ((remaining <= 0)); then
+            printf '\n'
+            return 1
+        fi
+        if [[ -s "$TEST_FAILURE_MARKER" ]]; then
+            printf '\n'
+            return 1
+        fi
+        elapsed=$((timeout - remaining))
+        if selected_from_state &&
+           [[ "$SELECTED_PROTOCOL" == "$expected_protocol" ]] &&
+           [[ "$(basename -- "$SELECTED_PROFILE")" == "$(basename -- "$expected_profile")" ]] &&
+           service_active &&
+           connection_local_ok "$SELECTED_PROTOCOL"; then
+            interface="$(interface_for_protocol "$SELECTED_PROTOCOL")"
+            if public_ip "$interface" "$remaining" >/dev/null; then
+                printf '\n'
+                return 0
+            fi
+        fi
+        if ((elapsed >= 3)) &&
+           systemctl_quiet is-failed "$SERVICE_NAME"; then
+            printf '\n'
+            return 1
+        fi
+        if ((elapsed >= 3)) && ! service_active; then
+            printf '\n'
+            return 1
+        fi
+        printf '.'
+        sleep_for=2
+        ((remaining < sleep_for)) && sleep_for="$remaining"
+        sleep "$sleep_for"
+    done
+}
+
+show_test_failure_log() {
+    local lines=80
+    [[ "${VPNCTL_BATCH_MODE:-0}" == "1" ]] && lines=20
+    say "Последние сообщения расширенного журнала:"
+    journalctl -u "$SERVICE_NAME" -n "$lines" --no-pager 2>/dev/null || true
+}
+
+classify_test_failure() {
+    local reason=""
+    TEST_FAILURE_CODE=1
+    [[ -r "$TEST_FAILURE_MARKER" ]] && read -r reason <"$TEST_FAILURE_MARKER"
+    case "$reason" in
+        openvpn-too-many-connections)
+            error "OpenVPN-сервер отклонил сессию: Too many connections"
+            error "Остановите другие подключения этого аккаунта или подождите освобождения серверной сессии"
+            TEST_FAILURE_CODE=3
+            ;;
+        openvpn-auth-failed)
+            error "OpenVPN-сервер отклонил авторизацию профиля"
+            TEST_FAILURE_CODE=3
+            ;;
+        openvpn-server-halt)
+            error "OpenVPN-сервер принудительно остановил подключение"
+            TEST_FAILURE_CODE=3
+            ;;
+    esac
+}
+
+test_timeout_handler() {
+    local token="${1:-}" current_token mode
+    mode="$(state_get MODE 2>/dev/null || true)"
+    current_token="$(state_get TEST_TOKEN 2>/dev/null || true)"
+    [[ "$mode" == "test" && -n "$token" && "$token" == "$current_token" ]] || return 0
+    acquire_recovery_lock 30 || {
+        warn "Защитный таймаут не получил блокировку; boot recovery сохранён"
+        return 1
+    }
+    mode="$(state_get MODE 2>/dev/null || true)"
+    current_token="$(state_get TEST_TOKEN 2>/dev/null || true)"
+    [[ "$mode" == "test" && "$token" == "$current_token" ]] || return 0
+    restore_test_backup "истёк защитный таймаут"
+}
+
+cmd_test() (
+    local -a original=("$@")
+    local requested_protocol="" requested_profile="" timeout="$DEFAULT_TEST_TIMEOUT"
+    local keep=0 protocol previous_protocol="" previous_profile="" failure_rc=1
+
+    while (($#)); do
+        case "$1" in
+            --timeout)
+                shift
+                [[ $# -gt 0 ]] || die "--timeout требует число секунд"
+                timeout="$1"
+                ;;
+            --keep) keep=1 ;;
+            --help|-h)
+                say "Использование: $CLI_COMMAND test [ПРОТОКОЛ] [ПРОФИЛЬ] [--timeout 45] [--keep]"
+                return 0
+                ;;
+            -*)
+                die "Неизвестный параметр test: $1"
+                ;;
+            *)
+                if [[ -z "$requested_protocol" ]]; then
+                    requested_protocol="$1"
+                elif [[ -z "$requested_profile" ]]; then
+                    requested_profile="$1"
+                else
+                    die "Лишний аргумент test: $1"
+                fi
+                ;;
+        esac
+        shift
+    done
+    validate_test_timeout "$timeout" || die "Таймаут должен быть от 2 до 600 секунд"
+    require_root test "${original[@]}"
+    systemd_available || die "systemd недоступен"
+
+    if selected_from_state; then
+        previous_protocol="$SELECTED_PROTOCOL"
+        previous_profile="$SELECTED_PROFILE"
+    fi
+    if [[ -z "$requested_protocol" ]]; then
+        if [[ -n "$previous_protocol" ]]; then
+            protocol="$previous_protocol"
+            requested_profile="$(basename -- "$previous_profile")"
+        else
+            protocol="$(choose_protocol)" || return 1
+        fi
+    else
+        protocol="$(canonical_protocol "$requested_protocol")" ||
+            die "Неизвестный протокол: $requested_protocol"
+        if [[ -z "$requested_profile" && "$protocol" == "$previous_protocol" ]]; then
+            requested_profile="$(basename -- "$previous_profile")"
+        fi
+    fi
+
+    resolve_profile "$protocol" "$requested_profile" || return 1
+    validate_profile "$protocol" "$SELECTED_PROFILE" 1 ||
+        die "Профиль не прошёл проверку безопасности"
+    validate_permissions "$SELECTED_PROFILE" ||
+        die "У профиля небезопасные права; требуется chmod 600"
+    acquire_action_lock
+    if [[ "$(state_get MODE 2>/dev/null || true)" == "test" ]]; then
+        restore_test_backup "очистка незавершённого предыдущего теста" ||
+            die "Не удалось восстановить предыдущий VPN; новый тест отменён"
+    fi
+    save_test_backup || die "Не удалось подготовить безопасный VPN rollback"
+
+    local tested_profile="$SELECTED_PROFILE"
+    local transaction_active=1
+    # shellcheck disable=SC2317,SC2329  # Called indirectly by the signal trap below.
+    abort_test_signal() {
+        if ((transaction_active)); then
+            restore_test_backup "тест прерван сигналом" || true
+        fi
+        exit 130
+    }
+    trap abort_test_signal INT TERM HUP
+
+    if ! start_test_attempt "$protocol" "$tested_profile" "$timeout"; then
+        classify_test_failure
+        failure_rc="$TEST_FAILURE_CODE"
+        show_test_failure_log
+        if ! restore_test_backup "сервис не запустился"; then
+            transaction_active=0
+            trap - INT TERM HUP
+            error "КРИТИЧЕСКАЯ ОШИБКА: исходный VPN не восстановлен; транзакция сохранена"
+            return 2
+        fi
+        transaction_active=0
+        trap - INT TERM HUP
+        return "$failure_rc"
+    fi
+    if wait_for_test_connection "$timeout" "$protocol" "$tested_profile"; then
+        say "TEST OK: туннель и доступ в интернет работают."
+        if ((keep)); then
+            finalize_test_connection "$protocol" "$tested_profile"
+            say "Тестовое соединение оставлено активным. Расширенный журнал сохранится до переподключения."
+        else
+            if ! restore_test_backup "проверка завершена; возвращаем исходное соединение"; then
+                transaction_active=0
+                trap - INT TERM HUP
+                error "КРИТИЧЕСКАЯ ОШИБКА: тест прошёл, но исходный VPN не восстановлен"
+                return 2
+            fi
+        fi
+        transaction_active=0
+        trap - INT TERM HUP
+        return 0
+    fi
+
+    classify_test_failure
+    failure_rc="$TEST_FAILURE_CODE"
+    error "TEST FAIL: соединение не прошло проверку за ${timeout}s"
+    show_test_failure_log
+    if ! restore_test_backup "тест не прошёл"; then
+        transaction_active=0
+        trap - INT TERM HUP
+        error "КРИТИЧЕСКАЯ ОШИБКА: исходный VPN не восстановлен; транзакция сохранена"
+        return 2
+    fi
+    transaction_active=0
+    trap - INT TERM HUP
+    return "$failure_rc"
+)
+
+cmd_test_all() {
+    local -a original=("$@") protocols=() files=()
+    local requested="all" timeout="$DEFAULT_TEST_TIMEOUT" protocol file
+    local total=0 passed=0 failed=0 skipped=0 started_at elapsed rc=0 aborted=0
+    while (($#)); do
+        case "$1" in
+            --timeout)
+                shift
+                [[ $# -gt 0 ]] || die "--timeout требует число секунд"
+                timeout="$1"
+                ;;
+            --help|-h)
+                say "Использование: $CLI_COMMAND test-all [ПРОТОКОЛ|all] [--timeout 45]"
+                return 0
+                ;;
+            -*)
+                die "Неизвестный параметр test-all: $1"
+                ;;
+            *)
+                [[ "$requested" == "all" ]] || die "Лишний аргумент test-all: $1"
+                requested="$1"
+                ;;
+        esac
+        shift
+    done
+    validate_test_timeout "$timeout" || die "Таймаут должен быть от 2 до 600 секунд"
+    mapfile -t protocols < <(requested_protocols "$requested") ||
+        die "Неизвестный протокол: $requested"
+    require_root test-all "${original[@]}"
+    systemd_available || die "systemd недоступен"
+
+    say "Живой тест всех профилей: каждый туннель имеет timeout и полный rollback."
+    for protocol in "${protocols[@]}"; do
+        load_profiles "$protocol"
+        files=("${PROFILES[@]}")
+        if ((${#files[@]} == 0)); then
+            warn "$(protocol_title "$protocol"): профилей нет"
+            continue
+        fi
+        if ! protocol_runtime_available "$protocol"; then
+            warn "$(protocol_title "$protocol"): runtime отсутствует, пропущено ${#files[@]}"
+            skipped=$((skipped + ${#files[@]}))
+            continue
+        fi
+        for file in "${files[@]}"; do
+            total=$((total + 1))
+            printf '\n=== [%d] %s / %s ===\n' "$total" \
+                "$(protocol_title "$protocol")" "$(profile_name "$file")"
+            if ! validate_profile "$protocol" "$file" 1 ||
+               ! validate_permissions "$file"; then
+                error "Профиль не прошёл предварительную проверку"
+                failed=$((failed + 1))
+                continue
+            fi
+            started_at="$(date +%s)"
+            VPNCTL_BATCH_MODE=1 "$SELF" test "$protocol" \
+                "$(basename -- "$file")" --timeout "$timeout"
+            rc=$?
+            if ((rc == 0)); then
+                elapsed=$(($(date +%s) - started_at))
+                passed=$((passed + 1))
+                printf '[PASS] туннель работает (%d сек.)\n' "$elapsed"
+            else
+                elapsed=$(($(date +%s) - started_at))
+                failed=$((failed + 1))
+                printf '[FAIL] туннель не работает (%d сек.)\n' "$elapsed"
+                if ((rc == 2)); then
+                    aborted=1
+                    error "Пакетная проверка остановлена: исходное VPN-соединение не восстановлено"
+                    break 2
+                elif ((rc == 3)); then
+                    aborted=1
+                    error "Пакетная проверка остановлена: OpenVPN-сервер отклонил сессию"
+                    break 2
+                fi
+            fi
+        done
+    done
+    printf '\nИтог live-test: tested=%d passed=%d failed=%d skipped=%d\n' \
+        "$total" "$passed" "$failed" "$skipped"
+    ((aborted == 0 && total > 0 && failed == 0 && skipped == 0))
+}
+
+cmd_emergency() (
+    local -a original=("$@") candidate_protocols=() candidate_profiles=()
+    local -A seen=()
+    local timeout=20 filter="" requested_protocol="" protocol file key
+    local previous_protocol="" previous_profile="" attempt=0 total=0
+
+    while (($#)); do
+        case "$1" in
+            --timeout)
+                shift
+                [[ $# -gt 0 ]] || die "--timeout требует число секунд"
+                timeout="$1"
+                ;;
+            --protocol)
+                shift
+                [[ $# -gt 0 ]] || die "--protocol требует имя"
+                requested_protocol="$1"
+                ;;
+            --help|-h)
+                say "Использование: $CLI_COMMAND emergency [--timeout 20] [--protocol ПРОТОКОЛ]"
+                return 0
+                ;;
+            *) die "Неизвестный параметр emergency: $1" ;;
+        esac
+        shift
+    done
+    validate_test_timeout "$timeout" || die "Таймаут должен быть от 2 до 600 секунд"
+    require_root emergency "${original[@]}"
+    systemd_available || die "systemd недоступен"
+    if [[ -n "$requested_protocol" ]]; then
+        filter="$(canonical_protocol "$requested_protocol")" ||
+            die "Неизвестный протокол: $requested_protocol"
+    fi
+
+    if selected_from_state; then
+        previous_protocol="$SELECTED_PROTOCOL"
+        previous_profile="$SELECTED_PROFILE"
+        if [[ -z "$filter" || "$filter" == "$previous_protocol" ]] &&
+           protocol_runtime_available "$previous_protocol"; then
+            key="$previous_protocol|$(basename -- "$previous_profile")"
+            seen["$key"]=1
+            candidate_protocols+=("$previous_protocol")
+            candidate_profiles+=("$previous_profile")
+        fi
+    fi
+
+    for protocol in amneziawg wireguard openvpn l2tp; do
+        [[ -z "$filter" || "$filter" == "$protocol" ]] || continue
+        if ! protocol_runtime_available "$protocol"; then
+            warn "EMERGENCY: $(protocol_title "$protocol") runtime недоступен, пропуск"
+            continue
+        fi
+        load_profiles "$protocol"
+        for file in "${PROFILES[@]}"; do
+            key="$protocol|$(basename -- "$file")"
+            [[ -z "${seen[$key]:-}" ]] || continue
+            validate_profile "$protocol" "$file" 1 || continue
+            validate_permissions "$file" || continue
+            seen["$key"]=1
+            candidate_protocols+=("$protocol")
+            candidate_profiles+=("$file")
+        done
+    done
+    total="${#candidate_profiles[@]}"
+    ((total > 0)) || die "Нет безопасных профилей для emergency recovery"
+
+    acquire_action_lock
+    if [[ "$(state_get MODE 2>/dev/null || true)" == "test" ]]; then
+        restore_test_backup "очистка незавершённого теста" || true
+    fi
+    save_test_backup || die "Не удалось подготовить безопасный VPN rollback"
+
+    local transaction_active=1
+    # shellcheck disable=SC2317,SC2329  # Called indirectly by the signal trap below.
+    abort_emergency_signal() {
+        if ((transaction_active)); then
+            restore_test_backup "emergency recovery прерван" || true
+        fi
+        exit 130
+    }
+    trap abort_emergency_signal INT TERM HUP
+
+    for ((attempt = 0; attempt < total; attempt++)); do
+        protocol="${candidate_protocols[attempt]}"
+        file="${candidate_profiles[attempt]}"
+        say
+        info "EMERGENCY $((attempt + 1))/$total: $(protocol_title "$protocol") / $(profile_name "$file")"
+        if ! start_test_attempt "$protocol" "$file" "$timeout"; then
+            warn "Сервис не запустился; переход к следующему профилю"
+            continue
+        fi
+        if wait_for_test_connection "$timeout" "$protocol" "$file"; then
+            finalize_test_connection "$protocol" "$file"
+            transaction_active=0
+            trap - INT TERM HUP
+            say "EMERGENCY OK: подключён первый доступный туннель."
+            say "Расширенный журнал останется до следующего переподключения."
+            return 0
+        fi
+        warn "Профиль не прошёл проверку; переход к следующему"
+        journalctl -u "$SERVICE_NAME" -n 20 --no-pager 2>/dev/null || true
+    done
+
+    error "EMERGENCY FAIL: доступный туннель не найден"
+    restore_test_backup "все профили недоступны"
+    transaction_active=0
+    trap - INT TERM HUP
+    return 1
+)
+
+cmd_status() {
+    local protocol profile desired mode state interface endpoint handshake now age ip autostart deadline
+    local fallback=""
+    require_profile_access status "$@"
+    fallback="$(detect_external_fallback || true)"
+    if ! selected_from_state; then
+        say "VPN: профиль не выбран"
+        [[ -z "$fallback" ]] ||
+            say "Fallback:  active ($(external_fallback_title "$fallback"))"
+        return 1
+    fi
+    protocol="$SELECTED_PROTOCOL"
+    profile="$SELECTED_PROFILE"
+    desired="$(state_get DESIRED 2>/dev/null || printf 'unknown')"
+    mode="$(state_get MODE 2>/dev/null || printf 'normal')"
+    endpoint="$(profile_endpoint "$protocol" "$profile")"
+    interface="$(interface_for_protocol "$protocol")"
+    if service_active; then state="active"; else state="inactive"; fi
+    if systemctl_quiet is-enabled "$SERVICE_NAME"; then
+        autostart="enabled"
+    else
+        autostart="disabled"
+    fi
+
+    printf 'VPN:       %s\n' "$state"
+    printf 'Protocol:  %s\n' "$(protocol_title "$protocol")"
+    printf 'Profile:   %s\n' "$(profile_name "$profile")"
+    printf 'Desired:   %s\n' "$desired"
+    printf 'Mode:      %s\n' "$mode"
+    if [[ "$mode" == "test" ]]; then
+        deadline="$(state_get TEST_DEADLINE 2>/dev/null || true)"
+        if [[ "$deadline" =~ ^[0-9]+$ ]]; then
+            deadline=$((deadline - $(date +%s)))
+            ((deadline < 0)) && deadline=0
+            printf 'Test left: %s sec\n' "$deadline"
+        fi
+    fi
+    printf 'Autostart: %s\n' "$autostart"
+    if [[ -n "$fallback" ]]; then
+        printf 'Fallback:  active (%s)\n' "$(external_fallback_title "$fallback")"
+    else
+        printf 'Fallback:  inactive\n'
+    fi
+    [[ -n "$endpoint" ]] && printf 'Endpoint:  %s\n' "$endpoint"
+    [[ -n "$interface" ]] && printf 'Interface: %s\n' "$interface"
+
+    if [[ "$state" == "active" && ("$protocol" == "amneziawg" || "$protocol" == "wireguard") ]]; then
+        handshake="$(latest_handshake "$protocol" "$interface")"
+        if [[ "$handshake" =~ ^[0-9]+$ ]] && ((handshake > 0)); then
+            now="$(date +%s)"
+            age=$((now - handshake))
+            printf 'Handshake: %s sec ago\n' "$age"
+        else
+            printf 'Handshake: not received\n'
+        fi
+    fi
+    if [[ "$state" == "active" ]]; then
+        ip="$(public_ip "$interface" || true)"
+        [[ -n "$ip" ]] && printf 'Public IP: %s\n' "$ip"
+    fi
+    [[ "$state" == "active" ]]
+}
+
+check_command() {
+    local command="$1" label="${2:-$1}"
+    if command -v "$command" >/dev/null 2>&1; then
+        check_ok "$label: $(command -v "$command")"
+    else
+        check_fail "$label не установлен"
+    fi
+}
+
+check_active_connection() {
+    local protocol="$1" interface handshake now age ip
+    interface="$(interface_for_protocol "$protocol")"
+    if service_active; then
+        check_ok "$SERVICE_NAME активен"
+    else
+        check_fail "$SERVICE_NAME не активен"
+    fi
+
+    if connection_local_ok "$protocol"; then
+        check_ok "VPN-интерфейс/соединение активно${interface:+: $interface}"
+    else
+        check_fail "VPN-интерфейс/соединение не найдено"
+        return
+    fi
+
+    if [[ "$protocol" == "amneziawg" || "$protocol" == "wireguard" ]]; then
+        handshake="$(latest_handshake "$protocol" "$interface")"
+        if [[ "$handshake" =~ ^[0-9]+$ ]] && ((handshake > 0)); then
+            now="$(date +%s)"
+            age=$((now - handshake))
+            if ((age <= 180)); then
+                check_ok "Последний handshake: $age сек. назад"
+            else
+                check_warn "Handshake устарел: $age сек. назад"
+            fi
+        else
+            check_warn "Handshake ещё не получен"
+        fi
+    fi
+
+    ip="$(public_ip "$interface" || true)"
+    if [[ -n "$ip" ]]; then
+        check_ok "Интернет через VPN работает; внешний IP: $ip"
+    else
+        check_fail "Нет ответа через VPN-интерфейс от $PROBE_URL"
+    fi
+}
+
+cmd_diagnose() {
+    local protocol profile endpoint_host
+    require_profile_access diagnose "$@"
+    CHECK_OK=0
+    CHECK_WARN=0
+    CHECK_FAIL=0
+    say "${C_BOLD}Диагностика VPN${C_RESET}"
+
+    if ip route show default 2>/dev/null | grep -q .; then
+        check_ok "Основной маршрут существует"
+    else
+        check_fail "Основной маршрут отсутствует"
+    fi
+    if getent ahostsv4 example.com >/dev/null 2>&1; then
+        check_ok "DNS-разрешение работает"
+    else
+        check_fail "DNS-разрешение не работает"
+    fi
+
+    if ! selected_from_state; then
+        check_fail "Активный профиль не выбран"
+    else
+        protocol="$SELECTED_PROTOCOL"
+        profile="$SELECTED_PROFILE"
+        check_ok "Выбран $(protocol_title "$protocol"): $(profile_name "$profile")"
+        validate_profile "$protocol" "$profile" 0 || true
+        endpoint_host="$(profile_endpoint "$protocol" "$profile")"
+        endpoint_host="${endpoint_host#[}"
+        endpoint_host="${endpoint_host%%]*}"
+        endpoint_host="${endpoint_host%%:*}"
+        if [[ -n "$endpoint_host" ]]; then
+            if getent ahostsv4 "$endpoint_host" >/dev/null 2>&1; then
+                check_ok "Адрес VPN-сервера разрешается: $endpoint_host"
+            else
+                check_fail "Не удаётся разрешить адрес VPN-сервера: $endpoint_host"
+            fi
+        fi
+        check_active_connection "$protocol"
+    fi
+
+    printf '\nИтог: OK=%d WARN=%d FAIL=%d\n' "$CHECK_OK" "$CHECK_WARN" "$CHECK_FAIL"
+    ((CHECK_FAIL == 0))
+}
+
+doctor_dependency_checks() {
+    check_command bash
+    check_command ip "iproute2"
+    check_command systemctl "systemd"
+    check_command systemd-run "systemd transient units"
+    check_command curl
+    check_command timeout
+    check_command flock
+    check_command getent "DNS resolver (getent)"
+    check_command ping "ICMP ping"
+    check_command openvpn
+    check_command wg
+    check_command wg-quick
+    check_command awg
+    check_command awg-quick
+    check_command nmcli "NetworkManager"
+
+    if command -v resolvectl >/dev/null 2>&1 || command -v resolvconf >/dev/null 2>&1; then
+        check_ok "DNS-интеграция доступна"
+    else
+        check_warn "Нет resolvectl/resolvconf; DNS VPN может не применяться"
+    fi
+
+    if amnezia_kernel_available; then
+        check_ok "AmneziaWG backend: модуль ядра"
+    elif amnezia_userspace_available; then
+        check_ok "AmneziaWG backend: amneziawg-go (userspace)"
+    else
+        check_fail "AmneziaWG backend отсутствует: нет модуля ядра и amneziawg-go"
+    fi
+    if broken_current_amnezia_ppa; then
+        check_warn "Amnezia PPA не публикует текущий Ubuntu suite; userspace backend продолжит работать"
+    fi
+
+    if command -v nmcli >/dev/null 2>&1 &&
+       nmcli -t -f NAME connection show 2>/dev/null | grep -q .; then
+        check_ok "NetworkManager отвечает"
+    else
+        check_warn "NetworkManager не отвечает или нет соединений"
+    fi
+
+    if command -v nm-l2tp-service >/dev/null 2>&1 ||
+       find /usr/lib /usr/libexec -type f -name 'nm-l2tp-service' -print -quit \
+           2>/dev/null | grep -q .; then
+        check_ok "Плагин NetworkManager L2TP установлен"
+    else
+        check_fail "Плагин NetworkManager L2TP не установлен"
+    fi
+
+    if command -v charon >/dev/null 2>&1 ||
+       command -v charon-systemd >/dev/null 2>&1 ||
+       command -v ipsec >/dev/null 2>&1 ||
+       find /usr/lib /usr/libexec -type f \
+           \( -name 'charon' -o -name 'charon-systemd' -o -name 'pluto' \) \
+           -print -quit 2>/dev/null | grep -q .; then
+        check_ok "IPsec backend установлен"
+    else
+        check_fail "IPsec backend (strongSwan/Libreswan) не установлен"
+    fi
+
+    if command -v pppd >/dev/null 2>&1; then
+        check_ok "PPP backend установлен"
+    else
+        check_fail "pppd не установлен"
+    fi
+
+    if command -v xl2tpd >/dev/null 2>&1 ||
+       command -v kl2tpd >/dev/null 2>&1; then
+        check_ok "L2TP transport установлен"
+    else
+        check_fail "L2TP transport (go-l2tp/xl2tpd) не установлен"
+    fi
+}
+
+doctor_fallback_checks() {
+    local fallback=""
+    if [[ -n "$LEGACY_FALLBACK_START" && -n "$LEGACY_FALLBACK_STOP" &&
+          -x "$LEGACY_FALLBACK_START" && -x "$LEGACY_FALLBACK_STOP" ]]; then
+        check_ok "Legacy fallback: setup/stop скрипты доступны"
+    elif [[ -z "$LEGACY_FALLBACK_START" && -z "$LEGACY_FALLBACK_STOP" ]]; then
+        check_warn "Legacy fallback не настроен (опционально: VPNCTL_LEGACY_START/VPNCTL_LEGACY_STOP)"
+    else
+        check_warn "Legacy fallback неполон: нужны $LEGACY_FALLBACK_START и $LEGACY_FALLBACK_STOP"
+    fi
+    if [[ -x "$ADGUARD_FALLBACK_CLI" ]] && fallback_account >/dev/null; then
+        check_ok "AdGuard fallback доступен для независимого rollback"
+    else
+        check_warn "AdGuard fallback недоступен или не определён пользователь"
+    fi
+    fallback="$(detect_external_fallback || true)"
+    [[ -z "$fallback" ]] ||
+        check_ok "Сейчас активен внешний fallback: $(external_fallback_title "$fallback")"
+}
+
+doctor_unit_checks() {
+    local desired
+    if ! systemd_available; then
+        check_fail "systemd сейчас недоступен"
+        return
+    fi
+    if systemctl cat "$SERVICE_NAME" >/dev/null 2>&1; then
+        check_ok "Установлен $SERVICE_NAME"
+    else
+        check_fail "Не установлен $SERVICE_NAME; запустите install.sh"
+    fi
+    if systemctl cat "$HEALTH_TIMER" >/dev/null 2>&1; then
+        check_ok "Установлен $HEALTH_TIMER"
+        if systemctl_quiet is-enabled "$HEALTH_TIMER"; then
+            check_ok "$HEALTH_TIMER включён при загрузке"
+        else
+            check_warn "$HEALTH_TIMER не включён при загрузке"
+        fi
+        if systemctl_quiet is-active "$HEALTH_TIMER"; then
+            check_ok "$HEALTH_TIMER выполняет автоматические проверки"
+        else
+            check_warn "$HEALTH_TIMER сейчас не активен"
+        fi
+    else
+        check_fail "Не установлен $HEALTH_TIMER; запустите install.sh"
+    fi
+    if systemctl cat "$TEST_RECOVERY_SERVICE" >/dev/null 2>&1; then
+        check_ok "Установлен $TEST_RECOVERY_SERVICE"
+        if systemctl_quiet is-enabled "$TEST_RECOVERY_SERVICE"; then
+            check_ok "$TEST_RECOVERY_SERVICE включён при загрузке"
+        else
+            check_warn "$TEST_RECOVERY_SERVICE установлен, но не включён"
+        fi
+    else
+        check_fail "Не установлен $TEST_RECOVERY_SERVICE; запустите install.sh"
+    fi
+    desired="$(state_get DESIRED 2>/dev/null || true)"
+    if [[ "$desired" == "up" ]]; then
+        if systemctl_quiet is-enabled "$SERVICE_NAME"; then
+            check_ok "$SERVICE_NAME включён для автоподключения"
+        else
+            check_warn "$SERVICE_NAME не включён для автоподключения"
+        fi
+        if service_active; then
+            check_ok "$SERVICE_NAME сейчас активен"
+        else
+            check_warn "$SERVICE_NAME должен быть подключён, но сейчас не активен"
+        fi
+    fi
+}
+
+doctor_profile_checks() {
+    local protocol file total=0
+    for protocol in amneziawg wireguard openvpn l2tp; do
+        load_profiles "$protocol"
+        if ((${#PROFILES[@]} == 0)); then
+            check_warn "$(protocol_title "$protocol"): профилей нет"
+            continue
+        fi
+        check_ok "$(protocol_title "$protocol"): профилей ${#PROFILES[@]}"
+        for file in "${PROFILES[@]}"; do
+            total=$((total + 1))
+            validate_profile "$protocol" "$file" 0 || true
+        done
+    done
+    ((total > 0)) || check_fail "Не найдено ни одного VPN-профиля"
+}
+
+doctor_fix() {
+    local protocol file installer
+    info "Применение безопасных исправлений"
+    mkdir -p "$STATE_DIR" "$RUN_DIR"
+    chmod 700 "$STATE_DIR" "$RUN_DIR"
+
+    for protocol in amneziawg wireguard openvpn l2tp; do
+        load_profiles "$protocol"
+        for file in "${PROFILES[@]}"; do
+            validate_permissions "$file" || fix_profile_permissions "$file" || true
+        done
+    done
+
+    installer="/usr/local/lib/mazzy-vpn/install.sh"
+    [[ -x "$installer" ]] || installer="/usr/local/lib/vpnctl/install.sh"
+    [[ -x "$installer" ]] || installer="$SCRIPT_DIR/install.sh"
+    if [[ -x "$installer" ]]; then
+        "$installer" --deps-only --yes || warn "Не все зависимости удалось установить"
+    else
+        warn "install.sh не найден; зависимости автоматически не установлены"
+    fi
+    if amnezia_kernel_available && command -v awg-quick >/dev/null 2>&1; then
+        modprobe amneziawg 2>/dev/null ||
+            warn "Модуль amneziawg не загрузился; проверьте DKMS и журнал ядра"
+    elif amnezia_userspace_available; then
+        info "AmneziaWG использует userspace backend amneziawg-go"
+    else
+        warn "AmneziaWG backend всё ещё недоступен"
+    fi
+
+    if systemd_available; then
+        systemctl daemon-reload || true
+        systemctl_quiet enable "$TEST_RECOVERY_SERVICE" || true
+        systemctl_quiet enable --now "$HEALTH_TIMER" || true
+        if [[ "$(state_get DESIRED 2>/dev/null || true)" == "up" ]] &&
+           selected_from_state; then
+            systemctl_quiet enable "$SERVICE_NAME" || true
+            reset_service_start_limit
+            systemctl_quiet start "$SERVICE_NAME" || true
+        fi
+    fi
+}
+
+cmd_doctor() {
+    local fix=0
+    require_profile_access doctor "$@"
+    case "${1:-}" in
+        "") ;;
+        --fix) fix=1 ;;
+        *) die "Неизвестный параметр doctor: $1" ;;
+    esac
+    if ((fix)); then
+        require_root doctor --fix
+        doctor_fix
+    fi
+
+    CHECK_OK=0
+    CHECK_WARN=0
+    CHECK_FAIL=0
+    say "${C_BOLD}$PRODUCT_NAME doctor${C_RESET}"
+    doctor_dependency_checks
+    doctor_fallback_checks
+    doctor_unit_checks
+    doctor_profile_checks
+    if [[ -r "$STATE_FILE" ]]; then
+        if selected_from_state; then
+            check_ok "Сохранённый выбор корректен"
+        else
+            check_fail "Сохранённый выбор повреждён или профиль удалён"
+        fi
+    else
+        check_warn "Профиль для подключения ещё не выбран"
+    fi
+
+    printf '\nИтог: OK=%d WARN=%d FAIL=%d\n' "$CHECK_OK" "$CHECK_WARN" "$CHECK_FAIL"
+    if ((CHECK_FAIL > 0)); then
+        ((fix)) || say "Для безопасных автоматических исправлений: sudo $CLI_COMMAND doctor --fix"
+        return 1
+    fi
+}
+
+cmd_self_test() {
+    local mode="network" timeout="$DEFAULT_PROBE_TIMEOUT" failed=0
+    local -a original=("$@")
+    while (($#)); do
+        case "$1" in
+            --offline) mode="offline" ;;
+            --live) mode="live" ;;
+            --timeout)
+                shift
+                [[ $# -gt 0 ]] || die "--timeout требует число секунд"
+                timeout="$1"
+                ;;
+            --help|-h)
+                say "Использование: $CLI_COMMAND self-test [--offline|--live] [--timeout 3]"
+                return 0
+                ;;
+            *) die "Неизвестный параметр self-test: $1" ;;
+        esac
+        shift
+    done
+    if [[ ! "$timeout" =~ ^[0-9]+$ ]] || ((timeout < 1 || timeout > 30)); then
+        die "Таймаут self-test должен быть от 1 до 30 секунд"
+    fi
+    require_profile_access self-test "${original[@]}"
+
+    say "${C_BOLD}$PRODUCT_NAME — самодиагностика${C_RESET}"
+    say "Режим: $mode"
+    say
+    cmd_validate all || failed=1
+    if [[ "$mode" != "offline" ]]; then
+        say
+        cmd_probe all --timeout "$timeout" || failed=1
+    fi
+    say
+    cmd_doctor || failed=1
+    if [[ "$mode" == "live" ]]; then
+        say
+        cmd_test_all all --timeout "$DEFAULT_TEST_TIMEOUT" || failed=1
+    fi
+    say
+    if ((failed)); then
+        error "$PRODUCT_NAME self-test: обнаружены проблемы"
+        return 1
+    fi
+    say "$PRODUCT_NAME self-test: все выбранные проверки пройдены."
+}
+
+cmd_autostart() {
+    local mode="${1:-}"
+    [[ "$mode" == "on" || "$mode" == "off" ]] ||
+        die "Использование: $CLI_COMMAND autostart on|off"
+    require_root autostart "$mode"
+    systemd_available || die "systemd недоступен"
+    if [[ "$mode" == "on" ]]; then
+        selected_from_state || die "Сначала выберите профиль: $CLI_COMMAND connect"
+        systemctl enable "$SERVICE_NAME" || die "Не удалось включить $SERVICE_NAME"
+        systemctl enable --now "$HEALTH_TIMER" ||
+            die "Не удалось включить $HEALTH_TIMER"
+        say "Автоподключение после загрузки включено."
+    else
+        systemctl disable "$SERVICE_NAME" || die "Не удалось отключить $SERVICE_NAME"
+        systemctl disable "$HEALTH_TIMER" || die "Не удалось отключить $HEALTH_TIMER"
+        say "Автоподключение после загрузки выключено; текущее соединение не остановлено."
+    fi
+}
+
+detect_profile_protocol() {
+    local file="$1"
+    [[ -f "$file" && -r "$file" ]] || return 1
+    if [[ "$file" == *.nmconnection ]] ||
+       {
+           grep -Eiq '^[[:space:]]*type[[:space:]]*=[[:space:]]*vpn[[:space:]]*$' "$file" &&
+               grep -Eiq '^[[:space:]]*service-type[[:space:]]*=.*l2tp' "$file"
+       }; then
+        printf 'l2tp\n'
+        return 0
+    fi
+    if [[ "$file" == *.ovpn ]] ||
+       {
+           has_directive "$file" client &&
+               has_directive "$file" remote &&
+               ! grep -Eq '^[[:space:]]*\[(Interface|Peer)\][[:space:]]*$' "$file"
+       }; then
+        printf 'openvpn\n'
+        return 0
+    fi
+    if grep -Eq '^[[:space:]]*\[Interface\][[:space:]]*$' "$file" &&
+       grep -Eq '^[[:space:]]*\[Peer\][[:space:]]*$' "$file"; then
+        if grep -Eiq '^[[:space:]]*(Jc|Jmin|Jmax|S1|S2|H1|H2|H3|H4|I1|I2|I3|I4|I5)[[:space:]]*=' "$file"; then
+            printf 'amneziawg\n'
+        else
+            printf 'wireguard\n'
+        fi
+        return 0
+    fi
+    return 1
+}
+
+import_target_dir() {
+    local protocol="$1" dir
+    dir="$(protocol_dir "$protocol")"
+    if [[ "$dir" == "$SCRIPT_DIR/conf/AMNEZIA" || "$dir" == "$SCRIPT_DIR/conf/"* ]]; then
+        dir="$DEFAULT_CONFIG_DIR/$protocol"
+    fi
+    printf '%s\n' "$dir"
+}
+
+safe_import_name() {
+    local name
+    name="$(basename -- "$1")"
+    [[ -n "$name" && "$name" != "." && "$name" != ".." ]] || return 1
+    [[ "$name" != *$'\n'* && "$name" != *$'\r'* && "$name" != *$'\033'* ]] ||
+        return 1
+    printf '%s\n' "$name"
+}
+
+cmd_import() {
+    local requested_protocol="${1:-}" source="${2:-}" force="${3:-}" protocol dir target
+    [[ -n "$requested_protocol" && -n "$source" ]] ||
+        die "Использование: $CLI_COMMAND import ПРОТОКОЛ ФАЙЛ [--force]"
+    protocol="$(canonical_protocol "$requested_protocol")" ||
+        die "Неизвестный протокол: $requested_protocol"
+    [[ -f "$source" ]] || die "Файл не найден: $source"
+    safe_import_name "$source" >/dev/null ||
+        die "Имя профиля содержит запрещённые управляющие символы"
+    validate_profile "$protocol" "$source" 1 ||
+        die "Профиль не прошёл проверку формата/безопасности"
+    require_root import "$protocol" "$source" "$force"
+
+    dir="$(import_target_dir "$protocol")"
+    mkdir -p "$dir"
+    chmod 700 "$(dirname -- "$dir")" "$dir"
+    target="$dir/$(basename -- "$source")"
+    if [[ -e "$target" && "$force" != "--force" ]]; then
+        die "Профиль уже существует: $target (для замены добавьте --force)"
+    fi
+    install -m 600 -- "$source" "$target" || die "Не удалось скопировать профиль"
+    say "Добавлен профиль: $target"
+}
+
+cmd_import_dir() {
+    local source_dir="" force=0 dry_run=0 protocol file name dir target
+    local detected=0 imported=0 unchanged=0 unknown=0 invalid=0 conflicts=0
+    local -a original=("$@") files=()
+    while (($#)); do
+        case "$1" in
+            --force) force=1 ;;
+            --dry-run|--scan) dry_run=1 ;;
+            --help|-h)
+                say "Использование: $CLI_COMMAND import-dir ПАПКА [--dry-run] [--force]"
+                return 0
+                ;;
+            -*)
+                die "Неизвестный параметр import-dir: $1"
+                ;;
+            *)
+                [[ -z "$source_dir" ]] || die "Укажите только одну папку конфигов"
+                source_dir="$1"
+                ;;
+        esac
+        shift
+    done
+    [[ -n "$source_dir" && -d "$source_dir" ]] ||
+        die "Папка конфигов не найдена: ${source_dir:-<не указана>}"
+    source_dir="$(readlink -f -- "$source_dir")"
+    mapfile -d '' -t files < <(
+        find "$source_dir" -type f \
+            \( -name '*.conf' -o -name '*.ovpn' -o -name '*.nmconnection' \) \
+            -print0 2>/dev/null | sort -z
+    )
+    ((${#files[@]} > 0)) ||
+        die "В папке нет файлов *.conf, *.ovpn или *.nmconnection"
+    ((dry_run)) || require_root import-dir "${original[@]}"
+
+    say "$PRODUCT_NAME: анализ папки $source_dir"
+    for file in "${files[@]}"; do
+        if ! protocol="$(detect_profile_protocol "$file")"; then
+            printf '[SKIP] unknown      %s\n' "$file"
+            unknown=$((unknown + 1))
+            continue
+        fi
+        detected=$((detected + 1))
+        if ! validate_profile "$protocol" "$file" 1; then
+            printf '[FAIL] %-12s %s\n' "$(protocol_title "$protocol")" "$file"
+            invalid=$((invalid + 1))
+            continue
+        fi
+        name="$(safe_import_name "$file")" || {
+            printf '[FAIL] unsafe-name  %s\n' "$file"
+            invalid=$((invalid + 1))
+            continue
+        }
+        dir="$(import_target_dir "$protocol")"
+        target="$dir/$name"
+        if ((dry_run)); then
+            printf '[SCAN] %-12s %s\n' "$(protocol_title "$protocol")" "$file"
+            continue
+        fi
+        mkdir -p "$dir"
+        chmod 700 "$(dirname -- "$dir")" "$dir"
+        if [[ -e "$target" ]] && cmp -s "$file" "$target"; then
+            chmod 600 "$target"
+            printf '[SAME] %-12s %s\n' "$(protocol_title "$protocol")" "$target"
+            unchanged=$((unchanged + 1))
+            continue
+        fi
+        if [[ -e "$target" && "$force" -eq 0 ]]; then
+            printf '[SKIP] conflict     %s (используйте --force)\n' "$target"
+            conflicts=$((conflicts + 1))
+            continue
+        fi
+        install -m 600 -- "$file" "$target" || {
+            printf '[FAIL] copy         %s\n' "$file"
+            invalid=$((invalid + 1))
+            continue
+        }
+        printf '[ OK ] %-12s %s\n' "$(protocol_title "$protocol")" "$target"
+        imported=$((imported + 1))
+    done
+    printf '\nИтог import-dir: files=%d detected=%d imported=%d same=%d unknown=%d invalid=%d conflicts=%d\n' \
+        "${#files[@]}" "$detected" "$imported" "$unchanged" "$unknown" "$invalid" "$conflicts"
+    ((detected > 0 && invalid == 0))
+}
+
+cmd_init_config_dir() {
+    local target="${1:-$PWD/mazzy-vpn-configs}" existed=0
+    [[ $# -le 1 ]] || die "Использование: $CLI_COMMAND init-config-dir [ПАПКА]"
+    target="$(readlink -m -- "$target")"
+    [[ -d "$target" ]] && existed=1
+    [[ ! -e "$target" || -d "$target" ]] ||
+        die "Путь существует и не является папкой: $target"
+    mkdir -p "$target"/{amneziawg,wireguard,openvpn,l2tp} ||
+        die "Не удалось создать структуру: $target"
+    ((existed)) || chmod 700 "$target"
+    chmod 700 "$target"/{amneziawg,wireguard,openvpn,l2tp}
+    say "Создана структура конфигов: $target"
+    say "  amneziawg/  wireguard/  openvpn/  l2tp/"
+    say "Импорт: sudo $CLI_COMMAND import-dir '$target'"
+}
+
+cmd_remove() {
+    local -a original=("$@")
+    local requested_protocol="${1:-}" requested_profile="${2:-}" protocol active_profile
+    [[ -n "$requested_protocol" && -n "$requested_profile" ]] ||
+        die "Использование: $CLI_COMMAND remove ПРОТОКОЛ ПРОФИЛЬ"
+    protocol="$(canonical_protocol "$requested_protocol")" ||
+        die "Неизвестный протокол: $requested_protocol"
+    require_profile_access remove "${original[@]}"
+    resolve_profile "$protocol" "$requested_profile" || return 1
+    require_root remove "$protocol" "$(basename -- "$SELECTED_PROFILE")"
+    active_profile="$(state_get PROFILE 2>/dev/null || true)"
+    if [[ "$(state_get PROTOCOL 2>/dev/null || true)" == "$protocol" &&
+          "$active_profile" == "$(basename -- "$SELECTED_PROFILE")" ]]; then
+        die "Нельзя удалить выбранный профиль. Сначала переключитесь на другой."
+    fi
+    rm -- "$SELECTED_PROFILE" || die "Не удалось удалить профиль"
+    say "Удалён профиль: $(basename -- "$SELECTED_PROFILE")"
+}
+
+l2tp_connection_id() {
+    local file="$1"
+    awk -F= '
+        /^\[connection\]$/ { in_connection=1; next }
+        /^\[/ { in_connection=0 }
+        in_connection && $1 == "id" {
+            sub(/^[^=]*=/, "")
+            print
+            exit
+        }
+    ' "$file"
+}
+
+openvpn_dns_up() {
+    local dev="${dev:-${1:-}}" value
+    declare -a servers=()
+    [[ -n "$dev" ]] || return 0
+    while IFS='=' read -r _ value; do
+        if [[ "$value" =~ ^dhcp-option[[:space:]]+DNS[[:space:]]+([^[:space:]]+) ]]; then
+            servers+=("${BASH_REMATCH[1]}")
+        fi
+    done < <(env | grep -E '^foreign_option_[0-9]+=' | sort -t_ -k3,3n)
+
+    ((${#servers[@]} > 0)) || servers=("1.1.1.1")
+    if command -v resolvectl >/dev/null 2>&1; then
+        resolvectl dns "$dev" "${servers[@]}"
+        resolvectl domain "$dev" '~.'
+        resolvectl default-route "$dev" yes
+    elif command -v resolvconf >/dev/null 2>&1; then
+        printf 'nameserver %s\n' "${servers[@]}" | resolvconf -a "$dev.vpnctl"
+    fi
+}
+
+openvpn_dns_down() {
+    local dev="${dev:-${1:-}}"
+    [[ -n "$dev" ]] || return 0
+    if command -v resolvectl >/dev/null 2>&1; then
+        resolvectl revert "$dev" >/dev/null 2>&1 || true
+    elif command -v resolvconf >/dev/null 2>&1; then
+        resolvconf -d "$dev.vpnctl" >/dev/null 2>&1 || true
+    fi
+}
+
+run_quick_service() {
+    local protocol="$1" profile="$2" mode="${3:-normal}" tool status_tool interface runtime
+    if [[ "$protocol" == "amneziawg" ]]; then
+        tool=awg-quick
+        status_tool=awg
+        interface=vpnaw0
+    else
+        tool=wg-quick
+        status_tool=wg
+        interface=vpnwg0
+    fi
+    runtime="$RUN_DIR/$interface.conf"
+    mkdir -p "$RUN_DIR"
+    chmod 700 "$RUN_DIR"
+    install -m 600 -- "$profile" "$runtime" || return 1
+
+    cleanup_quick() {
+        "$tool" down "$runtime" >/dev/null 2>&1 || true
+        rm -f "$runtime"
+    }
+    stop_quick() {
+        exit 0
+    }
+    trap cleanup_quick EXIT
+    trap stop_quick INT TERM
+    "$tool" up "$runtime" || return 1
+    cleanup_duplicate_quick_policy
+    if [[ "$mode" == "test" ]]; then
+        info "TEST: $(protocol_title "$protocol") interface $interface создан"
+        "$status_tool" show "$interface" 2>/dev/null |
+            awk '
+                /private key:/ { sub(/:.*/, ": (hidden)"); print; next }
+                /^[[:space:]]+i[1-5]:/ {
+                    if (!concealment) print "  concealment parameters: configured"
+                    concealment=1
+                    next
+                }
+                { print }
+            ' || true
+        ip -details address show dev "$interface" || true
+        ip -4 route show table all | sed -n '1,120p' || true
+        ip rule show || true
+    fi
+    while sleep 10; do
+        ip link show "$interface" >/dev/null 2>&1 || return 1
+    done
+}
+
+run_openvpn_service() {
+    local profile="$1" mode="${2:-normal}" legacy_cipher runtime_log rc=0
+    local -a args=(
+        --config "$profile"
+        --dev vpnovpn0
+        --dev-type tun
+        --script-security 2
+        --up "$SELF _openvpn-dns-up"
+        --down "$SELF _openvpn-dns-down"
+        --down-pre
+    )
+    if ! has_directive "$profile" 'data-ciphers' &&
+       ! has_directive "$profile" 'data-ciphers-fallback'; then
+        legacy_cipher="$(awk '$1 == "cipher" { print $2; exit }' "$profile")"
+        [[ -n "$legacy_cipher" ]] && args+=(--data-ciphers-fallback "$legacy_cipher")
+    fi
+    if [[ "$mode" == "test" ]]; then
+        args+=(--verb 6)
+        info "TEST: OpenVPN запущен с verb=6; профиль $(profile_name "$profile")"
+    fi
+    mkdir -p "$RUN_DIR"
+    chmod 700 "$RUN_DIR"
+    runtime_log="$RUN_DIR/openvpn.runtime.log"
+    install -m 600 /dev/null "$runtime_log" || return 1
+    openvpn "${args[@]}" 2>&1 | tee "$runtime_log"
+    rc="${PIPESTATUS[0]}"
+    if grep -Fq "Too many connections" "$runtime_log"; then
+        [[ "$mode" != "test" ]] ||
+            printf '%s\n' openvpn-too-many-connections >"$TEST_FAILURE_MARKER"
+        error "OpenVPN: сервер отклонил сессию (Too many connections); systemd повторит подключение"
+        return 75
+    fi
+    if grep -Eq 'AUTH_FAILED|auth-failure' "$runtime_log"; then
+        [[ "$mode" != "test" ]] ||
+            printf '%s\n' openvpn-auth-failed >"$TEST_FAILURE_MARKER"
+        error "OpenVPN: сервер отклонил авторизацию"
+        return 77
+    fi
+    if grep -Eq 'server-pushed-halt|Halt command was pushed by server' "$runtime_log"; then
+        [[ "$mode" != "test" ]] ||
+            printf '%s\n' openvpn-server-halt >"$TEST_FAILURE_MARKER"
+        error "OpenVPN: сервер принудительно остановил сессию"
+        return 75
+    fi
+    return "$rc"
+}
+
+run_l2tp_service() {
+    local profile="$1" mode="${2:-normal}" connection_id
+    connection_id="$(l2tp_connection_id "$profile")"
+    [[ -n "$connection_id" ]] || die "В L2TP-профиле отсутствует connection.id"
+    nmcli connection load "$profile" || return 1
+    nmcli connection up id "$connection_id" || return 1
+    if [[ "$mode" == "test" ]]; then
+        info "TEST: L2TP/IPsec соединение '$connection_id' поднято"
+        nmcli -f GENERAL.NAME,GENERAL.UUID,GENERAL.STATE,IP4.ADDRESS,IP4.GATEWAY \
+            connection show "$connection_id" || true
+        ip -details link show || true
+    fi
+
+    cleanup_l2tp() {
+        nmcli connection down id "$connection_id" >/dev/null 2>&1 || true
+    }
+    stop_l2tp() {
+        exit 0
+    }
+    trap cleanup_l2tp EXIT
+    trap stop_l2tp INT TERM
+    while sleep 10; do
+        nmcli -t -f NAME connection show --active 2>/dev/null |
+            grep -Fqx -- "$connection_id" || return 1
+    done
+}
+
+service_run() {
+    local desired mode deadline
+    ((EUID == 0)) || [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]] ||
+        die "_service-run требует root"
+    selected_from_state || die "Выбранный профиль отсутствует"
+    desired="$(state_get DESIRED 2>/dev/null || true)"
+    mode="$(state_get MODE 2>/dev/null || printf 'normal')"
+    deadline="$(state_get TEST_DEADLINE 2>/dev/null || true)"
+    if [[ "$desired" != "up" ]]; then
+        write_state "$SELECTED_PROTOCOL" "$SELECTED_PROFILE" up ||
+            die "Не удалось обновить состояние подключения"
+    fi
+    validate_profile "$SELECTED_PROTOCOL" "$SELECTED_PROFILE" 1 ||
+        die "Профиль не прошёл проверку безопасности"
+    validate_permissions "$SELECTED_PROFILE" ||
+        die "У выбранного профиля небезопасные права; требуется chmod 600"
+    if [[ "$mode" == "test" ]]; then
+        info "TEST: расширенное логирование включено; deadline=$deadline"
+        info "TEST: $(protocol_title "$SELECTED_PROTOCOL") / $(profile_name "$SELECTED_PROFILE")"
+    fi
+
+    case "$SELECTED_PROTOCOL" in
+        amneziawg|wireguard)
+            run_quick_service "$SELECTED_PROTOCOL" "$SELECTED_PROFILE" "$mode"
+            ;;
+        openvpn)
+            run_openvpn_service "$SELECTED_PROFILE" "$mode"
+            ;;
+        l2tp)
+            run_l2tp_service "$SELECTED_PROFILE" "$mode"
+            ;;
+    esac
+}
+
+health_reset() {
+    rm -f "$RUN_DIR/health.failures"
+}
+
+health_limit() {
+    if [[ "$HEALTH_FAILURE_LIMIT" =~ ^[1-9][0-9]*$ ]]; then
+        printf '%s\n' "$HEALTH_FAILURE_LIMIT"
+    else
+        printf '2\n'
+    fi
+}
+
+health_internet_ok() {
+    local interface="$1" timeout="$HEALTH_PROBE_TIMEOUT" trace
+    [[ "$timeout" =~ ^[1-9][0-9]*$ ]] || timeout=4
+    public_ip "$interface" "$timeout" >/dev/null && return 0
+    trace="$(
+        curl -4 -fsS --connect-timeout "$timeout" --max-time "$timeout" \
+            --interface "$interface" "$HEALTH_FALLBACK_PROBE_URL" 2>/dev/null
+    )" || return 1
+    grep -Eq '^ip=[0-9A-Fa-f:.]{3,64}$' <<<"$trace"
+}
+
+health_acquire_action_lock() {
+    exec 8>"$RUN_DIR/.action.lock"
+    flock -n 8
+}
+
+health_recover() {
+    local reason="$1" action="${2:-restart}" fallback=""
+    if ! health_acquire_action_lock; then
+        warn "Автовосстановление отложено: уже выполняется другая операция $PRODUCT_NAME"
+        return 0
+    fi
+    fallback="$(detect_external_fallback || true)"
+    if [[ -n "$fallback" ]]; then
+        warn "Автовосстановление останавливает конфликтующий $(external_fallback_title "$fallback")"
+        stop_external_fallbacks || {
+            error "Автовосстановление не смогло остановить внешний VPN"
+            return 1
+        }
+    fi
+    cleanup_stale_quick_policy
+    health_reset
+    reset_service_start_limit
+    warn "Автовосстановление: $reason; действие=$action $SERVICE_NAME"
+    if systemctl "$action" --no-block "$SERVICE_NAME"; then
+        info "Команда автовосстановления передана systemd"
+        return 0
+    fi
+    error "systemd отклонил команду автовосстановления"
+    return 1
+}
+
+health_failure() {
+    local reason="$1" failures=0 limit
+    limit="$(health_limit)"
+    mkdir -p "$RUN_DIR"
+    [[ -r "$RUN_DIR/health.failures" ]] &&
+        read -r failures <"$RUN_DIR/health.failures"
+    [[ "$failures" =~ ^[0-9]+$ ]] || failures=0
+    failures=$((failures + 1))
+    printf '%s\n' "$failures" >"$RUN_DIR/health.failures"
+    warn "Проверка соединения $failures/$limit: $reason"
+    if ((failures >= limit)); then
+        health_recover "$reason после $failures последовательных проверок" restart || true
+    fi
+}
+
+health_check() {
+    local desired interface mode deadline token now
+    mkdir -p "$RUN_DIR"
+    chmod 700 "$RUN_DIR"
+    exec 9>"$RUN_DIR/.health.lock"
+    flock -n 9 || return 0
+    desired="$(state_get DESIRED 2>/dev/null || true)"
+    [[ "$desired" == "up" ]] || {
+        health_reset
+        return 0
+    }
+    mode="$(state_get MODE 2>/dev/null || printf 'normal')"
+    if [[ "$mode" == "test" ]]; then
+        deadline="$(state_get TEST_DEADLINE 2>/dev/null || true)"
+        token="$(state_get TEST_TOKEN 2>/dev/null || true)"
+        now="$(date +%s)"
+        if [[ "$deadline" =~ ^[0-9]+$ ]] && ((now >= deadline)); then
+            test_timeout_handler "$token"
+        else
+            health_reset
+        fi
+        return 0
+    fi
+    if ! selected_from_state; then
+        health_failure "выбранный профиль не найден"
+        return 0
+    fi
+    if ! service_active; then
+        health_recover "сохранено DESIRED=up, но сервис не активен" start || true
+        return 0
+    fi
+    if ! connection_local_ok "$SELECTED_PROTOCOL"; then
+        health_failure "VPN-интерфейс отсутствует"
+        return 0
+    fi
+    interface="$(interface_for_protocol "$SELECTED_PROTOCOL")"
+    if ! health_internet_ok "$interface"; then
+        health_failure "нет доступа в интернет через VPN"
+        return 0
+    fi
+    health_reset
+}
+
+cmd_logs() {
+    local args=(-u "$SERVICE_NAME" --no-pager -n 100)
+    [[ "${1:-}" == "-f" ]] && args=(-f -u "$SERVICE_NAME")
+    journalctl "${args[@]}"
+}
+
+print_logo() {
+    printf '\n%s%s' "$C_CYAN" "$C_BOLD"
+    cat <<'EOF'
+                 ╭───────────────╮
+                ╱   M A Z Z Y     ╲
+               │       V P N       │
+               │    ◆    │    ◆    │
+                ╲        ◆        ╱
+                  ╲─────────────╱
+EOF
+    printf '             %s%s%s\n' "$C_RESET" "$C_BOLD" "$(msg tagline)"
+    printf '%s' "$C_RESET"
+}
+
+dashboard_render() {
+    local protocol="" profile="" location="" config_name="" interface=""
+    local service_text internet_text public_ip_value="" handshake_text=""
+    local autostart_text health_text fallback="" fallback_text counts="" protocol_name count
+    local tunnel_ok=0 now handshake
+    service_text="$(msg stopped)"
+    internet_text="$(msg not_available)"
+    autostart_text="$(msg disabled)"
+    health_text="$(msg disabled)"
+    systemctl_quiet is-enabled "$SERVICE_NAME" && autostart_text="$(msg enabled)"
+    systemctl_quiet is-active "$HEALTH_TIMER" && health_text="$(msg enabled)"
+    fallback="$(detect_external_fallback || true)"
+    if [[ -n "$fallback" ]]; then
+        fallback_text="$(external_fallback_title "$fallback") — $(msg active)"
+    else
+        fallback_text="$(msg fallback_none)"
+    fi
+
+    if selected_from_state; then
+        protocol="$SELECTED_PROTOCOL"
+        profile="$SELECTED_PROFILE"
+        location="$(profile_name "$profile")"
+        config_name="$(basename -- "$profile")"
+        interface="$(interface_for_protocol "$protocol")"
+        if service_active; then
+            service_text="$(msg active)"
+            if connection_local_ok "$protocol"; then
+                tunnel_ok=1
+                public_ip_value="$(public_ip "$interface" 2 || true)"
+                if [[ -n "$public_ip_value" ]]; then
+                    internet_text="✓ $(msg check_ok)"
+                else
+                    internet_text="✗ $(msg check_failed)"
+                fi
+                if [[ "$protocol" == "amneziawg" || "$protocol" == "wireguard" ]]; then
+                    handshake="$(latest_handshake "$protocol" "$interface")"
+                    if [[ "$handshake" =~ ^[0-9]+$ && "$handshake" -gt 0 ]]; then
+                        now="$(date +%s)"
+                        handshake_text="$((now - handshake)) $(msg seconds_ago)"
+                    fi
+                fi
+            else
+                internet_text="✗ $(msg check_failed)"
+            fi
+        fi
+    fi
+
+    for protocol_name in amneziawg wireguard openvpn l2tp; do
+        load_profiles "$protocol_name"
+        count="${#PROFILES[@]}"
+        counts+="${counts:+  ·  }$(protocol_title "$protocol_name")=$count"
+    done
+
+    print_logo
+    printf '%s╭─ %s ───────────────────────────────────────────────╮%s\n' \
+        "$C_BOLD" "$(msg connection)" "$C_RESET"
+    if [[ -n "$profile" ]]; then
+        printf '│  %s●%s %-18s  %s: %s\n' \
+            "$([[ "$service_text" == "$(msg active)" ]] && printf '%s' "$C_GREEN" || printf '%s' "$C_YELLOW")" \
+            "$C_RESET" "$service_text" "$(msg internet)" "$internet_text"
+        printf '│  ◆ %s: %s\n' "$(msg location)" "$location"
+        printf '│  ◇ %s: %s\n' "$(msg protocol_label)" "$(protocol_title "$protocol")"
+        printf '│  ★ %s: %s\n' "$(msg default_config)" "$config_name"
+        printf '│  ↳ %s: %s' "$(msg interface_label)" "${interface:-$(msg not_available)}"
+        if ((tunnel_ok)) && [[ -n "$handshake_text" ]]; then
+            printf '  ·  %s: %s' "$(msg handshake_label)" "$handshake_text"
+        fi
+        printf '\n'
+        printf '│  ↳ %s: %s\n' "$(msg public_ip_label)" "${public_ip_value:-$(msg not_available)}"
+    else
+        printf '│  ○ %s: %s\n' "$(msg selected)" "$(msg no_profile)"
+        printf '│  %s: %s\n' "$(msg internet)" "$(msg not_available)"
+    fi
+    printf '│  ⚙ %s: %s  ·  %s: %s\n' \
+        "$(msg autostart_label)" "$autostart_text" "$(msg health_label)" "$health_text"
+    printf '│  ⇄ %s: %s\n' "$(msg fallback)" "$fallback_text"
+    printf '├─ %s ──────────────────────────────────────────────────┤\n' "$(msg profiles)"
+    printf '│  %s\n' "$counts"
+    printf '╰────────────────────────────────────────────────────────╯\n'
+}
+
+cmd_dashboard() {
+    require_profile_access dashboard
+    dashboard_render
+}
+
+print_language_list() {
+    printf '  1. ru — %s\n' "$(language_native_name ru)"
+    printf '  2. en — %s\n' "$(language_native_name en)"
+    printf '  3. de — %s\n' "$(language_native_name de)"
+    printf '  4. zh — %s\n' "$(language_native_name zh)"
+    printf '  5. ja — %s\n' "$(language_native_name ja)"
+    printf '  6. ko — %s\n' "$(language_native_name ko)"
+}
+
+save_user_language() {
+    local language="$1" directory tmp
+    [[ -n "$USER_LOCALE_FILE" ]] || return 1
+    directory="$(dirname -- "$USER_LOCALE_FILE")"
+    install -d -m 700 -- "$directory" || return 1
+    tmp="$directory/.language.$$"
+    umask 077
+    printf '%s\n' "$language" >"$tmp" || return 1
+    chmod 600 "$tmp" || return 1
+    mv -f -- "$tmp" "$USER_LOCALE_FILE"
+    if ((EUID == 0)) && [[ "$LOCALE_OWNER_UID" =~ ^[0-9]+$ &&
+                           "$LOCALE_OWNER_GID" =~ ^[0-9]+$ ]]; then
+        chown "$LOCALE_OWNER_UID:$LOCALE_OWNER_GID" -- "$directory" \
+            "$USER_LOCALE_FILE" || return 1
+    fi
+}
+
+cmd_language() {
+    local requested="${1:-}" language
+    if [[ -z "$requested" || "$requested" == "current" ]]; then
+        printf '%s: %s (%s)\n' "$(msg current_language)" \
+            "$(language_native_name "$UI_LANG")" "$UI_LANG"
+        print_language_list
+        return 0
+    fi
+    if [[ "$requested" == "list" ]]; then
+        print_language_list
+        return 0
+    fi
+    language="$(normalize_language "$requested" 2>/dev/null)" || {
+        error "$(msg unsupported_language): $requested"
+        return 2
+    }
+    save_user_language "$language" || die "Не удалось сохранить язык: $USER_LOCALE_FILE"
+    UI_LANG="$language"
+    printf '%s: %s (%s)\n' "$(msg language_saved)" \
+        "$(language_native_name "$UI_LANG")" "$UI_LANG"
+}
+
+menu_language() {
+    local answer language
+    printf '\n%s: %s (%s)\n' "$(msg language_title)" \
+        "$(language_native_name "$UI_LANG")" "$UI_LANG"
+    print_language_list
+    read -r -p "$(msg language_prompt)" answer
+    case "$answer" in
+        1) language=ru ;; 2) language=en ;; 3) language=de ;;
+        4) language=zh ;; 5) language=ja ;; 6) language=ko ;;
+        *) warn "$(msg invalid_choice)"; return 1 ;;
+    esac
+    cmd_language "$language"
+}
+
+print_main_menu() {
+    case "$UI_LANG" in
+        ru)
+            cat <<'EOF'
+  1. Быстро подключить default-конфиг
+  2. Подключить / сменить сервер
+  3. Отключить VPN
+  4. Обновить dashboard
+  5. Безопасно протестировать один туннель
+  6. Проверить все конфиги и ping серверов
+  7. Живой тест всех профилей с rollback
+  8. Emergency: найти любой рабочий
+  9. Диагностика активного соединения
+ 10. Doctor установки
+ 11. Список серверов
+ 12. Автоподключение
+ 13. Журнал
+ 14. Полная самодиагностика
+ 15. Папки и импорт VPN-конфигов
+ 16. Язык интерфейса
+  0. Выход
+EOF
+            ;;
+        en)
+            cat <<'EOF'
+  1. Quick-connect the default config
+  2. Connect / change server
+  3. Disconnect VPN
+  4. Refresh dashboard
+  5. Safely test one tunnel
+  6. Validate all configs and ping servers
+  7. Live-test all profiles with rollback
+  8. Emergency: find any working profile
+  9. Diagnose the active connection
+ 10. Installation doctor
+ 11. Server list
+ 12. Autostart
+ 13. Service log
+ 14. Full self-diagnostics
+ 15. VPN config folders and import
+ 16. Interface language
+  0. Exit
+EOF
+            ;;
+        de)
+            cat <<'EOF'
+  1. Standardkonfiguration schnell verbinden
+  2. Verbinden / Server wechseln
+  3. VPN trennen
+  4. Dashboard aktualisieren
+  5. Einen Tunnel sicher testen
+  6. Alle Konfigurationen prüfen und Server anpingen
+  7. Alle Profile live testen, mit Rollback
+  8. Notfall: ein funktionierendes Profil finden
+  9. Aktive Verbindung diagnostizieren
+ 10. Installationsprüfung
+ 11. Serverliste
+ 12. Autostart
+ 13. Dienstprotokoll
+ 14. Vollständige Selbstdiagnose
+ 15. VPN-Konfigurationsordner und Import
+ 16. Oberflächensprache
+  0. Beenden
+EOF
+            ;;
+        zh)
+            cat <<'EOF'
+  1. 快速连接默认配置
+  2. 连接 / 更换服务器
+  3. 断开 VPN
+  4. 刷新仪表板
+  5. 安全测试单个隧道
+  6. 验证全部配置并 ping 服务器
+  7. 实测全部配置并自动回滚
+  8. 紧急模式：查找可用配置
+  9. 诊断当前连接
+ 10. 安装检查
+ 11. 服务器列表
+ 12. 自动启动
+ 13. 服务日志
+ 14. 完整自检
+ 15. VPN 配置文件夹与导入
+ 16. 界面语言
+  0. 退出
+EOF
+            ;;
+        ja)
+            cat <<'EOF'
+  1. 既定の設定ですぐ接続
+  2. 接続 / サーバー変更
+  3. VPN を切断
+  4. ダッシュボードを更新
+  5. 1つのトンネルを安全にテスト
+  6. 全設定を検証しサーバーへ ping
+  7. 全プロファイルをロールバック付きで実測
+  8. 緊急モード：利用可能な設定を検索
+  9. 現在の接続を診断
+ 10. インストール診断
+ 11. サーバー一覧
+ 12. 自動起動
+ 13. サービスログ
+ 14. 完全セルフ診断
+ 15. VPN 設定フォルダーとインポート
+ 16. 表示言語
+  0. 終了
+EOF
+            ;;
+        ko)
+            cat <<'EOF'
+  1. 기본 설정으로 빠른 연결
+  2. 연결 / 서버 변경
+  3. VPN 연결 해제
+  4. 대시보드 새로 고침
+  5. 단일 터널 안전 테스트
+  6. 모든 설정 검증 및 서버 ping
+  7. 모든 프로필 실연결 테스트와 롤백
+  8. 긴급 모드: 작동하는 프로필 찾기
+  9. 활성 연결 진단
+ 10. 설치 검사
+ 11. 서버 목록
+ 12. 자동 시작
+ 13. 서비스 로그
+ 14. 전체 자가 진단
+ 15. VPN 설정 폴더 및 가져오기
+ 16. 인터페이스 언어
+  0. 종료
+EOF
+            ;;
+    esac
+}
+
+menu_check_all() {
+    cmd_validate all || true
+    printf '\n'
+    cmd_probe all --timeout "$DEFAULT_PROBE_TIMEOUT" || true
+}
+
+menu_test_all() {
+    local protocol answer
+    protocol="$(choose_protocol)" || return 1
+    load_profiles "$protocol"
+    ((${#PROFILES[@]} > 0)) || {
+        warn "Для $(protocol_title "$protocol") профилей нет"
+        return 1
+    }
+    printf 'Будут последовательно проверены %d профилей %s.\n' \
+        "${#PROFILES[@]}" "$(protocol_title "$protocol")"
+    printf 'Каждый тест временно меняет VPN-маршрут и затем выполняет rollback.\n'
+    read -r -p "$(msg continue_prompt)" answer
+    [[ "$answer" == "y" || "$answer" == "Y" ||
+       "$answer" == "j" || "$answer" == "J" ]] || {
+        say "$(msg cancelled)"
+        return 0
+    }
+    cmd_test_all "$protocol" --timeout "$DEFAULT_TEST_TIMEOUT"
+}
+
+menu_autostart() {
+    local answer
+    case "$UI_LANG" in
+        ru) printf '  1. Включить автоподключение\n  2. Выключить автоподключение\n' ;;
+        en) printf '  1. Enable autostart\n  2. Disable autostart\n' ;;
+        de) printf '  1. Autostart aktivieren\n  2. Autostart deaktivieren\n' ;;
+        zh) printf '  1. 启用自动启动\n  2. 禁用自动启动\n' ;;
+        ja) printf '  1. 自動起動を有効化\n  2. 自動起動を無効化\n' ;;
+        ko) printf '  1. 자동 시작 활성화\n  2. 자동 시작 비활성화\n' ;;
+    esac
+    read -r -p "$(msg choice)" answer
+    case "$answer" in
+        1) cmd_autostart on ;;
+        2) cmd_autostart off ;;
+        *) warn "$(msg invalid_choice)"; return 1 ;;
+    esac
+}
+
+menu_config_folders() {
+    local choice path
+    case "$UI_LANG" in
+        ru) printf '  1. Просканировать папку без изменений\n  2. Импортировать распознанные конфиги\n  3. Создать новую структуру папок\n  0. Назад\n' ;;
+        en) printf '  1. Scan a folder without changes\n  2. Import recognized configs\n  3. Create a new folder structure\n  0. Back\n' ;;
+        de) printf '  1. Ordner ohne Änderungen scannen\n  2. Erkannte Konfigurationen importieren\n  3. Neue Ordnerstruktur erstellen\n  0. Zurück\n' ;;
+        zh) printf '  1. 扫描文件夹但不修改\n  2. 导入识别到的配置\n  3. 创建新的文件夹结构\n  0. 返回\n' ;;
+        ja) printf '  1. 変更せずフォルダーをスキャン\n  2. 認識した設定をインポート\n  3. 新しいフォルダー構造を作成\n  0. 戻る\n' ;;
+        ko) printf '  1. 변경 없이 폴더 스캔\n  2. 인식된 설정 가져오기\n  3. 새 폴더 구조 생성\n  0. 뒤로\n' ;;
+    esac
+    read -r -p "$(msg choice)" choice || return 0
+    case "$choice" in
+        1)
+            read -r -e -p "$(msg config_folder)" path
+            [[ -n "$path" ]] || { warn "$(msg no_folder)"; return 1; }
+            cmd_import_dir "$path" --dry-run
+            ;;
+        2)
+            read -r -e -p "$(msg config_folder)" path
+            [[ -n "$path" ]] || { warn "$(msg no_folder)"; return 1; }
+            cmd_import_dir "$path"
+            ;;
+        3)
+            read -r -e -p "$(msg new_folder)" path
+            cmd_init_config_dir "${path:-$PWD/mazzy-vpn-configs}"
+            ;;
+        0) return 0 ;;
+        *) warn "$(msg invalid_choice)"; return 1 ;;
+    esac
+}
+
+interactive_menu() {
+    local choice
+    require_profile_access
+    while true; do
+        dashboard_render
+        print_main_menu
+        read -r -p "$(msg choose_action)" choice || return 0
+        case "$choice" in
+            1) cmd_quick_connect || true ;;
+            2) cmd_connect || true ;;
+            3) cmd_disconnect || true ;;
+            4) cmd_dashboard || true ;;
+            5) cmd_test || true ;;
+            6) menu_check_all ;;
+            7) menu_test_all || true ;;
+            8) cmd_emergency || true ;;
+            9) cmd_diagnose || true ;;
+            10) cmd_doctor || true ;;
+            11) cmd_list all ;;
+            12) menu_autostart || true ;;
+            13) cmd_logs ;;
+            14) cmd_self_test || true ;;
+            15) menu_config_folders || true ;;
+            16) menu_language || true ;;
+            0) return 0 ;;
+            *) warn "$(msg unknown_item)" ;;
+        esac
+    done
+}
+
+main() {
+    local command="${1:-}"
+    [[ $# -eq 0 ]] || shift
+    case "$command" in
+        "") interactive_menu ;;
+        help|-h|--help) usage ;;
+        version|-V|--version)
+            say "$PRODUCT_NAME $VERSION ($CLI_COMMAND; alias: $COMPAT_COMMAND)"
+            ;;
+        list|ls) cmd_list "$@" ;;
+        connect|up|start|switch) cmd_connect "$@" ;;
+        quick|fast) cmd_quick_connect "$@" ;;
+        disconnect|down|stop) cmd_disconnect "$@" ;;
+        reconnect|restart) cmd_reconnect "$@" ;;
+        dashboard|dash) cmd_dashboard "$@" ;;
+        status|show) cmd_status "$@" ;;
+        diagnose|diag) cmd_diagnose "$@" ;;
+        validate|lint) cmd_validate "$@" ;;
+        probe|ping) cmd_probe "$@" ;;
+        test|check) cmd_test "$@" ;;
+        test-all|check-all) cmd_test_all "$@" ;;
+        emergency|recover) cmd_emergency "$@" ;;
+        self-test|selftest) cmd_self_test "$@" ;;
+        doctor) cmd_doctor "$@" ;;
+        autostart|auto) cmd_autostart "$@" ;;
+        import|add) cmd_import "$@" ;;
+        import-dir|add-dir|scan-dir) cmd_import_dir "$@" ;;
+        init-config-dir|init-dir) cmd_init_config_dir "$@" ;;
+        remove|delete|rm) cmd_remove "$@" ;;
+        logs|log) cmd_logs "$@" ;;
+        language|lang|locale) cmd_language "$@" ;;
+        _service-run) service_run ;;
+        _health-check) health_check ;;
+        _test-timeout) test_timeout_handler "${1:-}" ;;
+        _recover-stale-test) recover_stale_test_state ;;
+        _dedupe-quick-policy)
+            require_root _dedupe-quick-policy
+            cleanup_duplicate_quick_policy
+            ;;
+        _openvpn-dns-up) openvpn_dns_up "${1:-}" ;;
+        _openvpn-dns-down) openvpn_dns_down "${1:-}" ;;
+        *) error "Неизвестная команда: $command"; usage >&2; return 2 ;;
+    esac
+}
+
+main "$@"

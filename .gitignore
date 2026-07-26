@@ -1,0 +1,7 @@
+# VPN profiles contain credentials and are kept outside the code repository.
+conf
+
+# Local release artifacts.
+dist/
+*.tar.gz
+*.sha256

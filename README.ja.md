@@ -1,0 +1,113 @@
+# Mazzy VPN — 日本語ガイド
+
+作者・メンテナー:
+[Nik m (@mazurovn)](https://github.com/mazurovn)
+
+Mazzy VPN は AmneziaWG、WireGuard、OpenVPN、NetworkManager L2TP/IPsec
+を一つにまとめる Linux VPN マネージャーです。対話型 TUI、自動化向け CLI、
+安全な設定インポート、接続確認、自動ロールバック付きの実接続テストを提供します。
+
+## インストールと言語
+
+```bash
+git clone https://github.com/mazurovn/mazzy-vpn.git
+cd mazzy-vpn
+sudo ./install.sh
+mazzy-vpn
+```
+
+対話型インストールの最初に 6 言語から選択できます。自動インストール:
+
+```bash
+sudo ./install.sh --lang ja --yes
+sudo ./install.sh --lang ja --config-dir ~/VPN-configs
+```
+
+インストール後はメニュー項目 16、または次のコマンドで即時変更できます。
+
+```bash
+mazzy-vpn language
+mazzy-vpn language ja
+```
+
+対応コード: `ru`、`en`、`de`、`zh`、`ja`、`ko`。
+
+## ダッシュボードとクイック接続
+
+ダッシュボードは TUI メニューの上部に表示され、単独でも実行できます。
+
+```bash
+mazzy-vpn dashboard
+mazzy-vpn quick
+```
+
+実際のトンネルとインターネット状態、選択ロケーション、プロトコル、既定の設定、
+インターフェース、ハンドシェイク経過時間、パブリック IP、自動起動、
+ヘルス監視、フォールバック、各プロファイル数を一画面で確認できます。
+
+`mazzy-vpn quick` は保存済みの既定設定へ再選択なしで接続します。既定設定が
+ない場合は選択画面を開き、その選択を新しい既定値として保存します。
+
+## 主なコマンド
+
+```bash
+mazzy-vpn
+mazzy-vpn list
+mazzy-vpn quick
+sudo mazzy-vpn connect amneziawg 1
+sudo mazzy-vpn disconnect
+mazzy-vpn diagnose
+mazzy-vpn validate all
+mazzy-vpn probe all --timeout 3
+sudo mazzy-vpn test openvpn 1 --timeout 60
+sudo mazzy-vpn test-all all --timeout 30
+sudo mazzy-vpn emergency --timeout 20
+mazzy-vpn self-test
+sudo mazzy-vpn doctor --fix
+sudo mazzy-vpn autostart on
+```
+
+## 自動監視と修復
+
+VPN プロセスが予期せず終了すると systemd が再起動します。独立したヘルス
+タイマーは約 20 秒ごとに、希望状態、サービス、VPN インターフェース、および
+そのインターフェース経由の実際の HTTPS 接続を確認します。
+`DESIRED=up` なのにサービスが停止している場合は直ちに起動し、通信チェックが
+2 回連続で失敗すると再接続します。`sudo mazzy-vpn doctor --fix` は監視を有効に
+し、有効な既定プロファイルの自動起動を修復します。
+
+## 設定フォルダー
+
+```bash
+mazzy-vpn init-config-dir ~/MazzyConfigs
+mazzy-vpn import-dir ~/VPN-configs --dry-run
+sudo mazzy-vpn import-dir ~/VPN-configs
+```
+
+`amneziawg/`、`wireguard/`、`openvpn/`、`l2tp/` が作成されます。プロトコルは
+内容から判定され、コピー前に検証され、モード `600` で保存されます。実行可能な
+hook、ネストした OpenVPN 設定、不完全なプロファイルは拒否されます。
+
+## テスト、診断、ロールバック
+
+`validate all` は接続せず全設定を検証します。`probe all` は DNS、Ping、
+利用可能な TCP endpoint を確認します。`diagnose` はルート、DNS、サービス、
+インターフェース、ハンドシェイク、VPN 経由のインターネットを確認します。
+
+`test` と `test-all` は元の接続を保存して実際のトンネルを検証し、成功、失敗、
+タイムアウト、シグナルの後に復元します。`--keep` を明示した場合のみ、成功した
+接続を維持します。OpenVPN の `Too many connections` はサーバー側制限として
+報告され、元の接続が直ちに復元されます。
+
+## セキュリティ
+
+実際の秘密鍵、PSK、パスワード、個人用 VPN 設定を Git に含めないでください。
+公開リポジトリに運用設定はなく、ローカル設定は `/etc/vpnctl/profiles` に
+モード `600` で保存されます。リリース前に回帰テスト、ShellCheck、公開監査、
+Gitleaks を実行します。
+
+## 作者とライセンス
+
+Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn)。
+[GNU AGPL v3.0 以降](LICENSE) で公開されています。AGPL と原著作者表示を
+維持する条件で変更・再配布できます。

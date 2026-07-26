@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install checks
+        run: sudo apt-get update && sudo apt-get install -y shellcheck openvpn gitleaks
+
+      - name: Bash syntax
+        run: |
+          bash -n mazzy-vpn vpnctl install.sh tests/run.sh tests/audit-public.sh
+          bash -n setup_amnezia_vpn.sh stop_amnezia_vpn.sh
+          bash -n completions/mazzy-vpn completions/vpnctl
+
+      - name: ShellCheck
+        run: |
+          shellcheck mazzy-vpn vpnctl install.sh tests/run.sh tests/audit-public.sh
+          shellcheck setup_amnezia_vpn.sh stop_amnezia_vpn.sh
+          shellcheck completions/mazzy-vpn completions/vpnctl
+
+      - name: Regression suite
+        run: ./tests/run.sh
+
+      - name: Public repository audit
+        run: |
+          ./tests/audit-public.sh
+          gitleaks detect --source . --redact --no-banner
+
+      - name: Staging installer
+        run: |
+          stage="$(mktemp -d)"
+          ./install.sh --destdir "$stage" --no-deps --yes
+          test -x "$stage/usr/local/bin/mazzy-vpn"
+          sudo install -m 755 \
+            "$stage/usr/local/bin/mazzy-vpn" /usr/local/bin/mazzy-vpn
+          systemd-analyze verify \
+            "$stage/etc/systemd/system/vpnctl.service" \
+            "$stage/etc/systemd/system/vpnctl-health.service" \
+            "$stage/etc/systemd/system/vpnctl-health.timer" \
+            "$stage/etc/systemd/system/vpnctl-test-recovery.service"

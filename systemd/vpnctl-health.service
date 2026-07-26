@@ -1,0 +1,10 @@
+# Copyright (C) 2026 Nik m (@mazurovn)
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[Unit]
+Description=Mazzy VPN connection health check
+After=network-online.target vpnctl.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/mazzy-vpn _health-check
+UMask=0077

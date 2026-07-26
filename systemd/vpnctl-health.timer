@@ -1,0 +1,15 @@
+# Copyright (C) 2026 Nik m (@mazurovn)
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[Unit]
+Description=Periodically check and recover Mazzy VPN connection
+
+[Timer]
+OnBootSec=15s
+OnUnitActiveSec=20s
+AccuracySec=1s
+RandomizedDelaySec=2s
+Unit=vpnctl-health.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

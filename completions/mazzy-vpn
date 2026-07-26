@@ -1,0 +1,31 @@
+# shellcheck shell=bash
+# Copyright (C) 2026 Nik m (@mazurovn)
+# SPDX-License-Identifier: AGPL-3.0-or-later
+_mazzy_vpn()
+{
+    local cur prev commands protocols
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    commands="list connect quick disconnect reconnect dashboard status diagnose validate probe test test-all emergency self-test doctor autostart import import-dir init-config-dir remove logs language help version"
+    protocols="amneziawg wireguard openvpn l2tp"
+
+    if ((COMP_CWORD == 1)); then
+        mapfile -t COMPREPLY < <(compgen -W "$commands" -- "$cur")
+    elif [[ "$prev" == "list" || "$prev" == "connect" || "$prev" == "test" ||
+            "$prev" == "test-all" || "$prev" == "validate" || "$prev" == "probe" ||
+            "$prev" == "import" || "$prev" == "remove" ]]; then
+        mapfile -t COMPREPLY < <(compgen -W "$protocols all" -- "$cur")
+    elif [[ "$prev" == "autostart" ]]; then
+        mapfile -t COMPREPLY < <(compgen -W "on off" -- "$cur")
+    elif [[ "$prev" == "language" || "$prev" == "lang" ]]; then
+        mapfile -t COMPREPLY < <(compgen -W "ru en de zh ja ko list current" -- "$cur")
+    elif [[ "$prev" == "emergency" ]]; then
+        mapfile -t COMPREPLY < <(compgen -W "--timeout --protocol" -- "$cur")
+    elif [[ "$prev" == "self-test" || "$prev" == "selftest" ]]; then
+        mapfile -t COMPREPLY < <(compgen -W "--offline --live --timeout" -- "$cur")
+    elif [[ "$prev" == "import-dir" ]]; then
+        mapfile -t COMPREPLY < <(compgen -W "--dry-run --force" -- "$cur")
+    fi
+}
+complete -F _mazzy_vpn mazzy-vpn mazzyvpn vpnctl

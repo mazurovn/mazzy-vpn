@@ -1,0 +1,20 @@
+# Copyright (C) 2026 Nik m (@mazurovn)
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[Unit]
+Description=Mazzy VPN managed connection
+Documentation=file:/usr/local/lib/mazzy-vpn/README.md
+Wants=network-online.target
+After=network-online.target NetworkManager.service
+StartLimitIntervalSec=120
+StartLimitBurst=100
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/mazzy-vpn _service-run
+Restart=always
+RestartSec=5s
+TimeoutStopSec=20s
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
