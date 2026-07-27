@@ -1,0 +1,317 @@
+{
+  "contract_id": "com.mazurovn.mazzy-vpn.local-api",
+  "api_version": "1.0",
+  "schema": "schema.json",
+  "status": "foundation",
+  "transports": [
+    {
+      "id": "cli-contract-metadata",
+      "status": "implemented"
+    },
+    {
+      "id": "cli-json-adapter",
+      "status": "partial"
+    },
+    {
+      "id": "protected-local-service",
+      "status": "planned"
+    }
+  ],
+  "domains": [
+    "status",
+    "profiles",
+    "lifecycle",
+    "tests",
+    "services",
+    "doctor",
+    "settings"
+  ],
+  "operations": [
+    {
+      "name": "status.get",
+      "domain": "status",
+      "kind": "query",
+      "authorization": "none",
+      "action_id_required": false,
+      "deadline_required": false,
+      "audit_event": false,
+      "rollback": "not-applicable"
+    },
+    {
+      "name": "profiles.list",
+      "domain": "profiles",
+      "kind": "query",
+      "authorization": "none",
+      "action_id_required": false,
+      "deadline_required": false,
+      "audit_event": false,
+      "rollback": "not-applicable"
+    },
+    {
+      "name": "profiles.inspect-import",
+      "domain": "profiles",
+      "kind": "query",
+      "authorization": "none",
+      "action_id_required": false,
+      "deadline_required": true,
+      "audit_event": false,
+      "rollback": "not-applicable"
+    },
+    {
+      "name": "profiles.import",
+      "domain": "profiles",
+      "kind": "mutation",
+      "authorization": "system-mutate",
+      "action_id_required": true,
+      "deadline_required": true,
+      "audit_event": true,
+      "rollback": "state-restore"
+    },
+    {
+      "name": "profiles.remove",
+      "domain": "profiles",
+      "kind": "mutation",
+      "authorization": "system-mutate",
+      "action_id_required": true,
+      "deadline_required": true,
+      "audit_event": true,
+      "rollback": "state-restore"
+    },
+    {
+      "name": "profiles.select",
+      "domain": "profiles",
+      "kind": "mutation",
+      "authorization": "system-mutate",
+      "action_id_required": true,
+      "deadline_required": true,
+      "audit_event": true,
+      "rollback": "state-restore"
+    },
+    {
+      "name": "lifecycle.connect",
+      "domain": "lifecycle",
+      "kind": "mutation",
+      "authorization": "system-mutate",
+      "action_id_required": true,
+      "deadline_required": true,
+      "audit_event": true,
+      "rollback": "state-restore"
+    },
+    {
+      "name": "lifecycle.reconnect",
+      "domain": "lifecycle",
+      "kind": "mutation",
+      "authorization": "system-mutate",
+      "action_id_required": true,
+      "deadline_required": true,
+      "audit_event": true,
+      "rollback": "state-restore"
+    },
+    {
+      "name": "lifecycle.disconnect",
+      "domain": "lifecycle",
+      "kind": "mutation",
+      "authorization": "system-mutate",
+      "action_id_required": true,
+      "deadline_required": true,
+      "audit_event": true,
+      "rollback": "state-restore"
+    },
+    {
+      "name": "tests.validate",
+      "domain": "tests",
+      "kind": "query",
+      "authorization": "none",
+      "action_id_required": false,
+      "deadline_required": true,
+      "audit_event": false,
+      "rollback": "not-applicable"
+    },
+    {
+      "name": "tests.probe",
+      "domain": "tests",
+      "kind": "query",
+      "authorization": "none",
+      "action_id_required": false,
+      "deadline_required": true,
+      "audit_event": false,
+      "rollback": "not-applicable"
+    },
+    {
+      "name": "tests.run",
+      "domain": "tests",
+      "kind": "mutation",
+      "authorization": "system-mutate",
+      "action_id_required": true,
+      "deadline_required": true,
+      "audit_event": true,
+      "rollback": "state-restore"
+    },
+    {
+      "name": "tests.run-all",
+      "domain": "tests",
+      "kind": "mutation",
+      "authorization": "system-mutate",
+      "action_id_required": true,
+      "deadline_required": true,
+      "audit_event": true,
+      "rollback": "state-restore"
+    },
+    {
+      "name": "tests.emergency",
+      "domain": "tests",
+      "kind": "mutation",
+      "authorization": "system-mutate",
+      "action_id_required": true,
+      "deadline_required": true,
+      "audit_event": true,
+      "rollback": "state-restore"
+    },
+    {
+      "name": "services.get",
+      "domain": "services",
+      "kind": "query",
+      "authorization": "system-read",
+      "action_id_required": false,
+      "deadline_required": false,
+      "audit_event": false,
+      "rollback": "not-applicable"
+    },
+    {
+      "name": "services.start-engine",
+      "domain": "services",
+      "kind": "mutation",
+      "authorization": "system-mutate",
+      "action_id_required": true,
+      "deadline_required": true,
+      "audit_event": true,
+      "rollback": "transactional"
+    },
+    {
+      "name": "services.stop-engine",
+      "domain": "services",
+      "kind": "mutation",
+      "authorization": "system-mutate",
+      "action_id_required": true,
+      "deadline_required": true,
+      "audit_event": true,
+      "rollback": "transactional"
+    },
+    {
+      "name": "services.restart-engine",
+      "domain": "services",
+      "kind": "mutation",
+      "authorization": "system-mutate",
+      "action_id_required": true,
+      "deadline_required": true,
+      "audit_event": true,
+      "rollback": "transactional"
+    },
+    {
+      "name": "services.set-autostart",
+      "domain": "services",
+      "kind": "mutation",
+      "authorization": "system-mutate",
+      "action_id_required": true,
+      "deadline_required": true,
+      "audit_event": true,
+      "rollback": "transactional"
+    },
+    {
+      "name": "services.set-recovery",
+      "domain": "services",
+      "kind": "mutation",
+      "authorization": "system-mutate",
+      "action_id_required": true,
+      "deadline_required": true,
+      "audit_event": true,
+      "rollback": "transactional"
+    },
+    {
+      "name": "services.set-monitor",
+      "domain": "services",
+      "kind": "mutation",
+      "authorization": "system-mutate",
+      "action_id_required": true,
+      "deadline_required": true,
+      "audit_event": true,
+      "rollback": "transactional"
+    },
+    {
+      "name": "doctor.inspect",
+      "domain": "doctor",
+      "kind": "query",
+      "authorization": "system-read",
+      "action_id_required": false,
+      "deadline_required": true,
+      "audit_event": false,
+      "rollback": "not-applicable"
+    },
+    {
+      "name": "doctor.apply-fix",
+      "domain": "doctor",
+      "kind": "mutation",
+      "authorization": "system-mutate",
+      "action_id_required": true,
+      "deadline_required": true,
+      "audit_event": true,
+      "rollback": "best-effort"
+    },
+    {
+      "name": "settings.get",
+      "domain": "settings",
+      "kind": "query",
+      "authorization": "none",
+      "action_id_required": false,
+      "deadline_required": false,
+      "audit_event": false,
+      "rollback": "not-applicable"
+    },
+    {
+      "name": "settings.update",
+      "domain": "settings",
+      "kind": "mutation",
+      "authorization": "user-write",
+      "action_id_required": true,
+      "deadline_required": true,
+      "audit_event": true,
+      "rollback": "transactional"
+    }
+  ],
+  "error_codes": [
+    "invalid-request",
+    "unsupported-version",
+    "unsupported-operation",
+    "authorization-required",
+    "permission-denied",
+    "not-found",
+    "conflict",
+    "busy",
+    "deadline-exceeded",
+    "backend-unavailable",
+    "validation-failed",
+    "operation-failed",
+    "rollback-failed",
+    "internal-error"
+  ],
+  "security": {
+    "frontend_forbidden_fields": [
+      "private_key",
+      "preshared_key",
+      "password",
+      "credential",
+      "credentials",
+      "secret",
+      "endpoint",
+      "path",
+      "file_path",
+      "config"
+    ],
+    "frontend_public_references": [
+      "profile_id",
+      "import_token",
+      "message_key",
+      "fix_id"
+    ]
+  }
+}

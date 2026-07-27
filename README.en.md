@@ -13,6 +13,7 @@ The primary command is `mazzy-vpn`. The installer also creates the compatibility
 aliases `vpnctl` and `mazzyvpn`.
 
 [Architecture and operation diagrams](docs/ARCHITECTURE.en.md) ·
+[local API v1 contract](docs/API_CONTRACT.en.md) ·
 [Архитектура на русском](docs/ARCHITECTURE.ru.md)
 
 ## Install
@@ -149,10 +150,12 @@ About records the Desktop/engine/platform versions, author, copyright, AGPL
 license, privacy principles and safe-operation rules.
 
 Desktop 0.2 is a functional Linux control-center preview, not the final
-standalone Desktop 1.0 product. The remaining gates include a shared versioned
-local service API, complete mode/fallback settings, full six-language coverage
-for the new screens, signed update/rollback, and native macOS and Windows VPN
-backends. Development is synchronized through the
+standalone Desktop 1.0 product. The language-neutral API v1 schema and
+read-only contract metadata are now published, while the protected local
+service and migration of every client to that dispatcher remain incomplete.
+Other gates include complete mode/fallback settings, full six-language
+coverage for the new screens, signed update/rollback, and native macOS and
+Windows VPN backends. Development is synchronized through the
 [Desktop 1.0 plan](docs/DESKTOP_ROADMAP.en.md) and
 [capability matrix](docs/FEATURE_PARITY.md).
 
