@@ -4,6 +4,8 @@ All notable changes to Mazzy VPN are documented here.
 
 ## Unreleased
 
+## 1.2.0 / Desktop 0.2.0 — 2026-07-27
+
 - Bumped the shared engine to 1.2.0 and the Desktop Linux preview to 0.2.0.
 - Expanded Desktop from a dashboard companion into a Linux control center with
   Dashboard, Profiles, Diagnostics and Settings screens.
