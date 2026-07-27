@@ -1,6 +1,6 @@
 # Релизы и roadmap
 
-## 1.2.0 / Desktop 0.2.0 — выпущен как preview
+## 1.2.0 / Desktop 0.2.0 — кандидат на preview-релиз
 
 - Linux control center с Dashboard, Profiles, Diagnostics и Settings;
 - встроенный installer/engine, проверка версий и зависимостей, install/repair;
@@ -66,7 +66,7 @@ CLI engine и не является самостоятельным Desktop VPN-�
 
 # Releases and roadmap
 
-Version 1.2.0 / Desktop 0.2.0 is released as a preview. It expands the Linux preview
+Version 1.2.0 / Desktop 0.2.0 is a preview release candidate. It expands the Linux preview
 into a Dashboard/Profiles/Diagnostics/Settings control center with bundled
 engine bootstrap, version/dependency checks, file/folder import, profile
 actions, validation/probes/transactional tests, complete Doctor/self-test/log
