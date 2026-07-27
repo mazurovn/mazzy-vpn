@@ -4,6 +4,24 @@ All notable changes to Mazzy VPN are documented here.
 
 ## Unreleased
 
+- Bumped the shared engine to 1.2.0 and the Desktop Linux preview to 0.2.0.
+- Expanded Desktop from a dashboard companion into a Linux control center with
+  Dashboard, Profiles, Diagnostics and Settings screens.
+- Bundled the engine installer and required public runtime resources in Desktop
+  packages, with installed/bundled version and dependency readiness checks plus
+  an explicitly authorized install, update and repair workflow.
+- Added sanitized profile discovery, search and selection; safe single/multiple
+  file and folder import; connect, validate, probe, transactional test,
+  test-all, emergency and profile removal actions.
+- Added complete retained output for Doctor, approved Doctor fixes, offline/live
+  self-tests and bounded service logs.
+- Added Desktop controls for engine autostart and the independent recovery
+  monitor.
+- Added a typed Rust operation adapter with fixed argument construction, path
+  and value validation, output sanitization and unit tests; no UI text is
+  converted into a shell command.
+- Added CLI `profiles --json`, `import-files`, independent `monitor on|off` and
+  bounded `logs --lines`, with sanitized caches and regression coverage.
 - Defined the standalone Desktop 1.0 architecture: one shared core and local
   API for independently usable CLI, TUI and Desktop clients.
 - Added a machine-validated cross-surface capability registry and release gates

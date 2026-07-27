@@ -4,7 +4,7 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
 [Русская версия](ARCHITECTURE.ru.md) · [Project README](../README.md)
 
-This document describes the current CLI/TUI and Desktop 0.1 architecture. See
+This document describes the current CLI/TUI and Desktop 0.2 architecture. See
 the [Desktop 1.0 plan](DESKTOP_ROADMAP.en.md) for the target standalone
 architecture with a shared core and versioned API. The
 [feature-parity matrix](FEATURE_PARITY.md) prevents a preview from being
@@ -25,7 +25,7 @@ flowchart TB
     subgraph UX["CLI and terminal UI"]
         Entry["mazzy-vpn command dispatcher"]
         TUI["Interactive menu and dashboard"]
-        Desktop["Tauri Desktop Dashboard"]
+        Desktop["Tauri Desktop control center"]
         Tray["System tray with a fixed menu"]
         Commands["connect, quick, test, doctor, import"]
     end
@@ -36,6 +36,7 @@ flowchart TB
         State["Desired state and selected default<br/>/var/lib/vpnctl/active"]
         Runtime["Ephemeral counters, locks and test data<br/>/run/vpnctl"]
         StatusCache["Sanitized status without keys or endpoint<br/>/run/mazzy-vpn/status.json"]
+        ProfileCache["Sanitized profile catalog without paths/endpoints<br/>/run/mazzy-vpn/profiles.json"]
     end
 
     subgraph Supervisor["systemd supervision"]
@@ -68,6 +69,7 @@ flowchart TB
     TUI --> Commands
     Tray --> Desktop
     Desktop --> StatusCache
+    Desktop --> ProfileCache
     Desktop -. fixed allowlist through pkexec .-> Entry
     Commands --> Validation
     Validation --> Profiles
@@ -79,6 +81,7 @@ flowchart TB
     Health --> State
     Health --> Runtime
     Health --> StatusCache
+    Entry --> ProfileCache
     Health --> Service
     BootRecovery --> State
     BootRecovery --> Service
@@ -99,20 +102,22 @@ The control plane never embeds a provider key in source code. The public
 repository contains the manager, tests and documentation only. Operational
 profiles stay root-readable with mode `600`.
 
-## Desktop Dashboard and tray
+## Desktop control center and tray
 
 ![Mazzy VPN Desktop Dashboard — preview data](images/dashboard-connected-preview.png)
 
-Desktop never opens a VPN profile or reads a key. A root CLI process atomically
-updates a mode-`644` JSON cache. It contains service state, the selected display
-name, protocol, interface, handshake age, public VPN address, autostart and
-health-monitor state, and profile counts. Profile paths, server endpoints and
-configuration directives are not exported.
+Desktop opens user-selected files only long enough to pass their canonical paths
+to the validated import operation; it never parses a VPN profile or reads a key.
+A root CLI process atomically updates mode-`644` status and profile-catalog JSON
+caches. They contain service state, selected display name, protocol, interface,
+handshake age, public VPN address, autostart/health-monitor state and sanitized
+profile labels. Profile paths, server endpoints, keys and configuration
+directives are not exported.
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant UI as Tauri Dashboard / tray
+    participant UI as Tauri control center / tray
     participant Cache as /run/mazzy-vpn/status.json
     participant PK as pkexec
     participant CLI as mazzy-vpn
@@ -122,19 +127,21 @@ sequenceDiagram
         UI->>Cache: read sanitized status
         Cache-->>UI: JSON schema v1
     end
-    User->>UI: Quick / Reconnect / Disconnect / Doctor
-    UI->>PK: fixed command, no shell
+    User->>UI: import / connect / test / Doctor / settings
+    UI->>PK: typed fixed operation, no shell
     PK->>CLI: execute an allowed action
     CLI->>SD: change the managed tunnel
     CLI->>Cache: atomically refresh status
     Cache-->>UI: new state
 ```
 
-Closing the window hides it to the tray. Connect, reconnect, disconnect,
-refresh and diagnostics remain in the context menu. On Linux this is a
-functional companion to the installed CLI. macOS and Windows builds are UI
-previews and are not advertised as working VPN clients until native backends
-exist.
+Closing the window hides it to the tray. The Linux package bundles a compatible
+engine installer and can bootstrap or repair missing dependencies after
+explicit authorization, so a separate manual CLI installation is not required.
+The 0.2 adapter still starts the validated engine per operation; a persistent
+versioned local service API remains a Desktop 1.0 gate. macOS and Windows builds
+are UI previews and are not advertised as working VPN clients until native
+backends exist.
 
 ## Normal connection flow
 

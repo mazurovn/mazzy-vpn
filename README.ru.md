@@ -113,25 +113,32 @@ ping серверов, emergency recovery, doctor, автозапуск и жу�
 переходит через `sudo`; пароль вводится стандартному `sudo`, а не самому
 `mazzy-vpn`.
 
-## Desktop Dashboard и tray
+## Desktop control center и tray
 
 ![Mazzy VPN Desktop Dashboard](docs/images/dashboard-connected-preview.png)
 
-Tauri Desktop даёт те же основные действия в красивом окне и системном tray:
-Quick Connect, Reconnect, Disconnect, Refresh и Self-diagnostics. Linux-версия
-работает поверх установленного CLI и выпускается как AppImage, DEB и RPM.
-macOS и Windows пока являются только preview интерфейса до реализации нативных
-VPN backends.
+Tauri Desktop 0.2 для Linux содержит экраны Dashboard, Profiles, Diagnostics и
+Settings, а также системный tray. В пакет включены совместимый engine и
+installer: клиент сам проверяет версии и зависимости и после явного разрешения
+может установить, обновить или восстановить engine. Доступны импорт файлов и
+папок, поиск и выбор профиля, подключение, validation, probe, транзакционные
+тесты, Doctor с исправлениями, self-test, ограниченный журнал, autostart и
+управление recovery monitor. Предварительно устанавливать CLI вручную не нужно.
+Linux-пакеты выпускаются как AppImage, DEB и RPM.
 
-Это companion preview 0.1, а не самостоятельный Desktop 1.0. Целевая версия
-включит общий core, installer/bootstrap, import/выбор профилей, все режимы и
-services без отдельной установки CLI. Разработка синхронизируется через
+Desktop 0.2 — полноценный центр управления Linux в статусе preview, но ещё не
+финальный самостоятельный Desktop 1.0. Для снятия preview остаются versioned
+local service API, полные настройки режимов/fallback, перевод новых экранов на
+все шесть языков, подписанное обновление/rollback и нативные VPN backends для
+macOS и Windows. Разработка синхронизируется через
 [план Desktop 1.0](docs/DESKTOP_ROADMAP.ru.md) и
 [матрицу паритета](docs/FEATURE_PARITY.md).
 
-GUI не читает конфиги или ключи: он получает очищенный status cache без endpoint
-и запускает только фиксированный набор CLI-команд. Подробная установка,
-ограничения и диагностика: [Desktop-инструкция](docs/DESKTOP.ru.md).
+GUI после импорта не открывает VPN-конфиги и никогда не читает ключи. Он
+получает очищенные status/profile caches без endpoint и путей и передаёт
+привилегированному engine только типизированные операции из фиксированного
+allowlist. Подробная установка, ограничения и диагностика:
+[Desktop-инструкция](docs/DESKTOP.ru.md).
 
 ## Безопасное тестирование
 

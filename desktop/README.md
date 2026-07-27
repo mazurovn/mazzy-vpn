@@ -7,19 +7,24 @@ Licensed under `AGPL-3.0-or-later`.
 
 ## English
 
-Mazzy VPN Desktop is a Tauri 2 dashboard and system-tray companion for the
-Mazzy VPN CLI engine.
+Mazzy VPN Desktop is a Tauri 2 Linux control center and system-tray client for
+the shared Mazzy VPN engine.
 
-- **Current status:** 0.1 preview/companion. It is not the standalone Desktop
-  1.0 product and currently requires the installed Linux CLI engine.
-- Linux: functional dashboard, safe status cache, quick connect, reconnect,
-  disconnect, diagnostics, and a tray menu.
+- **Current status:** 0.2 Linux preview. It bundles the compatible engine
+  installer, checks versions and dependencies, and no longer requires the user
+  to install the CLI first.
+- Linux: dashboard, profile/file/folder import, location selection,
+  connect/disconnect, active-connection diagnostics, validate/probe/live-test
+  with rollback, full Doctor output, bounded logs, service settings, dependency
+  repair and tray.
 - macOS and Windows: UI preview builds only. They do **not** provide a working
   VPN tunnel until native Network Extension/launchd and Windows service/Wintun
   backends are implemented.
-- The GUI never reads VPN profiles or keys. It reads the sanitized
-  `/run/mazzy-vpn/status.json` cache. Privileged actions use a fixed command
-  allowlist and `pkexec`; no arbitrary shell command is accepted.
+- The GUI never reads VPN keys. It reads sanitized status/profile caches.
+  Privileged actions use typed requests, validated arguments and `pkexec`; no
+  arbitrary shell command is accepted.
+- Desktop 1.0 remains gated on fallback-policy UI, complete six-language
+  coverage for new screens and a versioned daemon API.
 
 Development:
 
@@ -46,19 +51,22 @@ architecture and parity gates are in
 
 ## Русский
 
-Mazzy VPN Desktop — Dashboard и системный tray на Tauri 2, работающие поверх
-CLI-движка Mazzy VPN.
+Mazzy VPN Desktop — Linux Control Center и системный tray на Tauri 2,
+работающие с общим движком Mazzy VPN.
 
-- **Текущий статус:** preview/companion 0.1. Это ещё не самостоятельный Desktop
-  1.0; сейчас требуется установленный Linux CLI engine.
-- Linux: рабочий Dashboard, безопасный cache состояния, быстрое подключение,
-  переподключение, отключение, диагностика и tray-меню.
+- **Текущий статус:** Linux preview 0.2. В пакет включён совместимый installer
+  движка; предварительно устанавливать CLI пользователю больше не нужно.
+- Linux: Dashboard, импорт файлов/папок, выбор локации, подключение,
+  диагностика активного соединения, validate/probe/live-test с rollback, полный
+  вывод Doctor, журнал, службы, проверка зависимостей и автоматическое
+  исправление.
 - macOS и Windows: только preview интерфейса. VPN-туннель на этих ОС появится
   после реализации нативных Network Extension/launchd и Windows service/Wintun.
-- GUI не читает VPN-конфиги и ключи. Он использует очищенный cache
-  `/run/mazzy-vpn/status.json`. Действия с повышенными правами ограничены
-  фиксированным списком и запускаются через `pkexec`; произвольные shell-команды
-  не принимаются.
+- GUI не читает VPN-ключи. Он использует очищенные cache состояния и профилей.
+  Привилегированные действия принимаются как typed-запросы с проверенными
+  аргументами и запускаются через `pkexec`; shell-строки не строятся.
+- Gate Desktop 1.0 остаётся закрыт до реализации fallback-policy UI, полного
+  перевода новых экранов на шесть языков и versioned daemon API.
 
 Разработка и сборка:
 

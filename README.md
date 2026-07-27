@@ -13,7 +13,7 @@
   <a href="LICENSE"><img alt="License: AGPL-3.0-or-later" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-8f7dff"></a>
   <a href="https://github.com/mazurovn/mazzy-vpn/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mazurovn/mazzy-vpn/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Linux" src="https://img.shields.io/badge/platform-Linux-65e7ff">
-  <img alt="Version 1.1.0" src="https://img.shields.io/badge/version-1.1.0-ef70ff">
+  <img alt="Version 1.2.0" src="https://img.shields.io/badge/version-1.2.0-ef70ff">
 </p>
 
 Mazzy VPN is a Linux VPN manager with a guided terminal UI and an
@@ -39,11 +39,12 @@ live tests and restores the previously working connection after a failure.
 
 - Live CLI/TUI dashboard with connection checks, selected location, default
   config, handshake, public IP, autostart and health-monitor state.
-- Tauri 2 Desktop Dashboard and tray. Linux is a functional CLI companion with
-  AppImage, DEB and RPM bundles; macOS and Windows builds are explicitly marked
-  as UI previews until native VPN backends are implemented. Desktop 0.1 is not
-  yet a standalone client and requires the Linux CLI engine; the tracked 1.0
-  plan moves all surfaces to one shared core without duplicated VPN logic.
+- Tauri 2 Desktop control center and tray. Desktop 0.2 bundles the Linux engine
+  and installer, checks dependencies, imports and manages profiles, exposes
+  transactional tests, Doctor output, logs and service settings, and can repair
+  its own engine after explicit authorization. AppImage, DEB and RPM remain
+  previews until the versioned local API and all Desktop 1.0 release gates are
+  complete; macOS and Windows still require native VPN backends.
 - Quick connection through the saved default profile: `mazzy-vpn quick`.
 - Two-layer unattended recovery: systemd restarts an exited process, while an
   independent 20-second health monitor reconnects a stalled tunnel.

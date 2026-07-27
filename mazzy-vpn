@@ -6,7 +6,7 @@ set -uo pipefail
 PRODUCT_NAME="Mazzy VPN"
 CLI_COMMAND="mazzy-vpn"
 COMPAT_COMMAND="vpnctl"
-VERSION="1.1.0"
+VERSION="1.2.0"
 
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd -- "$(dirname -- "$SELF")" && pwd)"
@@ -24,6 +24,7 @@ HEALTH_FALLBACK_PROBE_URL="${VPNCTL_HEALTH_FALLBACK_PROBE_URL:-https://1.1.1.1/c
 PROBE_URL="${VPNCTL_PROBE_URL:-https://api.ipify.org}"
 DASHBOARD_DIR="${VPNCTL_DASHBOARD_DIR:-/run/mazzy-vpn}"
 DASHBOARD_FILE="$DASHBOARD_DIR/status.json"
+PROFILES_FILE="$DASHBOARD_DIR/profiles.json"
 TEST_BACKUP="$STATE_DIR/test.previous"
 TEST_BACKUP_EXISTS="$STATE_DIR/test.previous.exists"
 TEST_BACKUP_ACTIVE="$STATE_DIR/test.previous.active"
@@ -504,7 +505,7 @@ Usage:
   mazzy-vpn connect [PROTOCOL] [PROFILE|NUMBER]
   mazzy-vpn disconnect | reconnect
   mazzy-vpn dashboard | status | diagnose
-  mazzy-vpn list [PROTOCOL]
+  mazzy-vpn list [PROTOCOL] | profiles --json
   mazzy-vpn validate [PROTOCOL|all]
   mazzy-vpn probe [PROTOCOL|all] [--timeout SEC]
   mazzy-vpn test [PROTOCOL] [PROFILE] [--timeout SEC] [--keep]
@@ -513,7 +514,9 @@ Usage:
   mazzy-vpn self-test [--offline|--live] [--timeout SEC]
   mazzy-vpn doctor [--fix]
   mazzy-vpn autostart on|off
+  mazzy-vpn monitor on|off
   mazzy-vpn import PROTOCOL FILE
+  mazzy-vpn import-files FILE...
   mazzy-vpn import-dir FOLDER [--dry-run] [--force]
   mazzy-vpn init-config-dir [FOLDER]
   mazzy-vpn language [ru|en|de|zh|ja|ko]
@@ -534,7 +537,7 @@ Verwendung:
   mazzy-vpn connect [PROTOKOLL] [PROFIL|NUMMER]
   mazzy-vpn disconnect | reconnect
   mazzy-vpn dashboard | status | diagnose
-  mazzy-vpn list [PROTOKOLL]
+  mazzy-vpn list [PROTOKOLL] | profiles --json
   mazzy-vpn validate [PROTOKOLL|all]
   mazzy-vpn probe [PROTOKOLL|all] [--timeout SEK]
   mazzy-vpn test [PROTOKOLL] [PROFIL] [--timeout SEK] [--keep]
@@ -543,7 +546,9 @@ Verwendung:
   mazzy-vpn self-test [--offline|--live]
   mazzy-vpn doctor [--fix]
   mazzy-vpn autostart on|off
+  mazzy-vpn monitor on|off
   mazzy-vpn import PROTOKOLL DATEI
+  mazzy-vpn import-files DATEI...
   mazzy-vpn import-dir ORDNER [--dry-run] [--force]
   mazzy-vpn init-config-dir [ORDNER]
   mazzy-vpn language [ru|en|de|zh|ja|ko]
@@ -564,7 +569,7 @@ Mazzy VPN — 安全便捷的 Linux VPN 管理工具
   mazzy-vpn connect [协议] [配置|编号]
   mazzy-vpn disconnect | reconnect
   mazzy-vpn dashboard | status | diagnose
-  mazzy-vpn list [协议]
+  mazzy-vpn list [协议] | profiles --json
   mazzy-vpn validate [协议|all]
   mazzy-vpn probe [协议|all] [--timeout 秒]
   mazzy-vpn test [协议] [配置] [--timeout 秒] [--keep]
@@ -573,7 +578,9 @@ Mazzy VPN — 安全便捷的 Linux VPN 管理工具
   mazzy-vpn self-test [--offline|--live]
   mazzy-vpn doctor [--fix]
   mazzy-vpn autostart on|off
+  mazzy-vpn monitor on|off
   mazzy-vpn import 协议 文件
+  mazzy-vpn import-files 文件...
   mazzy-vpn import-dir 文件夹 [--dry-run] [--force]
   mazzy-vpn init-config-dir [文件夹]
   mazzy-vpn language [ru|en|de|zh|ja|ko]
@@ -594,7 +601,7 @@ Mazzy VPN — Linux 向けの安全で使いやすい VPN 管理ツール
   mazzy-vpn connect [プロトコル] [プロファイル|番号]
   mazzy-vpn disconnect | reconnect
   mazzy-vpn dashboard | status | diagnose
-  mazzy-vpn list [プロトコル]
+  mazzy-vpn list [プロトコル] | profiles --json
   mazzy-vpn validate [プロトコル|all]
   mazzy-vpn probe [プロトコル|all] [--timeout 秒]
   mazzy-vpn test [プロトコル] [プロファイル] [--timeout 秒] [--keep]
@@ -603,7 +610,9 @@ Mazzy VPN — Linux 向けの安全で使いやすい VPN 管理ツール
   mazzy-vpn self-test [--offline|--live]
   mazzy-vpn doctor [--fix]
   mazzy-vpn autostart on|off
+  mazzy-vpn monitor on|off
   mazzy-vpn import プロトコル ファイル
+  mazzy-vpn import-files ファイル...
   mazzy-vpn import-dir フォルダー [--dry-run] [--force]
   mazzy-vpn init-config-dir [フォルダー]
   mazzy-vpn language [ru|en|de|zh|ja|ko]
@@ -624,7 +633,7 @@ Mazzy VPN — Linux용 안전하고 편리한 VPN 관리 도구
   mazzy-vpn connect [프로토콜] [프로필|번호]
   mazzy-vpn disconnect | reconnect
   mazzy-vpn dashboard | status | diagnose
-  mazzy-vpn list [프로토콜]
+  mazzy-vpn list [프로토콜] | profiles --json
   mazzy-vpn validate [프로토콜|all]
   mazzy-vpn probe [프로토콜|all] [--timeout 초]
   mazzy-vpn test [프로토콜] [프로필] [--timeout 초] [--keep]
@@ -633,7 +642,9 @@ Mazzy VPN — Linux용 안전하고 편리한 VPN 관리 도구
   mazzy-vpn self-test [--offline|--live]
   mazzy-vpn doctor [--fix]
   mazzy-vpn autostart on|off
+  mazzy-vpn monitor on|off
   mazzy-vpn import 프로토콜 파일
+  mazzy-vpn import-files 파일...
   mazzy-vpn import-dir 폴더 [--dry-run] [--force]
   mazzy-vpn init-config-dir [폴더]
   mazzy-vpn language [ru|en|de|zh|ja|ko]
@@ -651,6 +662,7 @@ Mazzy VPN - быстрое и безопасное управление VPN в L
 Использование:
   mazzy-vpn                         интерактивное TUI-меню
   mazzy-vpn list [ПРОТОКОЛ]         список серверов
+  mazzy-vpn profiles --json         безопасный список для Desktop
   mazzy-vpn connect [ПРОТОКОЛ] [ПРОФИЛЬ|НОМЕР]
   mazzy-vpn quick                   быстро подключить default-конфиг
   mazzy-vpn disconnect              отключить VPN
@@ -669,7 +681,9 @@ Mazzy VPN - быстрое и безопасное управление VPN в L
                                     полная самодиагностика
   mazzy-vpn doctor [--fix]          проверка установки и конфигов
   mazzy-vpn autostart on|off        автоподключение после загрузки
+  mazzy-vpn monitor on|off          health-monitor и recovery
   mazzy-vpn import ПРОТОКОЛ ФАЙЛ    безопасно добавить профиль
+  mazzy-vpn import-files ФАЙЛ...    распознать и добавить файлы
   mazzy-vpn import-dir ПАПКА [--dry-run] [--force]
                                     распознать и импортировать папку
   mazzy-vpn init-config-dir [ПАПКА] создать структуру для конфигов
@@ -1274,6 +1288,72 @@ cmd_list() {
     fi
     protocol="$(canonical_protocol "$requested")" || die "Неизвестный протокол: $requested"
     print_profile_list "$protocol"
+}
+
+profiles_json_live() {
+    local protocol file first=true selected_protocol="" selected_file=""
+    selected_from_state || true
+    selected_protocol="${SELECTED_PROTOCOL:-}"
+    selected_file="${SELECTED_PROFILE:-}"
+
+    printf '{"schema_version":1,"generated_at":%s,"profiles":[' "$(date +%s)"
+    for protocol in amneziawg wireguard openvpn l2tp; do
+        load_profiles "$protocol"
+        for file in "${PROFILES[@]}"; do
+            [[ "$first" == true ]] || printf ','
+            first=false
+            printf '{'
+            printf '"protocol":"%s","protocol_name":"%s",' \
+                "$(json_escape "$protocol")" \
+                "$(json_escape "$(protocol_title "$protocol")")"
+            printf '"file_name":"%s","name":"%s","location":"%s",' \
+                "$(json_escape "$(basename -- "$file")")" \
+                "$(json_escape "$(profile_name "$file")")" \
+                "$(json_escape "$(profile_name "$file")")"
+            if [[ "$protocol" == "$selected_protocol" &&
+                  "$file" == "$selected_file" ]]; then
+                printf '"selected":true'
+            else
+                printf '"selected":false'
+            fi
+            printf '}'
+        done
+    done
+    printf ']}\n'
+}
+
+write_profiles_cache() {
+    local tmp
+    ((EUID == 0)) || [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]] ||
+        return 1
+    mkdir -p -- "$DASHBOARD_DIR" || return 1
+    chmod 755 -- "$DASHBOARD_DIR" || return 1
+    tmp="$DASHBOARD_DIR/.profiles.$$"
+    umask 077
+    profiles_json_live >"$tmp" || {
+        rm -f -- "$tmp"
+        return 1
+    }
+    chmod 644 -- "$tmp" || {
+        rm -f -- "$tmp"
+        return 1
+    }
+    mv -f -- "$tmp" "$PROFILES_FILE"
+}
+
+cmd_profiles_json() {
+    if [[ -r "$PROFILES_FILE" ]]; then
+        cat -- "$PROFILES_FILE"
+        return 0
+    fi
+    if ((EUID == 0)) || [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]]; then
+        write_profiles_cache || return 1
+        cat -- "$PROFILES_FILE"
+        return 0
+    fi
+    printf '{"schema_version":1,"generated_at":0,"available":false,'
+    printf '"error":"profile cache is not ready","profiles":[]}\n'
+    return 1
 }
 
 choose_protocol() {
@@ -2659,6 +2739,7 @@ write_dashboard_cache() {
         return 1
     }
     mv -f -- "$tmp" "$DASHBOARD_FILE"
+    write_profiles_cache
 }
 
 cmd_status_json() {
@@ -3078,6 +3159,25 @@ cmd_autostart() {
     fi
 }
 
+cmd_monitor() {
+    local mode="${1:-}"
+    [[ "$mode" == "on" || "$mode" == "off" ]] ||
+        die "Использование: $CLI_COMMAND monitor on|off"
+    require_root monitor "$mode"
+    systemd_available || die "systemd недоступен"
+    if [[ "$mode" == "on" ]]; then
+        systemctl enable --now "$HEALTH_TIMER" ||
+            die "Не удалось включить $HEALTH_TIMER"
+        systemctl enable "$TEST_RECOVERY_SERVICE" ||
+            die "Не удалось включить $TEST_RECOVERY_SERVICE"
+        say "Автоматический контроль и recovery включены."
+    else
+        systemctl disable --now "$HEALTH_TIMER" ||
+            die "Не удалось остановить $HEALTH_TIMER"
+        say "Автоматический контроль остановлен; активный VPN не отключён."
+    fi
+}
+
 detect_profile_protocol() {
     local file="$1"
     [[ -f "$file" && -r "$file" ]] || return 1
@@ -3150,6 +3250,57 @@ cmd_import() {
     fi
     install -m 600 -- "$source" "$target" || die "Не удалось скопировать профиль"
     say "Добавлен профиль: $target"
+}
+
+cmd_import_files() {
+    local force=0 file protocol dir target failed=0 index
+    local -a original=("$@") files=() protocols=()
+    while (($#)); do
+        case "$1" in
+            --force) force=1 ;;
+            -*) die "Неизвестный параметр import-files: $1" ;;
+            *) files+=("$1") ;;
+        esac
+        shift
+    done
+    ((${#files[@]} > 0 && ${#files[@]} <= 128)) ||
+        die "Использование: $CLI_COMMAND import-files ФАЙЛ... [--force]"
+
+    for file in "${files[@]}"; do
+        [[ -f "$file" && -r "$file" ]] || die "Файл не найден: $file"
+        safe_import_name "$file" >/dev/null ||
+            die "Имя профиля содержит запрещённые управляющие символы: $file"
+        protocol="$(detect_profile_protocol "$file")" ||
+            die "Не удалось распознать VPN-протокол: $file"
+        validate_profile "$protocol" "$file" 1 ||
+            die "Профиль не прошёл проверку формата/безопасности: $file"
+        protocols+=("$protocol")
+    done
+
+    require_root import-files "${original[@]}"
+
+    if ((force == 0)); then
+        for index in "${!files[@]}"; do
+            file="${files[$index]}"
+            protocol="${protocols[$index]}"
+            dir="$(import_target_dir "$protocol")"
+            target="$dir/$(basename -- "$file")"
+            [[ ! -e "$target" ]] ||
+                die "Профиль уже существует: $target (для замены добавьте --force)"
+        done
+    fi
+
+    for index in "${!files[@]}"; do
+        file="${files[$index]}"
+        protocol="${protocols[$index]}"
+        if ((force)); then
+            cmd_import "$protocol" "$file" --force || failed=1
+        else
+            cmd_import "$protocol" "$file" || failed=1
+        fi
+    done
+    ((failed == 0)) || return 1
+    printf 'Итог import-files: imported=%d\n' "${#files[@]}"
 }
 
 cmd_import_dir() {
@@ -3584,8 +3735,25 @@ health_check() {
 }
 
 cmd_logs() {
-    local args=(-u "$SERVICE_NAME" --no-pager -n 100)
-    [[ "${1:-}" == "-f" ]] && args=(-f -u "$SERVICE_NAME")
+    local lines=100
+    local args=()
+    case "${1:-}" in
+        "")
+            ;;
+        -f|--follow)
+            args=(-f -u "$SERVICE_NAME")
+            ;;
+        --lines)
+            lines="${2:-}"
+            [[ "$lines" =~ ^[0-9]+$ && "$lines" -ge 20 && "$lines" -le 1000 ]] ||
+                die "--lines должен быть от 20 до 1000"
+            args=(-u "$SERVICE_NAME" --no-pager -n "$lines")
+            ;;
+        *)
+            die "Использование: $CLI_COMMAND logs [-f|--lines 20..1000]"
+            ;;
+    esac
+    ((${#args[@]} > 0)) || args=(-u "$SERVICE_NAME" --no-pager -n "$lines")
     journalctl "${args[@]}"
 }
 
@@ -3992,8 +4160,8 @@ main() {
     [[ $# -eq 0 ]] || shift
     case "$command" in
         connect|up|start|switch|quick|fast|disconnect|down|stop|\
-        reconnect|restart|autostart|auto|test|check|test-all|check-all|\
-        emergency|recover|import|add|import-dir|add-dir|scan-dir|\
+        reconnect|restart|autostart|auto|monitor|test|check|test-all|check-all|\
+        emergency|recover|import|add|import-files|import-dir|add-dir|scan-dir|\
         remove|delete|rm|language|lang|locale)
             trap 'write_dashboard_cache >/dev/null 2>&1 || true' EXIT
             ;;
@@ -4005,6 +4173,11 @@ main() {
             say "$PRODUCT_NAME $VERSION ($CLI_COMMAND; alias: $COMPAT_COMMAND)"
             ;;
         list|ls) cmd_list "$@" ;;
+        profiles|profile-list)
+            [[ $# -eq 0 || ($# -eq 1 && "${1:-}" == "--json") ]] ||
+                die "Использование: $CLI_COMMAND profiles --json"
+            cmd_profiles_json
+            ;;
         connect|up|start|switch) cmd_connect "$@" ;;
         quick|fast) cmd_quick_connect "$@" ;;
         disconnect|down|stop) cmd_disconnect "$@" ;;
@@ -4020,7 +4193,9 @@ main() {
         self-test|selftest) cmd_self_test "$@" ;;
         doctor) cmd_doctor "$@" ;;
         autostart|auto) cmd_autostart "$@" ;;
+        monitor) cmd_monitor "$@" ;;
         import|add) cmd_import "$@" ;;
+        import-files) cmd_import_files "$@" ;;
         import-dir|add-dir|scan-dir) cmd_import_dir "$@" ;;
         init-config-dir|init-dir) cmd_init_config_dir "$@" ;;
         remove|delete|rm) cmd_remove "$@" ;;

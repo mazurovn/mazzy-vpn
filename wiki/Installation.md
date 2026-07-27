@@ -39,7 +39,7 @@ sudo ./install.sh --live-test
 
 ## Desktop Linux
 
-Сначала должен быть установлен CLI. Затем установите один пакет из Releases:
+Установите один пакет из Releases:
 
 ```bash
 sudo apt install "./Mazzy VPN Desktop_VERSION_amd64.deb"
@@ -50,10 +50,11 @@ chmod +x "Mazzy VPN Desktop_VERSION_amd64.AppImage"
 DEB и RPM добавляют приложение в системное меню. AppImage можно запускать без
 системной установки. Проверяйте опубликованный SHA-256.
 
-Это описание относится к Desktop 0.1: ему пока требуется отдельно установленный
-движок CLI. Цель Desktop 1.0 — самостоятельный пакет с общим ядром, системным
-backend и bootstrap зависимостей; отдельная установка CLI/TUI больше не будет
-нужна. План и критерии готовности: [[Desktop Full Application Plan]].
+Desktop 0.2 содержит совместимые installer/engine resources. На экране Settings
+он проверяет установленную версию и зависимости и после явного системного
+разрешения устанавливает, обновляет или восстанавливает engine. Поэтому сначала
+устанавливать CLI вручную не требуется. Статус preview сохраняется до закрытия
+критериев [[Desktop Full Application Plan]].
 
 ## macOS и Windows
 
@@ -102,7 +103,7 @@ above.
 
 ## Linux Desktop
 
-Install the CLI first, then one bundle from Releases:
+Install one bundle from Releases:
 
 ```bash
 sudo apt install "./Mazzy VPN Desktop_VERSION_amd64.deb"
@@ -113,11 +114,11 @@ chmod +x "Mazzy VPN Desktop_VERSION_amd64.AppImage"
 DEB and RPM add an application-menu entry. AppImage is portable. Verify the
 published SHA-256 checksum.
 
-This describes Desktop 0.1, which still requires the separately installed CLI
-engine. Desktop 1.0 targets a standalone package with the shared core, a native
-system backend and dependency bootstrap, so a separate CLI/TUI installation
-will no longer be required. See [[Desktop Full Application Plan]] for the plan
-and release criteria.
+Desktop 0.2 contains compatible installer/engine resources. Its Settings screen
+checks the installed version and dependencies and, after explicit system
+authorization, installs, updates or repairs the engine. A prior manual CLI
+installation is therefore not required. The package remains a preview until
+the [[Desktop Full Application Plan]] release criteria are complete.
 
 ## macOS and Windows
 

@@ -1,5 +1,19 @@
 # Релизы и roadmap
 
+## 1.2.0 / Desktop 0.2.0 — в разработке
+
+- Linux control center с Dashboard, Profiles, Diagnostics и Settings;
+- встроенный installer/engine, проверка версий и зависимостей, install/repair;
+- импорт файлов/папок, поиск/выбор профиля и безопасные profile actions;
+- validate, probe, transactional tests, test-all и emergency;
+- полный вывод Doctor, self-test и bounded logs;
+- управление autostart и независимым health monitor;
+- типизированный Rust adapter без shell-команд и расширенные parity tests.
+
+Desktop 0.2 не требует предварительной ручной установки CLI, но остаётся
+preview до versioned service API, полного паритета режимов/локализаций,
+подписанного update/rollback и закрытия platform release gates.
+
 ## 1.1.0
 
 - CLI/TUI и двухуровневое автовосстановление;
@@ -34,6 +48,16 @@ CLI engine и не является самостоятельным Desktop VPN-�
 <a id="english"></a>
 
 # Releases and roadmap
+
+Version 1.2.0 / Desktop 0.2.0 is in development. It expands the Linux preview
+into a Dashboard/Profiles/Diagnostics/Settings control center with bundled
+engine bootstrap, version/dependency checks, file/folder import, profile
+actions, validation/probes/transactional tests, complete Doctor/self-test/log
+output, service controls and a typed Rust adapter.
+
+Desktop 0.2 does not require a prior manual CLI installation, but remains a
+preview until the versioned service API, complete mode/localization parity,
+signed update/rollback and platform release gates are complete.
 
 Version 1.1.0 adds the sanitized status cache, Tauri Dashboard and tray,
 functional Linux AppImage/DEB/RPM bundles, macOS/Windows UI previews, bilingual

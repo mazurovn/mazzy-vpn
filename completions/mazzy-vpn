@@ -7,7 +7,7 @@ _mazzy_vpn()
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    commands="list connect quick disconnect reconnect dashboard status diagnose validate probe test test-all emergency self-test doctor autostart import import-dir init-config-dir remove logs language help version"
+    commands="list profiles connect quick disconnect reconnect dashboard status diagnose validate probe test test-all emergency self-test doctor autostart monitor import import-files import-dir init-config-dir remove logs language help version"
     protocols="amneziawg wireguard openvpn l2tp"
 
     if ((COMP_CWORD == 1)); then
@@ -16,7 +16,7 @@ _mazzy_vpn()
             "$prev" == "test-all" || "$prev" == "validate" || "$prev" == "probe" ||
             "$prev" == "import" || "$prev" == "remove" ]]; then
         mapfile -t COMPREPLY < <(compgen -W "$protocols all" -- "$cur")
-    elif [[ "$prev" == "autostart" ]]; then
+    elif [[ "$prev" == "autostart" || "$prev" == "monitor" ]]; then
         mapfile -t COMPREPLY < <(compgen -W "on off" -- "$cur")
     elif [[ "$prev" == "language" || "$prev" == "lang" ]]; then
         mapfile -t COMPREPLY < <(compgen -W "ru en de zh ja ko list current" -- "$cur")
@@ -26,6 +26,8 @@ _mazzy_vpn()
         mapfile -t COMPREPLY < <(compgen -W "--offline --live --timeout" -- "$cur")
     elif [[ "$prev" == "import-dir" ]]; then
         mapfile -t COMPREPLY < <(compgen -W "--dry-run --force" -- "$cur")
+    elif [[ "$prev" == "import-files" ]]; then
+        mapfile -t COMPREPLY < <(compgen -W "--force" -- "$cur")
     fi
 }
 complete -F _mazzy_vpn mazzy-vpn mazzyvpn vpnctl

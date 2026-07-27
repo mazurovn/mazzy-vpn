@@ -1,4 +1,4 @@
-# Mazzy VPN Desktop: Dashboard и tray
+# Mazzy VPN Desktop: Linux Control Center и tray
 
 Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
@@ -8,27 +8,39 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
 ![Mazzy VPN Desktop Dashboard — preview с тестовыми данными](images/dashboard-connected-preview.png)
 
-Mazzy VPN Desktop — компактное приложение на Tauri 2 поверх проверяемого
-CLI-движка `mazzy-vpn`. Оно показывает соединение в одном окне и оставляет
-основные действия в системном tray.
+Mazzy VPN Desktop — приложение на Tauri 2 с общим движком `mazzy-vpn`.
+Linux-пакет 0.2 включает совместимый engine installer: отдельная предварительная
+установка CLI больше не требуется. CLI и TUI остаются самостоятельными
+клиентами того же движка и состояния.
 
-> **Статус 0.1:** это функциональный Linux dashboard/companion, но ещё не
-> самостоятельный VPN-клиент. Ему требуется установленный CLI engine. Desktop
-> 1.0 будет включать общий core/bootstrap и полный паритет без отдельной
-> установки CLI; до закрытия [release gates](FEATURE_PARITY.md) он остаётся
-> preview.
+> **Статус 0.2:** Linux control-center уже покрывает основной рабочий цикл, но
+> остаётся preview до закрытия [release gates](FEATURE_PARITY.md). Для Desktop
+> 1.0 ещё нужны полный fallback-policy UI, перевод новых экранов на все шесть
+> языков и versioned daemon API вместо промежуточного typed `pkexec`-адаптера.
 
 ## Статус платформ
 
 | Платформа | Статус | Пакеты |
 |---|---|---|
-| Linux x86_64 | Рабочий Dashboard и tray для установленного Mazzy VPN CLI | AppImage, DEB, RPM |
+| Linux x86_64 | Control Center с встроенным bootstrap общего движка | AppImage, DEB, RPM |
 | macOS | Preview интерфейса, VPN backend ещё не реализован | app, DMG |
 | Windows | Preview интерфейса, VPN backend ещё не реализован | MSI, NSIS EXE |
 
 macOS и Windows preview не нужно использовать как средство защиты трафика.
 Для полноценной поддержки нужны нативные Network Extension/launchd и Windows
 service/Wintun backends, подпись кода и platform-specific тесты.
+
+## Экраны Desktop 0.2
+
+1. **Обзор** — туннель, интернет, IP, handshake, health, recovery и tray.
+2. **Профили** — безопасный импорт файлов/папок, поиск, протоколы, выбор
+   локации/default-профиля, удаление и точечный live-test.
+3. **Тестирование** — validate, DNS/ping probe, `test-all` и emergency с
+   timeout/rollback.
+4. **Диагностика** — полный, не обрезанный результат Doctor/self-test и
+   ограниченный журнал systemd.
+5. **Настройки** — версии bundled/installed engine, состояние зависимостей,
+   Install/Update/Repair, autostart, health monitor, privacy и уведомления.
 
 ## Что показывает Dashboard
 
@@ -43,8 +55,10 @@ service/Wintun backends, подпись кода и platform-specific тесты
 - свежесть cache, чтобы устаревшие данные не выглядели актуальными.
 
 Статус обновляется каждые пять секунд из `/run/mazzy-vpn/status.json`.
-Root CLI/health monitor пересоздаёт этот файл атомарно. Он не содержит endpoint,
-пути профилей, приватные ключи, логины, пароли или конфигурационные директивы.
+Санитизированная библиотека профилей читается из
+`/run/mazzy-vpn/profiles.json`. Root engine пересоздаёт оба файла атомарно.
+Они не содержат endpoint, пути профилей, приватные ключи, логины, пароли или
+конфигурационные директивы.
 
 ## Действия в окне и tray
 
@@ -54,7 +68,15 @@ Root CLI/health monitor пересоздаёт этот файл атомарн�
 | Reconnect | `mazzy-vpn reconnect` |
 | Disconnect | `mazzy-vpn disconnect` |
 | Self-diagnostics | `mazzy-vpn doctor` |
+| Диагностика активного соединения | `mazzy-vpn diagnose` |
 | Refresh Status | `mazzy-vpn _refresh-dashboard-cache` |
+| Connect profile | `mazzy-vpn connect PROTOCOL PROFILE` |
+| Import files/folder | `mazzy-vpn import-files` / `import-dir` |
+| Validate / probe | `mazzy-vpn validate` / `probe` |
+| Transactional tests | `mazzy-vpn test` / `test-all` / `emergency` |
+| Install / repair | bundled `install.sh --yes --skip-tests` |
+| Service settings | `mazzy-vpn autostart` / `monitor` |
+| Logs | `mazzy-vpn logs --lines N` |
 
 GUI не строит shell-строку. Rust backend принимает enum и сопоставляет его
 фиксированному массиву аргументов. На Linux изменяющие состояние действия
@@ -67,34 +89,28 @@ GUI не строит shell-строку. Rust backend принимает enum �
 
 ## Установка Linux
 
-Сначала установите и проверьте CLI:
-
-```bash
-git clone https://github.com/mazurovn/mazzy-vpn.git
-cd mazzy-vpn
-sudo ./install.sh --yes
-sudo mazzy-vpn diagnose
-```
-
-Затем установите один Desktop-пакет со страницы Releases.
+Установите один Desktop-пакет со страницы Releases. Затем откройте
+**Настройки → Установить / обновить / исправить**. Встроенный проверенный
+installer определит ОС, сохранит существующие профили, установит недостающие
+зависимости, systemd engine/recovery и выполнит offline self-test.
 
 DEB:
 
 ```bash
-sudo apt install "./Mazzy VPN Desktop_0.1.0_amd64.deb"
+sudo apt install "./Mazzy VPN Desktop_0.2.0_amd64.deb"
 ```
 
 RPM:
 
 ```bash
-sudo dnf install "./Mazzy VPN Desktop-0.1.0-1.x86_64.rpm"
+sudo dnf install "./Mazzy VPN Desktop-0.2.0-1.x86_64.rpm"
 ```
 
 AppImage:
 
 ```bash
-chmod +x "Mazzy VPN Desktop_0.1.0_amd64.AppImage"
-./"Mazzy VPN Desktop_0.1.0_amd64.AppImage"
+chmod +x "Mazzy VPN Desktop_0.2.0_amd64.AppImage"
+./"Mazzy VPN Desktop_0.2.0_amd64.AppImage"
 ```
 
 Имена версий в примерах замените на фактические имена загруженных файлов.
@@ -102,9 +118,11 @@ chmod +x "Mazzy VPN Desktop_0.1.0_amd64.AppImage"
 
 ## Языки
 
-Dashboard поддерживает русский, английский, немецкий, китайский, японский и
-корейский. Выбор сохраняется локально в хранилище WebView и не отправляется в
-сеть. Язык CLI можно независимо изменить командой:
+Dashboard 0.1 полностью поддерживал русский, английский, немецкий, китайский,
+японский и корейский. Новые экраны 0.2 полностью переведены на русский и
+английский; для остальных языков пока используется английский fallback, поэтому
+release gate локализации честно остаётся `partial`. Выбор сохраняется локально
+и синхронизируется с общим engine.
 
 ```bash
 mazzy-vpn language ru

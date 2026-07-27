@@ -10,17 +10,17 @@ Status: **I** implemented · **P** partial · **R** planned · **—** not appli
 
 | Capability ID | CLI | TUI | Desktop Linux | macOS | Windows |
 |---|---:|---:|---:|---:|---:|
-| `connection-lifecycle` | I | I | P | R | R |
-| `profile-import` | I | I | R | R | R |
-| `profile-location-selection` | I | I | R | R | R |
-| `validation-probe-test` | I | I | R | R | R |
-| `operating-modes` | I | I | R | R | R |
-| `service-control` | I | P | R | R | R |
-| `dependency-bootstrap` | I | — | R | R | R |
+| `connection-lifecycle` | I | I | I | R | R |
+| `profile-import` | I | I | I | R | R |
+| `profile-location-selection` | I | I | I | R | R |
+| `validation-probe-test` | I | I | I | R | R |
+| `operating-modes` | I | I | P | R | R |
+| `service-control` | I | P | I | R | R |
+| `dependency-bootstrap` | I | — | I | R | R |
 | `dashboard-tray` | I | I | I | P | P |
-| `localization-six-languages` | I | I | I | I | I |
-| `automatic-recovery` | I | I | P | R | R |
-| `self-contained-runtime` | I | I | R | R | R |
+| `localization-six-languages` | I | I | P | P | P |
+| `automatic-recovery` | I | I | I | R | R |
+| `self-contained-runtime` | I | I | I | R | R |
 | `privilege-boundary` | I | I | P | R | R |
 
 ## Release gates
@@ -38,10 +38,11 @@ ready while any required capability is `partial`, `planned` or
 
 ## Русский
 
-Desktop 0.1 — preview интерфейса, а не самостоятельный VPN-клиент. Версия
-Desktop 1.0 допускается только после реализации полного импорта и выбора
-профилей, режимов, управления службами, bootstrap зависимостей, общего core,
-автовосстановления и platform-specific backend.
+Desktop 0.2 — Linux control-center preview. Он уже включает установщик общего
+движка, импорт и выбор профилей, validate/probe/live-test, Doctor с полным
+выводом, журнал и управление службами. Gate Desktop 1.0 всё ещё закрыт:
+не завершены fallback-policy UI, полный перевод новых экранов на шесть языков
+и переход от typed `pkexec`-адаптера к локальному versioned daemon API.
 
 Новая функция считается завершённой не после добавления одной кнопки, а после
 обновления общего API/core, всех применимых интерфейсов, автоматических тестов,
@@ -49,10 +50,11 @@ Desktop 1.0 допускается только после реализации 
 
 ## English
 
-Desktop 0.1 is a UI preview, not a standalone VPN client. Desktop 1.0 is
-allowed only after profile import/selection, modes, service control, dependency
-bootstrap, the shared core, recovery and the platform-native backend are
-implemented.
+Desktop 0.2 is a Linux control-center preview. It bundles the shared-engine
+installer and now exposes profile import/selection, validation, probes, live
+tests, full Doctor output, logs and service controls. The Desktop 1.0 gate
+remains closed until fallback-policy UI, full six-language coverage for the new
+screens and the versioned local daemon API replace the typed `pkexec` adapter.
 
 A feature is complete only after its shared API/core, every applicable
 interface, automated tests, this registry and both Russian and English

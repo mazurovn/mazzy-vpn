@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod backend;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::fs;
@@ -204,6 +206,11 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             get_status,
             run_action,
+            backend::get_profiles,
+            backend::get_installation_report,
+            backend::run_operation,
+            backend::pick_profile_files,
+            backend::pick_profile_folder,
             show_main_window,
             hide_main_window,
             get_platform_info

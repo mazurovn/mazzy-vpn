@@ -40,21 +40,30 @@ Desktop works without a separate CLI installation because it bundles a
 compatible client/core. CLI and TUI remain independently installable and can
 control the same core while the GUI is closed.
 
-## Missing from Desktop 0.1
+## Delivered in the Desktop 0.2 Linux preview
 
-- single-file, multi-file, folder and drag-and-drop import;
-- AWG, WireGuard, OpenVPN and L2TP/IPsec detection before installation;
-- profile library with search, grouping, location and default profile;
-- normal, test, emergency and fallback mode selection;
-- transactional tests, rollback and probe results in the GUI;
-- complete doctor with explicitly approved safe fixes;
-- engine service, autostart, health-monitor and recovery controls;
-- self-contained dependency bootstrap and existing-install migration;
-- a shared versioned API instead of direct individual CLI invocation;
+- bundled engine installer with version and dependency readiness checks;
+- safe single-file, multi-file and folder import with protocol detection;
+- sanitized profile library cache with search, location and selection;
+- connect, validate, probe, transactional test, test-all and emergency actions;
+- complete retained Doctor, approved fix, self-test and bounded log output;
+- engine autostart and independent health-monitor controls;
+- typed Rust operations with fixed argument construction and no shell strings;
+- capability-registry checks and cross-surface regression references.
+
+## Remaining before Desktop 1.0
+
+- import inspection/preview and drag-and-drop workflow;
+- complete normal, test, emergency and fallback-policy settings;
+- a shared versioned privileged service API instead of per-action CLI process
+  invocation (the 0.2 adapter is typed but still invokes the bundled engine);
+- complete six-language coverage for all new control-center screens;
+- signed updates, migration and transactional installer rollback;
 - native macOS/Windows backends, signing/notarization and system installers;
-- parity tests that block releases when a CLI/TUI capability was forgotten.
+- security, accessibility, failure-injection and long-running soak gates.
 
-Desktop packages remain **preview** until these items are complete.
+Desktop packages remain **preview** until the applicable release gates are
+complete.
 
 ## Target components
 

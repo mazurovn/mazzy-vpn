@@ -24,12 +24,12 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "implemented",
-        "desktop_linux": "partial",
+        "desktop_linux": "implemented",
         "desktop_macos": "planned",
         "desktop_windows": "planned"
       },
-      "tests": ["tests/run.sh", "desktop/src-tauri/src/main.rs"],
-      "docs": ["README.en.md", "README.ru.md", "docs/DESKTOP_ROADMAP.en.md", "docs/DESKTOP_ROADMAP.ru.md"]
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/main.rs", "desktop/src-tauri/src/backend.rs"],
+      "docs": ["README.en.md", "README.ru.md", "docs/DESKTOP.en.md", "docs/DESKTOP.ru.md"]
     },
     {
       "id": "profile-import",
@@ -39,12 +39,12 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "implemented",
-        "desktop_linux": "planned",
+        "desktop_linux": "implemented",
         "desktop_macos": "planned",
         "desktop_windows": "planned"
       },
-      "tests": ["tests/run.sh"],
-      "docs": ["README.en.md", "README.ru.md", "wiki/Profiles-and-Import.md"]
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/backend.rs", "desktop/ui/app.js"],
+      "docs": ["README.en.md", "README.ru.md", "docs/DESKTOP.en.md", "docs/DESKTOP.ru.md"]
     },
     {
       "id": "profile-location-selection",
@@ -54,12 +54,12 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "implemented",
-        "desktop_linux": "planned",
+        "desktop_linux": "implemented",
         "desktop_macos": "planned",
         "desktop_windows": "planned"
       },
-      "tests": ["tests/run.sh"],
-      "docs": ["README.en.md", "README.ru.md", "wiki/Profiles-and-Import.md"]
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/backend.rs", "desktop/ui/app.js"],
+      "docs": ["README.en.md", "README.ru.md", "docs/DESKTOP.en.md", "docs/DESKTOP.ru.md"]
     },
     {
       "id": "validation-probe-test",
@@ -69,12 +69,12 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "implemented",
-        "desktop_linux": "planned",
+        "desktop_linux": "implemented",
         "desktop_macos": "planned",
         "desktop_windows": "planned"
       },
-      "tests": ["tests/run.sh"],
-      "docs": ["docs/ARCHITECTURE.en.md", "docs/ARCHITECTURE.ru.md", "wiki/Diagnostics-and-Recovery.md"]
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/backend.rs", "desktop/ui/app.js"],
+      "docs": ["docs/ARCHITECTURE.en.md", "docs/ARCHITECTURE.ru.md", "docs/DESKTOP.en.md", "docs/DESKTOP.ru.md"]
     },
     {
       "id": "operating-modes",
@@ -84,11 +84,11 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "implemented",
-        "desktop_linux": "planned",
+        "desktop_linux": "partial",
         "desktop_macos": "planned",
         "desktop_windows": "planned"
       },
-      "tests": ["tests/run.sh"],
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/backend.rs", "desktop/ui/app.js"],
       "docs": ["docs/ARCHITECTURE.en.md", "docs/ARCHITECTURE.ru.md", "wiki/Diagnostics-and-Recovery.md"]
     },
     {
@@ -99,11 +99,11 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "partial",
-        "desktop_linux": "planned",
+        "desktop_linux": "implemented",
         "desktop_macos": "planned",
         "desktop_windows": "planned"
       },
-      "tests": ["tests/run.sh"],
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/backend.rs", "desktop/ui/app.js"],
       "docs": ["docs/ARCHITECTURE.en.md", "docs/ARCHITECTURE.ru.md", "wiki/Diagnostics-and-Recovery.md"]
     },
     {
@@ -114,12 +114,12 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "not-applicable",
-        "desktop_linux": "planned",
+        "desktop_linux": "implemented",
         "desktop_macos": "planned",
         "desktop_windows": "planned"
       },
-      "tests": ["tests/run.sh"],
-      "docs": ["docs/DESKTOP_ROADMAP.en.md", "docs/DESKTOP_ROADMAP.ru.md", "wiki/Installation.md"]
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/backend.rs", "desktop/src-tauri/tauri.conf.json"],
+      "docs": ["docs/DESKTOP.en.md", "docs/DESKTOP.ru.md", "docs/DESKTOP_ROADMAP.en.md", "docs/DESKTOP_ROADMAP.ru.md"]
     },
     {
       "id": "dashboard-tray",
@@ -144,9 +144,9 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "implemented",
-        "desktop_linux": "implemented",
-        "desktop_macos": "implemented",
-        "desktop_windows": "implemented"
+        "desktop_linux": "partial",
+        "desktop_macos": "partial",
+        "desktop_windows": "partial"
       },
       "tests": ["tests/run.sh", "desktop/ui/app.js"],
       "docs": ["README.en.md", "README.ru.md", "docs/DESKTOP.en.md", "docs/DESKTOP.ru.md"]
@@ -159,11 +159,11 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "implemented",
-        "desktop_linux": "partial",
+        "desktop_linux": "implemented",
         "desktop_macos": "planned",
         "desktop_windows": "planned"
       },
-      "tests": ["tests/run.sh"],
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/backend.rs", "desktop/ui/app.js"],
       "docs": ["docs/ARCHITECTURE.en.md", "docs/ARCHITECTURE.ru.md", "wiki/Diagnostics-and-Recovery.md"]
     },
     {
@@ -174,12 +174,12 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "implemented",
-        "desktop_linux": "planned",
+        "desktop_linux": "implemented",
         "desktop_macos": "planned",
         "desktop_windows": "planned"
       },
-      "tests": ["tests/run.sh"],
-      "docs": ["docs/DESKTOP_ROADMAP.en.md", "docs/DESKTOP_ROADMAP.ru.md", "wiki/Desktop-Full-Application-Plan.md"]
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/backend.rs", "desktop/src-tauri/tauri.conf.json"],
+      "docs": ["docs/DESKTOP.en.md", "docs/DESKTOP.ru.md", "docs/DESKTOP_ROADMAP.en.md", "docs/DESKTOP_ROADMAP.ru.md"]
     },
     {
       "id": "privilege-boundary",
@@ -193,7 +193,7 @@
         "desktop_macos": "planned",
         "desktop_windows": "planned"
       },
-      "tests": ["tests/run.sh", "desktop/src-tauri/src/main.rs", "tests/audit-public.sh"],
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/main.rs", "desktop/src-tauri/src/backend.rs", "tests/audit-public.sh"],
       "docs": ["SECURITY.md", "docs/DESKTOP_ROADMAP.en.md", "docs/DESKTOP_ROADMAP.ru.md"]
     }
   ],

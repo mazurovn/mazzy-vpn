@@ -122,14 +122,93 @@ const translations = {
   }
 };
 
+Object.assign(translations.ru, {
+  navDashboard: "Обзор", navProfiles: "Профили", navDiagnostics: "Диагностика", navSettings: "Настройки",
+  profileLibrary: "БИБЛИОТЕКА ПРОФИЛЕЙ", profileManagement: "Профили и локации",
+  profileManagementHint: "Импорт, проверка, выбор и безопасный тест конфигураций.",
+  importFiles: "Загрузить файлы", scanFolder: "Проверить папку", importFolder: "Импортировать папку",
+  searchProfiles: "Поиск профиля или локации", allProtocols: "Все протоколы",
+  profilesLoading: "Загружаем профили…", profilesEmpty: "Профили не найдены",
+  selectedProfile: "Выбран по умолчанию", connectProfile: "Подключить", testProfile: "Тест", removeProfile: "Удалить",
+  testingTools: "ТЕСТИРОВАНИЕ", testingTitle: "Проверка конфигураций",
+  testTimeout: "Таймаут живого теста", testProtocol: "Протокол",
+  validateProfiles: "Проверить формат", probeEndpoints: "DNS и ping endpoint",
+  testAllProfiles: "Живой test-all с rollback", emergencyMode: "Аварийный выбор рабочего VPN",
+  rollbackHint: "Живые тесты временно меняют маршрут и всегда используют timeout + rollback.",
+  diagnosticsCenter: "ДИАГНОСТИКА", diagnosticsTitle: "Doctor, тесты и журнал",
+  diagnosticsHint: "Полный результат больше не скрывается: вывод сохраняется в этой панели.",
+  runDoctor: "Запустить Doctor", repairSystem: "Установить/исправить",
+  connectionDiagnose: "Диагностика соединения",
+  connectionDiagnoseHint: "Маршрут, DNS, туннель, handshake и интернет",
+  offlineSelfTest: "Offline self-test", offlineSelfTestHint: "Формат, зависимости, службы и права",
+  liveSelfTest: "Live self-test", liveSelfTestHint: "Проверка туннелей с rollback",
+  serviceLog: "Журнал сервиса", serviceLogHint: "Последние события без секретов", logLines: "Строк журнала",
+  outputReady: "Готово к проверке", outputRunning: "Выполняется", outputSuccess: "Успешно",
+  outputFailed: "Есть ошибки", diagnosticOutput: "Результат", clearOutput: "Очистить",
+  outputPlaceholder: "Здесь появится полный вывод Doctor, тестов и журнала.",
+  settingsCenter: "НАСТРОЙКИ", settingsTitle: "Установка и системные настройки",
+  settingsHint: "Desktop включает совместимый движок и может установить недостающие зависимости.",
+  installRepair: "Установить / обновить / исправить", installation: "УСТАНОВКА",
+  engineReadiness: "Готовность движка", installedVersion: "Установлено",
+  bundledVersion: "В комплекте Desktop", engineService: "Системная служба",
+  recoveryMonitor: "Recovery monitor", services: "СЛУЖБЫ", serviceControl: "Управление службами",
+  notifications: "Уведомления", notificationsHint: "Локально, без телеметрии",
+  privacyMode: "Скрывать публичный IP", privacyModeHint: "Применяется к Dashboard",
+  installed: "УСТАНОВЛЕНО", missing: "НЕТ", updateRequired: "НУЖНО ОБНОВИТЬ",
+  ready: "ГОТОВО", confirmLiveTest: "Живой тест временно изменит VPN-маршрут и затем выполнит rollback. Продолжить?",
+  confirmRemove: "Удалить выбранный VPN-профиль?", confirmRepair: "Запустить системную установку и исправление зависимостей?",
+  profilesRefreshed: "Список профилей обновлён", noSelection: "Ничего не выбрано"
+});
+
+Object.assign(translations.en, {
+  navDashboard: "Dashboard", navProfiles: "Profiles", navDiagnostics: "Diagnostics", navSettings: "Settings",
+  profileLibrary: "PROFILE LIBRARY", profileManagement: "Profiles and locations",
+  profileManagementHint: "Import, validate, select and safely test configurations.",
+  importFiles: "Import files", scanFolder: "Scan folder", importFolder: "Import folder",
+  searchProfiles: "Search profile or location", allProtocols: "All protocols",
+  profilesLoading: "Loading profiles…", profilesEmpty: "No profiles found",
+  selectedProfile: "Selected as default", connectProfile: "Connect", testProfile: "Test", removeProfile: "Remove",
+  testingTools: "TESTING", testingTitle: "Configuration checks", testTimeout: "Live test timeout",
+  testProtocol: "Protocol", validateProfiles: "Validate format", probeEndpoints: "DNS and endpoint ping",
+  testAllProfiles: "Live test-all with rollback", emergencyMode: "Emergency working VPN selection",
+  rollbackHint: "Live tests temporarily change routes and always use a timeout plus rollback.",
+  diagnosticsCenter: "DIAGNOSTICS", diagnosticsTitle: "Doctor, tests and logs",
+  diagnosticsHint: "Complete results are retained in this panel instead of being discarded.",
+  runDoctor: "Run Doctor", repairSystem: "Install / repair",
+  connectionDiagnose: "Connection diagnostics",
+  connectionDiagnoseHint: "Route, DNS, tunnel, handshake and Internet",
+  offlineSelfTest: "Offline self-test", offlineSelfTestHint: "Format, dependencies, services and permissions",
+  liveSelfTest: "Live self-test", liveSelfTestHint: "Tunnel checks with rollback",
+  serviceLog: "Service log", serviceLogHint: "Recent redacted events", logLines: "Log lines",
+  outputReady: "Ready", outputRunning: "Running", outputSuccess: "Success", outputFailed: "Problems found",
+  diagnosticOutput: "Result", clearOutput: "Clear",
+  outputPlaceholder: "Complete Doctor, test and service log output will appear here.",
+  settingsCenter: "SETTINGS", settingsTitle: "Installation and system settings",
+  settingsHint: "Desktop bundles a compatible engine and can install missing dependencies.",
+  installRepair: "Install / update / repair", installation: "INSTALLATION", engineReadiness: "Engine readiness",
+  installedVersion: "Installed", bundledVersion: "Bundled with Desktop", engineService: "System service",
+  recoveryMonitor: "Recovery monitor", services: "SERVICES", serviceControl: "Service control",
+  notifications: "Notifications", notificationsHint: "Local only, no telemetry",
+  privacyMode: "Hide public IP", privacyModeHint: "Applied to Dashboard",
+  installed: "INSTALLED", missing: "MISSING", updateRequired: "UPDATE REQUIRED", ready: "READY",
+  confirmLiveTest: "The live test temporarily changes VPN routes and then rolls back. Continue?",
+  confirmRemove: "Remove the selected VPN profile?", confirmRepair: "Run system installation and dependency repair?",
+  profilesRefreshed: "Profile list refreshed", noSelection: "Nothing selected"
+});
+
 const $ = (selector) => document.querySelector(selector);
 const state = {
   lang: localStorage.getItem("mazzy-language") || "ru",
   hideIp: localStorage.getItem("mazzy-hide-ip") === "true",
+  notifications: localStorage.getItem("mazzy-notifications") !== "false",
+  page: "dashboard",
   status: null,
+  profiles: [],
+  installation: null,
   lastSignature: "",
   events: [],
-  busy: false
+  busy: false,
+  lastOperation: null
 };
 
 function t(key) {
@@ -142,7 +221,12 @@ function applyLanguage() {
   document.querySelectorAll("[data-i18n]").forEach((node) => {
     node.textContent = t(node.dataset.i18n);
   });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((node) => {
+    node.placeholder = t(node.dataset.i18nPlaceholder);
+  });
   if (state.status) renderStatus(state.status);
+  renderProfiles();
+  if (state.installation) renderInstallation(state.installation);
 }
 
 function setMiniState(selector, enabled, activeLabel = "enabled", inactiveLabel = "disabled") {
@@ -180,6 +264,38 @@ function showToast(message, error = false) {
   toast.className = `toast visible${error ? " error" : ""}`;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { toast.className = "toast"; }, 4200);
+}
+
+function showPage(page) {
+  state.page = page;
+  document.querySelectorAll("[data-page]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.page === page);
+  });
+  document.querySelectorAll("[data-page-panel]").forEach((panel) => {
+    panel.classList.toggle("active", panel.dataset.pagePanel === page);
+  });
+}
+
+function operationTimeout() {
+  const value = Number($("#test-timeout")?.value || 45);
+  return Math.min(600, Math.max(2, Number.isFinite(value) ? value : 45));
+}
+
+function setBusy(busy) {
+  state.busy = busy;
+  document.querySelectorAll("button").forEach((button) => {
+    if (!button.matches("[data-page], #hide-button, #privacy-button")) button.disabled = busy;
+  });
+}
+
+function showOperationResult(result, title = "") {
+  state.lastOperation = result;
+  const output = $("#operation-output");
+  const status = $("#operation-state");
+  $("#operation-title").textContent = title || result?.action || t("diagnosticOutput");
+  status.textContent = result?.success ? t("outputSuccess") : t("outputFailed");
+  status.className = `operation-state ${result?.success ? "success" : "error"}`;
+  output.textContent = result?.output?.trim() || (result?.success ? t("actionDone") : t("actionFailed"));
 }
 
 function renderStatus(data) {
@@ -239,6 +355,116 @@ function renderStatus(data) {
   state.lastSignature = signature;
 }
 
+function renderProfiles() {
+  const list = $("#profile-list");
+  if (!list) return;
+  const query = ($("#profile-search")?.value || "").trim().toLocaleLowerCase();
+  const protocol = $("#protocol-filter")?.value || "all";
+  const profiles = state.profiles.filter((profile) => {
+    const matchesProtocol = protocol === "all" || profile.protocol === protocol;
+    const haystack = `${profile.name || ""} ${profile.location || ""} ${profile.protocol_name || ""}`.toLocaleLowerCase();
+    return matchesProtocol && (!query || haystack.includes(query));
+  });
+  if (!profiles.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = t("profilesEmpty");
+    list.replaceChildren(empty);
+    return;
+  }
+  list.replaceChildren(...profiles.map((profile) => {
+    const row = document.createElement("div");
+    row.className = `profile-item${profile.selected ? " selected" : ""}`;
+    const marker = document.createElement("span");
+    marker.className = "profile-marker";
+    const copy = document.createElement("div");
+    copy.className = "profile-copy";
+    const name = document.createElement("strong");
+    name.textContent = profile.name || profile.file_name;
+    const detail = document.createElement("small");
+    detail.textContent = `${profile.protocol_name || profile.protocol}${profile.selected ? ` · ${t("selectedProfile")}` : ""}`;
+    copy.append(name, detail);
+    const actions = document.createElement("div");
+    actions.className = "profile-actions";
+    const connect = document.createElement("button");
+    connect.type = "button";
+    connect.textContent = t("connectProfile");
+    connect.addEventListener("click", () => runOperation({
+      kind: "connect", protocol: profile.protocol, profile: profile.file_name
+    }, t("connectProfile")));
+    const test = document.createElement("button");
+    test.type = "button";
+    test.textContent = t("testProfile");
+    test.addEventListener("click", () => {
+      if (window.confirm(t("confirmLiveTest"))) {
+        runOperation({
+          kind: "test", protocol: profile.protocol, profile: profile.file_name,
+          timeout: operationTimeout()
+        }, `${t("testProfile")}: ${profile.name}`);
+      }
+    });
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "remove";
+    remove.textContent = t("removeProfile");
+    remove.addEventListener("click", () => {
+      if (window.confirm(t("confirmRemove"))) {
+        runOperation({
+          kind: "remove-profile", protocol: profile.protocol, profile: profile.file_name
+        }, `${t("removeProfile")}: ${profile.name}`);
+      }
+    });
+    actions.append(connect, test, remove);
+    row.append(marker, copy, actions);
+    return row;
+  }));
+}
+
+async function refreshProfiles(manual = false) {
+  try {
+    if (!invoke) throw new Error("Tauri runtime is unavailable");
+    const data = await invoke("get_profiles");
+    state.profiles = Array.isArray(data?.profiles) ? data.profiles : [];
+    renderProfiles();
+    if (manual) showToast(t("profilesRefreshed"));
+  } catch (error) {
+    state.profiles = [];
+    renderProfiles();
+    if (manual) showToast(String(error), true);
+  }
+}
+
+function renderInstallation(report) {
+  state.installation = report;
+  $("#installed-version").textContent = report?.installed_version || t("missing");
+  $("#bundled-version").textContent = report?.bundled_version || t("missing");
+  $("#service-installed").textContent = report?.service_installed ? t("installed") : t("missing");
+  $("#monitor-installed").textContent = report?.monitor_installed ? t("installed") : t("missing");
+  const badge = $("#installation-badge");
+  badge.textContent = report?.needs_install ? t("updateRequired") : t("ready");
+  badge.className = `health-badge ${report?.needs_install ? "bad" : "ok"}`;
+  const dependencies = $("#dependency-list");
+  dependencies.replaceChildren(...(report?.dependencies || []).map((dependency) => {
+    const row = document.createElement("div");
+    row.className = `dependency${dependency.installed ? " installed" : ""}`;
+    const label = document.createElement("span");
+    label.textContent = `${dependency.label} · ${dependency.required_for}`;
+    const status = document.createElement("span");
+    status.textContent = dependency.installed ? "OK" : t("missing");
+    row.append(label, status);
+    return row;
+  }));
+}
+
+async function refreshInstallation() {
+  if (!invoke) return;
+  try {
+    renderInstallation(await invoke("get_installation_report"));
+  } catch (error) {
+    showToast(String(error), true);
+  }
+}
+
 async function refreshStatus(manual = false) {
   try {
     if (!invoke) throw new Error("Tauri runtime is unavailable");
@@ -251,46 +477,176 @@ async function refreshStatus(manual = false) {
   }
 }
 
-async function runAction(action) {
+async function runOperation(request, title = "", openOutput = true) {
   if (state.busy) return;
-  state.busy = true;
-  document.querySelectorAll("[data-action]").forEach((button) => { button.disabled = true; });
-  showToast(`${t("actionStarted")}: ${action}`);
+  setBusy(true);
+  $("#operation-state").textContent = t("outputRunning");
+  $("#operation-state").className = "operation-state running";
+  $("#operation-title").textContent = title || request.kind;
+  $("#operation-output").textContent = `${t("actionStarted")}: ${title || request.kind}…`;
+  showToast(`${t("actionStarted")}: ${title || request.kind}`);
   try {
     if (!invoke) throw new Error("Tauri runtime is unavailable");
-    const result = await invoke("run_action", { action });
+    const result = await invoke("run_operation", { request });
     const detail = result.output?.trim().split("\n").slice(-1)[0] || "";
     addEvent(result.success ? t("actionDone") : t("actionFailed"), detail,
       result.success ? "success" : "error");
+    showOperationResult(result, title);
     showToast(result.success ? t("actionDone") : `${t("actionFailed")}: ${detail}`, !result.success);
+    if (openOutput && (request.kind === "doctor" || request.kind === "self-test" ||
+        request.kind === "logs" || !result.success)) {
+      showPage("diagnostics");
+    }
+    return result;
   } catch (error) {
     addEvent(t("actionFailed"), String(error), "error");
     showToast(`${t("actionFailed")}: ${error}`, true);
+    showOperationResult({ success: false, action: request.kind, output: String(error) }, title);
+    if (openOutput) showPage("diagnostics");
+    return null;
   } finally {
-    state.busy = false;
-    document.querySelectorAll("[data-action]").forEach((button) => { button.disabled = false; });
+    setBusy(false);
     await refreshStatus(false);
+    await refreshProfiles(false);
+    await refreshInstallation();
   }
+}
+
+async function runAction(action) {
+  const request = action === "doctor" ? { kind: "doctor", fix: false } : { kind: action };
+  return runOperation(request, action, action === "doctor");
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
   applyLanguage();
-  $("#language-select").addEventListener("change", (event) => {
+  $("#language-select").addEventListener("change", async (event) => {
     state.lang = event.target.value;
     localStorage.setItem("mazzy-language", state.lang);
     applyLanguage();
+    await runOperation({ kind: "language", language: state.lang }, t("language"), false);
   });
   $("#privacy-button").addEventListener("click", () => {
     state.hideIp = !state.hideIp;
     localStorage.setItem("mazzy-hide-ip", String(state.hideIp));
+    $("#privacy-toggle").checked = state.hideIp;
     if (state.status) renderStatus(state.status);
+  });
+  $("#privacy-toggle").checked = state.hideIp;
+  $("#privacy-toggle").addEventListener("change", (event) => {
+    state.hideIp = event.target.checked;
+    localStorage.setItem("mazzy-hide-ip", String(state.hideIp));
+    if (state.status) renderStatus(state.status);
+  });
+  $("#notifications-toggle").checked = state.notifications;
+  $("#notifications-toggle").addEventListener("change", (event) => {
+    state.notifications = event.target.checked;
+    localStorage.setItem("mazzy-notifications", String(state.notifications));
   });
   $("#refresh-button").addEventListener("click", () => refreshStatus(true));
   $("#hide-button").addEventListener("click", async () => {
     if (invoke) await invoke("hide_main_window");
   });
+  document.querySelectorAll("[data-page]").forEach((button) => {
+    button.addEventListener("click", () => showPage(button.dataset.page));
+  });
   document.querySelectorAll("[data-action]").forEach((button) => {
     button.addEventListener("click", () => runAction(button.dataset.action));
+  });
+  $("#profile-search").addEventListener("input", renderProfiles);
+  $("#protocol-filter").addEventListener("change", renderProfiles);
+  $("#profiles-refresh-button").addEventListener("click", async () => {
+    await runOperation({ kind: "refresh" }, t("profilesRefreshed"), false);
+    await refreshProfiles(true);
+  });
+
+  $("#import-files-button").addEventListener("click", async () => {
+    if (!invoke || state.busy) return;
+    const paths = await invoke("pick_profile_files");
+    if (Array.isArray(paths) && paths.length) {
+      await runOperation({ kind: "import-files", paths, force: false }, t("importFiles"), false);
+    }
+  });
+  $("#scan-folder-button").addEventListener("click", async () => {
+    if (!invoke || state.busy) return;
+    const path = await invoke("pick_profile_folder");
+    if (path) {
+      await runOperation({
+        kind: "import-folder", path, dry_run: true, force: false
+      }, t("scanFolder"), true);
+    }
+  });
+  $("#import-folder-button").addEventListener("click", async () => {
+    if (!invoke || state.busy) return;
+    const path = await invoke("pick_profile_folder");
+    if (path) {
+      await runOperation({
+        kind: "import-folder", path, dry_run: false, force: false
+      }, t("importFolder"), false);
+    }
+  });
+  $("#validate-button").addEventListener("click", () => runOperation({
+    kind: "validate", protocol: $("#test-protocol").value
+  }, t("validateProfiles")));
+  $("#probe-button").addEventListener("click", () => runOperation({
+    kind: "probe", protocol: $("#test-protocol").value, timeout: Math.min(30, operationTimeout())
+  }, t("probeEndpoints")));
+  $("#test-all-button").addEventListener("click", () => {
+    if (window.confirm(t("confirmLiveTest"))) {
+      runOperation({
+        kind: "test-all", protocol: $("#test-protocol").value, timeout: operationTimeout()
+      }, t("testAllProfiles"));
+    }
+  });
+  $("#emergency-button").addEventListener("click", () => {
+    if (window.confirm(t("confirmLiveTest"))) {
+      const selected = $("#test-protocol").value;
+      runOperation({
+        kind: "emergency", protocol: selected === "all" ? null : selected,
+        timeout: operationTimeout()
+      }, t("emergencyMode"));
+    }
+  });
+
+  $("#doctor-button").addEventListener("click", () =>
+    runOperation({ kind: "doctor", fix: false }, t("runDoctor")));
+  $("#diagnose-button").addEventListener("click", () =>
+    runOperation({ kind: "diagnose" }, t("connectionDiagnose")));
+  $("#doctor-fix-button").addEventListener("click", () => {
+    if (window.confirm(t("confirmRepair"))) {
+      runOperation({ kind: "doctor", fix: true }, t("repairSystem"));
+    }
+  });
+  $("#self-test-offline-button").addEventListener("click", () =>
+    runOperation({ kind: "self-test", live: false, timeout: 3 }, t("offlineSelfTest")));
+  $("#self-test-live-button").addEventListener("click", () => {
+    if (window.confirm(t("confirmLiveTest"))) {
+      runOperation({ kind: "self-test", live: true, timeout: 3 }, t("liveSelfTest"));
+    }
+  });
+  $("#logs-button").addEventListener("click", () => {
+    const lines = Math.min(1000, Math.max(20, Number($("#log-lines").value || 200)));
+    runOperation({ kind: "logs", lines }, t("serviceLog"));
+  });
+  $("#clear-output-button").addEventListener("click", () => {
+    state.lastOperation = null;
+    $("#operation-state").textContent = t("outputReady");
+    $("#operation-state").className = "operation-state";
+    $("#operation-title").textContent = t("diagnosticOutput");
+    $("#operation-output").textContent = t("outputPlaceholder");
+  });
+
+  $("#bootstrap-button").addEventListener("click", () => {
+    if (window.confirm(t("confirmRepair"))) {
+      runOperation({ kind: "bootstrap" }, t("installRepair"));
+    }
+  });
+  document.querySelectorAll("[data-service-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const [service, value] = button.dataset.serviceAction.split("-");
+      runOperation({
+        kind: service, enabled: value === "on"
+      }, service === "autostart" ? t("autoConnect") : t("healthMonitor"), false);
+    });
   });
 
   if (tauri?.event?.listen) {
@@ -298,7 +654,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       const detail = payload?.output?.trim().split("\n").slice(-1)[0] || "";
       addEvent(payload?.success ? t("actionDone") : t("actionFailed"), detail,
         payload?.success ? "success" : "error");
+      showOperationResult(payload, payload?.action || t("diagnosticOutput"));
       showToast(payload?.success ? t("actionDone") : `${t("actionFailed")}: ${detail}`, !payload?.success);
+      if (payload?.action === "doctor" || !payload?.success) showPage("diagnostics");
       refreshStatus(false);
     });
   }
@@ -307,6 +665,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     const platform = await invoke("get_platform_info");
     $("#platform-note").textContent = platform?.functional ? "" : t("preview");
   }
-  await refreshStatus(false);
+  await Promise.all([refreshStatus(false), refreshProfiles(false), refreshInstallation()]);
   setInterval(() => refreshStatus(false), 5000);
 });
