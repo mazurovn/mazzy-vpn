@@ -10,6 +10,7 @@ VERSION="1.2.0"
 
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd -- "$(dirname -- "$SELF")" && pwd)"
+API_DIR="${VPNCTL_API_DIR:-}"
 DEFAULT_CONFIG_DIR="/etc/vpnctl/profiles"
 CONFIG_DIR="${VPNCTL_CONFIG_DIR:-}"
 STATE_DIR="${VPNCTL_STATE_DIR:-/var/lib/vpnctl}"
@@ -493,6 +494,35 @@ check_fail() {
     printf '%s[FAIL]%s %s\n' "$C_RED" "$C_RESET" "$*"
 }
 
+api_manifest_path() {
+    local candidate
+    if [[ -n "$API_DIR" ]]; then
+        candidate="$API_DIR/manifest.json"
+        [[ -r "$candidate" ]] || return 1
+        printf '%s\n' "$candidate"
+        return 0
+    fi
+    for candidate in \
+        "$SCRIPT_DIR/api/v1/manifest.json" \
+        "$SCRIPT_DIR/../lib/mazzy-vpn/api/v1/manifest.json"; do
+        if [[ -r "$candidate" ]]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+cmd_api_info() {
+    local manifest
+    [[ $# -eq 1 && "${1:-}" == "--json" ]] ||
+        die "Использование: $CLI_COMMAND api-info --json"
+    manifest="$(api_manifest_path)" ||
+        die "API contract manifest не найден; переустановите $PRODUCT_NAME"
+    command cat -- "$manifest" ||
+        die "Не удалось прочитать API contract manifest"
+}
+
 usage() {
     case "$UI_LANG" in
         en)
@@ -520,6 +550,7 @@ Usage:
   mazzy-vpn import-dir FOLDER [--dry-run] [--force]
   mazzy-vpn init-config-dir [FOLDER]
   mazzy-vpn language [ru|en|de|zh|ja|ko]
+  mazzy-vpn api-info --json
   mazzy-vpn logs [-f] | version
 
 Protocols: amneziawg (awg), wireguard (wg), openvpn (ovpn), l2tp
@@ -552,6 +583,7 @@ Verwendung:
   mazzy-vpn import-dir ORDNER [--dry-run] [--force]
   mazzy-vpn init-config-dir [ORDNER]
   mazzy-vpn language [ru|en|de|zh|ja|ko]
+  mazzy-vpn api-info --json
   mazzy-vpn logs [-f] | version
 
 Protokolle: amneziawg (awg), wireguard (wg), openvpn (ovpn), l2tp
@@ -584,6 +616,7 @@ Mazzy VPN — 安全便捷的 Linux VPN 管理工具
   mazzy-vpn import-dir 文件夹 [--dry-run] [--force]
   mazzy-vpn init-config-dir [文件夹]
   mazzy-vpn language [ru|en|de|zh|ja|ko]
+  mazzy-vpn api-info --json
   mazzy-vpn logs [-f] | version
 
 协议：amneziawg (awg)、wireguard (wg)、openvpn (ovpn)、l2tp
@@ -616,6 +649,7 @@ Mazzy VPN — Linux 向けの安全で使いやすい VPN 管理ツール
   mazzy-vpn import-dir フォルダー [--dry-run] [--force]
   mazzy-vpn init-config-dir [フォルダー]
   mazzy-vpn language [ru|en|de|zh|ja|ko]
+  mazzy-vpn api-info --json
   mazzy-vpn logs [-f] | version
 
 プロトコル: amneziawg (awg)、wireguard (wg)、openvpn (ovpn)、l2tp
@@ -648,6 +682,7 @@ Mazzy VPN — Linux용 안전하고 편리한 VPN 관리 도구
   mazzy-vpn import-dir 폴더 [--dry-run] [--force]
   mazzy-vpn init-config-dir [폴더]
   mazzy-vpn language [ru|en|de|zh|ja|ko]
+  mazzy-vpn api-info --json
   mazzy-vpn logs [-f] | version
 
 프로토콜: amneziawg (awg), wireguard (wg), openvpn (ovpn), l2tp
@@ -689,6 +724,7 @@ Mazzy VPN - быстрое и безопасное управление VPN в L
   mazzy-vpn init-config-dir [ПАПКА] создать структуру для конфигов
   mazzy-vpn remove ПРОТОКОЛ ПРОФИЛЬ удалить профиль
   mazzy-vpn logs [-f]               журнал сервиса
+  mazzy-vpn api-info --json         manifest локального API v1
   mazzy-vpn language [ru|en|de|zh|ja|ko]
                                     показать или сменить язык интерфейса
   mazzy-vpn version
@@ -4172,6 +4208,7 @@ main() {
         version|-V|--version)
             say "$PRODUCT_NAME $VERSION ($CLI_COMMAND; alias: $COMPAT_COMMAND)"
             ;;
+        api-info) cmd_api_info "$@" ;;
         list|ls) cmd_list "$@" ;;
         profiles|profile-list)
             [[ $# -eq 0 || ($# -eq 1 && "${1:-}" == "--json") ]] ||

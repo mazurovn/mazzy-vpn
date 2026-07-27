@@ -846,12 +846,26 @@ stage="$TMP/stage"
    -f "$stage/usr/local/lib/mazzy-vpn/docs/PLATFORM_ROADMAP.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/FEATURE_PARITY.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/capabilities.json" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/API_CONTRACT.en.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/API_CONTRACT.ru.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/PROJECT_STATUS.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.en.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.ru.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/api/v1/manifest.json" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/api/v1/schema.json" &&
    -f "$stage/usr/local/lib/mazzy-vpn/LICENSE" &&
    -f "$stage/usr/local/lib/mazzy-vpn/AUTHORS.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/PRIVACY.md" ]] ||
     fail "six-language and architecture documentation was not staged"
+cmp -s "$ROOT/api/v1/manifest.json" \
+    "$stage/usr/local/lib/mazzy-vpn/api/v1/manifest.json" ||
+    fail "staged API manifest differs from the source contract"
+cmp -s "$ROOT/api/v1/schema.json" \
+    "$stage/usr/local/lib/mazzy-vpn/api/v1/schema.json" ||
+    fail "staged API schema differs from the source contract"
+"$stage/usr/local/bin/mazzy-vpn" api-info --json |
+    cmp -s - "$ROOT/api/v1/manifest.json" ||
+    fail "staged CLI does not expose the installed API manifest"
 [[ -f "$stage/usr/local/share/bash-completion/completions/mazzy-vpn" ]] ||
     fail "Mazzy VPN completion was not staged"
 for protocol_dir in amneziawg wireguard openvpn l2tp; do
@@ -911,6 +925,11 @@ COMP_CWORD=1
 _mazzy_vpn
 printf '%s\n' "${COMPREPLY[@]}" | grep -qx 'dashboard' ||
     fail "Mazzy VPN completion does not include dashboard"
+COMP_WORDS=(mazzy-vpn api-info --)
+COMP_CWORD=2
+_mazzy_vpn
+printf '%s\n' "${COMPREPLY[@]}" | grep -qx -- '--json' ||
+    fail "Mazzy VPN completion does not include api-info --json"
 COMP_WORDS=(mazzy-vpn language j)
 COMP_CWORD=2
 _mazzy_vpn
@@ -938,5 +957,9 @@ ok "Ubuntu without PPA uses pinned userspace fallback"
 python3 "$ROOT/tests/check-capabilities.py" >/dev/null ||
     fail "cross-surface capability registry is inconsistent"
 ok "CLI/TUI/Desktop capability parity and release gates"
+
+python3 "$ROOT/tests/check-api-contract.py" >/dev/null ||
+    fail "versioned local API contract is inconsistent"
+ok "versioned local API contract"
 
 printf '1..%d\n' "$pass"

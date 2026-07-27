@@ -16,6 +16,7 @@ use tauri::{
 
 const STATUS_FILE: &str = "/run/mazzy-vpn/status.json";
 const CLI_PATH: &str = "/usr/local/bin/mazzy-vpn";
+const API_MANIFEST: &str = include_str!("../../../api/v1/manifest.json");
 
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -144,6 +145,16 @@ fn get_status() -> Value {
     read_status()
 }
 
+fn api_manifest() -> Result<Value, String> {
+    serde_json::from_str(API_MANIFEST)
+        .map_err(|error| format!("Embedded API contract is invalid: {error}"))
+}
+
+#[tauri::command]
+fn get_api_info() -> Result<Value, String> {
+    api_manifest()
+}
+
 #[tauri::command]
 async fn run_action(action: VpnAction) -> Result<ActionResult, String> {
     tauri::async_runtime::spawn_blocking(move || execute_action(action))
@@ -211,6 +222,7 @@ fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             get_status,
+            get_api_info,
             run_action,
             backend::get_profiles,
             backend::get_installation_report,
@@ -310,5 +322,20 @@ mod tests {
         assert_eq!(info.desktop_version, env!("CARGO_PKG_VERSION"));
         assert!(info.author.contains("Nik m"));
         assert_eq!(info.license, "AGPL-3.0-or-later");
+    }
+
+    #[test]
+    fn embedded_api_contract_is_frontend_readable() {
+        let manifest = api_manifest().expect("embedded API manifest");
+        assert_eq!(manifest["api_version"], "1.0");
+        assert_eq!(manifest["status"], "foundation");
+        let transports = manifest["transports"]
+            .as_array()
+            .expect("transport registry");
+        let protected = transports
+            .iter()
+            .find(|transport| transport["id"] == "protected-local-service")
+            .expect("protected service transport");
+        assert_eq!(protected["status"], "planned");
     }
 }

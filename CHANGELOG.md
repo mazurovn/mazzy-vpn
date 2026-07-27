@@ -4,6 +4,18 @@ All notable changes to Mazzy VPN are documented here.
 
 ## Unreleased
 
+- Published the language-neutral local API contract `1.0` with frontend-safe
+  request, response and event envelopes, stable operation/error codes and
+  explicit authorization, audit, deadline and rollback metadata.
+- Added unprivileged `mazzy-vpn api-info --json` contract discovery and the
+  equivalent read-only Desktop command.
+- Bundled and installed the API manifest/schema with CLI and Desktop packages.
+- Added a stdlib-only contract validator that prevents operation drift and
+  forbidden keys, credentials, endpoints, configurations or unrestricted paths
+  from entering the frontend schema.
+- Added `versioned-local-api` to the machine-validated capability registry. The
+  shared dispatcher and protected local service remain explicitly incomplete.
+
 ## 1.2.0 / Desktop 0.2.0 — 2026-07-27
 
 - Bumped the shared engine to 1.2.0 and the Desktop Linux preview to 0.2.0.

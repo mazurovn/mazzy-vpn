@@ -12,6 +12,7 @@ endpoint, запускает только один управляемый тун
 Основная команда — `mazzy-vpn`. Совместимые aliases: `vpnctl` и `mazzyvpn`.
 
 [Архитектура и схемы работы](docs/ARCHITECTURE.ru.md) ·
+[контракт локального API v1](docs/API_CONTRACT.ru.md) ·
 [Architecture in English](docs/ARCHITECTURE.en.md)
 
 ## Установка
@@ -130,10 +131,12 @@ Linux-пакеты выпускаются как AppImage, DEB и RPM.
 лицензию AGPL, принципы приватности и правила безопасной работы.
 
 Desktop 0.2 — полноценный центр управления Linux в статусе preview, но ещё не
-финальный самостоятельный Desktop 1.0. Для снятия preview остаются versioned
-local service API, полные настройки режимов/fallback, перевод новых экранов на
-все шесть языков, подписанное обновление/rollback и нативные VPN backends для
-macOS и Windows. Разработка синхронизируется через
+финальный самостоятельный Desktop 1.0. Язык-независимая схема API v1 и
+read-only метаданные контракта уже опубликованы, но защищённый локальный
+service и перевод всех клиентов на единый dispatcher ещё не готовы. Для
+снятия preview также остаются полные настройки режимов/fallback, перевод новых
+экранов на все шесть языков, подписанное обновление/rollback и нативные VPN
+backends для macOS и Windows. Разработка синхронизируется через
 [план Desktop 1.0](docs/DESKTOP_ROADMAP.ru.md) и
 [матрицу паритета](docs/FEATURE_PARITY.md).
 

@@ -1,0 +1,929 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mazurovn/mazzy-vpn/api/v1/schema.json",
+  "title": "Mazzy VPN local API v1 envelopes",
+  "description": "Language-neutral frontend-safe request, response and event contract.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/RequestEnvelope"
+    },
+    {
+      "$ref": "#/$defs/ResponseEnvelope"
+    },
+    {
+      "$ref": "#/$defs/EventEnvelope"
+    }
+  ],
+  "$defs": {
+    "ApiVersion": {
+      "const": "1.0"
+    },
+    "Identifier": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]+$"
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "Protocol": {
+      "enum": [
+        "amneziawg",
+        "wireguard",
+        "openvpn",
+        "l2tp"
+      ]
+    },
+    "Authorization": {
+      "enum": [
+        "none",
+        "system-read",
+        "user-write",
+        "system-mutate"
+      ]
+    },
+    "QueryOperation": {
+      "enum": [
+        "status.get",
+        "profiles.list",
+        "profiles.inspect-import",
+        "tests.validate",
+        "tests.probe",
+        "services.get",
+        "doctor.inspect",
+        "settings.get"
+      ]
+    },
+    "MutationOperation": {
+      "enum": [
+        "profiles.import",
+        "profiles.remove",
+        "profiles.select",
+        "lifecycle.connect",
+        "lifecycle.reconnect",
+        "lifecycle.disconnect",
+        "tests.run",
+        "tests.run-all",
+        "tests.emergency",
+        "services.start-engine",
+        "services.stop-engine",
+        "services.restart-engine",
+        "services.set-autostart",
+        "services.set-monitor",
+        "services.set-recovery",
+        "doctor.apply-fix",
+        "settings.update"
+      ]
+    },
+    "EmptyPayload": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "ProfileReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id"
+      ],
+      "properties": {
+        "profile_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "protocol": {
+          "$ref": "#/$defs/Protocol"
+        }
+      }
+    },
+    "ImportReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "import_token"
+      ],
+      "properties": {
+        "import_token": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "replace_existing": {
+          "type": "boolean"
+        }
+      }
+    },
+    "TestRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "timeout_seconds"
+      ],
+      "properties": {
+        "profile_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "protocol": {
+          "$ref": "#/$defs/Protocol"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 900
+        }
+      }
+    },
+    "ServiceChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "DoctorFixRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fix_id"
+      ],
+      "properties": {
+        "fix_id": {
+          "$ref": "#/$defs/Identifier"
+        }
+      }
+    },
+    "SettingsPatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "language": {
+          "enum": [
+            "ru",
+            "en",
+            "de",
+            "zh",
+            "ja",
+            "ko"
+          ]
+        },
+        "notifications": {
+          "type": "boolean"
+        },
+        "update_channel": {
+          "enum": [
+            "stable",
+            "preview"
+          ]
+        },
+        "fallback_policy": {
+          "enum": [
+            "disabled",
+            "previous-profile",
+            "emergency"
+          ]
+        }
+      },
+      "minProperties": 1
+    },
+    "RequestPayload": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/EmptyPayload"
+        },
+        {
+          "$ref": "#/$defs/ProfileReference"
+        },
+        {
+          "$ref": "#/$defs/ImportReference"
+        },
+        {
+          "$ref": "#/$defs/TestRequest"
+        },
+        {
+          "$ref": "#/$defs/ServiceChange"
+        },
+        {
+          "$ref": "#/$defs/DoctorFixRequest"
+        },
+        {
+          "$ref": "#/$defs/SettingsPatch"
+        }
+      ]
+    },
+    "QueryRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "api_version",
+        "request_id",
+        "operation",
+        "payload"
+      ],
+      "properties": {
+        "api_version": {
+          "$ref": "#/$defs/ApiVersion"
+        },
+        "request_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "operation": {
+          "$ref": "#/$defs/QueryOperation"
+        },
+        "deadline_ms": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 900000
+        },
+        "payload": {
+          "$ref": "#/$defs/RequestPayload"
+        }
+      }
+    },
+    "MutationRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "api_version",
+        "request_id",
+        "operation",
+        "action_id",
+        "authorization",
+        "deadline_ms",
+        "payload"
+      ],
+      "properties": {
+        "api_version": {
+          "$ref": "#/$defs/ApiVersion"
+        },
+        "request_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "operation": {
+          "$ref": "#/$defs/MutationOperation"
+        },
+        "action_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "authorization": {
+          "$ref": "#/$defs/Authorization"
+        },
+        "deadline_ms": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 900000
+        },
+        "payload": {
+          "$ref": "#/$defs/RequestPayload"
+        }
+      }
+    },
+    "RequestEnvelope": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/QueryRequest"
+        },
+        {
+          "$ref": "#/$defs/MutationRequest"
+        }
+      ]
+    },
+    "ConnectionSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "disconnected",
+            "connecting",
+            "connected",
+            "testing",
+            "recovering",
+            "error",
+            "unknown"
+          ]
+        },
+        "protocol": {
+          "$ref": "#/$defs/Protocol"
+        },
+        "profile_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "internet_reachable": {
+          "type": "boolean"
+        },
+        "healthy": {
+          "type": "boolean"
+        }
+      }
+    },
+    "PublicStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "product",
+        "engine_version",
+        "generated_at",
+        "available",
+        "connection"
+      ],
+      "properties": {
+        "product": {
+          "const": "Mazzy VPN"
+        },
+        "engine_version": {
+          "type": "string"
+        },
+        "generated_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "available": {
+          "type": "boolean"
+        },
+        "connection": {
+          "$ref": "#/$defs/ConnectionSummary"
+        }
+      }
+    },
+    "ProfileSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "display_name",
+        "protocol",
+        "selected",
+        "validation"
+      ],
+      "properties": {
+        "profile_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "protocol": {
+          "$ref": "#/$defs/Protocol"
+        },
+        "selected": {
+          "type": "boolean"
+        },
+        "validation": {
+          "enum": [
+            "unknown",
+            "valid",
+            "invalid"
+          ]
+        },
+        "source_kind": {
+          "enum": [
+            "system",
+            "imported",
+            "managed"
+          ]
+        }
+      }
+    },
+    "ProfileCollection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profiles"
+      ],
+      "properties": {
+        "profiles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProfileSummary"
+          }
+        }
+      }
+    },
+    "TestResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "profile_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "protocol": {
+          "$ref": "#/$defs/Protocol"
+        },
+        "status": {
+          "enum": [
+            "passed",
+            "failed",
+            "timed-out",
+            "cancelled",
+            "rolled-back",
+            "rollback-failed"
+          ]
+        },
+        "latency_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "message_key": {
+          "$ref": "#/$defs/Identifier"
+        }
+      }
+    },
+    "ServiceState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "service_id",
+        "state",
+        "enabled"
+      ],
+      "properties": {
+        "service_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "state": {
+          "enum": [
+            "active",
+            "inactive",
+            "failed",
+            "unknown"
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "last_transition_at": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      }
+    },
+    "ServiceCollection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "services"
+      ],
+      "properties": {
+        "services": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ServiceState"
+          }
+        }
+      }
+    },
+    "DoctorFinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "severity",
+        "message_key"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "severity": {
+          "enum": [
+            "ok",
+            "warning",
+            "error"
+          ]
+        },
+        "message_key": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "fix_id": {
+          "$ref": "#/$defs/Identifier"
+        }
+      }
+    },
+    "DoctorReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ok",
+        "warnings",
+        "failures",
+        "findings"
+      ],
+      "properties": {
+        "ok": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warnings": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failures": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DoctorFinding"
+          }
+        }
+      }
+    },
+    "PublicSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "language",
+        "notifications",
+        "update_channel",
+        "fallback_policy"
+      ],
+      "properties": {
+        "language": {
+          "enum": [
+            "ru",
+            "en",
+            "de",
+            "zh",
+            "ja",
+            "ko"
+          ]
+        },
+        "notifications": {
+          "type": "boolean"
+        },
+        "update_channel": {
+          "enum": [
+            "stable",
+            "preview"
+          ]
+        },
+        "fallback_policy": {
+          "enum": [
+            "disabled",
+            "previous-profile",
+            "emergency"
+          ]
+        }
+      }
+    },
+    "RollbackOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "required",
+        "state"
+      ],
+      "properties": {
+        "required": {
+          "type": "boolean"
+        },
+        "state": {
+          "enum": [
+            "not-needed",
+            "pending",
+            "completed",
+            "failed"
+          ]
+        },
+        "message_key": {
+          "$ref": "#/$defs/Identifier"
+        }
+      }
+    },
+    "ActionOutcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_id",
+        "state",
+        "state_changed",
+        "rollback"
+      ],
+      "properties": {
+        "action_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "state": {
+          "enum": [
+            "queued",
+            "running",
+            "succeeded",
+            "failed",
+            "timed-out",
+            "rolled-back",
+            "rollback-failed"
+          ]
+        },
+        "state_changed": {
+          "type": "boolean"
+        },
+        "rollback": {
+          "$ref": "#/$defs/RollbackOutcome"
+        },
+        "message_key": {
+          "$ref": "#/$defs/Identifier"
+        }
+      }
+    },
+    "ErrorCode": {
+      "enum": [
+        "invalid-request",
+        "unsupported-version",
+        "unsupported-operation",
+        "authorization-required",
+        "permission-denied",
+        "not-found",
+        "conflict",
+        "busy",
+        "deadline-exceeded",
+        "backend-unavailable",
+        "validation-failed",
+        "operation-failed",
+        "rollback-failed",
+        "internal-error"
+      ]
+    },
+    "ApiError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message_key",
+        "retryable",
+        "user_action_required"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "message_key": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "user_action_required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ResponseResult": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/PublicStatus"
+        },
+        {
+          "$ref": "#/$defs/ProfileCollection"
+        },
+        {
+          "$ref": "#/$defs/TestResult"
+        },
+        {
+          "$ref": "#/$defs/ServiceCollection"
+        },
+        {
+          "$ref": "#/$defs/DoctorReport"
+        },
+        {
+          "$ref": "#/$defs/PublicSettings"
+        },
+        {
+          "$ref": "#/$defs/ActionOutcome"
+        }
+      ]
+    },
+    "ResponseEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "api_version",
+        "request_id",
+        "status"
+      ],
+      "properties": {
+        "api_version": {
+          "$ref": "#/$defs/ApiVersion"
+        },
+        "request_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "error"
+          ]
+        },
+        "result": {
+          "$ref": "#/$defs/ResponseResult"
+        },
+        "error": {
+          "$ref": "#/$defs/ApiError"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "ok"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "result"
+            ],
+            "not": {
+              "required": [
+                "error"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "error"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "error"
+            ],
+            "not": {
+              "required": [
+                "result"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "ConnectionEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "connection"
+      ],
+      "properties": {
+        "connection": {
+          "$ref": "#/$defs/ConnectionSummary"
+        }
+      }
+    },
+    "ActionEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action"
+      ],
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/ActionOutcome"
+        }
+      }
+    },
+    "ServiceEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "service"
+      ],
+      "properties": {
+        "service": {
+          "$ref": "#/$defs/ServiceState"
+        }
+      }
+    },
+    "DiagnosticEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "finding"
+      ],
+      "properties": {
+        "finding": {
+          "$ref": "#/$defs/DoctorFinding"
+        }
+      }
+    },
+    "AuditEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action_id",
+        "operation",
+        "authorization",
+        "decision",
+        "outcome"
+      ],
+      "properties": {
+        "action_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "operation": {
+          "$ref": "#/$defs/MutationOperation"
+        },
+        "authorization": {
+          "$ref": "#/$defs/Authorization"
+        },
+        "decision": {
+          "enum": [
+            "approved",
+            "denied",
+            "not-required"
+          ]
+        },
+        "outcome": {
+          "enum": [
+            "started",
+            "succeeded",
+            "failed",
+            "timed-out",
+            "rolled-back",
+            "rollback-failed"
+          ]
+        }
+      }
+    },
+    "EventPayload": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ConnectionEvent"
+        },
+        {
+          "$ref": "#/$defs/ActionEvent"
+        },
+        {
+          "$ref": "#/$defs/ServiceEvent"
+        },
+        {
+          "$ref": "#/$defs/DiagnosticEvent"
+        },
+        {
+          "$ref": "#/$defs/AuditEvent"
+        }
+      ]
+    },
+    "EventEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "api_version",
+        "event_id",
+        "sequence",
+        "generated_at",
+        "event_type",
+        "payload"
+      ],
+      "properties": {
+        "api_version": {
+          "$ref": "#/$defs/ApiVersion"
+        },
+        "event_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "generated_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "event_type": {
+          "enum": [
+            "connection.changed",
+            "action.changed",
+            "service.changed",
+            "doctor.finding",
+            "audit.recorded"
+          ]
+        },
+        "action_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "payload": {
+          "$ref": "#/$defs/EventPayload"
+        }
+      }
+    }
+  }
+}
