@@ -122,10 +122,12 @@ jobs:
           tagName: desktop-v__VERSION__
           releaseName: "Mazzy VPN Desktop v__VERSION__ (preview)"
           releaseBody: |
-            Mazzy VPN Desktop is a dashboard and tray companion for the Mazzy VPN CLI.
+            Mazzy VPN Desktop 0.2 is a self-contained Linux control-center preview.
 
-            Linux bundles are functional with an installed Mazzy VPN CLI engine.
-            macOS and Windows bundles are UI previews only until their native VPN backends are implemented.
+            Linux bundles include the compatible Mazzy VPN 1.2 engine installer and public runtime resources; no prior manual CLI installation is required. Dashboard, profile import and selection, validation/probes/transactional tests, complete Doctor/self-test output, bounded logs, service/recovery settings and About/Privacy information are included.
+
+            macOS and Windows bundles remain UI previews only. They do not provide traffic protection until their native Network Extension and Windows Service/Wintun backends pass the platform release gates.
+
             These preview artifacts are unsigned; review the checksums and project documentation before use.
           releaseDraft: true
           prerelease: true

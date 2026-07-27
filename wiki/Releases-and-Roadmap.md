@@ -1,6 +1,6 @@
 # Релизы и roadmap
 
-## 1.2.0 / Desktop 0.2.0 — кандидат на preview-релиз
+## 1.2.0 / Desktop 0.2.0 — preview release line
 
 - Linux control center с Dashboard, Profiles, Diagnostics и Settings;
 - встроенный installer/engine, проверка версий и зависимостей, install/repair;
@@ -15,6 +15,10 @@
 Desktop 0.2 не требует предварительной ручной установки CLI, но остаётся
 preview до versioned service API, полного паритета режимов/локализаций,
 подписанного update/rollback и закрытия platform release gates.
+
+Фактическая публикация определяется наличием tags `v1.2.0` и
+`desktop-v0.2.0` и соответствующих страниц в GitHub Releases. Пока хотя бы
+одного из них нет, release line считается кандидатом.
 
 ## 1.1.0
 
@@ -66,7 +70,7 @@ CLI engine и не является самостоятельным Desktop VPN-�
 
 # Releases and roadmap
 
-Version 1.2.0 / Desktop 0.2.0 is a preview release candidate. It expands the Linux preview
+Version 1.2.0 / Desktop 0.2.0 is the current preview release line. It expands the Linux preview
 into a Dashboard/Profiles/Diagnostics/Settings control center with bundled
 engine bootstrap, version/dependency checks, file/folder import, profile
 actions, validation/probes/transactional tests, complete Doctor/self-test/log
@@ -77,6 +81,10 @@ gates.
 Desktop 0.2 does not require a prior manual CLI installation, but remains a
 preview until the versioned service API, complete mode/localization parity,
 signed update/rollback and platform release gates are complete.
+
+Publication is determined by tags `v1.2.0` and `desktop-v0.2.0` and their
+corresponding GitHub Release pages. Treat the release line as a candidate while
+either one is missing.
 
 Version 1.1.0 adds the sanitized status cache, Tauri Dashboard and tray,
 functional Linux AppImage/DEB/RPM bundles, macOS/Windows UI previews, bilingual

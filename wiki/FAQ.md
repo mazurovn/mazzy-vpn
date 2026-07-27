@@ -15,12 +15,15 @@ Copyright © 2026 Nik m. Код распространяется по GNU AGPL-3
 
 ## Какие версии сейчас рабочие?
 
-- CLI/TUI 1.2: Linux.
-- Desktop 0.2: функциональный Linux preview.
+- Текущая release line: CLI/TUI 1.2.0 для Linux и функциональный Linux Desktop
+  0.2.0 preview, подготовленные в
+  [PR #22](https://github.com/mazurovn/mazzy-vpn/pull/22).
 - Windows и macOS: только UI preview, нативные VPN backend ещё не готовы.
 - Android и iOS: planned native clients; готовых мобильных пакетов пока нет.
 
-Проверяйте [release gates](Releases-and-Roadmap), а не только номер версии.
+Опубликованной считается только версия с tag и страницей в
+[GitHub Releases](https://github.com/mazurovn/mazzy-vpn/releases). Проверяйте
+[release gates](Releases-and-Roadmap), а не только номер версии или changelog.
 
 ## Desktop самодостаточен?
 
@@ -28,6 +31,12 @@ Linux Desktop 0.2 содержит совместимый engine и installer. �
 ручная установка CLI не нужна. Для системного VPN backend и зависимостей
 приложение использует стандартное разрешение ОС и после установки повторяет
 проверку. До закрытия `desktop-linux-1.0` пакет остаётся preview.
+
+## Почему `preview-release` пропущен в обычном PR?
+
+Это ожидаемое условие, а не сбой. Release job запускается только при создании
+tag `desktop-v*`. Обычный push или PR выполняет тесты и собирает временные
+artifacts, но ничего не публикует в Releases.
 
 ## Какие профили поддерживаются?
 
@@ -69,6 +78,16 @@ transactional rollback. Всё равно сохраните важную сет
 версию, протокол, шаги и очищенный вывод. Секреты отправляйте только по процессу
 из `SECURITY.md`.
 
+## Как предложить и выбрать следующую функцию?
+
+Предложения публикуются в
+[Ideas](https://github.com/mazurovn/mazzy-vpn/discussions/categories/ideas), а
+голосования — в
+[Polls](https://github.com/mazurovn/mazzy-vpn/discussions/categories/polls).
+Результат помогает выбрать порядок пользовательских функций. Обязательные
+security, platform и release gates остаются обязательными независимо от числа
+голосов.
+
 ---
 
 <a id="english"></a>
@@ -91,13 +110,16 @@ and preserving authorship.
 
 ## Which versions work today?
 
-- CLI/TUI 1.2: Linux.
-- Desktop 0.2: functional Linux preview.
+- Current release line: CLI/TUI 1.2.0 for Linux and the functional Linux
+  Desktop 0.2.0 preview, prepared in
+  [PR #22](https://github.com/mazurovn/mazzy-vpn/pull/22).
 - Windows and macOS: UI preview only; native VPN backends are not complete.
 - Android and iOS: planned native clients; no working mobile packages yet.
 
-Use the [release gates](Releases-and-Roadmap#english), not a version number
-alone, to determine readiness.
+Only a version with a tag and a
+[GitHub Release](https://github.com/mazurovn/mazzy-vpn/releases) is published.
+Use the [release gates](Releases-and-Roadmap#english), not a version number or
+changelog entry alone, to determine readiness.
 
 ## Is Desktop self-contained?
 
@@ -105,6 +127,12 @@ Linux Desktop 0.2 bundles a compatible engine and installer, so no prior manual
 CLI install is required. System VPN backends and dependencies use standard OS
 authorization and are checked again afterwards. The package remains preview
 until `desktop-linux-1.0` passes.
+
+## Why is `preview-release` skipped on an ordinary PR?
+
+This is an expected condition, not a failure. The release job runs only when a
+`desktop-v*` tag is created. An ordinary push or PR runs tests and builds
+temporary artifacts but publishes nothing to Releases.
 
 ## Which profiles are supported?
 
@@ -144,3 +172,12 @@ logs first. Open an [issue](https://github.com/mazurovn/mazzy-vpn/issues) or a
 [Discussion](https://github.com/mazurovn/mazzy-vpn/discussions) with OS,
 version, protocol, reproduction steps and redacted output. Use the private
 process in `SECURITY.md` for secrets.
+
+## How do I propose and choose the next feature?
+
+Post proposals in
+[Ideas](https://github.com/mazurovn/mazzy-vpn/discussions/categories/ideas) and
+vote in
+[Polls](https://github.com/mazurovn/mazzy-vpn/discussions/categories/polls).
+Results help order user-facing work. Mandatory security, platform and release
+gates remain mandatory regardless of vote count.

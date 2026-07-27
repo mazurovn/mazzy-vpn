@@ -10,16 +10,22 @@ VPN-доступ и не предоставляет серверы: вы исп�
 
 ## Текущий статус
 
-- CLI/TUI 1.2 — Linux.
-- Desktop 0.2 — функциональный Linux preview.
+- Текущая release line — CLI/TUI 1.2 для Linux и функциональный Linux Desktop
+  0.2 preview, подготовленные в
+  [PR #22](https://github.com/mazurovn/mazzy-vpn/pull/22).
 - Windows/macOS — UI preview без production VPN backend.
 - Android/iOS — planned native clients; готовых мобильных пакетов пока нет.
+
+Страница [Releases](https://github.com/mazurovn/mazzy-vpn/releases) — источник
+истины: версия в `main`, changelog или PR ещё не выпущена без соответствующего
+tag и страницы Release.
 
 ## Куда писать
 
 - **Announcements** — релизы и важные изменения от сопровождающего.
 - **Q&A** — вопросы об установке, профилях, Doctor и диагностике.
 - **Ideas** — предложения функций и улучшений UX.
+- **Polls** — голосования за порядок будущих пользовательских функций.
 - **General** — архитектура, документация, локализация и сообщество.
 - **Show and tell** — безопасные примеры интеграций без приватных конфигураций.
 
@@ -36,6 +42,9 @@ VPN-доступ и не предоставляет серверы: вы исп�
 4. Отделяйте подтверждённое поведение от предположений.
 5. Уважайте участников и соблюдайте законы своей юрисдикции.
 6. Не выдавайте изменённые сборки за официальные релизы и сохраняйте авторство.
+
+Результат голосования помогает расставить приоритеты, но не отменяет
+обязательные security, platform и release gates.
 
 Начните с [Wiki](https://github.com/mazurovn/mazzy-vpn/wiki),
 [FAQ](https://github.com/mazurovn/mazzy-vpn/wiki/FAQ) и

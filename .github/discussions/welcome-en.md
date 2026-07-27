@@ -10,16 +10,22 @@ License: GNU AGPL-3.0-or-later.
 
 ## Current status
 
-- CLI/TUI 1.2 — Linux.
-- Desktop 0.2 — functional Linux preview.
+- The current release line is CLI/TUI 1.2 for Linux and the functional Linux
+  Desktop 0.2 preview, prepared in
+  [PR #22](https://github.com/mazurovn/mazzy-vpn/pull/22).
 - Windows/macOS — UI preview without a production VPN backend.
 - Android/iOS — planned native clients; no working mobile packages yet.
+
+The [Releases](https://github.com/mazurovn/mazzy-vpn/releases) page is the
+source of truth: a version in `main`, the changelog or a PR is not released
+without its corresponding tag and Release page.
 
 ## Where to post
 
 - **Announcements** — releases and important maintainer updates.
 - **Q&A** — installation, profiles, Doctor and troubleshooting questions.
 - **Ideas** — feature proposals and UX improvements.
+- **Polls** — votes that help order future user-facing features.
 - **General** — architecture, documentation, localization and community.
 - **Show and tell** — safe integrations without private configurations.
 
@@ -36,6 +42,9 @@ vulnerability or secret; follow
 4. Separate confirmed behavior from assumptions.
 5. Be respectful and follow the laws in your jurisdiction.
 6. Do not present modified builds as official releases; preserve authorship.
+
+Poll results inform priority but cannot waive mandatory security, platform or
+release gates.
 
 Start with the [Wiki](https://github.com/mazurovn/mazzy-vpn/wiki),
 [FAQ](https://github.com/mazurovn/mazzy-vpn/wiki/FAQ) and
