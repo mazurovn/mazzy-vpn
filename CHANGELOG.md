@@ -7,6 +7,10 @@ All notable changes to Mazzy VPN are documented here.
 - Bumped the shared engine to 1.2.0 and the Desktop Linux preview to 0.2.0.
 - Expanded Desktop from a dashboard companion into a Linux control center with
   Dashboard, Profiles, Diagnostics and Settings screens.
+- Added an About screen with product/engine versions, author, license, privacy,
+  operational rules and security guidance, plus a bilingual privacy document.
+- Added Android/iOS capability gates and a bilingual cross-platform roadmap for
+  CLI/TUI, Linux, Windows, macOS and native mobile releases.
 - Bundled the engine installer and required public runtime resources in Desktop
   packages, with installed/bundled version and dependency readiness checks plus
   an explicitly authorized install, update and repair workflow.

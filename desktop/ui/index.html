@@ -57,6 +57,8 @@
                 data-i18n="navDiagnostics">Диагностика</button>
         <button class="section-tab" type="button" data-page="settings"
                 data-i18n="navSettings">Настройки</button>
+        <button class="section-tab" type="button" data-page="about"
+                data-i18n="navAbout">О программе</button>
       </nav>
 
       <div class="page-panel active" data-page-panel="dashboard">
@@ -402,6 +404,68 @@
               <label class="switch"><input id="privacy-toggle" type="checkbox">
                 <span></span></label>
             </div>
+          </article>
+        </section>
+      </div>
+
+      <div class="page-panel" data-page-panel="about">
+        <section class="page-heading glass about-heading">
+          <div>
+            <p class="eyebrow" data-i18n="aboutProduct">О ПРОДУКТЕ</p>
+            <h2>Mazzy VPN</h2>
+            <p class="muted" data-i18n="aboutLead">
+              Безопасный центр управления VPN с общим CLI/TUI/Desktop engine.
+            </p>
+          </div>
+          <span class="health-badge ok" id="about-version">Desktop —</span>
+        </section>
+
+        <section class="about-grid">
+          <article class="glass card about-card">
+            <p class="eyebrow" data-i18n="aboutPurpose">НАЗНАЧЕНИЕ</p>
+            <h3 data-i18n="aboutPurposeTitle">Один безопасный контур управления</h3>
+            <p data-i18n="aboutPurposeText">
+              Mazzy VPN управляет AmneziaWG, WireGuard, OpenVPN и L2TP/IPsec,
+              проверяет профили и восстанавливает предыдущее соединение после тестов.
+            </p>
+            <dl class="about-meta">
+              <div><dt>Desktop</dt><dd id="about-desktop-version">—</dd></div>
+              <div><dt>Engine</dt><dd id="about-engine-version">—</dd></div>
+              <div><dt data-i18n="aboutPlatform">Платформа</dt><dd id="about-platform">—</dd></div>
+            </dl>
+          </article>
+
+          <article class="glass card about-card">
+            <p class="eyebrow" data-i18n="aboutAuthor">АВТОР И СОПРОВОЖДЕНИЕ</p>
+            <h3 id="about-author">Nik m (@mazurovn)</h3>
+            <p data-i18n="aboutAuthorText">
+              Проект создан и сопровождается Nik m. Оригинальное авторство и
+              уведомления об авторских правах должны сохраняться.
+            </p>
+            <dl class="about-meta">
+              <div><dt data-i18n="aboutCopyright">Авторское право</dt>
+                <dd>Copyright © 2026 Nik m</dd></div>
+              <div><dt>GitHub</dt><dd>github.com/mazurovn/mazzy-vpn</dd></div>
+              <div><dt data-i18n="aboutLicense">Лицензия</dt>
+                <dd id="about-license">AGPL-3.0-or-later</dd></div>
+            </dl>
+          </article>
+
+          <article class="glass card about-card about-rules">
+            <p class="eyebrow" data-i18n="aboutRules">ПРАВИЛА И БЕЗОПАСНОСТЬ</p>
+            <h3 data-i18n="aboutRulesTitle">Прозрачная работа без скрытых действий</h3>
+            <ul class="rule-list">
+              <li data-i18n="aboutRuleLocal">Профили, ключи и журналы остаются на устройстве; телеметрии нет.</li>
+              <li data-i18n="aboutRulePrivilege">Системные изменения выполняются только после стандартного разрешения ОС.</li>
+              <li data-i18n="aboutRuleTests">Live-тесты временно меняют маршруты и обязаны завершаться rollback.</li>
+              <li data-i18n="aboutRuleLicense">Изменённые сетевые версии должны соблюдать условия AGPL и предоставлять исходный код.</li>
+              <li data-i18n="aboutRuleIdentity">Нельзя выдавать изменённую сборку за оригинальный релиз или искажать авторство.</li>
+              <li data-i18n="aboutRuleProvider">Пользователь отвечает за законность VPN-провайдера и импортируемых конфигураций.</li>
+            </ul>
+            <p class="about-docs">
+              <span data-i18n="aboutDocuments">Документы:</span>
+              LICENSE · SECURITY.md · PRIVACY · Desktop roadmap
+            </p>
           </article>
         </section>
       </div>

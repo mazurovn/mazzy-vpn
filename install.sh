@@ -160,10 +160,12 @@ write_installed_language() {
 validate_source_tree() {
     local required
     for required in mazzy-vpn install.sh LICENSE AUTHORS.md CHANGELOG.md SECURITY.md \
+        PRIVACY.md \
         README.md README.ru.md README.en.md README.de.md README.zh.md \
         README.ja.md README.ko.md docs/ARCHITECTURE.en.md \
         docs/ARCHITECTURE.ru.md docs/DESKTOP.en.md docs/DESKTOP.ru.md \
         docs/DESKTOP_ROADMAP.en.md docs/DESKTOP_ROADMAP.ru.md \
+        docs/PLATFORM_ROADMAP.en.md docs/PLATFORM_ROADMAP.ru.md \
         docs/FEATURE_PARITY.md docs/capabilities.json \
         desktop/README.md \
         tests/run.sh tests/audit-public.sh tests/check-capabilities.py \
@@ -248,8 +250,11 @@ post_install_checks() {
        -r /usr/local/lib/mazzy-vpn/docs/capabilities.json &&
        -r /usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.en.md &&
        -r /usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.ru.md &&
+       -r /usr/local/lib/mazzy-vpn/docs/PLATFORM_ROADMAP.en.md &&
+       -r /usr/local/lib/mazzy-vpn/docs/PLATFORM_ROADMAP.ru.md &&
        -r /usr/local/lib/mazzy-vpn/LICENSE &&
        -r /usr/local/lib/mazzy-vpn/AUTHORS.md &&
+       -r /usr/local/lib/mazzy-vpn/PRIVACY.md &&
        -r /usr/local/share/bash-completion/completions/mazzy-vpn ]] ||
         {
             echo "Не установлены документация или Bash completion." >&2
@@ -498,6 +503,10 @@ install_files() {
         "$docs_dir/DESKTOP_ROADMAP.en.md"
     run install -m 644 "$SCRIPT_DIR/docs/DESKTOP_ROADMAP.ru.md" \
         "$docs_dir/DESKTOP_ROADMAP.ru.md"
+    run install -m 644 "$SCRIPT_DIR/docs/PLATFORM_ROADMAP.en.md" \
+        "$docs_dir/PLATFORM_ROADMAP.en.md"
+    run install -m 644 "$SCRIPT_DIR/docs/PLATFORM_ROADMAP.ru.md" \
+        "$docs_dir/PLATFORM_ROADMAP.ru.md"
     run install -m 644 "$SCRIPT_DIR/docs/FEATURE_PARITY.md" \
         "$docs_dir/FEATURE_PARITY.md"
     run install -m 644 "$SCRIPT_DIR/docs/capabilities.json" \
@@ -506,6 +515,7 @@ install_files() {
     run install -m 644 "$SCRIPT_DIR/AUTHORS.md" "$lib_dir/AUTHORS.md"
     run install -m 644 "$SCRIPT_DIR/CHANGELOG.md" "$lib_dir/CHANGELOG.md"
     run install -m 644 "$SCRIPT_DIR/SECURITY.md" "$lib_dir/SECURITY.md"
+    run install -m 644 "$SCRIPT_DIR/PRIVACY.md" "$lib_dir/PRIVACY.md"
     run install -m 644 "$SCRIPT_DIR/systemd/vpnctl.service" "$unit_dir/vpnctl.service"
     run install -m 644 "$SCRIPT_DIR/systemd/vpnctl-health.service" "$unit_dir/vpnctl-health.service"
     run install -m 644 "$SCRIPT_DIR/systemd/vpnctl-health.timer" "$unit_dir/vpnctl-health.timer"
@@ -533,9 +543,11 @@ install_files() {
             "$docs_dir/DESKTOP.en.md" "$docs_dir/DESKTOP.ru.md" \
             "$docs_dir/DESKTOP_ROADMAP.en.md" \
             "$docs_dir/DESKTOP_ROADMAP.ru.md" \
+            "$docs_dir/PLATFORM_ROADMAP.en.md" \
+            "$docs_dir/PLATFORM_ROADMAP.ru.md" \
             "$docs_dir/FEATURE_PARITY.md" "$docs_dir/capabilities.json" \
             "$lib_dir/LICENSE" "$lib_dir/AUTHORS.md" "$lib_dir/CHANGELOG.md" \
-            "$lib_dir/SECURITY.md" \
+            "$lib_dir/SECURITY.md" "$lib_dir/PRIVACY.md" \
             "$unit_dir/vpnctl.service" \
             "$unit_dir/vpnctl-health.service" "$unit_dir/vpnctl-health.timer" \
             "$unit_dir/vpnctl-test-recovery.service" "$completion_dir/mazzy-vpn"

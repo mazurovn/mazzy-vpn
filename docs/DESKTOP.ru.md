@@ -35,12 +35,13 @@ service/Wintun backends, подпись кода и platform-specific тесты
 1. **Обзор** — туннель, интернет, IP, handshake, health, recovery и tray.
 2. **Профили** — безопасный импорт файлов/папок, поиск, протоколы, выбор
    локации/default-профиля, удаление и точечный live-test.
-3. **Тестирование** — validate, DNS/ping probe, `test-all` и emergency с
-   timeout/rollback.
-4. **Диагностика** — полный, не обрезанный результат Doctor/self-test и
-   ограниченный журнал systemd.
-5. **Настройки** — версии bundled/installed engine, состояние зависимостей,
+3. **Диагностика** — validate, DNS/ping probe, транзакционные тесты, `test-all`,
+   emergency recovery, полный результат Doctor/self-test и ограниченный журнал
+   systemd.
+4. **Настройки** — версии bundled/installed engine, состояние зависимостей,
    Install/Update/Repair, autostart, health monitor, privacy и уведомления.
+5. **О программе** — версии Desktop/engine/platform, автор, лицензия,
+   приватность и правила безопасной работы.
 
 ## Что показывает Dashboard
 

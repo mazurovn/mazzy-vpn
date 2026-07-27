@@ -123,7 +123,8 @@ const translations = {
 };
 
 Object.assign(translations.ru, {
-  navDashboard: "Обзор", navProfiles: "Профили", navDiagnostics: "Диагностика", navSettings: "Настройки",
+  navDashboard: "Обзор", navProfiles: "Профили", navDiagnostics: "Диагностика",
+  navSettings: "Настройки", navAbout: "О программе",
   profileLibrary: "БИБЛИОТЕКА ПРОФИЛЕЙ", profileManagement: "Профили и локации",
   profileManagementHint: "Импорт, проверка, выбор и безопасный тест конфигураций.",
   importFiles: "Загрузить файлы", scanFolder: "Проверить папку", importFolder: "Импортировать папку",
@@ -157,11 +158,26 @@ Object.assign(translations.ru, {
   installed: "УСТАНОВЛЕНО", missing: "НЕТ", updateRequired: "НУЖНО ОБНОВИТЬ",
   ready: "ГОТОВО", confirmLiveTest: "Живой тест временно изменит VPN-маршрут и затем выполнит rollback. Продолжить?",
   confirmRemove: "Удалить выбранный VPN-профиль?", confirmRepair: "Запустить системную установку и исправление зависимостей?",
-  profilesRefreshed: "Список профилей обновлён", noSelection: "Ничего не выбрано"
+  profilesRefreshed: "Список профилей обновлён", noSelection: "Ничего не выбрано",
+  aboutProduct: "О ПРОДУКТЕ", aboutLead: "Безопасный центр управления VPN с общим CLI/TUI/Desktop engine.",
+  aboutPurpose: "НАЗНАЧЕНИЕ", aboutPurposeTitle: "Один безопасный контур управления",
+  aboutPurposeText: "Mazzy VPN управляет AmneziaWG, WireGuard, OpenVPN и L2TP/IPsec, проверяет профили и восстанавливает предыдущее соединение после тестов.",
+  aboutPlatform: "Платформа", aboutAuthor: "АВТОР И СОПРОВОЖДЕНИЕ",
+  aboutAuthorText: "Проект создан и сопровождается Nik m. Оригинальное авторство и уведомления об авторских правах должны сохраняться.",
+  aboutCopyright: "Авторское право", aboutLicense: "Лицензия",
+  aboutRules: "ПРАВИЛА И БЕЗОПАСНОСТЬ", aboutRulesTitle: "Прозрачная работа без скрытых действий",
+  aboutRuleLocal: "Профили, ключи и журналы остаются на устройстве; телеметрии нет.",
+  aboutRulePrivilege: "Системные изменения выполняются только после стандартного разрешения ОС.",
+  aboutRuleTests: "Live-тесты временно меняют маршруты и обязаны завершаться rollback.",
+  aboutRuleLicense: "Изменённые сетевые версии должны соблюдать условия AGPL и предоставлять исходный код.",
+  aboutRuleIdentity: "Нельзя выдавать изменённую сборку за оригинальный релиз или искажать авторство.",
+  aboutRuleProvider: "Пользователь отвечает за законность VPN-провайдера и импортируемых конфигураций.",
+  aboutDocuments: "Документы:"
 });
 
 Object.assign(translations.en, {
-  navDashboard: "Dashboard", navProfiles: "Profiles", navDiagnostics: "Diagnostics", navSettings: "Settings",
+  navDashboard: "Dashboard", navProfiles: "Profiles", navDiagnostics: "Diagnostics",
+  navSettings: "Settings", navAbout: "About",
   profileLibrary: "PROFILE LIBRARY", profileManagement: "Profiles and locations",
   profileManagementHint: "Import, validate, select and safely test configurations.",
   importFiles: "Import files", scanFolder: "Scan folder", importFolder: "Import folder",
@@ -193,7 +209,21 @@ Object.assign(translations.en, {
   installed: "INSTALLED", missing: "MISSING", updateRequired: "UPDATE REQUIRED", ready: "READY",
   confirmLiveTest: "The live test temporarily changes VPN routes and then rolls back. Continue?",
   confirmRemove: "Remove the selected VPN profile?", confirmRepair: "Run system installation and dependency repair?",
-  profilesRefreshed: "Profile list refreshed", noSelection: "Nothing selected"
+  profilesRefreshed: "Profile list refreshed", noSelection: "Nothing selected",
+  aboutProduct: "ABOUT THE PRODUCT", aboutLead: "A safe VPN control center with one CLI/TUI/Desktop engine.",
+  aboutPurpose: "PURPOSE", aboutPurposeTitle: "One validated control plane",
+  aboutPurposeText: "Mazzy VPN manages AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec, validates profiles and restores the previous connection after tests.",
+  aboutPlatform: "Platform", aboutAuthor: "AUTHOR AND MAINTAINER",
+  aboutAuthorText: "The project was created and is maintained by Nik m. Original authorship and copyright notices must be preserved.",
+  aboutCopyright: "Copyright", aboutLicense: "License",
+  aboutRules: "RULES AND SECURITY", aboutRulesTitle: "Transparent operation without hidden actions",
+  aboutRuleLocal: "Profiles, keys and logs stay on the device; no telemetry is collected.",
+  aboutRulePrivilege: "System changes run only after the operating system's standard authorization.",
+  aboutRuleTests: "Live tests temporarily change routes and must finish with rollback.",
+  aboutRuleLicense: "Modified network versions must follow the AGPL and provide corresponding source code.",
+  aboutRuleIdentity: "A modified build must not be presented as an original release or misrepresent authorship.",
+  aboutRuleProvider: "The user is responsible for the legality of their VPN provider and imported configurations.",
+  aboutDocuments: "Documents:"
 });
 
 const $ = (selector) => document.querySelector(selector);
@@ -205,6 +235,7 @@ const state = {
   status: null,
   profiles: [],
   installation: null,
+  platformInfo: null,
   lastSignature: "",
   events: [],
   busy: false,
@@ -227,6 +258,7 @@ function applyLanguage() {
   if (state.status) renderStatus(state.status);
   renderProfiles();
   if (state.installation) renderInstallation(state.installation);
+  renderAbout();
 }
 
 function setMiniState(selector, enabled, activeLabel = "enabled", inactiveLabel = "disabled") {
@@ -454,6 +486,21 @@ function renderInstallation(report) {
     row.append(label, status);
     return row;
   }));
+  renderAbout();
+}
+
+function renderAbout() {
+  const info = state.platformInfo;
+  if (!$("#about-version")) return;
+  const desktopVersion = info?.desktop_version || "—";
+  const engineVersion = state.installation?.installed_version ||
+    state.installation?.bundled_version || state.status?.version || "—";
+  $("#about-version").textContent = `Desktop ${desktopVersion}`;
+  $("#about-desktop-version").textContent = desktopVersion;
+  $("#about-engine-version").textContent = engineVersion;
+  $("#about-platform").textContent = info?.os ? info.os.toUpperCase() : "—";
+  $("#about-author").textContent = info?.author || "Nik m (@mazurovn)";
+  $("#about-license").textContent = info?.license || "AGPL-3.0-or-later";
 }
 
 async function refreshInstallation() {
@@ -663,7 +710,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   if (invoke) {
     const platform = await invoke("get_platform_info");
+    state.platformInfo = platform;
     $("#platform-note").textContent = platform?.functional ? "" : t("preview");
+    renderAbout();
   }
   await Promise.all([refreshStatus(false), refreshProfiles(false), refreshInstallation()]);
   setInterval(() => refreshStatus(false), 5000);

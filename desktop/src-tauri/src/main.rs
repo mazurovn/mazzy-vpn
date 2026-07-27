@@ -40,6 +40,9 @@ struct PlatformInfo {
     os: &'static str,
     functional: bool,
     note: &'static str,
+    desktop_version: &'static str,
+    author: &'static str,
+    license: &'static str,
 }
 
 fn action_spec(action: VpnAction) -> (&'static str, &'static [&'static str]) {
@@ -193,6 +196,9 @@ fn platform_info() -> PlatformInfo {
     PlatformInfo {
         os: std::env::consts::OS,
         functional: cfg!(target_os = "linux"),
+        desktop_version: env!("CARGO_PKG_VERSION"),
+        author: env!("CARGO_PKG_AUTHORS"),
+        license: env!("CARGO_PKG_LICENSE"),
         note: if cfg!(target_os = "linux") {
             "Linux CLI backend is available"
         } else {
@@ -296,5 +302,13 @@ mod tests {
         let status = fallback_status("test");
         assert_eq!(status["available"], false);
         assert_eq!(status["schema_version"], 1);
+    }
+
+    #[test]
+    fn about_metadata_comes_from_the_package_manifest() {
+        let info = platform_info();
+        assert_eq!(info.desktop_version, env!("CARGO_PKG_VERSION"));
+        assert!(info.author.contains("Nik m"));
+        assert_eq!(info.license, "AGPL-3.0-or-later");
     }
 }

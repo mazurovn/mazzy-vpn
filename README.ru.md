@@ -117,14 +117,17 @@ ping серверов, emergency recovery, doctor, автозапуск и жу�
 
 ![Mazzy VPN Desktop Dashboard](docs/images/dashboard-connected-preview.png)
 
-Tauri Desktop 0.2 для Linux содержит экраны Dashboard, Profiles, Diagnostics и
-Settings, а также системный tray. В пакет включены совместимый engine и
+Tauri Desktop 0.2 для Linux содержит экраны Dashboard, Profiles, Diagnostics,
+Settings и «О программе», а также системный tray. В пакет включены совместимый engine и
 installer: клиент сам проверяет версии и зависимости и после явного разрешения
 может установить, обновить или восстановить engine. Доступны импорт файлов и
 папок, поиск и выбор профиля, подключение, validation, probe, транзакционные
 тесты, Doctor с исправлениями, self-test, ограниченный журнал, autostart и
 управление recovery monitor. Предварительно устанавливать CLI вручную не нужно.
 Linux-пакеты выпускаются как AppImage, DEB и RPM.
+
+«О программе» показывает версии Desktop/engine/platform, автора, copyright,
+лицензию AGPL, принципы приватности и правила безопасной работы.
 
 Desktop 0.2 — полноценный центр управления Linux в статусе preview, но ещё не
 финальный самостоятельный Desktop 1.0. Для снятия preview остаются versioned

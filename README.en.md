@@ -136,14 +136,17 @@ Change the language immediately with menu item 16 or
 
 ![Mazzy VPN Desktop Dashboard](docs/images/dashboard-connected-preview.png)
 
-The Tauri Desktop 0.2 Linux preview provides Dashboard, Profiles, Diagnostics
-and Settings screens plus a system tray. It bundles the compatible engine and
+The Tauri Desktop 0.2 Linux preview provides Dashboard, Profiles, Diagnostics,
+Settings and About screens plus a system tray. It bundles the compatible engine and
 installer, checks installed versions and dependencies, and can install, update
 or repair the engine after explicit authorization. Profile file/folder import,
 search, connect, validation, probes, transactional tests, Doctor fixes,
 self-tests, bounded logs, autostart and recovery-monitor controls are available
 without first installing the CLI by hand. Packages are available as AppImage,
 DEB and RPM.
+
+About records the Desktop/engine/platform versions, author, copyright, AGPL
+license, privacy principles and safe-operation rules.
 
 Desktop 0.2 is a functional Linux control-center preview, not the final
 standalone Desktop 1.0 product. The remaining gates include a shared versioned

@@ -33,6 +33,7 @@ live tests and restores the previously working connection after a failure.
 [Standalone Desktop 1.0 plan](docs/DESKTOP_ROADMAP.en.md) ·
 [План самостоятельного Desktop 1.0](docs/DESKTOP_ROADMAP.ru.md) ·
 [Capability parity](docs/FEATURE_PARITY.md) ·
+[Cross-platform roadmap](docs/PLATFORM_ROADMAP.en.md) ·
 [Project Wiki](https://github.com/mazurovn/mazzy-vpn/wiki)
 
 ![Mazzy VPN Desktop Dashboard](docs/images/dashboard-connected-preview.png)
@@ -51,6 +52,7 @@ live tests and restores the previously working connection after a failure.
 - Interface and installer languages: Russian, English, German, Chinese,
   Japanese and Korean.
 - [Security policy](SECURITY.md)
+- [Privacy principles](PRIVACY.md)
 - [Contributing](CONTRIBUTING.md)
 
 Quick start:

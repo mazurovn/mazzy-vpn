@@ -842,12 +842,15 @@ stage="$TMP/stage"
    -f "$stage/usr/local/lib/mazzy-vpn/docs/DESKTOP.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/DESKTOP_ROADMAP.en.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/DESKTOP_ROADMAP.ru.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/PLATFORM_ROADMAP.en.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/PLATFORM_ROADMAP.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/FEATURE_PARITY.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/capabilities.json" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.en.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/LICENSE" &&
-   -f "$stage/usr/local/lib/mazzy-vpn/AUTHORS.md" ]] ||
+   -f "$stage/usr/local/lib/mazzy-vpn/AUTHORS.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/PRIVACY.md" ]] ||
     fail "six-language and architecture documentation was not staged"
 [[ -f "$stage/usr/local/share/bash-completion/completions/mazzy-vpn" ]] ||
     fail "Mazzy VPN completion was not staged"

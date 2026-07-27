@@ -36,12 +36,13 @@ backends, code signing and platform-specific integration tests.
 1. **Dashboard** — tunnel, Internet, IP, handshake, health, recovery and tray.
 2. **Profiles** — safe file/folder import, search, protocol and location/default
    selection, removal and per-profile live tests.
-3. **Testing** — validation, DNS/ping probes, `test-all` and emergency mode with
-   timeout and rollback.
-4. **Diagnostics** — complete retained Doctor/self-test output and bounded
+3. **Diagnostics** — validation, DNS/ping probes, transactional tests,
+   `test-all`, emergency recovery, complete Doctor/self-test output and bounded
    systemd logs.
-5. **Settings** — bundled/installed versions, dependency readiness,
+4. **Settings** — bundled/installed versions, dependency readiness,
    install/update/repair, autostart, monitor, privacy and notifications.
+5. **About** — Desktop/engine/platform versions, author, license, privacy and
+   safe-operation rules.
 
 ## Dashboard data
 
