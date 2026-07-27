@@ -15,6 +15,15 @@ All notable changes to Mazzy VPN are documented here.
   from entering the frontend schema.
 - Added `versioned-local-api` to the machine-validated capability registry. The
   shared dispatcher and protected local service remain explicitly incomplete.
+- Added a systemd socket-activated Linux API transport protected by
+  `0660 root:mazzy-vpn`, with `status.get`, `profiles.list` and lifecycle
+  connect/reconnect/disconnect handlers.
+- Added opaque profile IDs, persistent idempotent action records, serialized
+  mutations, bounded deadlines, sanitized root-only audit and desired-state
+  rollback after lifecycle failures.
+- Routed Desktop lifecycle operations through the protected API when installed,
+  retaining the typed `pkexec` adapter as a compatibility fallback and for
+  operation domains not migrated yet.
 
 ## 1.2.0 / Desktop 0.2.0 — 2026-07-27
 

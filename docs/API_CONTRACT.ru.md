@@ -13,8 +13,10 @@
 `cli-json-adapter` явно имеет статус `partial`: существующие безопасные JSON
 status/profile outputs доступны, но клиенты ещё не отправляют все v1 request
 envelopes через единый dispatcher. Метаданные контракта реализованы.
-Защищённый локальный service пока явно имеет статус `planned`: публикация схемы
-не означает, что финальный daemon уже реализован.
+Socket-activated Linux transport имеет статус `partial`: он принимает
+`status.get`, `profiles.list` и три мутации `lifecycle.*`. Остальные операции и
+не-Linux transports пока `planned`, поэтому полный кроссплатформенный daemon ещё
+не заявлен готовым.
 
 ## Совместимость
 
@@ -35,7 +37,9 @@ envelopes через единый dispatcher. Метаданные контра�
 - объявленную rollback-семантику и итог rollback.
 
 Повторная доставка того же action ID не должна выполнять изменение дважды.
-Это правило idempotency будет контролировать защищённый локальный service.
+Linux lifecycle dispatcher уже контролирует это правило через постоянный
+root-readable action journal. Остальные mutation domains должны принять то же
+правило при переносе за service boundary.
 
 ## Безопасность frontend
 
@@ -53,3 +57,10 @@ finding codes, severity, локализуемые message keys и отдельн
 `mazzy-vpn api-info --json` без root возвращает manifest установленного
 контракта. Desktop предоставляет те же метаданные webview через read-only
 Tauri-команду. CI проверяет синхронность CLI, manifest и schema.
+
+В Linux `mazzy-vpn-api.socket` публикует `/run/mazzy-vpn/api-v1.sock` с
+правами `0660 root:mazzy-vpn`. Одно соединение принимает один JSON request,
+завершённый переводом строки, и возвращает один response. Мутации
+сериализованы, ограничены deadline и сохраняются по action ID в root-only
+state. Audit содержит только operation ID и результат — без payload и raw
+backend output.

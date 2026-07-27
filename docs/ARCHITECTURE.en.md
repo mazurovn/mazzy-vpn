@@ -35,6 +35,7 @@ flowchart TB
         ActionLock["Exclusive action lock"]
         State["Desired state and selected default<br/>/var/lib/vpnctl/active"]
         Runtime["Ephemeral counters, locks and test data<br/>/run/vpnctl"]
+        ActionJournal["Idempotency and sanitized audit<br/>/var/lib/vpnctl/api-*"]
         StatusCache["Sanitized status without keys or endpoint<br/>/run/mazzy-vpn/status.json"]
         ProfileCache["Sanitized profile catalog without paths/endpoints<br/>/run/mazzy-vpn/profiles.json"]
     end
@@ -44,6 +45,7 @@ flowchart TB
         Timer["vpnctl-health.timer<br/>about every 20 seconds"]
         Health["vpnctl-health.service"]
         BootRecovery["vpnctl-test-recovery.service"]
+        ApiSocket["mazzy-vpn-api.socket<br/>0660 root:mazzy-vpn"]
     end
 
     subgraph Data["Private local data"]
@@ -70,7 +72,10 @@ flowchart TB
     Tray --> Desktop
     Desktop --> StatusCache
     Desktop --> ProfileCache
-    Desktop -. fixed allowlist through pkexec .-> Entry
+    Desktop --> ApiSocket
+    ApiSocket --> Entry
+    ApiSocket --> ActionJournal
+    Desktop -. remaining fixed operations through pkexec .-> Entry
     Commands --> Validation
     Validation --> Profiles
     Commands --> ActionLock
@@ -119,6 +124,7 @@ sequenceDiagram
     actor User
     participant UI as Tauri control center / tray
     participant Cache as /run/mazzy-vpn/status.json
+    participant API as protected Unix socket
     participant PK as pkexec
     participant CLI as mazzy-vpn
     participant SD as systemd
@@ -127,21 +133,28 @@ sequenceDiagram
         UI->>Cache: read sanitized status
         Cache-->>UI: JSON schema v1
     end
-    User->>UI: import / connect / test / Doctor / settings
-    UI->>PK: typed fixed operation, no shell
-    PK->>CLI: execute an allowed action
+    User->>UI: connect / reconnect / disconnect
+    UI->>API: API v1 envelope + action ID + deadline
+    API->>CLI: validated lifecycle action
     CLI->>SD: change the managed tunnel
     CLI->>Cache: atomically refresh status
+    API-->>UI: sanitized outcome + rollback state
     Cache-->>UI: new state
+    User->>UI: import / test / Doctor / remaining settings
+    UI->>PK: interim typed fixed operation, no shell
+    PK->>CLI: execute an allowed action
 ```
 
 Closing the window hides it to the tray. The Linux package bundles a compatible
 engine installer and can bootstrap or repair missing dependencies after
 explicit authorization, so a separate manual CLI installation is not required.
-The 0.2 adapter still starts the validated engine per operation; a persistent
-versioned local service API remains a Desktop 1.0 gate. macOS and Windows builds
-are UI previews and are not advertised as working VPN clients until native
-backends exist.
+The incremental Linux API now handles sanitized status/profile queries and the
+connect, reconnect and disconnect lifecycle. It persists action IDs, enforces
+deadlines and reports rollback outcomes. Import, tests, Doctor and service
+settings still use the typed `pkexec` adapter until their API handlers are
+implemented. Completing that migration remains a Desktop 1.0 gate. macOS and
+Windows builds are UI previews and are not advertised as working VPN clients
+until native backends exist.
 
 ## Normal connection flow
 
@@ -268,8 +281,11 @@ previous connection has been restored successfully.
 | `/etc/vpnctl/locale` | Installed interface language | Persistent, non-secret |
 | `/var/lib/vpnctl/active` | Selected protocol, default profile, `DESIRED`, test metadata | Persistent, root-owned |
 | `/var/lib/vpnctl/test.*` | Transaction and rollback snapshot | Exists only while recovery may be needed |
+| `/var/lib/vpnctl/api-actions` | Completed/running action IDs and sanitized outcomes | Persistent, directory `700`, records `600` |
+| `/var/lib/vpnctl/api-audit.jsonl` | Operation, authorization decision and outcome | Persistent, mode `600`; no payload/backend output |
 | `/run/vpnctl` | Locks, health counter and sanitized runtime log | Cleared at boot |
 | `/run/mazzy-vpn/status.json` | Sanitized Desktop status | Recreated by root, readable without keys or endpoint |
+| `/run/mazzy-vpn/api-v1.sock` | Versioned local API transport | Socket `0660 root:mazzy-vpn`, systemd activated |
 | `vpnctl.service` | Owns the active managed tunnel | Long-running, systemd supervised |
 | `vpnctl-health.timer` | Schedules independent health checks | Enabled for unattended recovery |
 | `vpnctl-test-recovery.service` | Repairs interrupted tests after boot | Boot-time oneshot |

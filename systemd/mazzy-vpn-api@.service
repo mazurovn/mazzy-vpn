@@ -1,0 +1,24 @@
+# Copyright (C) 2026 Nik m (@mazurovn)
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[Unit]
+Description=Mazzy VPN local API request
+Documentation=file:/usr/local/lib/mazzy-vpn/docs/API_CONTRACT.en.md
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/mazzy-vpn _api-dispatch
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+User=root
+Group=root
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectKernelTunables=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes

@@ -16,8 +16,8 @@ independent clients of the same engine and state.
 > **0.2 status:** the Linux control center now covers the main workflow, but it
 > remains preview until the [release gates](FEATURE_PARITY.md) pass. Desktop
 > 1.0 still needs complete fallback-policy UI, six-language coverage for every
-> new screen, and a versioned daemon API replacing the interim typed `pkexec`
-> adapter.
+> new screen, and migration of the remaining typed `pkexec` operations to the
+> partial versioned local API.
 
 ## Platform status
 
@@ -80,10 +80,12 @@ key, username, password or configuration directive.
 | Logs | `mazzy-vpn logs --lines N` |
 
 The GUI never constructs a shell string. Its Rust backend accepts an enum and
-maps it to a fixed argument array. On Linux, state-changing actions go through
-system `pkexec`, so the OS may show its standard administrator prompt. Closing
-the window hides the application to the tray; use **Quit Mazzy VPN** for a full
-exit.
+maps it to a fixed request or argument array. Connect, reconnect and disconnect
+use `/run/mazzy-vpn/api-v1.sock` when the installed engine provides it. The
+socket is restricted to `root:mazzy-vpn`, and outcomes contain no raw backend
+output. Remaining state-changing actions use system `pkexec`, so the OS may
+show its standard administrator prompt. Closing the window hides the
+application to the tray; use **Quit Mazzy VPN** for a full exit.
 
 On Linux, open the tray context menu with the right mouse button. Plain-click
 events depend on the desktop environment.
@@ -93,7 +95,9 @@ events depend on the desktop environment.
 Install one Desktop bundle from the Releases page. Then open
 **Settings → Install / update / repair**. The bundled validated installer
 detects the OS, preserves existing profiles, installs missing dependencies and
-the systemd engine/recovery units, then runs an offline self-test.
+the systemd engine/recovery/API units, then runs an offline self-test. The
+installer adds the invoking desktop user to the `mazzy-vpn` group; a new login
+session may be required before the protected socket is available to Desktop.
 
 DEB:
 
@@ -140,9 +144,12 @@ mazzy-vpn status --json
 systemctl status vpnctl-health.timer
 ```
 
-If an action fails, check `pkexec` and then the CLI:
+If an action fails, check the API socket, group membership, `pkexec` fallback
+and then the CLI:
 
 ```bash
+systemctl status mazzy-vpn-api.socket
+id -nG | tr ' ' '\n' | grep -x mazzy-vpn
 command -v pkexec
 sudo mazzy-vpn doctor
 sudo mazzy-vpn diagnose

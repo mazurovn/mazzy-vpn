@@ -17,7 +17,7 @@ jobs:
           persist-credentials: false
 
       - name: Install checks
-        run: sudo apt-get update && sudo apt-get install -y shellcheck openvpn gitleaks
+        run: sudo apt-get update && sudo apt-get install -y shellcheck openvpn gitleaks jq
 
       - name: Bash syntax
         run: |
@@ -56,6 +56,8 @@ jobs:
           sudo install -m 755 \
             "$stage/usr/local/bin/mazzy-vpn" /usr/local/bin/mazzy-vpn
           systemd-analyze verify \
+            "$stage/etc/systemd/system/mazzy-vpn-api.socket" \
+            "$stage/etc/systemd/system/mazzy-vpn-api@.service" \
             "$stage/etc/systemd/system/vpnctl.service" \
             "$stage/etc/systemd/system/vpnctl-health.service" \
             "$stage/etc/systemd/system/vpnctl-health.timer" \

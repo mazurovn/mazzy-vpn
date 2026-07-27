@@ -16,7 +16,8 @@ Linux-пакет 0.2 включает совместимый engine installer: �
 > **Статус 0.2:** Linux control-center уже покрывает основной рабочий цикл, но
 > остаётся preview до закрытия [release gates](FEATURE_PARITY.md). Для Desktop
 > 1.0 ещё нужны полный fallback-policy UI, перевод новых экранов на все шесть
-> языков и versioned daemon API вместо промежуточного typed `pkexec`-адаптера.
+> языков и перенос оставшихся typed `pkexec`-операций в частично реализованный
+> versioned local API.
 
 ## Статус платформ
 
@@ -80,10 +81,13 @@ service/Wintun backends, подпись кода и platform-specific тесты
 | Logs | `mazzy-vpn logs --lines N` |
 
 GUI не строит shell-строку. Rust backend принимает enum и сопоставляет его
-фиксированному массиву аргументов. На Linux изменяющие состояние действия
-проходят через системный `pkexec`, поэтому ОС может показать стандартный запрос
-прав администратора. Закрытие окна скрывает приложение в tray; окончательный
-выход выполняется пунктом **Quit Mazzy VPN**.
+фиксированному request или массиву аргументов. Connect, reconnect и disconnect
+используют `/run/mazzy-vpn/api-v1.sock`, если он предоставлен установленным
+engine. Socket ограничен `root:mazzy-vpn`, а outcomes не содержат raw backend
+output. Остальные изменяющие состояние действия проходят через системный
+`pkexec`, поэтому ОС может показать стандартный запрос прав администратора.
+Закрытие окна скрывает приложение в tray; окончательный выход выполняется
+пунктом **Quit Mazzy VPN**.
 
 На Linux контекстное меню tray открывается правой кнопкой. Поддержка события
 обычного клика зависит от desktop environment.
@@ -93,7 +97,9 @@ GUI не строит shell-строку. Rust backend принимает enum �
 Установите один Desktop-пакет со страницы Releases. Затем откройте
 **Настройки → Установить / обновить / исправить**. Встроенный проверенный
 installer определит ОС, сохранит существующие профили, установит недостающие
-зависимости, systemd engine/recovery и выполнит offline self-test.
+зависимости, systemd engine/recovery/API units и выполнит offline self-test.
+Пользователь, запустивший установку, добавляется в группу `mazzy-vpn`; для
+доступа Desktop к защищённому socket может понадобиться повторный вход в сеанс.
 
 DEB:
 
@@ -140,9 +146,12 @@ mazzy-vpn status --json
 systemctl status vpnctl-health.timer
 ```
 
-Если действие не выполнилось, проверьте `pkexec`, затем CLI:
+Если действие не выполнилось, проверьте API socket, членство в группе,
+`pkexec` fallback, затем CLI:
 
 ```bash
+systemctl status mazzy-vpn-api.socket
+id -nG | tr ' ' '\n' | grep -x mazzy-vpn
 command -v pkexec
 sudo mazzy-vpn doctor
 sudo mazzy-vpn diagnose

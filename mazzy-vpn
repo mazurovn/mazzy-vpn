@@ -15,10 +15,15 @@ DEFAULT_CONFIG_DIR="/etc/vpnctl/profiles"
 CONFIG_DIR="${VPNCTL_CONFIG_DIR:-}"
 STATE_DIR="${VPNCTL_STATE_DIR:-/var/lib/vpnctl}"
 STATE_FILE="$STATE_DIR/active"
+API_ACTION_DIR="${VPNCTL_API_ACTION_DIR:-$STATE_DIR/api-actions}"
+API_AUDIT_FILE="${VPNCTL_API_AUDIT_FILE:-$STATE_DIR/api-audit.jsonl}"
+API_MAX_REQUEST_BYTES="${VPNCTL_API_MAX_REQUEST_BYTES:-65536}"
 RUN_DIR="${VPNCTL_RUN_DIR:-/run/vpnctl}"
 SERVICE_NAME="${VPNCTL_SERVICE_NAME:-vpnctl.service}"
 HEALTH_TIMER="${VPNCTL_HEALTH_TIMER:-vpnctl-health.timer}"
 TEST_RECOVERY_SERVICE="${VPNCTL_TEST_RECOVERY_SERVICE:-vpnctl-test-recovery.service}"
+API_SOCKET_UNIT="${VPNCTL_API_SOCKET_UNIT:-mazzy-vpn-api.socket}"
+API_SERVICE_UNIT="${VPNCTL_API_SERVICE_UNIT:-mazzy-vpn-api@.service}"
 HEALTH_FAILURE_LIMIT="${VPNCTL_HEALTH_FAILURE_LIMIT:-2}"
 HEALTH_PROBE_TIMEOUT="${VPNCTL_HEALTH_PROBE_TIMEOUT:-4}"
 HEALTH_FALLBACK_PROBE_URL="${VPNCTL_HEALTH_FALLBACK_PROBE_URL:-https://1.1.1.1/cdn-cgi/trace}"
@@ -1327,7 +1332,7 @@ cmd_list() {
 }
 
 profiles_json_live() {
-    local protocol file first=true selected_protocol="" selected_file=""
+    local protocol file first=true selected_protocol="" selected_file="" opaque_id
     selected_from_state || true
     selected_protocol="${SELECTED_PROTOCOL:-}"
     selected_file="${SELECTED_PROFILE:-}"
@@ -1338,8 +1343,10 @@ profiles_json_live() {
         for file in "${PROFILES[@]}"; do
             [[ "$first" == true ]] || printf ','
             first=false
+            opaque_id="$(profile_opaque_id "$protocol" "$file")"
             printf '{'
-            printf '"protocol":"%s","protocol_name":"%s",' \
+            printf '"profile_id":"%s","protocol":"%s","protocol_name":"%s",' \
+                "$(json_escape "$opaque_id")" \
                 "$(json_escape "$protocol")" \
                 "$(json_escape "$(protocol_title "$protocol")")"
             printf '"file_name":"%s","name":"%s","location":"%s",' \
@@ -1356,6 +1363,16 @@ profiles_json_live() {
         done
     done
     printf ']}\n'
+}
+
+profile_opaque_id() {
+    local protocol="$1" file="$2" digest
+    digest="$(
+        printf '%s\000%s' "$protocol" "$(basename -- "$file")" |
+            sha256sum |
+            awk '{ print substr($1, 1, 32) }'
+    )"
+    printf 'profile-%s\n' "$digest"
 }
 
 write_profiles_cache() {
@@ -2794,6 +2811,568 @@ cmd_status_json() {
     return 1
 }
 
+api_valid_identifier() {
+    [[ "${1:-}" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$ ]]
+}
+
+api_server_request_id() {
+    printf 'server-%s-%s\n' "$(date +%s)" "$$"
+}
+
+api_error_response() {
+    local request_id="$1" code="$2" message_key="$3"
+    local retryable="${4:-false}" user_action_required="${5:-false}"
+    jq -cn \
+        --arg request_id "$request_id" \
+        --arg code "$code" \
+        --arg message_key "$message_key" \
+        --argjson retryable "$retryable" \
+        --argjson user_action_required "$user_action_required" \
+        '{
+            api_version: "1.0",
+            request_id: $request_id,
+            status: "error",
+            error: {
+                code: $code,
+                message_key: $message_key,
+                retryable: $retryable,
+                user_action_required: $user_action_required
+            }
+        }'
+}
+
+api_ok_response() {
+    local request_id="$1" result="$2"
+    jq -cn \
+        --arg request_id "$request_id" \
+        --argjson result "$result" \
+        '{
+            api_version: "1.0",
+            request_id: $request_id,
+            status: "ok",
+            result: $result
+        }'
+}
+
+api_status_result() {
+    write_dashboard_cache >/dev/null 2>&1 || true
+    [[ -r "$DASHBOARD_FILE" && -r "$PROFILES_FILE" ]] || return 1
+    jq -c --arg engine_version "$VERSION" --slurpfile catalog "$PROFILES_FILE" '
+        . as $status
+        | (
+            ($catalog[0].profiles // [])
+            | map(select(
+                .protocol == ($status.protocol // "")
+                and .name == ($status.profile // "")
+            ))
+            | first // null
+        ) as $profile
+        | {
+            product: "Mazzy VPN",
+            engine_version: ($status.version // $engine_version),
+            generated_at: (
+                if (($status.generated_at // 0) | type) == "number"
+                    and ($status.generated_at // 0) > 0
+                then ($status.generated_at | todateiso8601)
+                else "1970-01-01T00:00:00Z"
+                end
+            ),
+            available: ($status.available // true),
+            connection: (
+                {
+                    state: (
+                        if ($status.mode // "") == "test" then "testing"
+                        elif ($status.tunnel_active // false) then "connected"
+                        elif ($status.desired // "") == "down" then "disconnected"
+                        elif ($status.service_state // "") == "active" then "connecting"
+                        elif ($status.desired // "") == "up" then "error"
+                        else "unknown"
+                        end
+                    ),
+                    internet_reachable: (($status.internet // "") == "up"),
+                    healthy: ($status.healthy // false)
+                }
+                + (
+                    if $profile == null then {}
+                    else {
+                        protocol: $profile.protocol,
+                        profile_id: $profile.profile_id
+                    }
+                    end
+                )
+            )
+        }
+    ' "$DASHBOARD_FILE"
+}
+
+api_profiles_result() {
+    write_profiles_cache >/dev/null 2>&1 || true
+    [[ -r "$PROFILES_FILE" ]] || return 1
+    jq -c '{
+        profiles: [
+            (.profiles // [])[] |
+            {
+                profile_id: .profile_id,
+                display_name: .name,
+                protocol: .protocol,
+                selected: (.selected // false),
+                validation: "unknown",
+                source_kind: "system"
+            }
+        ]
+    }' "$PROFILES_FILE"
+}
+
+api_write_record() {
+    local target="$1" content="$2" tmp
+    mkdir -p -- "$API_ACTION_DIR" || return 1
+    chmod 700 -- "$API_ACTION_DIR" || return 1
+    tmp="$(mktemp "$API_ACTION_DIR/.record.XXXXXX")" || return 1
+    umask 077
+    printf '%s\n' "$content" >"$tmp" || {
+        rm -f -- "$tmp"
+        return 1
+    }
+    chmod 600 -- "$tmp" || {
+        rm -f -- "$tmp"
+        return 1
+    }
+    mv -f -- "$tmp" "$target"
+}
+
+api_audit_event() {
+    local action_id="$1" operation="$2" decision="$3" outcome="$4"
+    local event event_id sequence generated_at
+    mkdir -p -- "$STATE_DIR" || return 1
+    chmod 700 -- "$STATE_DIR" || return 1
+    generated_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    event_id="$(
+        printf '%s\000%s\000%s\000%s\000%s' \
+            "$action_id" "$operation" "$outcome" "$generated_at" "$$" |
+            sha256sum |
+            awk '{ print "audit-" substr($1, 1, 32) }'
+    )"
+    sequence="$(( $(date +%s) * 100000 + ($$ % 1000) * 100 + RANDOM % 100 ))"
+    event="$(
+        jq -cn \
+            --arg generated_at "$generated_at" \
+            --arg event_id "$event_id" \
+            --argjson sequence "$sequence" \
+            --arg action_id "$action_id" \
+            --arg operation "$operation" \
+            --arg decision "$decision" \
+            --arg outcome "$outcome" \
+            '{
+                api_version: "1.0",
+                event_id: $event_id,
+                sequence: $sequence,
+                generated_at: $generated_at,
+                event_type: "audit.recorded",
+                action_id: $action_id,
+                payload: {
+                    action_id: $action_id,
+                    operation: $operation,
+                    authorization: "system-mutate",
+                    decision: $decision,
+                    outcome: $outcome
+                }
+            }'
+    )" || return 1
+    umask 077
+    printf '%s\n' "$event" >>"$API_AUDIT_FILE"
+    chmod 600 -- "$API_AUDIT_FILE"
+}
+
+api_action_outcome() {
+    local action_id="$1" state="$2" state_changed="$3"
+    local rollback_required="$4" rollback_state="$5" message_key="$6"
+    jq -cn \
+        --arg action_id "$action_id" \
+        --arg state "$state" \
+        --argjson state_changed "$state_changed" \
+        --argjson rollback_required "$rollback_required" \
+        --arg rollback_state "$rollback_state" \
+        --arg message_key "$message_key" \
+        '{
+            action_id: $action_id,
+            state: $state,
+            state_changed: $state_changed,
+            rollback: {
+                required: $rollback_required,
+                state: $rollback_state
+            },
+            message_key: $message_key
+        }'
+}
+
+api_find_profile() {
+    local profile_id="$1" field="$2"
+    write_profiles_cache >/dev/null 2>&1 || true
+    [[ -r "$PROFILES_FILE" ]] || return 1
+    jq -er --arg profile_id "$profile_id" --arg field "$field" '
+        (.profiles // [])
+        | map(select(.profile_id == $profile_id))
+        | first
+        | .[$field]
+        | select(type == "string" and length > 0)
+    ' "$PROFILES_FILE"
+}
+
+api_restore_state() {
+    local snapshot="$1" existed="$2" previous_desired="" tmp
+    if [[ "$existed" == true ]]; then
+        mkdir -p -- "$STATE_DIR" || return 1
+        chmod 700 -- "$STATE_DIR" || return 1
+        tmp="$STATE_DIR/.active.api-rollback.$$"
+        install -m 600 "$snapshot" "$tmp" || return 1
+        mv -f -- "$tmp" "$STATE_FILE" || return 1
+        previous_desired="$(
+            awk -F= '$1 == "DESIRED" { print substr($0, index($0, "=") + 1); exit }' \
+                "$snapshot"
+        )"
+    else
+        rm -f -- "$STATE_FILE" || return 1
+    fi
+
+    health_reset
+    systemctl_quiet reset-failed "$SERVICE_NAME" || true
+    if [[ "$previous_desired" == "up" ]]; then
+        systemctl start "$SERVICE_NAME" || return 1
+    else
+        systemctl_quiet stop "$SERVICE_NAME" || true
+    fi
+    write_dashboard_cache >/dev/null 2>&1 || true
+}
+
+api_store_completed_action() {
+    local record_file="$1" fingerprint="$2" operation="$3" outcome="$4" record
+    record="$(
+        jq -cn \
+            --arg fingerprint "$fingerprint" \
+            --arg operation "$operation" \
+            --arg completed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --argjson outcome "$outcome" \
+            '{
+                fingerprint: $fingerprint,
+                state: "completed",
+                operation: $operation,
+                completed_at: $completed_at,
+                outcome: $outcome
+            }'
+    )" || return 1
+    api_write_record "$record_file" "$record"
+}
+
+api_run_lifecycle_action() {
+    local request="$1" request_id="$2" operation="$3" action_id="$4"
+    local deadline_ms="$5" fingerprint record_file stored_fingerprint stored_state
+    local outcome profile_id protocol profile snapshot snapshot_existed=false
+    local duration output_file rc rollback_state audit_outcome running_record
+
+    mkdir -p -- "$API_ACTION_DIR" || {
+        api_error_response "$request_id" internal-error api.journal.unavailable true true
+        return
+    }
+    chmod 700 -- "$API_ACTION_DIR" || {
+        api_error_response "$request_id" internal-error api.journal.unavailable true true
+        return
+    }
+    exec 7>"$API_ACTION_DIR/.mutation.lock"
+    if ! flock -n 7; then
+        api_error_response "$request_id" busy api.action.busy true false
+        return
+    fi
+
+    fingerprint="$(
+        jq -cS 'del(.request_id)' <<<"$request" |
+            sha256sum |
+            awk '{ print $1 }'
+    )"
+    record_file="$API_ACTION_DIR/$action_id.json"
+    if [[ -r "$record_file" ]]; then
+        stored_fingerprint="$(jq -r '.fingerprint // ""' "$record_file" 2>/dev/null || true)"
+        stored_state="$(jq -r '.state // ""' "$record_file" 2>/dev/null || true)"
+        if [[ "$stored_fingerprint" != "$fingerprint" ]]; then
+            api_error_response "$request_id" conflict api.action.id-conflict false true
+            return
+        fi
+        if [[ "$stored_state" == "completed" ]]; then
+            outcome="$(jq -c '.outcome' "$record_file" 2>/dev/null)" || {
+                api_error_response "$request_id" internal-error api.journal.corrupt false true
+                return
+            }
+            api_ok_response "$request_id" "$outcome"
+            return
+        fi
+        api_error_response "$request_id" busy api.action.interrupted false true
+        return
+    fi
+
+    case "$operation" in
+        lifecycle.connect)
+            if ! jq -e '
+                ((.payload | keys) - ["profile_id", "protocol"] | length) == 0
+            ' <<<"$request" >/dev/null 2>&1; then
+                api_error_response "$request_id" invalid-request api.profile.payload-invalid false true
+                return
+            fi
+            profile_id="$(jq -er '.payload.profile_id' <<<"$request" 2>/dev/null)" || {
+                api_error_response "$request_id" invalid-request api.profile.id-required false true
+                return
+            }
+            api_valid_identifier "$profile_id" || {
+                api_error_response "$request_id" invalid-request api.profile.id-invalid false true
+                return
+            }
+            protocol="$(api_find_profile "$profile_id" protocol 2>/dev/null)" || {
+                api_error_response "$request_id" not-found api.profile.not-found false true
+                return
+            }
+            if ! jq -e --arg protocol "$protocol" '
+                (.payload.protocol // $protocol) == $protocol
+            ' <<<"$request" >/dev/null 2>&1; then
+                api_error_response "$request_id" conflict api.profile.protocol-conflict false true
+                return
+            fi
+            profile="$(api_find_profile "$profile_id" file_name 2>/dev/null)" || {
+                api_error_response "$request_id" not-found api.profile.not-found false true
+                return
+            }
+            ;;
+        lifecycle.reconnect|lifecycle.disconnect)
+            if ! jq -e '.payload == {}' <<<"$request" >/dev/null 2>&1; then
+                api_error_response "$request_id" invalid-request api.payload.must-be-empty false true
+                return
+            fi
+            ;;
+        *)
+            api_error_response "$request_id" unsupported-operation api.operation.unsupported false true
+            return
+            ;;
+    esac
+
+    running_record="$(
+        jq -cn \
+            --arg fingerprint "$fingerprint" \
+            --arg operation "$operation" \
+            --arg started_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+                fingerprint: $fingerprint,
+                state: "running",
+                operation: $operation,
+                started_at: $started_at
+            }'
+    )"
+    api_write_record "$record_file" "$running_record" || {
+        api_error_response "$request_id" internal-error api.journal.unavailable true true
+        return
+    }
+    api_audit_event "$action_id" "$operation" approved started || true
+
+    snapshot="$API_ACTION_DIR/.snapshot.$action_id.$$"
+    if [[ -r "$STATE_FILE" ]]; then
+        install -m 600 "$STATE_FILE" "$snapshot" || {
+            rm -f -- "$record_file"
+            api_error_response "$request_id" internal-error api.snapshot.failed true true
+            return
+        }
+        snapshot_existed=true
+    else
+        : >"$snapshot"
+        chmod 600 -- "$snapshot"
+    fi
+    output_file="$API_ACTION_DIR/.output.$action_id.$$"
+    duration=$(((deadline_ms + 999) / 1000))
+    ((duration > 0)) || duration=1
+
+    case "$operation" in
+        lifecycle.connect)
+            timeout --foreground --kill-after=5s "${duration}s" \
+                "$SELF" connect "$protocol" "$profile" >"$output_file" 2>&1
+            rc=$?
+            ;;
+        lifecycle.reconnect)
+            timeout --foreground --kill-after=5s "${duration}s" \
+                "$SELF" reconnect >"$output_file" 2>&1
+            rc=$?
+            ;;
+        lifecycle.disconnect)
+            timeout --foreground --kill-after=5s "${duration}s" \
+                "$SELF" disconnect >"$output_file" 2>&1
+            rc=$?
+            ;;
+    esac
+    rm -f -- "$output_file"
+
+    if ((rc == 0)); then
+        write_dashboard_cache >/dev/null 2>&1 || true
+        outcome="$(api_action_outcome \
+            "$action_id" succeeded true false not-needed api.action.succeeded)"
+        audit_outcome=succeeded
+    else
+        if api_restore_state "$snapshot" "$snapshot_existed"; then
+            rollback_state=completed
+            if ((rc == 124 || rc == 137)); then
+                outcome="$(api_action_outcome \
+                    "$action_id" timed-out true true "$rollback_state" \
+                    api.action.deadline-exceeded)"
+                audit_outcome=timed-out
+            else
+                outcome="$(api_action_outcome \
+                    "$action_id" rolled-back true true "$rollback_state" \
+                    api.action.rolled-back)"
+                audit_outcome=rolled-back
+            fi
+        else
+            outcome="$(api_action_outcome \
+                "$action_id" rollback-failed true true failed \
+                api.action.rollback-failed)"
+            audit_outcome=rollback-failed
+        fi
+    fi
+    rm -f -- "$snapshot"
+
+    api_store_completed_action "$record_file" "$fingerprint" "$operation" "$outcome" || {
+        api_error_response "$request_id" internal-error api.journal.unavailable true true
+        return
+    }
+    api_audit_event "$action_id" "$operation" approved "$audit_outcome" || true
+    api_ok_response "$request_id" "$outcome"
+}
+
+api_dispatch() {
+    local request="" request_id operation result action_id authorization deadline_ms
+    local allowed_keys
+    ((EUID == 0)) || [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]] || {
+        api_error_response "$(api_server_request_id)" permission-denied \
+            api.transport.root-required false true
+        return
+    }
+    for command in jq sha256sum flock timeout install; do
+        command -v "$command" >/dev/null 2>&1 || {
+            api_error_response "$(api_server_request_id)" backend-unavailable \
+                api.runtime.missing-dependency false true
+            return
+        }
+    done
+    [[ "$API_MAX_REQUEST_BYTES" =~ ^[1-9][0-9]*$ ]] || API_MAX_REQUEST_BYTES=65536
+    if ! IFS= read -r -t 5 request; then
+        api_error_response "$(api_server_request_id)" invalid-request \
+            api.request.missing false false
+        return
+    fi
+    if ((${#request} == 0 || ${#request} > API_MAX_REQUEST_BYTES)); then
+        api_error_response "$(api_server_request_id)" invalid-request \
+            api.request.size false false
+        return
+    fi
+    if ! jq -e 'type == "object"' <<<"$request" >/dev/null 2>&1; then
+        api_error_response "$(api_server_request_id)" invalid-request \
+            api.request.invalid-json false false
+        return
+    fi
+    allowed_keys='[
+        "action_id", "api_version", "authorization", "deadline_ms",
+        "operation", "payload", "request_id"
+    ]'
+    if ! jq -e --argjson allowed "$allowed_keys" '
+        ((keys - $allowed) | length) == 0
+        and has("api_version")
+        and has("request_id")
+        and has("operation")
+        and has("payload")
+        and (.api_version | type == "string")
+        and (.request_id | type == "string")
+        and (.operation | type == "string")
+        and (.payload | type == "object")
+    ' <<<"$request" >/dev/null 2>&1; then
+        api_error_response "$(api_server_request_id)" invalid-request \
+            api.request.shape false false
+        return
+    fi
+
+    request_id="$(jq -r '.request_id // ""' <<<"$request")"
+    if ! api_valid_identifier "$request_id"; then
+        api_error_response "$(api_server_request_id)" invalid-request \
+            api.request.id-invalid false false
+        return
+    fi
+    if [[ "$(jq -r '.api_version // ""' <<<"$request")" != "1.0" ]]; then
+        api_error_response "$request_id" unsupported-version api.version.unsupported false true
+        return
+    fi
+    operation="$(jq -r '.operation // ""' <<<"$request")"
+    case "$operation" in
+        status.get|profiles.list)
+            if jq -e 'has("action_id") or has("authorization")' \
+                <<<"$request" >/dev/null 2>&1; then
+                api_error_response "$request_id" invalid-request \
+                    api.query.mutation-fields false false
+                return
+            fi
+            if ! jq -e '
+                .payload == {}
+                and (
+                    (has("deadline_ms") | not)
+                    or (
+                        (.deadline_ms | type == "number")
+                        and ((.deadline_ms | floor) == .deadline_ms)
+                        and .deadline_ms >= 100
+                        and .deadline_ms <= 900000
+                    )
+                )
+            ' <<<"$request" >/dev/null 2>&1; then
+                api_error_response "$request_id" invalid-request \
+                    api.query.payload-invalid false false
+                return
+            fi
+            if [[ "$operation" == status.get ]]; then
+                result="$(api_status_result)" || {
+                    api_error_response "$request_id" backend-unavailable \
+                        api.status.unavailable true false
+                    return
+                }
+            else
+                result="$(api_profiles_result)" || {
+                    api_error_response "$request_id" backend-unavailable \
+                        api.profiles.unavailable true false
+                    return
+                }
+            fi
+            api_ok_response "$request_id" "$result"
+            ;;
+        lifecycle.connect|lifecycle.reconnect|lifecycle.disconnect)
+            if ! jq -e '
+                (.action_id | type == "string")
+                and (.authorization | type == "string")
+                and (.deadline_ms | type == "number")
+                and ((.deadline_ms | floor) == .deadline_ms)
+            ' <<<"$request" >/dev/null 2>&1; then
+                api_error_response "$request_id" invalid-request \
+                    api.mutation.requirements false true
+                return
+            fi
+            action_id="$(jq -r '.action_id // ""' <<<"$request")"
+            authorization="$(jq -r '.authorization // ""' <<<"$request")"
+            deadline_ms="$(jq -r '.deadline_ms // ""' <<<"$request")"
+            if ! api_valid_identifier "$action_id" ||
+               [[ "$authorization" != system-mutate ]] ||
+               [[ ! "$deadline_ms" =~ ^[0-9]+$ ]] ||
+               ((deadline_ms < 100 || deadline_ms > 900000)); then
+                api_error_response "$request_id" invalid-request \
+                    api.mutation.requirements false true
+                return
+            fi
+            api_run_lifecycle_action \
+                "$request" "$request_id" "$operation" "$action_id" "$deadline_ms"
+            ;;
+        *)
+            api_error_response "$request_id" unsupported-operation \
+                api.operation.unsupported false true
+            ;;
+    esac
+}
+
 check_command() {
     local command="$1" label="${2:-$1}"
     if command -v "$command" >/dev/null 2>&1; then
@@ -2894,6 +3473,8 @@ doctor_dependency_checks() {
     check_command curl
     check_command timeout
     check_command flock
+    check_command jq "JSON API runtime (jq)"
+    check_command sha256sum "opaque profile IDs (sha256sum)"
     check_command getent "DNS resolver (getent)"
     check_command ping "ICMP ping"
     check_command openvpn
@@ -3015,6 +3596,17 @@ doctor_unit_checks() {
         fi
     else
         check_fail "Не установлен $TEST_RECOVERY_SERVICE; запустите install.sh"
+    fi
+    if systemctl cat "$API_SOCKET_UNIT" >/dev/null 2>&1 &&
+       systemctl cat "$API_SERVICE_UNIT" >/dev/null 2>&1; then
+        check_ok "Установлен защищённый local API transport"
+        if systemctl_quiet is-active "$API_SOCKET_UNIT"; then
+            check_ok "$API_SOCKET_UNIT принимает локальные API-запросы"
+        else
+            check_warn "$API_SOCKET_UNIT установлен, но не активен"
+        fi
+    else
+        check_fail "Local API units не установлены; запустите install.sh"
     fi
     desired="$(state_get DESIRED 2>/dev/null || true)"
     if [[ "$desired" == "up" ]]; then
@@ -4244,6 +4836,7 @@ main() {
             require_root _refresh-dashboard-cache
             write_dashboard_cache
             ;;
+        _api-dispatch) api_dispatch ;;
         _test-timeout) test_timeout_handler "${1:-}" ;;
         _recover-stale-test) recover_stale_test_state ;;
         _dedupe-quick-policy)

@@ -2,7 +2,7 @@
 
 Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
-Last synchronized: 2026-07-27.
+Last synchronized: 2026-07-28.
 
 This file is the persistent handoff after interrupted Codex sessions. GitHub
 issues and release gates in [`capabilities.json`](capabilities.json) remain the
@@ -10,14 +10,16 @@ authoritative backlog; this page records the verified resumption point.
 
 ## Verified release baseline
 
-- `main`, `v1.2.0` and `desktop-v0.2.0` resolve to
+- `main` resolves to `8e92316cedab897d0f64488a1968456f009df25c`
+  after merging API contract PR #25.
+- `v1.2.0` and `desktop-v0.2.0` remain at
   `0fe11a22b4e68f4c9106e4415ebaf5a2c281cb2c`.
 - CLI/TUI 1.2.0 is the current stable release.
 - Linux Desktop 0.2.0 is a functional control-center preview.
 - Windows and macOS 0.2.0 artifacts are unsigned UI previews without native
   VPN backends.
 - Android and iOS clients are planned and have no release artifacts.
-- PR #22 is merged and there are no open pull requests at this checkpoint.
+- PR #22 and API contract PR #25 are merged.
 
 Release links:
 
@@ -49,7 +51,7 @@ Release links:
 
 ## Current implementation slice
 
-The active branch completes the first incremental issue #5 slice:
+Merged PR #25 completed the first incremental issue #5 slice:
 
 - API contract `1.0` publishes 25 operations and 14 stable error codes;
 - request, response, event and sanitized audit envelopes are defined;
@@ -59,14 +61,26 @@ The active branch completes the first incremental issue #5 slice:
 - CI validates operation IDs, authorization, audit, deadlines, rollback
   semantics and the frontend forbidden-field policy.
 
+The active `agent/local-api-daemon` branch builds the next vertical slice:
+
+- systemd socket activation at `/run/mazzy-vpn/api-v1.sock`, protected by
+  `0660 root:mazzy-vpn`;
+- `status.get`, `profiles.list` and all three `lifecycle.*` operations;
+- opaque profile IDs instead of paths or filenames in API requests;
+- persistent action-ID idempotency, serialized mutations and bounded deadlines;
+- root-only sanitized audit and explicit desired-state rollback;
+- Desktop lifecycle routing through the API with a compatibility fallback while
+  the remaining operation domains still use the typed `pkexec` adapter.
+
 Verified locally:
 
-- shell regression suite: 52/52;
-- Rust unit tests: 8/8;
+- shell regression suite: 55/55;
+- Rust unit tests: 9/9;
 - ShellCheck, Clippy, capability/API validators, public audit and gitleaks;
 - npm audit: 0 vulnerabilities;
 - staged installer reads the installed contract through the staged CLI.
 
-Do not mark issue #5 complete after this slice. CLI/TUI migration, protected
-local transport, state migration, crash/concurrency testing and the final
-daemon contract remain separate acceptance criteria.
+Do not mark issue #5 complete after this slice. The remaining API domains,
+independently installed CLI/TUI client migration, stale-running-action recovery,
+cross-version compatibility and broader crash/concurrency tests remain separate
+acceptance criteria.

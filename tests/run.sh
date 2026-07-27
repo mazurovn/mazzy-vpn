@@ -55,6 +55,11 @@ case "$*" in
     "start vpnctl.service"|"restart vpnctl.service"|\
     "start --no-block vpnctl.service"|"restart --no-block vpnctl.service")
         [[ "${FAKE_SYSTEMCTL_START_FAIL:-0}" == "1" ]] && exit 1
+        if [[ -n "${FAKE_SYSTEMCTL_FAIL_ONCE_FILE:-}" &&
+              ! -e "$FAKE_SYSTEMCTL_FAIL_ONCE_FILE" ]]; then
+            touch "$FAKE_SYSTEMCTL_FAIL_ONCE_FILE"
+            exit 1
+        fi
         if [[ "${FAKE_SYSTEMCTL_START_LIMIT:-0}" =~ ^[0-9]+$ ]] &&
            ((FAKE_SYSTEMCTL_START_LIMIT > 0)); then
             count=0
@@ -223,6 +228,8 @@ export FAKE_LEGACY_ACTIVE="$TMP/legacy.active"
 export VPNCTL_ALLOW_UNPRIVILEGED=1
 export VPNCTL_CONFIG_DIR="$TMP/config"
 export VPNCTL_STATE_DIR="$TMP/state"
+export VPNCTL_API_ACTION_DIR="$TMP/state/api-actions"
+export VPNCTL_API_AUDIT_FILE="$TMP/state/api-audit.jsonl"
 export VPNCTL_RUN_DIR="$TMP/run"
 export VPNCTL_DASHBOARD_DIR="$TMP/dashboard"
 export VPNCTL_PROBE_URL="https://probe.invalid"
@@ -562,9 +569,162 @@ grep -q '192\.0\.2\.10' <<<"$profiles_json" &&
     fail "Desktop profile cache leaked a VPN endpoint"
 grep -Eq 'PrivateKey|PublicKey|private.key|public.key' <<<"$profiles_json" &&
     fail "Desktop profile cache leaked key material"
+profile_id="$(
+    jq -er '.profiles[] | select(.name == "Test Server") | .profile_id' \
+        <<<"$profiles_json"
+)"
+[[ "$profile_id" =~ ^profile-[a-f0-9]{32}$ ]] ||
+    fail "Desktop profile cache does not expose an opaque stable profile ID"
 [[ "$(stat -c %a "$VPNCTL_DASHBOARD_DIR/profiles.json")" == "644" ]] ||
     fail "Desktop profile cache is not safely readable"
 ok "sanitized Desktop profile library cache"
+
+api_status_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-status-0001",
+        operation: "status.get",
+        payload: {}
+    }'
+)"
+api_status_response="$(printf '%s\n' "$api_status_request" | "$CLI" _api-dispatch)"
+jq -e --arg profile_id "$profile_id" '
+    .api_version == "1.0"
+    and .request_id == "request-status-0001"
+    and .status == "ok"
+    and .result.product == "Mazzy VPN"
+    and .result.connection.profile_id == $profile_id
+    and .result.connection.state == "connected"
+' <<<"$api_status_response" >/dev/null ||
+    fail "local API status.get response is invalid"
+
+api_profiles_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-profiles-0001",
+        operation: "profiles.list",
+        payload: {}
+    }'
+)"
+api_profiles_response="$(printf '%s\n' "$api_profiles_request" | "$CLI" _api-dispatch)"
+jq -e --arg profile_id "$profile_id" '
+    .status == "ok"
+    and any(
+        .result.profiles[];
+        .profile_id == $profile_id
+        and .display_name == "Test Server"
+        and .protocol == "openvpn"
+        and .selected == true
+    )
+' <<<"$api_profiles_response" >/dev/null ||
+    fail "local API profiles.list response is invalid"
+ok "local API query envelopes expose only sanitized status and profiles"
+
+api_connect_request="$(
+    jq -cn --arg profile_id "$profile_id" '{
+        api_version: "1.0",
+        request_id: "request-connect-0001",
+        operation: "lifecycle.connect",
+        action_id: "action-connect-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {profile_id: $profile_id}
+    }'
+)"
+: >"$FAKE_SYSTEMCTL_LOG"
+api_connect_response="$(printf '%s\n' "$api_connect_request" | "$CLI" _api-dispatch)"
+jq -e '
+    .status == "ok"
+    and .result.action_id == "action-connect-0001"
+    and .result.state == "succeeded"
+    and .result.rollback.state == "not-needed"
+' <<<"$api_connect_response" >/dev/null ||
+    fail "local API lifecycle.connect did not succeed"
+api_start_count="$(grep -c '^start vpnctl.service$' "$FAKE_SYSTEMCTL_LOG")"
+api_replay_request="$(
+    jq -c '.request_id = "request-connect-replay-0001"' <<<"$api_connect_request"
+)"
+api_replay_response="$(printf '%s\n' "$api_replay_request" | "$CLI" _api-dispatch)"
+jq -e '
+    .request_id == "request-connect-replay-0001"
+    and .status == "ok"
+    and .result.state == "succeeded"
+' <<<"$api_replay_response" >/dev/null ||
+    fail "local API did not replay the stored action outcome"
+[[ "$(grep -c '^start vpnctl.service$' "$FAKE_SYSTEMCTL_LOG")" == "$api_start_count" ]] ||
+    fail "repeated local API action ID executed the mutation twice"
+[[ "$(stat -c %a "$VPNCTL_API_ACTION_DIR/action-connect-0001.json")" == "600" ]] ||
+    fail "local API action journal is not root-only"
+ok "local API mutation IDs are persistent and idempotent"
+
+export FAKE_SYSTEMCTL_FAIL_ONCE_FILE="$TMP/api-start-failed-once"
+api_rollback_request="$(
+    jq -cn --arg profile_id "$profile_id" '{
+        api_version: "1.0",
+        request_id: "request-rollback-0001",
+        operation: "lifecycle.connect",
+        action_id: "action-rollback-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {profile_id: $profile_id}
+    }'
+)"
+api_rollback_response="$(
+    printf '%s\n' "$api_rollback_request" | "$CLI" _api-dispatch
+)"
+unset FAKE_SYSTEMCTL_FAIL_ONCE_FILE
+jq -e '
+    .status == "ok"
+    and .result.state == "rolled-back"
+    and .result.state_changed == true
+    and .result.rollback.required == true
+    and .result.rollback.state == "completed"
+' <<<"$api_rollback_response" >/dev/null ||
+    fail "local API did not report a completed lifecycle rollback"
+grep -q '^DESIRED=up$' "$VPNCTL_STATE_DIR/active" ||
+    fail "local API rollback did not restore the previous desired state"
+[[ "$(grep -c '^start vpnctl.service$' "$FAKE_SYSTEMCTL_LOG")" -gt "$api_start_count" ]] ||
+    fail "local API rollback did not restart the previous managed tunnel"
+if grep -Eq 'Test Server|192\.0\.2\.10|PrivateKey|PublicKey' \
+    "$VPNCTL_API_AUDIT_FILE"; then
+    fail "local API audit log leaked profile or endpoint data"
+fi
+jq -s -e '
+    length == 4
+    and all(.[];
+        .api_version == "1.0"
+        and .event_type == "audit.recorded"
+        and (.event_id | startswith("audit-"))
+        and .payload.authorization == "system-mutate"
+        and (.payload.outcome |
+            IN("started", "succeeded", "rolled-back", "timed-out",
+               "rollback-failed"))
+    )
+' "$VPNCTL_API_AUDIT_FILE" >/dev/null ||
+    fail "local API audit log does not use sanitized v1 event envelopes"
+[[ "$(stat -c %a "$VPNCTL_API_AUDIT_FILE")" == "600" ]] ||
+    fail "local API audit log is not root-only"
+api_conflict_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-conflict-0001",
+        operation: "lifecycle.disconnect",
+        action_id: "action-connect-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {}
+    }'
+)"
+api_conflict_response="$(
+    printf '%s\n' "$api_conflict_request" | "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "conflict"
+    and .error.user_action_required == true
+' <<<"$api_conflict_response" >/dev/null ||
+    fail "local API accepted one action ID for two different mutations"
+ok "local API lifecycle failures restore state and emit sanitized audit events"
 
 dashboard_output="$("$CLI" dashboard)"
 grep -q 'M A Z Z Y' <<<"$dashboard_output" || fail "dashboard artwork is missing"
@@ -881,6 +1041,16 @@ grep -q '^OnUnitActiveSec=20s$' "$stage/etc/systemd/system/vpnctl-health.timer" 
     fail "health timer interval is not the expected 20 seconds"
 [[ -f "$stage/etc/systemd/system/vpnctl-test-recovery.service" ]] ||
     fail "test recovery unit not staged"
+[[ -f "$stage/etc/systemd/system/mazzy-vpn-api.socket" &&
+   -f "$stage/etc/systemd/system/mazzy-vpn-api@.service" ]] ||
+    fail "local API systemd units were not staged"
+grep -q '^SocketMode=0660$' "$stage/etc/systemd/system/mazzy-vpn-api.socket" ||
+    fail "local API socket is not protected by mode 0660"
+grep -q '^SocketGroup=mazzy-vpn$' "$stage/etc/systemd/system/mazzy-vpn-api.socket" ||
+    fail "local API socket is not restricted to the mazzy-vpn group"
+grep -q '^NoNewPrivileges=yes$' \
+    "$stage/etc/systemd/system/mazzy-vpn-api@.service" ||
+    fail "local API request service is missing process hardening"
 grep -q 'ExecStart=/usr/local/bin/mazzy-vpn' \
     "$stage/etc/systemd/system/vpnctl.service" ||
     fail "staged service does not use Mazzy VPN command"

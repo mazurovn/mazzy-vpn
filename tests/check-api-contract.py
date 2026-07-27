@@ -87,8 +87,8 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
         fail("CLI contract metadata must be declared implemented")
     if transports.get("cli-json-adapter") != "partial":
         fail("the not-yet-unified CLI JSON adapter must remain partial")
-    if transports.get("protected-local-service") != "planned":
-        fail("the not-yet-implemented protected service must remain planned")
+    if transports.get("protected-local-service") != "partial":
+        fail("the incremental Linux protected service must remain partial")
 
     domains = manifest.get("domains")
     operations = manifest.get("operations")

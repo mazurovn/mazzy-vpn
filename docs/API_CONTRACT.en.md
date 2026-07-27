@@ -13,8 +13,10 @@ boundary for issue
 `cli-json-adapter` is explicitly `partial`: existing safe JSON status/profile
 outputs remain available, but clients do not yet submit every v1 request
 envelope through one dispatcher. Contract metadata is implemented. The
-protected local service transport is explicitly `planned`; publishing the
-schema does not claim that the final daemon exists.
+socket-activated Linux transport is `partial`: it accepts `status.get`,
+`profiles.list` and the three `lifecycle.*` mutations. Other operations and
+non-Linux transports remain `planned`, so this still does not claim that the
+complete cross-platform daemon exists.
 
 ## Compatibility
 
@@ -35,7 +37,9 @@ Every mutation requires:
 - declared rollback semantics and a final rollback outcome.
 
 Repeated delivery of the same action ID must never apply the mutation twice.
-This idempotency rule will be enforced by the protected local service.
+The Linux lifecycle dispatcher enforces this rule with a persistent,
+root-readable action journal. Remaining mutation domains must adopt the same
+rule as they move behind the service.
 
 ## Frontend safety
 
@@ -54,3 +58,10 @@ codes, severity, localized message keys and individually authorizable fix IDs.
 root privileges. Desktop exposes the same metadata to its webview through a
 read-only Tauri command. CI checks that the CLI result, manifest and schema stay
 synchronized.
+
+On Linux, `mazzy-vpn-api.socket` exposes `/run/mazzy-vpn/api-v1.sock` as
+`root:mazzy-vpn` mode `0660`. Every connection carries one newline-terminated
+request and receives one newline-terminated response. Mutations are serialized,
+deadline-bounded and recorded by action ID under root-only state. The audit log
+contains operation IDs and outcomes only, never request payloads or backend
+output.

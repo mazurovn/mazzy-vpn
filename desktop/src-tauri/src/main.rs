@@ -156,8 +156,8 @@ fn get_api_info() -> Result<Value, String> {
 }
 
 #[tauri::command]
-async fn run_action(action: VpnAction) -> Result<ActionResult, String> {
-    tauri::async_runtime::spawn_blocking(move || execute_action(action))
+async fn run_action(app: AppHandle, action: VpnAction) -> Result<ActionResult, String> {
+    tauri::async_runtime::spawn_blocking(move || execute_tray_action(&app, action))
         .await
         .map_err(|error| error.to_string())
 }
@@ -187,18 +187,40 @@ fn get_platform_info() -> PlatformInfo {
     platform_info()
 }
 
+fn execute_tray_action(app: &AppHandle, action: VpnAction) -> ActionResult {
+    let operation = match action {
+        VpnAction::Reconnect => Some(backend::OperationRequest::Reconnect),
+        VpnAction::Disconnect => Some(backend::OperationRequest::Disconnect),
+        _ => None,
+    };
+    if let Some(operation) = operation {
+        let result = backend::execute_operation(app, operation);
+        return ActionResult {
+            success: result.success,
+            action: action_spec(action).0,
+            output: result.output,
+            code: result.code,
+        };
+    }
+    execute_action(action)
+}
+
 fn launch_tray_action(app: AppHandle, action: VpnAction) {
     tauri::async_runtime::spawn(async move {
-        let result =
-            match tauri::async_runtime::spawn_blocking(move || execute_action(action)).await {
-                Ok(result) => result,
-                Err(error) => ActionResult {
-                    success: false,
-                    action: action_spec(action).0,
-                    output: error.to_string(),
-                    code: None,
-                },
-            };
+        let operation_app = app.clone();
+        let result = match tauri::async_runtime::spawn_blocking(move || {
+            execute_tray_action(&operation_app, action)
+        })
+        .await
+        {
+            Ok(result) => result,
+            Err(error) => ActionResult {
+                success: false,
+                action: action_spec(action).0,
+                output: error.to_string(),
+                code: None,
+            },
+        };
         let _ = app.emit("vpn-action-result", result);
     });
 }
@@ -336,6 +358,6 @@ mod tests {
             .iter()
             .find(|transport| transport["id"] == "protected-local-service")
             .expect("protected service transport");
-        assert_eq!(protected["status"], "planned");
+        assert_eq!(protected["status"], "partial");
     }
 }
