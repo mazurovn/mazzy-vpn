@@ -1,0 +1,269 @@
+{
+  "schema_version": 1,
+  "product": "Mazzy VPN",
+  "author": "Nik m (@mazurovn)",
+  "status_values": [
+    "implemented",
+    "partial",
+    "planned",
+    "not-applicable"
+  ],
+  "surfaces": [
+    "cli",
+    "tui",
+    "desktop_linux",
+    "desktop_macos",
+    "desktop_windows"
+  ],
+  "capabilities": [
+    {
+      "id": "connection-lifecycle",
+      "name_en": "Connect, reconnect and disconnect",
+      "name_ru": "Подключение, переподключение и отключение",
+      "owner": "shared-core",
+      "surfaces": {
+        "cli": "implemented",
+        "tui": "implemented",
+        "desktop_linux": "partial",
+        "desktop_macos": "planned",
+        "desktop_windows": "planned"
+      },
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/main.rs"],
+      "docs": ["README.en.md", "README.ru.md", "docs/DESKTOP_ROADMAP.en.md", "docs/DESKTOP_ROADMAP.ru.md"]
+    },
+    {
+      "id": "profile-import",
+      "name_en": "Safe file and folder profile import",
+      "name_ru": "Безопасный импорт профилей и папок",
+      "owner": "shared-core",
+      "surfaces": {
+        "cli": "implemented",
+        "tui": "implemented",
+        "desktop_linux": "planned",
+        "desktop_macos": "planned",
+        "desktop_windows": "planned"
+      },
+      "tests": ["tests/run.sh"],
+      "docs": ["README.en.md", "README.ru.md", "wiki/Profiles-and-Import.md"]
+    },
+    {
+      "id": "profile-location-selection",
+      "name_en": "Protocol, location and default-profile selection",
+      "name_ru": "Выбор протокола, локации и default-профиля",
+      "owner": "shared-core",
+      "surfaces": {
+        "cli": "implemented",
+        "tui": "implemented",
+        "desktop_linux": "planned",
+        "desktop_macos": "planned",
+        "desktop_windows": "planned"
+      },
+      "tests": ["tests/run.sh"],
+      "docs": ["README.en.md", "README.ru.md", "wiki/Profiles-and-Import.md"]
+    },
+    {
+      "id": "validation-probe-test",
+      "name_en": "Validation, endpoint probes and transactional live tests",
+      "name_ru": "Валидация, probe endpoint и транзакционные live-тесты",
+      "owner": "shared-core",
+      "surfaces": {
+        "cli": "implemented",
+        "tui": "implemented",
+        "desktop_linux": "planned",
+        "desktop_macos": "planned",
+        "desktop_windows": "planned"
+      },
+      "tests": ["tests/run.sh"],
+      "docs": ["docs/ARCHITECTURE.en.md", "docs/ARCHITECTURE.ru.md", "wiki/Diagnostics-and-Recovery.md"]
+    },
+    {
+      "id": "operating-modes",
+      "name_en": "Normal, test, emergency and fallback modes",
+      "name_ru": "Режимы normal, test, emergency и fallback",
+      "owner": "shared-core",
+      "surfaces": {
+        "cli": "implemented",
+        "tui": "implemented",
+        "desktop_linux": "planned",
+        "desktop_macos": "planned",
+        "desktop_windows": "planned"
+      },
+      "tests": ["tests/run.sh"],
+      "docs": ["docs/ARCHITECTURE.en.md", "docs/ARCHITECTURE.ru.md", "wiki/Diagnostics-and-Recovery.md"]
+    },
+    {
+      "id": "service-control",
+      "name_en": "Service, autostart, health monitor and recovery control",
+      "name_ru": "Управление сервисом, автозапуском, монитором и recovery",
+      "owner": "platform-backend",
+      "surfaces": {
+        "cli": "implemented",
+        "tui": "partial",
+        "desktop_linux": "planned",
+        "desktop_macos": "planned",
+        "desktop_windows": "planned"
+      },
+      "tests": ["tests/run.sh"],
+      "docs": ["docs/ARCHITECTURE.en.md", "docs/ARCHITECTURE.ru.md", "wiki/Diagnostics-and-Recovery.md"]
+    },
+    {
+      "id": "dependency-bootstrap",
+      "name_en": "Self-contained dependency detection and installation",
+      "name_ru": "Самостоятельная проверка и установка зависимостей",
+      "owner": "platform-installer",
+      "surfaces": {
+        "cli": "implemented",
+        "tui": "not-applicable",
+        "desktop_linux": "planned",
+        "desktop_macos": "planned",
+        "desktop_windows": "planned"
+      },
+      "tests": ["tests/run.sh"],
+      "docs": ["docs/DESKTOP_ROADMAP.en.md", "docs/DESKTOP_ROADMAP.ru.md", "wiki/Installation.md"]
+    },
+    {
+      "id": "dashboard-tray",
+      "name_en": "Dashboard, activity state and tray actions",
+      "name_ru": "Dashboard, состояние и действия tray",
+      "owner": "frontend",
+      "surfaces": {
+        "cli": "implemented",
+        "tui": "implemented",
+        "desktop_linux": "implemented",
+        "desktop_macos": "partial",
+        "desktop_windows": "partial"
+      },
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/main.rs"],
+      "docs": ["docs/DESKTOP.en.md", "docs/DESKTOP.ru.md", "wiki/Desktop-Dashboard-and-Tray.md"]
+    },
+    {
+      "id": "localization-six-languages",
+      "name_en": "Russian, English, German, Chinese, Japanese and Korean",
+      "name_ru": "Русский, английский, немецкий, китайский, японский и корейский",
+      "owner": "frontend",
+      "surfaces": {
+        "cli": "implemented",
+        "tui": "implemented",
+        "desktop_linux": "implemented",
+        "desktop_macos": "implemented",
+        "desktop_windows": "implemented"
+      },
+      "tests": ["tests/run.sh", "desktop/ui/app.js"],
+      "docs": ["README.en.md", "README.ru.md", "docs/DESKTOP.en.md", "docs/DESKTOP.ru.md"]
+    },
+    {
+      "id": "automatic-recovery",
+      "name_en": "Monitoring, self-healing and safe rollback",
+      "name_ru": "Мониторинг, самолечение и безопасный rollback",
+      "owner": "shared-core",
+      "surfaces": {
+        "cli": "implemented",
+        "tui": "implemented",
+        "desktop_linux": "partial",
+        "desktop_macos": "planned",
+        "desktop_windows": "planned"
+      },
+      "tests": ["tests/run.sh"],
+      "docs": ["docs/ARCHITECTURE.en.md", "docs/ARCHITECTURE.ru.md", "wiki/Diagnostics-and-Recovery.md"]
+    },
+    {
+      "id": "self-contained-runtime",
+      "name_en": "Desktop bundle includes the engine; no separate CLI install",
+      "name_ru": "Desktop включает движок; отдельная установка CLI не нужна",
+      "owner": "shared-core",
+      "surfaces": {
+        "cli": "implemented",
+        "tui": "implemented",
+        "desktop_linux": "planned",
+        "desktop_macos": "planned",
+        "desktop_windows": "planned"
+      },
+      "tests": ["tests/run.sh"],
+      "docs": ["docs/DESKTOP_ROADMAP.en.md", "docs/DESKTOP_ROADMAP.ru.md", "wiki/Desktop-Full-Application-Plan.md"]
+    },
+    {
+      "id": "privilege-boundary",
+      "name_en": "Least-privilege API and protected profile storage",
+      "name_ru": "API с минимальными правами и защищённое хранение профилей",
+      "owner": "shared-core",
+      "surfaces": {
+        "cli": "implemented",
+        "tui": "implemented",
+        "desktop_linux": "partial",
+        "desktop_macos": "planned",
+        "desktop_windows": "planned"
+      },
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/main.rs", "tests/audit-public.sh"],
+      "docs": ["SECURITY.md", "docs/DESKTOP_ROADMAP.en.md", "docs/DESKTOP_ROADMAP.ru.md"]
+    }
+  ],
+  "release_gates": [
+    {
+      "id": "cli-tui-1.1",
+      "declared_ready": true,
+      "requirements": [
+        {"capability": "connection-lifecycle", "surfaces": ["cli", "tui"]},
+        {"capability": "profile-import", "surfaces": ["cli", "tui"]},
+        {"capability": "profile-location-selection", "surfaces": ["cli", "tui"]},
+        {"capability": "validation-probe-test", "surfaces": ["cli", "tui"]},
+        {"capability": "operating-modes", "surfaces": ["cli", "tui"]},
+        {"capability": "automatic-recovery", "surfaces": ["cli", "tui"]},
+        {"capability": "privilege-boundary", "surfaces": ["cli", "tui"]}
+      ]
+    },
+    {
+      "id": "desktop-linux-1.0",
+      "declared_ready": false,
+      "requirements": [
+        {"capability": "connection-lifecycle", "surfaces": ["desktop_linux"]},
+        {"capability": "profile-import", "surfaces": ["desktop_linux"]},
+        {"capability": "profile-location-selection", "surfaces": ["desktop_linux"]},
+        {"capability": "validation-probe-test", "surfaces": ["desktop_linux"]},
+        {"capability": "operating-modes", "surfaces": ["desktop_linux"]},
+        {"capability": "service-control", "surfaces": ["desktop_linux"]},
+        {"capability": "dependency-bootstrap", "surfaces": ["desktop_linux"]},
+        {"capability": "dashboard-tray", "surfaces": ["desktop_linux"]},
+        {"capability": "localization-six-languages", "surfaces": ["desktop_linux"]},
+        {"capability": "automatic-recovery", "surfaces": ["desktop_linux"]},
+        {"capability": "self-contained-runtime", "surfaces": ["desktop_linux"]},
+        {"capability": "privilege-boundary", "surfaces": ["desktop_linux"]}
+      ]
+    },
+    {
+      "id": "desktop-macos-1.0",
+      "declared_ready": false,
+      "requirements": [
+        {"capability": "connection-lifecycle", "surfaces": ["desktop_macos"]},
+        {"capability": "profile-import", "surfaces": ["desktop_macos"]},
+        {"capability": "profile-location-selection", "surfaces": ["desktop_macos"]},
+        {"capability": "validation-probe-test", "surfaces": ["desktop_macos"]},
+        {"capability": "operating-modes", "surfaces": ["desktop_macos"]},
+        {"capability": "service-control", "surfaces": ["desktop_macos"]},
+        {"capability": "dependency-bootstrap", "surfaces": ["desktop_macos"]},
+        {"capability": "dashboard-tray", "surfaces": ["desktop_macos"]},
+        {"capability": "localization-six-languages", "surfaces": ["desktop_macos"]},
+        {"capability": "automatic-recovery", "surfaces": ["desktop_macos"]},
+        {"capability": "self-contained-runtime", "surfaces": ["desktop_macos"]},
+        {"capability": "privilege-boundary", "surfaces": ["desktop_macos"]}
+      ]
+    },
+    {
+      "id": "desktop-windows-1.0",
+      "declared_ready": false,
+      "requirements": [
+        {"capability": "connection-lifecycle", "surfaces": ["desktop_windows"]},
+        {"capability": "profile-import", "surfaces": ["desktop_windows"]},
+        {"capability": "profile-location-selection", "surfaces": ["desktop_windows"]},
+        {"capability": "validation-probe-test", "surfaces": ["desktop_windows"]},
+        {"capability": "operating-modes", "surfaces": ["desktop_windows"]},
+        {"capability": "service-control", "surfaces": ["desktop_windows"]},
+        {"capability": "dependency-bootstrap", "surfaces": ["desktop_windows"]},
+        {"capability": "dashboard-tray", "surfaces": ["desktop_windows"]},
+        {"capability": "localization-six-languages", "surfaces": ["desktop_windows"]},
+        {"capability": "automatic-recovery", "surfaces": ["desktop_windows"]},
+        {"capability": "self-contained-runtime", "surfaces": ["desktop_windows"]},
+        {"capability": "privilege-boundary", "surfaces": ["desktop_windows"]}
+      ]
+    }
+  ]
+}

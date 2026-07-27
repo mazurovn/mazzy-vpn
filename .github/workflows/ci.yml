@@ -34,6 +34,9 @@ jobs:
       - name: Regression suite
         run: ./tests/run.sh
 
+      - name: Cross-surface release gates
+        run: python3 tests/check-capabilities.py
+
       - name: Public repository audit
         run: |
           ./tests/audit-public.sh

@@ -2,6 +2,15 @@
 
 All notable changes to Mazzy VPN are documented here.
 
+## Unreleased
+
+- Defined the standalone Desktop 1.0 architecture: one shared core and local
+  API for independently usable CLI, TUI and Desktop clients.
+- Added a machine-validated cross-surface capability registry and release gates
+  that prevent a preview from being labeled as a complete Desktop client.
+- Added bilingual Desktop roadmap, feature-parity matrix, PR checklist and a
+  capability issue template.
+
 ## 1.1.0 — 2026-07-26
 
 - Added English and Russian architecture documentation with component,

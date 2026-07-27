@@ -4,6 +4,12 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
 [Русская версия](ARCHITECTURE.ru.md) · [Project README](../README.md)
 
+This document describes the current CLI/TUI and Desktop 0.1 architecture. See
+the [Desktop 1.0 plan](DESKTOP_ROADMAP.en.md) for the target standalone
+architecture with a shared core and versioned API. The
+[feature-parity matrix](FEATURE_PARITY.md) prevents a preview from being
+presented as a complete standalone application.
+
 Mazzy VPN is a Bash CLI/TUI, a Tauri Desktop Dashboard and a small set of
 systemd units. It keeps protocol profiles outside the source tree, uses one
 canonical desired-state file and delegates tunnel lifetime to systemd. The

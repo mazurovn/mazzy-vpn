@@ -30,6 +30,9 @@ live tests and restores the previously working connection after a failure.
 [Схемы архитектуры](docs/ARCHITECTURE.ru.md) ·
 [Desktop Dashboard](docs/DESKTOP.en.md) ·
 [Desktop Dashboard на русском](docs/DESKTOP.ru.md) ·
+[Standalone Desktop 1.0 plan](docs/DESKTOP_ROADMAP.en.md) ·
+[План самостоятельного Desktop 1.0](docs/DESKTOP_ROADMAP.ru.md) ·
+[Capability parity](docs/FEATURE_PARITY.md) ·
 [Project Wiki](https://github.com/mazurovn/mazzy-vpn/wiki)
 
 ![Mazzy VPN Desktop Dashboard](docs/images/dashboard-connected-preview.png)
@@ -38,7 +41,9 @@ live tests and restores the previously working connection after a failure.
   config, handshake, public IP, autostart and health-monitor state.
 - Tauri 2 Desktop Dashboard and tray. Linux is a functional CLI companion with
   AppImage, DEB and RPM bundles; macOS and Windows builds are explicitly marked
-  as UI previews until native VPN backends are implemented.
+  as UI previews until native VPN backends are implemented. Desktop 0.1 is not
+  yet a standalone client and requires the Linux CLI engine; the tracked 1.0
+  plan moves all surfaces to one shared core without duplicated VPN logic.
 - Quick connection through the saved default profile: `mazzy-vpn quick`.
 - Two-layer unattended recovery: systemd restarts an exited process, while an
   independent 20-second health monitor reconnects a stalled tunnel.

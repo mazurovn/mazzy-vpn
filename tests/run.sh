@@ -791,6 +791,10 @@ stage="$TMP/stage"
    -f "$stage/usr/local/lib/mazzy-vpn/README.ko.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/DESKTOP.en.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/DESKTOP.ru.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/DESKTOP_ROADMAP.en.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/DESKTOP_ROADMAP.ru.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/FEATURE_PARITY.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/capabilities.json" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.en.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/LICENSE" &&
@@ -878,5 +882,9 @@ if grep -q 'add-apt-repository' <<<"$fallback_output"; then
     fail "unsupported Ubuntu suite attempted to add the PPA"
 fi
 ok "Ubuntu without PPA uses pinned userspace fallback"
+
+python3 "$ROOT/tests/check-capabilities.py" >/dev/null ||
+    fail "cross-surface capability registry is inconsistent"
+ok "CLI/TUI/Desktop capability parity and release gates"
 
 printf '1..%d\n' "$pass"

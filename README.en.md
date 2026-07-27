@@ -142,6 +142,12 @@ Linux application is a functional companion to the installed CLI and ships as
 AppImage, DEB and RPM. macOS and Windows are UI previews until native VPN
 backends are implemented.
 
+This is the 0.1 companion preview, not the standalone Desktop 1.0 product. The
+target bundles the shared core, installer/bootstrap, profile import/selection,
+all modes and service controls without a separate CLI installation. Development
+is synchronized through the [Desktop 1.0 plan](docs/DESKTOP_ROADMAP.en.md) and
+[capability matrix](docs/FEATURE_PARITY.md).
+
 The GUI does not read profiles or keys. It consumes a sanitized status cache
 without endpoints and can invoke only a fixed CLI action allowlist. See the
 [Desktop guide](docs/DESKTOP.en.md) for installation, limitations and

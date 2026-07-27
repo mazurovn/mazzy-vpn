@@ -163,8 +163,10 @@ validate_source_tree() {
         README.md README.ru.md README.en.md README.de.md README.zh.md \
         README.ja.md README.ko.md docs/ARCHITECTURE.en.md \
         docs/ARCHITECTURE.ru.md docs/DESKTOP.en.md docs/DESKTOP.ru.md \
+        docs/DESKTOP_ROADMAP.en.md docs/DESKTOP_ROADMAP.ru.md \
+        docs/FEATURE_PARITY.md docs/capabilities.json \
         desktop/README.md \
-        tests/run.sh tests/audit-public.sh \
+        tests/run.sh tests/audit-public.sh tests/check-capabilities.py \
         completions/mazzy-vpn systemd/vpnctl.service \
         systemd/vpnctl-health.service systemd/vpnctl-health.timer \
         systemd/vpnctl-test-recovery.service; do
@@ -240,6 +242,10 @@ post_install_checks() {
        -r /usr/local/lib/mazzy-vpn/README.ko.md &&
        -r /usr/local/lib/mazzy-vpn/docs/DESKTOP.en.md &&
        -r /usr/local/lib/mazzy-vpn/docs/DESKTOP.ru.md &&
+       -r /usr/local/lib/mazzy-vpn/docs/DESKTOP_ROADMAP.en.md &&
+       -r /usr/local/lib/mazzy-vpn/docs/DESKTOP_ROADMAP.ru.md &&
+       -r /usr/local/lib/mazzy-vpn/docs/FEATURE_PARITY.md &&
+       -r /usr/local/lib/mazzy-vpn/docs/capabilities.json &&
        -r /usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.en.md &&
        -r /usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.ru.md &&
        -r /usr/local/lib/mazzy-vpn/LICENSE &&
@@ -488,6 +494,14 @@ install_files() {
         "$docs_dir/DESKTOP.en.md"
     run install -m 644 "$SCRIPT_DIR/docs/DESKTOP.ru.md" \
         "$docs_dir/DESKTOP.ru.md"
+    run install -m 644 "$SCRIPT_DIR/docs/DESKTOP_ROADMAP.en.md" \
+        "$docs_dir/DESKTOP_ROADMAP.en.md"
+    run install -m 644 "$SCRIPT_DIR/docs/DESKTOP_ROADMAP.ru.md" \
+        "$docs_dir/DESKTOP_ROADMAP.ru.md"
+    run install -m 644 "$SCRIPT_DIR/docs/FEATURE_PARITY.md" \
+        "$docs_dir/FEATURE_PARITY.md"
+    run install -m 644 "$SCRIPT_DIR/docs/capabilities.json" \
+        "$docs_dir/capabilities.json"
     run install -m 644 "$SCRIPT_DIR/LICENSE" "$lib_dir/LICENSE"
     run install -m 644 "$SCRIPT_DIR/AUTHORS.md" "$lib_dir/AUTHORS.md"
     run install -m 644 "$SCRIPT_DIR/CHANGELOG.md" "$lib_dir/CHANGELOG.md"
@@ -517,6 +531,9 @@ install_files() {
             "$lib_dir/README.ja.md" "$lib_dir/README.ko.md" \
             "$docs_dir/ARCHITECTURE.en.md" "$docs_dir/ARCHITECTURE.ru.md" \
             "$docs_dir/DESKTOP.en.md" "$docs_dir/DESKTOP.ru.md" \
+            "$docs_dir/DESKTOP_ROADMAP.en.md" \
+            "$docs_dir/DESKTOP_ROADMAP.ru.md" \
+            "$docs_dir/FEATURE_PARITY.md" "$docs_dir/capabilities.json" \
             "$lib_dir/LICENSE" "$lib_dir/AUTHORS.md" "$lib_dir/CHANGELOG.md" \
             "$lib_dir/SECURITY.md" \
             "$unit_dir/vpnctl.service" \

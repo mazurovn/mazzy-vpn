@@ -1,0 +1,58 @@
+name: Cross-surface capability
+description: Plan or implement a Mazzy VPN capability without CLI/TUI/Desktop drift
+title: "[Capability] "
+labels: ["capability", "needs-parity"]
+body:
+  - type: input
+    id: capability
+    attributes:
+      label: Capability ID
+      description: Use or add an ID in docs/capabilities.json.
+      placeholder: profile-location-selection
+    validations:
+      required: true
+  - type: dropdown
+    id: owner
+    attributes:
+      label: Primary owner
+      options:
+        - shared-core
+        - platform-backend
+        - platform-installer
+        - frontend
+    validations:
+      required: true
+  - type: checkboxes
+    id: surfaces
+    attributes:
+      label: Affected surfaces
+      options:
+        - label: CLI
+        - label: TUI
+        - label: Desktop Linux
+        - label: Desktop macOS
+        - label: Desktop Windows
+  - type: textarea
+    id: outcome
+    attributes:
+      label: User outcome and acceptance criteria
+      description: Include success, failure, rollback and permission behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: tests
+    attributes:
+      label: Required automated tests
+    validations:
+      required: true
+  - type: checkboxes
+    id: sync
+    attributes:
+      label: Synchronization contract
+      options:
+        - label: Shared API/schema change is documented.
+          required: true
+        - label: Capability registry and release gates will be updated.
+          required: true
+        - label: Russian and English documentation will be updated.
+          required: true

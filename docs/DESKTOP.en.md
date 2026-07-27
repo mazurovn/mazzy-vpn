@@ -3,13 +3,20 @@
 Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
 [Русский](DESKTOP.ru.md) · [Architecture](ARCHITECTURE.en.md) ·
-[Project home](../README.md)
+[Standalone Desktop 1.0 plan](DESKTOP_ROADMAP.en.md) ·
+[Capability parity](FEATURE_PARITY.md) · [Project home](../README.md)
 
 ![Mazzy VPN Desktop Dashboard — preview data](images/dashboard-connected-preview.png)
 
 Mazzy VPN Desktop is a compact Tauri 2 application built on the validated
 `mazzy-vpn` CLI engine. It presents connection health in one window and keeps
 the main actions available from the system tray.
+
+> **0.1 status:** this is a functional Linux dashboard/companion, not yet a
+> standalone VPN client. It requires the installed CLI engine. Desktop 1.0 will
+> bundle the shared core/bootstrap and reach full parity without a separate CLI
+> installation; it remains preview until the
+> [release gates](FEATURE_PARITY.md) pass.
 
 ## Platform status
 

@@ -123,6 +123,12 @@ Quick Connect, Reconnect, Disconnect, Refresh и Self-diagnostics. Linux-вер�
 macOS и Windows пока являются только preview интерфейса до реализации нативных
 VPN backends.
 
+Это companion preview 0.1, а не самостоятельный Desktop 1.0. Целевая версия
+включит общий core, installer/bootstrap, import/выбор профилей, все режимы и
+services без отдельной установки CLI. Разработка синхронизируется через
+[план Desktop 1.0](docs/DESKTOP_ROADMAP.ru.md) и
+[матрицу паритета](docs/FEATURE_PARITY.md).
+
 GUI не читает конфиги или ключи: он получает очищенный status cache без endpoint
 и запускает только фиксированный набор CLI-команд. Подробная установка,
 ограничения и диагностика: [Desktop-инструкция](docs/DESKTOP.ru.md).

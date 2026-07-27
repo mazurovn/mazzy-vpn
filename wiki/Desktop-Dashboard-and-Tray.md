@@ -2,6 +2,11 @@
 
 ![Dashboard](https://raw.githubusercontent.com/mazurovn/mazzy-vpn/main/docs/images/dashboard-connected-preview.png)
 
+> Desktop 0.1 — функциональный Linux dashboard/companion, а не самостоятельный
+> VPN-клиент. Сейчас ему требуется установленный CLI engine. Целевая модель,
+> полный импорт/выбор профилей, режимы, services и installer описаны в
+> [плане Desktop 1.0](Desktop-Full-Application-Plan).
+
 Dashboard объединяет:
 
 - состояние сервиса, туннеля и интернета;
@@ -51,6 +56,11 @@ flowchart LR
 <a id="english"></a>
 
 # Desktop Dashboard and tray
+
+> Desktop 0.1 is a functional Linux dashboard/companion, not a standalone VPN
+> client. It currently requires the installed CLI engine. The bundled core,
+> complete profile/mode/service UI and installer are tracked in the
+> [Desktop 1.0 plan](Desktop-Full-Application-Plan#english).
 
 Dashboard combines:
 

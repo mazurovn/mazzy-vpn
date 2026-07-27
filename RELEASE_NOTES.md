@@ -26,6 +26,10 @@ Highlights:
 - macOS and Windows UI preview builds, clearly marked as non-functional until
   native VPN backends and signing are implemented.
 
+Desktop 0.1 is a companion preview and currently requires the separately
+installed Linux CLI engine. It must not be described as the standalone Desktop
+1.0 application; that target is tracked by the capability release gates.
+
 Install:
 
 ```bash
@@ -61,6 +65,10 @@ Mazzy VPN 1.1.0 добавляет безопасный Desktop Dashboard и с�
 - инструкции по установке и использованию на шести языках;
 - preview-сборки macOS и Windows, явно отмеченные как нерабочие до реализации
   нативных VPN backends и подписи.
+
+Desktop 0.1 — companion preview, которому пока требуется отдельно
+установленный Linux CLI engine. Его нельзя называть самостоятельным Desktop
+1.0; готовность целевой версии определяется capability release gates.
 
 Установка:
 

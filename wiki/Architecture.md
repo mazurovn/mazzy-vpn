@@ -2,6 +2,11 @@
 
 Полная версия: [docs/ARCHITECTURE.ru.md](https://github.com/mazurovn/mazzy-vpn/blob/main/docs/ARCHITECTURE.ru.md).
 
+Эта страница описывает действующую архитектуру CLI/TUI и Desktop 0.1.
+Целевая архитектура самостоятельного Desktop 1.0, общий core/API и правила
+синхронизации интерфейсов описаны на странице
+[[Desktop Full Application Plan]].
+
 ```mermaid
 flowchart TB
     User["Пользователь"]
