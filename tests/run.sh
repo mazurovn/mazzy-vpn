@@ -125,6 +125,21 @@ cat >"$TMP/fakebin/resolvectl" <<'EOF'
 printf '%s\n' "$*" >>"${FAKE_RESOLVECTL_LOG:?}"
 EOF
 
+cat >"$TMP/fakebin/socat" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${FAKE_SOCAT_OVERSIZED:-0}" == "1" ]]; then
+    head -c 2048 /dev/zero | tr '\0' x
+    exit 0
+fi
+if [[ -n "${FAKE_SOCAT_LOST_RESPONSE_FILE:-}" &&
+      ! -e "$FAKE_SOCAT_LOST_RESPONSE_FILE" ]]; then
+    touch "$FAKE_SOCAT_LOST_RESPONSE_FILE"
+    "${FAKE_SOCAT_DISPATCH:?}" _api-dispatch >/dev/null
+    exit 1
+fi
+exec "${FAKE_SOCAT_DISPATCH:?}" _api-dispatch
+EOF
+
 cat >"$TMP/fakebin/ip" <<'EOF'
 #!/usr/bin/env bash
 case "$*" in
@@ -218,6 +233,7 @@ export FAKE_SYSTEMCTL_COUNTER="$TMP/systemctl.counter"
 export FAKE_SYSTEMD_RUN_LOG="$TMP/systemd-run.log"
 export FAKE_OPENVPN_LOG="$TMP/openvpn.log"
 export FAKE_RESOLVECTL_LOG="$TMP/resolvectl.log"
+export FAKE_SOCAT_DISPATCH="$CLI"
 export FAKE_IP_LOG="$TMP/ip.log"
 export FAKE_IP_RULES="$TMP/ip.rules"
 export FAKE_ADGUARD_LOG="$TMP/adguard.log"
@@ -949,6 +965,86 @@ if grep -Eq 'Test Server|192\.0\.2\.10|PrivateKey|PublicKey' \
     fail "rotated local API audit log leaked profile or endpoint data"
 fi
 ok "local API recovery fails closed and bounds persistent journals"
+
+api_client_status="$(
+    VPNCTL_API_CLIENT_FORCE=1 "$CLI" status --json
+)"
+jq -e '
+    .api_version == "1.0"
+    and .status == "ok"
+    and .result.connection.state == "connected"
+' <<<"$api_client_status" >/dev/null ||
+    fail "CLI local API client did not return the status.get envelope"
+
+api_client_profiles="$(
+    VPNCTL_API_CLIENT_FORCE=1 "$CLI" profiles --json
+)"
+jq -e --arg profile_id "$profile_id" '
+    .api_version == "1.0"
+    and .status == "ok"
+    and any(
+        .result.profiles[];
+        .profile_id == $profile_id
+        and .display_name == "Test Server"
+        and .protocol == "openvpn"
+    )
+' <<<"$api_client_profiles" >/dev/null ||
+    fail "CLI local API client did not return the profiles.list envelope"
+if grep -Eq 'file_name|192\.0\.2\.10|PrivateKey|PublicKey' \
+    <<<"$api_client_profiles"; then
+    fail "CLI local API profile response leaked engine-only profile data"
+fi
+
+api_client_list="$(
+    VPNCTL_API_CLIENT_FORCE=1 "$CLI" list openvpn
+)"
+grep -q 'Test Server' <<<"$api_client_list" ||
+    fail "CLI local API profile list omitted the display name"
+grep -q '192\.0\.2\.10' <<<"$api_client_list" &&
+    fail "CLI local API profile list leaked the endpoint"
+if FAKE_SOCAT_OVERSIZED=1 VPNCTL_API_CLIENT_FORCE=1 \
+    VPNCTL_API_CLIENT_MAX_RESPONSE_BYTES=256 \
+    "$CLI" status --json >/dev/null 2>&1; then
+    fail "CLI local API client accepted an oversized response"
+fi
+
+: >"$FAKE_SYSTEMCTL_LOG"
+api_client_connect="$(
+    VPNCTL_API_CLIENT_FORCE=1 "$CLI" connect openvpn "Test Server"
+)"
+grep -q 'Подключение запущено' <<<"$api_client_connect" ||
+    fail "CLI local API connect did not report success"
+[[ "$(grep -c '^start vpnctl.service$' "$FAKE_SYSTEMCTL_LOG")" == "1" ]] ||
+    fail "CLI local API connect did not execute exactly once"
+
+: >"$FAKE_SYSTEMCTL_LOG"
+rm -f "$TMP/socat-lost-response"
+api_client_reconnect="$(
+    FAKE_SOCAT_LOST_RESPONSE_FILE="$TMP/socat-lost-response" \
+        VPNCTL_API_CLIENT_FORCE=1 "$CLI" reconnect
+)"
+grep -q 'Переподключение запущено' <<<"$api_client_reconnect" ||
+    fail "CLI local API reconnect did not recover from a lost response"
+[[ -e "$TMP/socat-lost-response" ]] ||
+    fail "CLI local API lost-response scenario was not exercised"
+[[ "$(grep -c '^start vpnctl.service$' "$FAKE_SYSTEMCTL_LOG")" == "1" ]] ||
+    fail "CLI local API retry executed one reconnect action twice"
+
+api_client_dashboard="$(
+    VPNCTL_API_CLIENT_FORCE=1 "$CLI" dashboard
+)"
+grep -q 'API: 1.0' <<<"$api_client_dashboard" ||
+    fail "TUI dashboard did not use the protected local API"
+grep -q '192\.0\.2\.10' <<<"$api_client_dashboard" &&
+    fail "TUI local API dashboard leaked the endpoint"
+
+api_client_disconnect="$(
+    VPNCTL_API_CLIENT_FORCE=1 "$CLI" disconnect
+)"
+grep -q 'VPN отключён' <<<"$api_client_disconnect" ||
+    fail "CLI local API disconnect did not report success"
+VPNCTL_API_CLIENT_FORCE=1 "$CLI" connect openvpn "Test Server" >/dev/null
+ok "CLI/TUI use opaque local API queries and idempotent lifecycle mutations"
 
 dashboard_output="$("$CLI" dashboard)"
 grep -q 'M A Z Z Y' <<<"$dashboard_output" || fail "dashboard artwork is missing"

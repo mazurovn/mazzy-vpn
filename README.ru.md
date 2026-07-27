@@ -66,12 +66,12 @@ regression-тесты, после установки — проверку system
 
 ```bash
 mazzy-vpn list
-sudo mazzy-vpn quick
+mazzy-vpn quick
 mazzy-vpn dashboard
-sudo mazzy-vpn connect amneziawg 1
-sudo mazzy-vpn connect openvpn "Example Server"
-sudo mazzy-vpn reconnect
-sudo mazzy-vpn disconnect
+mazzy-vpn connect amneziawg 1
+mazzy-vpn connect openvpn "Example Server"
+mazzy-vpn reconnect
+mazzy-vpn disconnect
 mazzy-vpn status
 mazzy-vpn status --json
 mazzy-vpn diagnose
@@ -86,6 +86,13 @@ mazzy-vpn logs
 mazzy-vpn language
 mazzy-vpn language en
 ```
+
+После установки status, list/dashboard и lifecycle-команды CLI/TUI используют
+защищённый `/run/mazzy-vpn/api-v1.sock` без `sudo`. Установщик добавляет
+пользователя в группу `mazzy-vpn` и автоматически ставит `jq`/`socat`; после
+первой установки может потребоваться повторный вход в сеанс. Test, import,
+Doctor fixes и остальные ещё не перенесённые системные операции по-прежнему
+явно запрашивают root.
 
 Без аргументов `mazzy-vpn` открывает интерактивное меню. `autostart on` включает
 подключение выбранного профиля после загрузки. Watchdog текущего соединения
@@ -131,9 +138,9 @@ Linux-пакеты выпускаются как AppImage, DEB и RPM.
 лицензию AGPL, принципы приватности и правила безопасной работы.
 
 Desktop 0.2 — полноценный центр управления Linux в статусе preview, но ещё не
-финальный самостоятельный Desktop 1.0. Язык-независимая схема API v1 и
-read-only метаданные контракта уже опубликованы, но защищённый локальный
-service и перевод всех клиентов на единый dispatcher ещё не готовы. Для
+финальный самостоятельный Desktop 1.0. Язык-независимая схема API v1,
+защищённый Linux service и lifecycle-клиенты CLI/TUI/Desktop уже реализованы,
+но остальные operation domains ещё не переведены на единый dispatcher. Для
 снятия preview также остаются полные настройки режимов/fallback, перевод новых
 экранов на все шесть языков, подписанное обновление/rollback и нативные VPN
 backends для macOS и Windows. Разработка синхронизируется через
@@ -328,7 +335,7 @@ OpenVPN в retryable failure; systemd повторяет подключение 
 или подождите истечения старой серверной сессии, затем выполните:
 
 ```bash
-sudo mazzy-vpn connect openvpn "Example Server"
+mazzy-vpn connect openvpn "Example Server"
 mazzy-vpn diagnose
 ```
 

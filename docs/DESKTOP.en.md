@@ -84,7 +84,9 @@ The GUI never constructs a shell string. Its Rust backend accepts an enum and
 maps it to a fixed request or argument array. Connect, reconnect and disconnect
 use `/run/mazzy-vpn/api-v1.sock` when the installed engine provides it. The
 socket is restricted to `root:mazzy-vpn`, and outcomes contain no raw backend
-output. Remaining state-changing actions use system `pkexec`, so the OS may
+output. CLI/TUI use the same socket without `sudo` for lifecycle actions and
+select profiles by opaque ID only. Remaining state-changing actions use system
+`pkexec`, so the OS may
 show its standard administrator prompt. Closing the window hides the
 application to the tray; use **Quit Mazzy VPN** for a full exit.
 
@@ -96,7 +98,8 @@ events depend on the desktop environment.
 Install one Desktop bundle from the Releases page. Then open
 **Settings → Install / update / repair**. The bundled validated installer
 detects the OS, preserves existing profiles, installs missing dependencies and
-the systemd engine/recovery/API units, then runs an offline self-test. The
+the systemd engine/recovery/API units, including `jq`/`socat`, then runs an
+offline self-test. The
 installer adds the invoking desktop user to the `mazzy-vpn` group; a new login
 session may be required before the protected socket is available to Desktop.
 

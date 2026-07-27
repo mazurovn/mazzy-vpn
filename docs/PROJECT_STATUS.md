@@ -83,16 +83,29 @@ Draft PR #26 on `agent/local-api-daemon` builds the protected-service slice:
 - failed or missing crash-recovery snapshots persist a root-only marker that
   blocks later API mutations until explicit administrator acknowledgement.
 
+The active stacked `agent/cli-tui-api-client` branch adds the next client slice:
+
+- unprivileged CLI/TUI `status`, `profiles`, `list`, dashboard, quick, connect,
+  reconnect and disconnect routing through the same Unix socket;
+- profile selection from sanitized display names and opaque profile IDs without
+  reading root-only profile files;
+- bounded `socat` transport, response identity validation and one automatic
+  retry with the same action ID after a lost response;
+- no direct `sudo` fallback after a request may have been sent;
+- automatic `socat` installation on Debian/Ubuntu, Fedora/RHEL, Arch and
+  openSUSE.
+
 Verified locally:
 
-- shell regression suite: 58/58 on PR #26;
+- shell regression suite: 59/59 on the stacked PR #27 branch;
 - Rust unit tests: 11/11;
 - ShellCheck, Clippy, capability/API validators, public audit and gitleaks;
 - the previous npm audit reported 0 vulnerabilities, but the 2026-07-28 online
   refresh was not authorized by the sandbox and must not be treated as current;
-- staged installer reads the installed contract through the staged CLI.
+- release-mode Linux Desktop build: DEB, RPM and AppImage;
+- the DEB-embedded CLI, installer, API docs and handoff byte-match this branch.
 
 Do not mark issue #5 complete after this slice. The remaining API domains,
-independently installed CLI/TUI client migration, native caller identity,
-strict end-to-end deadlines, long-lived idempotency semantics and real-host
-crash/concurrency tests remain separate acceptance criteria.
+native caller identity, strict end-to-end deadlines, long-lived idempotency
+semantics and real-host crash/concurrency tests remain separate acceptance
+criteria.

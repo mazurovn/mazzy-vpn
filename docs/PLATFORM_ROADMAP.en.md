@@ -9,8 +9,9 @@ must not be called a complete client until its gate computes as `ready`.
 ## Shared foundation
 
 Every interface must use one profile model, the same error codes, connection
-states and transactional rules. The planned versioned local API separates an
-unprivileged UI from the system VPN backend. Private keys and complete
+states and transactional rules. The partially implemented versioned local API
+already separates CLI/TUI/Desktop lifecycle operations from the system Linux
+VPN backend. Private keys and complete
 configurations never enter the status cache, telemetry or public logs.
 
 ```mermaid

@@ -213,6 +213,10 @@ run_preflight_tests() {
         "$SCRIPT_DIR/install.sh" "$SCRIPT_DIR/tests/run.sh" \
         "$SCRIPT_DIR/setup_amnezia_vpn.sh" "$SCRIPT_DIR/stop_amnezia_vpn.sh"
     bash -n "$SCRIPT_DIR/completions/mazzy-vpn" "$SCRIPT_DIR/completions/vpnctl"
+    if ((NO_DEPS)) && ! command -v socat >/dev/null 2>&1; then
+        echo "Для CLI/TUI local API нужен socat; уберите --no-deps или установите socat." >&2
+        return 1
+    fi
     if ! command -v jq >/dev/null 2>&1; then
         if ((NO_DEPS)); then
             echo "Для regression-тестов local API нужен jq; уберите --no-deps или установите jq." >&2
@@ -415,7 +419,7 @@ install_amnezia_userspace() {
 install_debian_dependencies() {
     local -a packages=(iproute2 curl ca-certificates openvpn wireguard-tools
         network-manager network-manager-l2tp strongswan xl2tpd iputils-ping
-        netcat-openbsd jq)
+        netcat-openbsd jq socat)
     if ! run apt-get update; then
         echo "Предупреждение: один из APT-репозиториев не обновился." >&2
         echo "Продолжаю с успешно обновлёнными индексами; doctor покажет остаточные проблемы." >&2
@@ -454,7 +458,7 @@ install_debian_dependencies() {
 
 install_fedora_dependencies() {
     run dnf install -y iproute curl ca-certificates openvpn wireguard-tools \
-        NetworkManager NetworkManager-l2tp strongswan xl2tpd iputils jq
+        NetworkManager NetworkManager-l2tp strongswan xl2tpd iputils jq socat
     if ! amnezia_ready && confirm "Включить COPR amneziavpn/amneziawg?"; then
         run dnf install -y dnf-plugins-core
         run dnf copr enable -y amneziavpn/amneziawg
@@ -464,7 +468,7 @@ install_fedora_dependencies() {
 
 install_arch_dependencies() {
     run pacman -S --needed --noconfirm iproute2 curl ca-certificates openvpn \
-        wireguard-tools networkmanager-l2tp strongswan xl2tpd iputils jq
+        wireguard-tools networkmanager-l2tp strongswan xl2tpd iputils jq socat
     if ! amnezia_ready; then
         echo "AmneziaWG отсутствует. Установите amneziawg-tools и совместимый модуль из AUR вручную."
     fi
@@ -472,7 +476,7 @@ install_arch_dependencies() {
 
 install_suse_dependencies() {
     run zypper --non-interactive install iproute2 curl ca-certificates openvpn \
-        wireguard-tools NetworkManager-l2tp strongswan xl2tpd iputils jq
+        wireguard-tools NetworkManager-l2tp strongswan xl2tpd iputils jq socat
     if ! amnezia_ready; then
         echo "AmneziaWG отсутствует; автоматическая установка для openSUSE не поддерживается."
     fi

@@ -11,8 +11,10 @@ The published contract version is `1.0`. This is an incremental compatibility
 boundary for issue
 [#5](https://github.com/mazurovn/mazzy-vpn/issues/5). The current
 `cli-json-adapter` is explicitly `partial`: existing safe JSON status/profile
-outputs remain available, but clients do not yet submit every v1 request
-envelope through one dispatcher. Contract metadata is implemented. The
+outputs remain available, and CLI/TUI now submit v1 envelopes for `status.get`,
+`profiles.list` and `lifecycle.*` through one dispatcher. Remaining domains
+still use the compatible direct CLI control plane. Contract metadata is
+implemented. The
 socket-activated Linux transport is `partial`: it accepts `status.get`,
 `profiles.list` and the three `lifecycle.*` mutations. Other operations and
 non-Linux transports remain `planned`, so this still does not claim that the
@@ -96,3 +98,15 @@ desired mode, interface, handshake age, current public IP, autostart, health
 monitor, failure count and external-fallback state. These fields are optional
 for minor-version compatibility. The VPN endpoint, profile filename/path and
 configuration remain forbidden.
+
+Installed CLI and TUI clients use the socket without `sudo` for status, profile
+listing, connect, quick, reconnect and disconnect. The client sends only an
+opaque `profile_id`, bounds response time and size, and verifies
+`api_version`/`request_id`. If a response is lost, it automatically retries the
+same request with the same `action_id`, so the daemon returns the stored outcome
+without applying the mutation twice. If the transport remains indeterminate,
+the client does not run the same operation through `sudo`.
+
+The installer adds `socat` for the Unix-socket client. The user must belong to
+the `mazzy-vpn` group; a new login session may be required after initial group
+enrollment.

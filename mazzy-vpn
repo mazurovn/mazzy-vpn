@@ -28,6 +28,8 @@ TEST_RECOVERY_SERVICE="${VPNCTL_TEST_RECOVERY_SERVICE:-vpnctl-test-recovery.serv
 API_SOCKET_UNIT="${VPNCTL_API_SOCKET_UNIT:-mazzy-vpn-api.socket}"
 API_SERVICE_UNIT="${VPNCTL_API_SERVICE_UNIT:-mazzy-vpn-api@.service}"
 RUNTIME_READER_GROUP="${VPNCTL_RUNTIME_READER_GROUP:-mazzy-vpn}"
+API_SOCKET="${VPNCTL_API_SOCKET:-/run/mazzy-vpn/api-v1.sock}"
+API_CLIENT_MAX_RESPONSE_BYTES="${VPNCTL_API_CLIENT_MAX_RESPONSE_BYTES:-65536}"
 HEALTH_FAILURE_LIMIT="${VPNCTL_HEALTH_FAILURE_LIMIT:-2}"
 HEALTH_PROBE_TIMEOUT="${VPNCTL_HEALTH_PROBE_TIMEOUT:-4}"
 HEALTH_FALLBACK_PROBE_URL="${VPNCTL_HEALTH_FALLBACK_PROBE_URL:-https://1.1.1.1/cdn-cgi/trace}"
@@ -465,6 +467,10 @@ CHECK_OK=0
 CHECK_WARN=0
 CHECK_FAIL=0
 TEST_FAILURE_CODE=1
+API_CLIENT_PROFILES='[]'
+API_CLIENT_SELECTED_PROFILE_ID=""
+API_CLIENT_SELECTED_PROFILE_NAME=""
+API_CLIENT_SELECTED_PROTOCOL=""
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
     C_RED=$'\033[31m'
@@ -744,7 +750,7 @@ Mazzy VPN - быстрое и безопасное управление VPN в L
 Примеры:
   mazzy-vpn
   mazzy-vpn list openvpn
-  sudo mazzy-vpn connect amneziawg 2
+  mazzy-vpn connect amneziawg 2
   sudo mazzy-vpn test openvpn 2 --timeout 60
   mazzy-vpn self-test
   sudo mazzy-vpn test-all openvpn --timeout 30
@@ -1055,6 +1061,429 @@ require_profile_access() {
     fi
 }
 
+api_client_candidate() {
+    [[ "${VPNCTL_API_SERVER_CONTEXT:-0}" != "1" &&
+       "${VPNCTL_API_CLIENT_DISABLE:-0}" != "1" ]] || return 1
+    ((EUID != 0)) || [[ "${VPNCTL_API_CLIENT_FORCE:-0}" == "1" ]] || return 1
+    [[ -S "$API_SOCKET" || "${VPNCTL_API_CLIENT_FORCE:-0}" == "1" ]]
+}
+
+api_client_ready() {
+    local dependency
+    api_client_candidate || return 1
+    for dependency in head jq socat timeout; do
+        command -v "$dependency" >/dev/null 2>&1 ||
+            die "Local API доступен, но не установлен $dependency. Запустите install.sh."
+    done
+    [[ "$API_CLIENT_MAX_RESPONSE_BYTES" =~ ^[1-9][0-9]*$ ]] ||
+        API_CLIENT_MAX_RESPONSE_BYTES=65536
+    ((API_CLIENT_MAX_RESPONSE_BYTES <= 1048576)) ||
+        API_CLIENT_MAX_RESPONSE_BYTES=65536
+}
+
+api_client_identifier() {
+    local prefix="$1" token=""
+    if [[ -r /proc/sys/kernel/random/uuid ]]; then
+        IFS= read -r token </proc/sys/kernel/random/uuid || token=""
+        token="${token//-/}"
+    fi
+    if [[ -z "$token" ]]; then
+        token="$(
+            printf '%s:%s:%s:%s' "$(date +%s%N)" "$$" "$RANDOM" "$prefix" |
+                sha256sum |
+                awk '{ print substr($1, 1, 32) }'
+        )"
+    fi
+    printf '%s-%s\n' "$prefix" "$token"
+}
+
+api_client_send() {
+    local request="$1" request_id deadline_ms timeout_seconds response="" rc=1 attempt
+    request_id="$(jq -r '.request_id // ""' <<<"$request")"
+    deadline_ms="$(jq -r '.deadline_ms // 5000' <<<"$request")"
+    [[ "$deadline_ms" =~ ^[0-9]+$ ]] || deadline_ms=5000
+    timeout_seconds=$(((deadline_ms + 999) / 1000 + 5))
+    ((timeout_seconds >= 10)) || timeout_seconds=10
+    ((timeout_seconds <= 905)) || timeout_seconds=905
+
+    for attempt in 1 2; do
+        response="$(
+            printf '%s\n' "$request" |
+                timeout --foreground --kill-after=2s "${timeout_seconds}s" \
+                    socat -T "$timeout_seconds" - "UNIX-CONNECT:$API_SOCKET" \
+                    2>/dev/null |
+                head -c "$((API_CLIENT_MAX_RESPONSE_BYTES + 1))"
+        )"
+        rc=$?
+        if ((rc == 0)) &&
+           ((${#response} > 0 && ${#response} <= API_CLIENT_MAX_RESPONSE_BYTES)) &&
+           jq -e --arg request_id "$request_id" '
+               .api_version == "1.0"
+               and .request_id == $request_id
+               and (.status == "ok" or .status == "error")
+           ' <<<"$response" >/dev/null 2>&1; then
+            printf '%s\n' "$response"
+            return 0
+        fi
+    done
+    return 70
+}
+
+api_client_query() {
+    local operation="$1" request_id request
+    request_id="$(api_client_identifier request)"
+    request="$(
+        jq -cn \
+            --arg request_id "$request_id" \
+            --arg operation "$operation" \
+            '{
+                api_version: "1.0",
+                request_id: $request_id,
+                operation: $operation,
+                payload: {}
+            }'
+    )"
+    api_client_send "$request"
+}
+
+api_client_fetch_profiles() {
+    local response
+    response="$(api_client_query profiles.list)" || {
+        error "Local API не вернул каталог профилей."
+        return 70
+    }
+    if [[ "$(jq -r '.status' <<<"$response")" != "ok" ]]; then
+        error "Local API: $(jq -r '.error.code + ": " + .error.message_key' <<<"$response")"
+        return 1
+    fi
+    API_CLIENT_PROFILES="$(jq -c '.result.profiles // []' <<<"$response")"
+}
+
+api_client_print_profile_list() {
+    local protocol="$1" entry index=0 name selected
+    local -a entries=()
+    mapfile -t entries < <(
+        jq -c --arg protocol "$protocol" '
+            .[] | select(.protocol == $protocol)
+        ' <<<"$API_CLIENT_PROFILES"
+    )
+    printf '\n%s%s%s\n' "$C_BOLD" "$(protocol_title "$protocol")" "$C_RESET"
+    if ((${#entries[@]} == 0)); then
+        printf '  Профилей нет\n'
+        return 0
+    fi
+    for entry in "${entries[@]}"; do
+        index=$((index + 1))
+        name="$(jq -r '.display_name' <<<"$entry")"
+        selected="$(jq -r '.selected // false' <<<"$entry")"
+        printf '  %2d. %s' "$index" "$name"
+        [[ "$selected" == "true" ]] && printf '  *'
+        printf '\n'
+    done
+}
+
+api_client_choose_protocol() {
+    local answer protocol count index=1
+    stdin_interactive || {
+        error "Укажите протокол: amneziawg, wireguard, openvpn или l2tp"
+        return 1
+    }
+    printf '\n%s\n' "$(msg choose_protocol)" >&2
+    for protocol in amneziawg wireguard openvpn l2tp; do
+        count="$(
+            jq -r --arg protocol "$protocol" '
+                map(select(.protocol == $protocol)) | length
+            ' <<<"$API_CLIENT_PROFILES"
+        )"
+        printf '  %d. %-12s %s: %-3d\n' "$index" \
+            "$(protocol_title "$protocol")" "$(msg profile_count)" "$count" >&2
+        index=$((index + 1))
+    done
+    read -r -p "$(msg protocol_number)" answer
+    case "$answer" in
+        1) printf 'amneziawg\n' ;;
+        2) printf 'wireguard\n' ;;
+        3) printf 'openvpn\n' ;;
+        4) printf 'l2tp\n' ;;
+        *) error "$(msg invalid_protocol)"; return 1 ;;
+    esac
+}
+
+api_client_resolve_profile() {
+    local requested_protocol="${1:-}" requested_profile="${2:-}" protocol
+    local matches selected="" match_count index
+    api_client_fetch_profiles || return
+    if [[ -z "$requested_protocol" ]]; then
+        protocol="$(api_client_choose_protocol)" || return 1
+    else
+        protocol="$(canonical_protocol "$requested_protocol")" ||
+            die "Неизвестный протокол: $requested_protocol"
+    fi
+    matches="$(
+        jq -c --arg protocol "$protocol" '
+            [.[] | select(.protocol == $protocol)]
+        ' <<<"$API_CLIENT_PROFILES"
+    )"
+    match_count="$(jq -r 'length' <<<"$matches")"
+    ((match_count > 0)) || {
+        error "Для $(protocol_title "$protocol") нет профилей"
+        return 1
+    }
+    if [[ -z "$requested_profile" ]]; then
+        stdin_interactive || {
+            error "Укажите профиль или его номер. Список: $CLI_COMMAND list $protocol"
+            return 1
+        }
+        api_client_print_profile_list "$protocol" >&2
+        read -r -p "$(msg server_number)" requested_profile
+    fi
+    if [[ "$requested_profile" =~ ^[0-9]+$ ]]; then
+        index=$((10#$requested_profile))
+        if ((index >= 1 && index <= match_count)); then
+            selected="$(jq -c --argjson index "$((index - 1))" '.[$index]' <<<"$matches")"
+        fi
+    else
+        selected="$(
+            jq -c --arg requested "$requested_profile" '
+                [.[] | select(.display_name == $requested)] | first // empty
+            ' <<<"$matches"
+        )"
+        if [[ -z "$selected" ]]; then
+            match_count="$(
+                jq -r --arg requested "${requested_profile,,}" '
+                    [.[] | select((.display_name | ascii_downcase) == $requested)] | length
+                ' <<<"$matches"
+            )"
+            if ((match_count == 1)); then
+                selected="$(
+                    jq -c --arg requested "${requested_profile,,}" '
+                        [.[] | select((.display_name | ascii_downcase) == $requested)] | first
+                    ' <<<"$matches"
+                )"
+            elif ((match_count > 1)); then
+                error "Имя '$requested_profile' неоднозначно; используйте точное имя или номер"
+                return 1
+            fi
+        fi
+    fi
+    [[ -n "$selected" && "$selected" != "null" ]] || {
+        error "Профиль '$requested_profile' не найден для $(protocol_title "$protocol")"
+        return 1
+    }
+    API_CLIENT_SELECTED_PROFILE_ID="$(jq -r '.profile_id' <<<"$selected")"
+    API_CLIENT_SELECTED_PROFILE_NAME="$(jq -r '.display_name' <<<"$selected")"
+    API_CLIENT_SELECTED_PROTOCOL="$protocol"
+}
+
+api_client_mutation() {
+    local operation="$1" payload="$2" deadline_ms="$3"
+    local action_id request_id request response status state code message
+    action_id="$(api_client_identifier action)"
+    request_id="$(api_client_identifier request)"
+    request="$(
+        jq -cn \
+            --arg request_id "$request_id" \
+            --arg operation "$operation" \
+            --arg action_id "$action_id" \
+            --argjson deadline_ms "$deadline_ms" \
+            --argjson payload "$payload" \
+            '{
+                api_version: "1.0",
+                request_id: $request_id,
+                operation: $operation,
+                action_id: $action_id,
+                authorization: "system-mutate",
+                deadline_ms: $deadline_ms,
+                payload: $payload
+            }'
+    )"
+    response="$(api_client_send "$request")" || {
+        error "Ответ local API потерян или невалиден; повтор через sudo запрещён."
+        error "Безопасный action ID для проверки журнала: $action_id"
+        return 70
+    }
+    status="$(jq -r '.status' <<<"$response")"
+    if [[ "$status" != "ok" ]]; then
+        code="$(jq -r '.error.code // "internal-error"' <<<"$response")"
+        message="$(jq -r '.error.message_key // "api.response.malformed"' <<<"$response")"
+        error "Local API отклонил операцию: $code ($message)"
+        [[ "$code" != "busy" ]] ||
+            error "Action ID для безопасной проверки/повтора: $action_id"
+        return 1
+    fi
+    state="$(jq -r '.result.state // "failed"' <<<"$response")"
+    if [[ "$state" != "succeeded" ]]; then
+        message="$(jq -r '.result.message_key // "api.response.malformed"' <<<"$response")"
+        error "Операция завершилась состоянием $state ($message)"
+        return 1
+    fi
+}
+
+api_client_cmd_connect() {
+    api_client_resolve_profile "${1:-}" "${2:-}" || return
+    info "Выбран $(protocol_title "$API_CLIENT_SELECTED_PROTOCOL"): $API_CLIENT_SELECTED_PROFILE_NAME"
+    api_client_mutation lifecycle.connect \
+        "$(jq -cn --arg profile_id "$API_CLIENT_SELECTED_PROFILE_ID" \
+            '{profile_id: $profile_id}')" 60000 || return
+    say "Подключение запущено. Проверка: $CLI_COMMAND status"
+}
+
+api_client_cmd_disconnect() {
+    (($# == 0)) || die "Использование: $CLI_COMMAND disconnect"
+    api_client_mutation lifecycle.disconnect '{}' 30000 || return
+    say "VPN отключён."
+}
+
+api_client_cmd_reconnect() {
+    (($# == 0)) || die "Использование: $CLI_COMMAND reconnect"
+    api_client_mutation lifecycle.reconnect '{}' 30000 || return
+    say "Переподключение запущено."
+}
+
+api_client_cmd_quick() {
+    local response state profile_id profile_name=""
+    (($# == 0)) || die "Использование: $CLI_COMMAND quick"
+    response="$(api_client_query status.get)" || {
+        error "Local API не вернул статус."
+        return 70
+    }
+    [[ "$(jq -r '.status' <<<"$response")" == "ok" ]] || {
+        error "Local API не смог прочитать статус."
+        return 1
+    }
+    state="$(jq -r '.result.connection.state // "unknown"' <<<"$response")"
+    profile_id="$(jq -r '.result.connection.profile_id // ""' <<<"$response")"
+    api_client_fetch_profiles || return
+    if [[ -n "$profile_id" ]]; then
+        profile_name="$(
+            jq -r --arg profile_id "$profile_id" '
+                [.[] | select(.profile_id == $profile_id) | .display_name] |
+                first // ""
+            ' <<<"$API_CLIENT_PROFILES"
+        )"
+    fi
+    if [[ "$state" == "connected" &&
+          "$(jq -r '.result.connection.healthy // false' <<<"$response")" == "true" ]]; then
+        say "$(msg already_connected)${profile_name:+: $profile_name}"
+        return 0
+    fi
+    if [[ -z "$profile_id" ]]; then
+        info "$(msg no_default)"
+        api_client_cmd_connect
+        return
+    fi
+    api_client_cmd_reconnect
+}
+
+api_client_cmd_status() {
+    local json=false response state profile_id="" protocol="" profile_name=""
+    if [[ "${1:-}" == "--json" ]]; then
+        json=true
+        shift
+    fi
+    (($# == 0)) || die "Использование: $CLI_COMMAND status [--json]"
+    response="$(api_client_query status.get)" || {
+        error "Local API не вернул статус."
+        return 70
+    }
+    if [[ "$json" == true ]]; then
+        printf '%s\n' "$response"
+        [[ "$(jq -r '.status' <<<"$response")" == "ok" ]]
+        return
+    fi
+    [[ "$(jq -r '.status' <<<"$response")" == "ok" ]] || {
+        error "Local API не смог прочитать статус."
+        return 1
+    }
+    state="$(jq -r '.result.connection.state // "unknown"' <<<"$response")"
+    profile_id="$(jq -r '.result.connection.profile_id // ""' <<<"$response")"
+    protocol="$(jq -r '.result.connection.protocol // ""' <<<"$response")"
+    if [[ -n "$profile_id" ]]; then
+        api_client_fetch_profiles || return
+        profile_name="$(
+            jq -r --arg profile_id "$profile_id" '
+                [.[] | select(.profile_id == $profile_id) | .display_name] |
+                first // ""
+            ' <<<"$API_CLIENT_PROFILES"
+        )"
+    fi
+    if [[ "$state" == "connected" ]]; then
+        printf 'VPN:       active\n'
+    else
+        printf 'VPN:       %s\n' "$state"
+    fi
+    [[ -z "$protocol" ]] || printf 'Protocol:  %s\n' "$(protocol_title "$protocol")"
+    [[ -z "$profile_name" ]] || printf 'Profile:   %s\n' "$profile_name"
+    printf 'Internet:  %s\n' \
+        "$(jq -r 'if .result.connection.internet_reachable then "reachable" else "unreachable" end' <<<"$response")"
+    printf 'Healthy:   %s\n' \
+        "$(jq -r 'if .result.connection.healthy then "yes" else "no" end' <<<"$response")"
+    [[ "$state" == "connected" ]]
+}
+
+api_client_dashboard_render() {
+    local response state profile_id="" protocol="" profile_name="" counts=""
+    local protocol_name count service_text internet_text
+    response="$(api_client_query status.get)" || {
+        error "Local API не вернул dashboard status."
+        return 70
+    }
+    [[ "$(jq -r '.status' <<<"$response")" == "ok" ]] || {
+        error "Local API не смог построить dashboard."
+        return 1
+    }
+    api_client_fetch_profiles || return
+    state="$(jq -r '.result.connection.state // "unknown"' <<<"$response")"
+    profile_id="$(jq -r '.result.connection.profile_id // ""' <<<"$response")"
+    protocol="$(jq -r '.result.connection.protocol // ""' <<<"$response")"
+    if [[ -n "$profile_id" ]]; then
+        profile_name="$(
+            jq -r --arg profile_id "$profile_id" '
+                [.[] | select(.profile_id == $profile_id) | .display_name] |
+                first // ""
+            ' <<<"$API_CLIENT_PROFILES"
+        )"
+    fi
+    for protocol_name in amneziawg wireguard openvpn l2tp; do
+        count="$(
+            jq -r --arg protocol "$protocol_name" '
+                map(select(.protocol == $protocol)) | length
+            ' <<<"$API_CLIENT_PROFILES"
+        )"
+        counts+="${counts:+  ·  }$(protocol_title "$protocol_name")=$count"
+    done
+    case "$state" in
+        connected|connecting|testing) service_text="$(msg active)" ;;
+        *) service_text="$(msg stopped)" ;;
+    esac
+    if [[ "$(jq -r '.result.connection.internet_reachable // false' <<<"$response")" == "true" ]]; then
+        internet_text="✓ $(msg check_ok)"
+    else
+        internet_text="✗ $(msg check_failed)"
+    fi
+
+    print_logo
+    printf '%s╭─ %s ───────────────────────────────────────────────╮%s\n' \
+        "$C_BOLD" "$(msg connection)" "$C_RESET"
+    if [[ -n "$profile_name" ]]; then
+        printf '│  %s●%s %-18s  %s: %s\n' \
+            "$([[ "$state" == "connected" ]] && printf '%s' "$C_GREEN" || printf '%s' "$C_YELLOW")" \
+            "$C_RESET" "$service_text" "$(msg internet)" "$internet_text"
+        printf '│  ◆ %s: %s\n' "$(msg location)" "$profile_name"
+        printf '│  ◇ %s: %s\n' "$(msg protocol_label)" "$(protocol_title "$protocol")"
+        printf '│  ★ %s: %s\n' "$(msg default_config)" "$profile_name"
+        printf '│  ↳ API: 1.0  ·  %s: %s\n' \
+            "$(msg health_label)" \
+            "$(jq -r 'if .result.connection.healthy then "OK" else "WARN" end' <<<"$response")"
+    else
+        printf '│  ○ %s: %s\n' "$(msg selected)" "$(msg no_profile)"
+        printf '│  %s: %s\n' "$(msg internet)" "$(msg not_available)"
+    fi
+    printf '├─ %s ──────────────────────────────────────────────────┤\n' "$(msg profiles)"
+    printf '│  %s\n' "$counts"
+    printf '╰────────────────────────────────────────────────────────╯\n'
+}
+
 systemd_available() {
     command -v systemctl >/dev/null 2>&1 &&
         [[ -d /run/systemd/system || "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]]
@@ -1340,6 +1769,19 @@ fix_profile_permissions() {
 
 cmd_list() {
     local requested="${1:-all}" protocol
+    if api_client_ready; then
+        api_client_fetch_profiles || return
+        if [[ "$requested" == "all" ]]; then
+            for protocol in amneziawg wireguard openvpn l2tp; do
+                api_client_print_profile_list "$protocol"
+            done
+            return 0
+        fi
+        protocol="$(canonical_protocol "$requested")" ||
+            die "Неизвестный протокол: $requested"
+        api_client_print_profile_list "$protocol"
+        return 0
+    fi
     require_profile_access list "$@"
     if [[ "$requested" == "all" ]]; then
         for protocol in amneziawg wireguard openvpn l2tp; do
@@ -1444,6 +1886,13 @@ write_profiles_cache() {
 }
 
 cmd_profiles_json() {
+    if api_client_ready; then
+        api_client_query profiles.list || {
+            error "Local API не вернул каталог профилей."
+            return 70
+        }
+        return
+    fi
     if [[ -r "$PROFILES_FILE" ]]; then
         cat -- "$PROFILES_FILE"
         return 0
@@ -1491,6 +1940,10 @@ choose_protocol() {
 cmd_connect() (
     local -a original=("$@")
     local requested_protocol="${1:-}" requested_profile="${2:-}" protocol fallback=""
+    if api_client_ready; then
+        api_client_cmd_connect "${original[@]}"
+        return
+    fi
     require_profile_access connect "${original[@]}"
     if [[ -z "$requested_protocol" ]]; then
         protocol="$(choose_protocol)" || return 1
@@ -1541,6 +1994,10 @@ cmd_connect() (
 )
 
 cmd_disconnect() (
+    if api_client_ready; then
+        api_client_cmd_disconnect "$@"
+        return
+    fi
     require_root disconnect
     systemd_available || die "systemd недоступен"
     acquire_action_lock
@@ -1559,6 +2016,10 @@ cmd_disconnect() (
 
 cmd_reconnect() (
     local fallback=""
+    if api_client_ready; then
+        api_client_cmd_reconnect "$@"
+        return
+    fi
     require_root reconnect
     acquire_action_lock
     cancel_test_guard
@@ -1592,6 +2053,10 @@ cmd_reconnect() (
 
 cmd_quick_connect() {
     local interface
+    if api_client_ready; then
+        api_client_cmd_quick "$@"
+        return
+    fi
     require_profile_access quick
     if ! selected_from_state; then
         info "$(msg no_default)"
@@ -2653,6 +3118,10 @@ cmd_emergency() (
 cmd_status() {
     local protocol profile desired mode state interface endpoint handshake now age ip autostart deadline
     local fallback=""
+    if api_client_ready; then
+        api_client_cmd_status "$@"
+        return
+    fi
     if [[ "${1:-}" == "--json" ]]; then
         shift
         (($# == 0)) || die "Использование: $CLI_COMMAND status --json"
@@ -3541,6 +4010,7 @@ api_dispatch() {
             api.transport.root-required false true
         return
     }
+    export VPNCTL_API_SERVER_CONTEXT=1
     for command in jq sha256sum flock timeout install; do
         command -v "$command" >/dev/null 2>&1 || {
             api_error_response "$(api_server_request_id)" backend-unavailable \
@@ -3768,6 +4238,7 @@ doctor_dependency_checks() {
     check_command timeout
     check_command flock
     check_command jq "JSON API runtime (jq)"
+    check_command socat "local API client transport (socat)"
     check_command sha256sum "opaque profile IDs (sha256sum)"
     check_command getent "DNS resolver (getent)"
     check_command ping "ICMP ping"
@@ -4722,6 +5193,10 @@ dashboard_render() {
     local service_text internet_text public_ip_value="" handshake_text=""
     local autostart_text health_text fallback="" fallback_text counts="" protocol_name count
     local tunnel_ok=0 now handshake
+    if api_client_ready; then
+        api_client_dashboard_render
+        return
+    fi
     service_text="$(msg stopped)"
     internet_text="$(msg not_available)"
     autostart_text="$(msg disabled)"
@@ -4799,6 +5274,10 @@ dashboard_render() {
 }
 
 cmd_dashboard() {
+    if api_client_ready; then
+        dashboard_render
+        return
+    fi
     require_profile_access dashboard
     dashboard_render
 }
@@ -5073,7 +5552,7 @@ menu_config_folders() {
 
 interactive_menu() {
     local choice
-    require_profile_access
+    api_client_candidate || require_profile_access
     while true; do
         dashboard_render
         print_main_menu

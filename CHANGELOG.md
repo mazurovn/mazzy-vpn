@@ -25,6 +25,11 @@ All notable changes to Mazzy VPN are documented here.
   retaining the typed `pkexec` adapter as a compatibility fallback and for
   operation domains not migrated yet; an indeterminate transport is retried
   once with the identical request and action ID.
+- Routed unprivileged CLI/TUI status, profile listing, dashboard and lifecycle
+  actions through the same protected API, using opaque profile IDs only.
+- Added bounded `socat` transport with response identity validation and
+  same-action retry after a lost response, without an unsafe post-send `sudo`
+  fallback; installers now bootstrap `socat` on supported Linux families.
 - Added crash reconciliation for orphaned API actions, bounded the completed
   action journal and rotated the sanitized root-only audit log.
 - Rejected every terminal control character in imported or manually installed

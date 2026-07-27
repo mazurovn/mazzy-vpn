@@ -13,8 +13,9 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 Mazzy VPN состоит из Bash CLI/TUI, Tauri Desktop Dashboard и небольшого набора
 systemd units. Профили протоколов хранятся вне исходного кода, выбранное
 состояние записывается в один канонический файл, а временем жизни туннеля
-управляет systemd. Терминальное меню, Desktop и команды автоматизации используют
-один проверяемый CLI-контур и одинаковые переходы состояния.
+управляет systemd. Непривилегированные CLI, TUI и Desktop используют защищённый
+локальный API для status/profile queries и lifecycle; остальные команды
+постепенно переносятся из совместимого прямого CLI-контура.
 
 ## Компонентная архитектура
 
@@ -69,6 +70,8 @@ flowchart TB
     Entry --> TUI
     Entry --> Commands
     TUI --> Commands
+    Entry --> ApiSocket
+    TUI --> ApiSocket
     Tray --> Desktop
     Desktop --> StatusCache
     Desktop --> ProfileCache
@@ -106,6 +109,13 @@ flowchart TB
 Контур управления не содержит ключей провайдера в исходном коде. В публичном
 репозитории находятся только менеджер, тесты и документация. Рабочие профили
 остаются доступными только root и имеют права `600`.
+
+CLI/TUI-клиент подключается к Unix socket через автоматически установленный
+`socat`. Он ограничивает размер и время ответа, проверяет identity envelope и
+при сетевой неопределённости повторяет тот же request с тем же `action_id`.
+Root API-dispatch помечает server context, поэтому внутренний вызов движка не
+может рекурсивно вернуться в socket. После возможной отправки запроса прямой
+`sudo` fallback запрещён.
 
 ## Desktop control center и tray
 
