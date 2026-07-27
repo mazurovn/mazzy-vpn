@@ -22,6 +22,8 @@ flowchart TB
     Core --> Mac["macOS Network Extension"]
     Core --> Win["Windows service / Wintun"]
     Core --> Store["Protected profiles"]
+    Mobile["Android / iOS native clients"] --> Contract["Shared profile/state contract"]
+    Contract --> Core
 ```
 
 ## Обязательные функции
@@ -35,8 +37,10 @@ flowchart TB
 - dependency detection/install/migrate/repair/uninstall;
 - одинаковые события, ошибки и состояние в CLI, TUI и Desktop.
 
-Текущий Desktop 0.1 остаётся preview, пока gate `desktop-linux-1.0`,
+Текущий Desktop 0.2 остаётся preview, пока gate `desktop-linux-1.0`,
 `desktop-macos-1.0` или `desktop-windows-1.0` не вычисляется как ready.
+Android и iOS имеют отдельные gate и нативный lifecycle; они не блокируют
+Desktop 1.0 и не считаются Desktop wrapper.
 
 ## Контроль синхронизации
 
@@ -76,4 +80,6 @@ doctor/fixes, dependency installation/migration and platform-native backends.
 
 `docs/capabilities.json` is the machine-validated source of truth. Every change
 updates applicable clients, tests, Russian/English docs and the release gate.
-Desktop 0.1 remains preview until the appropriate standalone 1.0 gate passes.
+Desktop 0.2 remains preview until the appropriate standalone 1.0 gate passes.
+Android and iOS have independent native-client gates; they neither block
+Desktop 1.0 nor count as wrapped Desktop frontends.

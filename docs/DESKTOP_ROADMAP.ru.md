@@ -40,21 +40,29 @@ Desktop работает без отдельной установки CLI, по�
 client/core. CLI и TUI остаются доступными отдельно и могут управлять тем же
 core, даже когда GUI закрыт.
 
-## Что отсутствует в Desktop 0.1
+## Что готово в Desktop 0.2 Linux preview
 
-- импорт одного файла, нескольких файлов и папки drag-and-drop;
-- распознавание AWG, WireGuard, OpenVPN и L2TP/IPsec до установки;
-- библиотека профилей с поиском, группировкой, локацией и default-профилем;
-- выбор normal/test/emergency/fallback режимов;
-- transactional test, rollback и результаты probe в GUI;
-- полный doctor с безопасными предложениями исправлений;
-- просмотр/управление engine service, autostart, health monitor и recovery;
-- self-contained bootstrap зависимостей и миграция существующей установки;
-- общий versioned API вместо прямого вызова отдельных CLI-команд;
+- встроенный installer engine с проверкой версий и готовности зависимостей;
+- безопасный импорт одного/нескольких файлов и папки с определением протокола;
+- очищенный cache библиотеки профилей с поиском, локацией и выбором;
+- connect, validate, probe, transactional test, test-all и emergency;
+- полный сохраняемый вывод Doctor, approved fix, self-test и bounded logs;
+- управление autostart engine и независимым health monitor;
+- типизированные Rust-операции с фиксированными аргументами без shell-строк;
+- проверки capability registry и ссылки на regression-тесты всех поверхностей.
+
+## Что остаётся до Desktop 1.0
+
+- предварительный просмотр импорта и drag-and-drop workflow;
+- полные настройки normal/test/emergency и fallback policy;
+- общий привилегированный versioned service API вместо отдельного CLI-процесса
+  на каждое действие (adapter 0.2 типизирован, но вызывает встроенный engine);
+- полный перевод новых экранов центра управления на все шесть языков;
+- подписанные обновления, миграция и transactional rollback installer;
 - native macOS/Windows backends, signing/notarization и системные installers;
-- тесты паритета, запрещающие выпуск GUI с забытыми функциями CLI/TUI.
+- security, accessibility, failure-injection и длительные soak gates.
 
-До закрытия этих пунктов пакеты Desktop имеют статус **preview**.
+До закрытия применимых release gates пакеты Desktop имеют статус **preview**.
 
 ## Целевые компоненты
 

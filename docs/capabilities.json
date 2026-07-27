@@ -13,7 +13,9 @@
     "tui",
     "desktop_linux",
     "desktop_macos",
-    "desktop_windows"
+    "desktop_windows",
+    "mobile_android",
+    "mobile_ios"
   ],
   "capabilities": [
     {
@@ -24,12 +26,14 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "implemented",
-        "desktop_linux": "partial",
+        "desktop_linux": "implemented",
         "desktop_macos": "planned",
-        "desktop_windows": "planned"
+        "desktop_windows": "planned",
+        "mobile_android": "planned",
+        "mobile_ios": "planned"
       },
-      "tests": ["tests/run.sh", "desktop/src-tauri/src/main.rs"],
-      "docs": ["README.en.md", "README.ru.md", "docs/DESKTOP_ROADMAP.en.md", "docs/DESKTOP_ROADMAP.ru.md"]
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/main.rs", "desktop/src-tauri/src/backend.rs"],
+      "docs": ["README.en.md", "README.ru.md", "docs/DESKTOP.en.md", "docs/DESKTOP.ru.md"]
     },
     {
       "id": "profile-import",
@@ -39,12 +43,14 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "implemented",
-        "desktop_linux": "planned",
+        "desktop_linux": "implemented",
         "desktop_macos": "planned",
-        "desktop_windows": "planned"
+        "desktop_windows": "planned",
+        "mobile_android": "planned",
+        "mobile_ios": "planned"
       },
-      "tests": ["tests/run.sh"],
-      "docs": ["README.en.md", "README.ru.md", "wiki/Profiles-and-Import.md"]
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/backend.rs", "desktop/ui/app.js"],
+      "docs": ["README.en.md", "README.ru.md", "docs/DESKTOP.en.md", "docs/DESKTOP.ru.md"]
     },
     {
       "id": "profile-location-selection",
@@ -54,12 +60,14 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "implemented",
-        "desktop_linux": "planned",
+        "desktop_linux": "implemented",
         "desktop_macos": "planned",
-        "desktop_windows": "planned"
+        "desktop_windows": "planned",
+        "mobile_android": "planned",
+        "mobile_ios": "planned"
       },
-      "tests": ["tests/run.sh"],
-      "docs": ["README.en.md", "README.ru.md", "wiki/Profiles-and-Import.md"]
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/backend.rs", "desktop/ui/app.js"],
+      "docs": ["README.en.md", "README.ru.md", "docs/DESKTOP.en.md", "docs/DESKTOP.ru.md"]
     },
     {
       "id": "validation-probe-test",
@@ -69,12 +77,14 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "implemented",
-        "desktop_linux": "planned",
+        "desktop_linux": "implemented",
         "desktop_macos": "planned",
-        "desktop_windows": "planned"
+        "desktop_windows": "planned",
+        "mobile_android": "planned",
+        "mobile_ios": "planned"
       },
-      "tests": ["tests/run.sh"],
-      "docs": ["docs/ARCHITECTURE.en.md", "docs/ARCHITECTURE.ru.md", "wiki/Diagnostics-and-Recovery.md"]
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/backend.rs", "desktop/ui/app.js"],
+      "docs": ["docs/ARCHITECTURE.en.md", "docs/ARCHITECTURE.ru.md", "docs/DESKTOP.en.md", "docs/DESKTOP.ru.md"]
     },
     {
       "id": "operating-modes",
@@ -84,11 +94,13 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "implemented",
-        "desktop_linux": "planned",
+        "desktop_linux": "partial",
         "desktop_macos": "planned",
-        "desktop_windows": "planned"
+        "desktop_windows": "planned",
+        "mobile_android": "planned",
+        "mobile_ios": "planned"
       },
-      "tests": ["tests/run.sh"],
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/backend.rs", "desktop/ui/app.js"],
       "docs": ["docs/ARCHITECTURE.en.md", "docs/ARCHITECTURE.ru.md", "wiki/Diagnostics-and-Recovery.md"]
     },
     {
@@ -99,11 +111,13 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "partial",
-        "desktop_linux": "planned",
+        "desktop_linux": "implemented",
         "desktop_macos": "planned",
-        "desktop_windows": "planned"
+        "desktop_windows": "planned",
+        "mobile_android": "not-applicable",
+        "mobile_ios": "not-applicable"
       },
-      "tests": ["tests/run.sh"],
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/backend.rs", "desktop/ui/app.js"],
       "docs": ["docs/ARCHITECTURE.en.md", "docs/ARCHITECTURE.ru.md", "wiki/Diagnostics-and-Recovery.md"]
     },
     {
@@ -114,12 +128,14 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "not-applicable",
-        "desktop_linux": "planned",
+        "desktop_linux": "implemented",
         "desktop_macos": "planned",
-        "desktop_windows": "planned"
+        "desktop_windows": "planned",
+        "mobile_android": "not-applicable",
+        "mobile_ios": "not-applicable"
       },
-      "tests": ["tests/run.sh"],
-      "docs": ["docs/DESKTOP_ROADMAP.en.md", "docs/DESKTOP_ROADMAP.ru.md", "wiki/Installation.md"]
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/backend.rs", "desktop/src-tauri/tauri.conf.json"],
+      "docs": ["docs/DESKTOP.en.md", "docs/DESKTOP.ru.md", "docs/DESKTOP_ROADMAP.en.md", "docs/DESKTOP_ROADMAP.ru.md"]
     },
     {
       "id": "dashboard-tray",
@@ -131,7 +147,9 @@
         "tui": "implemented",
         "desktop_linux": "implemented",
         "desktop_macos": "partial",
-        "desktop_windows": "partial"
+        "desktop_windows": "partial",
+        "mobile_android": "planned",
+        "mobile_ios": "planned"
       },
       "tests": ["tests/run.sh", "desktop/src-tauri/src/main.rs"],
       "docs": ["docs/DESKTOP.en.md", "docs/DESKTOP.ru.md", "wiki/Desktop-Dashboard-and-Tray.md"]
@@ -144,9 +162,11 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "implemented",
-        "desktop_linux": "implemented",
-        "desktop_macos": "implemented",
-        "desktop_windows": "implemented"
+        "desktop_linux": "partial",
+        "desktop_macos": "partial",
+        "desktop_windows": "partial",
+        "mobile_android": "planned",
+        "mobile_ios": "planned"
       },
       "tests": ["tests/run.sh", "desktop/ui/app.js"],
       "docs": ["README.en.md", "README.ru.md", "docs/DESKTOP.en.md", "docs/DESKTOP.ru.md"]
@@ -159,11 +179,13 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "implemented",
-        "desktop_linux": "partial",
+        "desktop_linux": "implemented",
         "desktop_macos": "planned",
-        "desktop_windows": "planned"
+        "desktop_windows": "planned",
+        "mobile_android": "planned",
+        "mobile_ios": "planned"
       },
-      "tests": ["tests/run.sh"],
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/backend.rs", "desktop/ui/app.js"],
       "docs": ["docs/ARCHITECTURE.en.md", "docs/ARCHITECTURE.ru.md", "wiki/Diagnostics-and-Recovery.md"]
     },
     {
@@ -174,12 +196,14 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "implemented",
-        "desktop_linux": "planned",
+        "desktop_linux": "implemented",
         "desktop_macos": "planned",
-        "desktop_windows": "planned"
+        "desktop_windows": "planned",
+        "mobile_android": "planned",
+        "mobile_ios": "planned"
       },
-      "tests": ["tests/run.sh"],
-      "docs": ["docs/DESKTOP_ROADMAP.en.md", "docs/DESKTOP_ROADMAP.ru.md", "wiki/Desktop-Full-Application-Plan.md"]
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/backend.rs", "desktop/src-tauri/tauri.conf.json"],
+      "docs": ["docs/DESKTOP.en.md", "docs/DESKTOP.ru.md", "docs/DESKTOP_ROADMAP.en.md", "docs/DESKTOP_ROADMAP.ru.md"]
     },
     {
       "id": "privilege-boundary",
@@ -191,15 +215,34 @@
         "tui": "implemented",
         "desktop_linux": "partial",
         "desktop_macos": "planned",
-        "desktop_windows": "planned"
+        "desktop_windows": "planned",
+        "mobile_android": "planned",
+        "mobile_ios": "planned"
       },
-      "tests": ["tests/run.sh", "desktop/src-tauri/src/main.rs", "tests/audit-public.sh"],
+      "tests": ["tests/run.sh", "desktop/src-tauri/src/main.rs", "desktop/src-tauri/src/backend.rs", "tests/audit-public.sh"],
       "docs": ["SECURITY.md", "docs/DESKTOP_ROADMAP.en.md", "docs/DESKTOP_ROADMAP.ru.md"]
+    },
+    {
+      "id": "mobile-vpn-lifecycle",
+      "name_en": "OS-managed mobile tunnel, background lifecycle and protected secrets",
+      "name_ru": "Мобильный VPN-туннель, фоновый lifecycle и защищённые секреты",
+      "owner": "mobile-platform-backend",
+      "surfaces": {
+        "cli": "not-applicable",
+        "tui": "not-applicable",
+        "desktop_linux": "not-applicable",
+        "desktop_macos": "not-applicable",
+        "desktop_windows": "not-applicable",
+        "mobile_android": "planned",
+        "mobile_ios": "planned"
+      },
+      "tests": ["tests/check-capabilities.py"],
+      "docs": ["docs/PLATFORM_ROADMAP.en.md", "docs/PLATFORM_ROADMAP.ru.md"]
     }
   ],
   "release_gates": [
     {
-      "id": "cli-tui-1.1",
+      "id": "cli-tui-1.2",
       "declared_ready": true,
       "requirements": [
         {"capability": "connection-lifecycle", "surfaces": ["cli", "tui"]},
@@ -263,6 +306,40 @@
         {"capability": "automatic-recovery", "surfaces": ["desktop_windows"]},
         {"capability": "self-contained-runtime", "surfaces": ["desktop_windows"]},
         {"capability": "privilege-boundary", "surfaces": ["desktop_windows"]}
+      ]
+    },
+    {
+      "id": "mobile-android-1.0",
+      "declared_ready": false,
+      "requirements": [
+        {"capability": "connection-lifecycle", "surfaces": ["mobile_android"]},
+        {"capability": "profile-import", "surfaces": ["mobile_android"]},
+        {"capability": "profile-location-selection", "surfaces": ["mobile_android"]},
+        {"capability": "validation-probe-test", "surfaces": ["mobile_android"]},
+        {"capability": "operating-modes", "surfaces": ["mobile_android"]},
+        {"capability": "dashboard-tray", "surfaces": ["mobile_android"]},
+        {"capability": "localization-six-languages", "surfaces": ["mobile_android"]},
+        {"capability": "automatic-recovery", "surfaces": ["mobile_android"]},
+        {"capability": "self-contained-runtime", "surfaces": ["mobile_android"]},
+        {"capability": "privilege-boundary", "surfaces": ["mobile_android"]},
+        {"capability": "mobile-vpn-lifecycle", "surfaces": ["mobile_android"]}
+      ]
+    },
+    {
+      "id": "mobile-ios-1.0",
+      "declared_ready": false,
+      "requirements": [
+        {"capability": "connection-lifecycle", "surfaces": ["mobile_ios"]},
+        {"capability": "profile-import", "surfaces": ["mobile_ios"]},
+        {"capability": "profile-location-selection", "surfaces": ["mobile_ios"]},
+        {"capability": "validation-probe-test", "surfaces": ["mobile_ios"]},
+        {"capability": "operating-modes", "surfaces": ["mobile_ios"]},
+        {"capability": "dashboard-tray", "surfaces": ["mobile_ios"]},
+        {"capability": "localization-six-languages", "surfaces": ["mobile_ios"]},
+        {"capability": "automatic-recovery", "surfaces": ["mobile_ios"]},
+        {"capability": "self-contained-runtime", "surfaces": ["mobile_ios"]},
+        {"capability": "privilege-boundary", "surfaces": ["mobile_ios"]},
+        {"capability": "mobile-vpn-lifecycle", "surfaces": ["mobile_ios"]}
       ]
     }
   ]

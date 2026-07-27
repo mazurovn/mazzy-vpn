@@ -1,8 +1,8 @@
 {
   "name": "mazzy-vpn-desktop",
   "private": true,
-  "version": "0.1.0",
-  "description": "Mazzy VPN Desktop dashboard and tray companion for Mazzy VPN CLI",
+  "version": "0.2.0",
+  "description": "Mazzy VPN Desktop Linux control center with embedded engine bootstrap",
   "author": "Nik m (@mazurovn)",
   "license": "AGPL-3.0-or-later",
   "scripts": {

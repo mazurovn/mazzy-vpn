@@ -2,7 +2,7 @@
 
 Полная версия: [docs/ARCHITECTURE.ru.md](https://github.com/mazurovn/mazzy-vpn/blob/main/docs/ARCHITECTURE.ru.md).
 
-Эта страница описывает действующую архитектуру CLI/TUI и Desktop 0.1.
+Эта страница описывает действующую архитектуру CLI/TUI и Desktop 0.2.
 Целевая архитектура самостоятельного Desktop 1.0, общий core/API и правила
 синхронизации интерфейсов описаны на странице
 [[Desktop Full Application Plan]].
@@ -11,8 +11,8 @@
 flowchart TB
     User["Пользователь"]
     TUI["CLI / TUI"]
-    Desktop["Tauri Dashboard / tray"]
-    Cache["Sanitized status cache"]
+    Desktop["Tauri control center / tray"]
+    Cache["Sanitized status + profiles cache"]
     Validate["Profile validation"]
     State["Desired state"]
     Systemd["systemd service + health timer"]
@@ -69,8 +69,8 @@ sequenceDiagram
     participant Secret as Profiles mode 600
 
     CLI->>Cache: atomic safe snapshot
-    UI->>Cache: read status
-    UI->>PK: fixed enum action
+    UI->>Cache: read status + profiles
+    UI->>PK: typed fixed operation
     PK->>CLI: known argv only
     CLI->>Secret: validate and use
     Secret--xUI: never read
@@ -85,6 +85,7 @@ sequenceDiagram
 Full document: [docs/ARCHITECTURE.en.md](https://github.com/mazurovn/mazzy-vpn/blob/main/docs/ARCHITECTURE.en.md).
 
 The CLI/TUI is the validated control plane. systemd owns tunnel lifetime and an
-independent health timer. Desktop reads a sanitized cache and maps enum actions
-to fixed CLI argument arrays through `pkexec`. Operational profiles remain
+independent health timer. Desktop reads sanitized status/profile caches and
+maps typed operations to fixed CLI argument arrays through `pkexec`. Its bundle
+contains the compatible installer/engine resources. Operational profiles remain
 root-only and never cross the Desktop boundary.

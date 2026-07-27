@@ -1,5 +1,12 @@
 # Безопасность и приватность
 
+Полная двуязычная политика:
+[PRIVACY.md](https://github.com/mazurovn/mazzy-vpn/blob/main/PRIVACY.md).
+
+Mazzy VPN не использует обязательный cloud account и не собирает телеметрию.
+Проверки endpoint выполняются только по явному действию пользователя или
+включённой им проверке здоровья. Приватные профили хранятся локально.
+
 ## Что не публикуется
 
 - приватные и preshared keys;
@@ -43,6 +50,13 @@ SHA-256. Security reports: см. `SECURITY.md`; не публикуйте сек
 <a id="english"></a>
 
 # Security and privacy
+
+Full bilingual policy:
+[PRIVACY.md](https://github.com/mazurovn/mazzy-vpn/blob/main/PRIVACY.md).
+
+Mazzy VPN has no mandatory cloud account and collects no telemetry. Endpoint
+checks run only after an explicit user action or a health check the user
+enabled. Private profiles remain local.
 
 Private or preshared keys, OpenVPN client keys and auth files, IPsec/PPP
 credentials, operational profiles, personal paths and user endpoint lists are

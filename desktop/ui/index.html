@@ -48,6 +48,20 @@
         </div>
       </header>
 
+      <nav class="section-tabs" aria-label="Mazzy VPN sections">
+        <button class="section-tab active" type="button" data-page="dashboard"
+                data-i18n="navDashboard">Обзор</button>
+        <button class="section-tab" type="button" data-page="profiles"
+                data-i18n="navProfiles">Профили</button>
+        <button class="section-tab" type="button" data-page="diagnostics"
+                data-i18n="navDiagnostics">Диагностика</button>
+        <button class="section-tab" type="button" data-page="settings"
+                data-i18n="navSettings">Настройки</button>
+        <button class="section-tab" type="button" data-page="about"
+                data-i18n="navAbout">О программе</button>
+      </nav>
+
+      <div class="page-panel active" data-page-panel="dashboard">
       <section class="hero glass">
         <div class="connection-orb-wrap">
           <div class="connection-orb" id="connection-orb" aria-hidden="true">
@@ -191,6 +205,270 @@
           </div>
         </article>
       </section>
+      </div>
+
+      <div class="page-panel" data-page-panel="profiles">
+        <section class="page-heading glass">
+          <div>
+            <p class="eyebrow" data-i18n="profileLibrary">PROFILE LIBRARY</p>
+            <h2 data-i18n="profileManagement">Профили и локации</h2>
+            <p class="muted" data-i18n="profileManagementHint">
+              Импорт, проверка, выбор и безопасный тест конфигураций.
+            </p>
+          </div>
+          <div class="heading-actions">
+            <button class="compact-action primary" id="import-files-button" type="button"
+                    data-i18n="importFiles">Загрузить файлы</button>
+            <button class="compact-action" id="scan-folder-button" type="button"
+                    data-i18n="scanFolder">Проверить папку</button>
+            <button class="compact-action" id="import-folder-button" type="button"
+                    data-i18n="importFolder">Импортировать папку</button>
+          </div>
+        </section>
+
+        <section class="control-grid">
+          <article class="glass card profiles-workspace">
+            <div class="toolbar">
+              <input id="profile-search" type="search" autocomplete="off"
+                     data-i18n-placeholder="searchProfiles"
+                     placeholder="Поиск профиля или локации">
+              <select id="protocol-filter" aria-label="Protocol filter">
+                <option value="all" data-i18n="allProtocols">Все протоколы</option>
+                <option value="amneziawg">AmneziaWG</option>
+                <option value="wireguard">WireGuard</option>
+                <option value="openvpn">OpenVPN</option>
+                <option value="l2tp">L2TP/IPsec</option>
+              </select>
+              <button class="icon-button" id="profiles-refresh-button" type="button"
+                      aria-label="Refresh profiles">↻</button>
+            </div>
+            <div class="profile-list" id="profile-list" aria-live="polite">
+              <div class="empty-state" data-i18n="profilesLoading">Загружаем профили…</div>
+            </div>
+          </article>
+
+          <aside class="glass card test-workspace">
+            <p class="eyebrow" data-i18n="testingTools">TESTING</p>
+            <h3 data-i18n="testingTitle">Проверка конфигураций</h3>
+            <label class="field">
+              <span data-i18n="testTimeout">Таймаут живого теста</span>
+              <input id="test-timeout" type="number" min="2" max="600" value="45">
+            </label>
+            <label class="field">
+              <span data-i18n="testProtocol">Протокол</span>
+              <select id="test-protocol">
+                <option value="all" data-i18n="allProtocols">Все протоколы</option>
+                <option value="amneziawg">AmneziaWG</option>
+                <option value="wireguard">WireGuard</option>
+                <option value="openvpn">OpenVPN</option>
+                <option value="l2tp">L2TP/IPsec</option>
+              </select>
+            </label>
+            <div class="stack-actions">
+              <button class="compact-action" id="validate-button" type="button"
+                      data-i18n="validateProfiles">Проверить формат</button>
+              <button class="compact-action" id="probe-button" type="button"
+                      data-i18n="probeEndpoints">DNS и ping endpoint</button>
+              <button class="compact-action warn" id="test-all-button" type="button"
+                      data-i18n="testAllProfiles">Живой test-all с rollback</button>
+              <button class="compact-action danger" id="emergency-button" type="button"
+                      data-i18n="emergencyMode">Аварийный выбор рабочего VPN</button>
+            </div>
+            <p class="safety-note" data-i18n="rollbackHint">
+              Живые тесты временно меняют маршрут и всегда используют timeout + rollback.
+            </p>
+          </aside>
+        </section>
+      </div>
+
+      <div class="page-panel" data-page-panel="diagnostics">
+        <section class="page-heading glass">
+          <div>
+            <p class="eyebrow" data-i18n="diagnosticsCenter">DIAGNOSTICS</p>
+            <h2 data-i18n="diagnosticsTitle">Doctor, тесты и журнал</h2>
+            <p class="muted" data-i18n="diagnosticsHint">
+              Полный результат больше не скрывается: вывод сохраняется в этой панели.
+            </p>
+          </div>
+          <div class="heading-actions">
+            <button class="compact-action primary" id="doctor-button" type="button"
+                    data-i18n="runDoctor">Запустить Doctor</button>
+            <button class="compact-action warn" id="doctor-fix-button" type="button"
+                    data-i18n="repairSystem">Установить/исправить</button>
+          </div>
+        </section>
+
+        <section class="diagnostic-layout">
+          <aside class="glass card diagnostic-actions">
+            <button class="diagnostic-action" id="diagnose-button" type="button">
+              <strong data-i18n="connectionDiagnose">Диагностика соединения</strong>
+              <small data-i18n="connectionDiagnoseHint">Маршрут, DNS, туннель, handshake и интернет</small>
+            </button>
+            <button class="diagnostic-action" id="self-test-offline-button" type="button">
+              <strong data-i18n="offlineSelfTest">Offline self-test</strong>
+              <small data-i18n="offlineSelfTestHint">Формат, зависимости, службы и права</small>
+            </button>
+            <button class="diagnostic-action" id="self-test-live-button" type="button">
+              <strong data-i18n="liveSelfTest">Live self-test</strong>
+              <small data-i18n="liveSelfTestHint">Проверка туннелей с rollback</small>
+            </button>
+            <button class="diagnostic-action" id="logs-button" type="button">
+              <strong data-i18n="serviceLog">Журнал сервиса</strong>
+              <small data-i18n="serviceLogHint">Последние 200 событий без секретов</small>
+            </button>
+            <label class="field">
+              <span data-i18n="logLines">Строк журнала</span>
+              <input id="log-lines" type="number" min="20" max="1000" value="200">
+            </label>
+          </aside>
+
+          <article class="glass card output-card">
+            <div class="output-heading">
+              <div>
+                <span class="operation-state" id="operation-state"
+                      data-i18n="outputReady">Готово к проверке</span>
+                <strong id="operation-title" data-i18n="diagnosticOutput">Результат</strong>
+              </div>
+              <button class="compact-action" id="clear-output-button" type="button"
+                      data-i18n="clearOutput">Очистить</button>
+            </div>
+            <pre id="operation-output" tabindex="0" aria-live="polite"
+                 data-i18n="outputPlaceholder">Здесь появится полный вывод Doctor, тестов и журнала.</pre>
+          </article>
+        </section>
+      </div>
+
+      <div class="page-panel" data-page-panel="settings">
+        <section class="page-heading glass">
+          <div>
+            <p class="eyebrow" data-i18n="settingsCenter">SETTINGS</p>
+            <h2 data-i18n="settingsTitle">Установка и системные настройки</h2>
+            <p class="muted" data-i18n="settingsHint">
+              Desktop включает совместимый движок и может установить недостающие зависимости.
+            </p>
+          </div>
+          <button class="compact-action primary" id="bootstrap-button" type="button"
+                  data-i18n="installRepair">Установить / обновить / исправить</button>
+        </section>
+
+        <section class="settings-grid">
+          <article class="glass card installation-card">
+            <div class="card-heading">
+              <div>
+                <p class="eyebrow" data-i18n="installation">INSTALLATION</p>
+                <h3 data-i18n="engineReadiness">Готовность движка</h3>
+              </div>
+              <span class="health-badge" id="installation-badge">CHECK</span>
+            </div>
+            <dl class="version-list">
+              <div><dt data-i18n="installedVersion">Установлено</dt>
+                <dd id="installed-version">—</dd></div>
+              <div><dt data-i18n="bundledVersion">В комплекте Desktop</dt>
+                <dd id="bundled-version">—</dd></div>
+              <div><dt data-i18n="engineService">Системная служба</dt>
+                <dd id="service-installed">—</dd></div>
+              <div><dt data-i18n="recoveryMonitor">Recovery monitor</dt>
+                <dd id="monitor-installed">—</dd></div>
+            </dl>
+            <div class="dependency-list" id="dependency-list"></div>
+          </article>
+
+          <article class="glass card service-card">
+            <p class="eyebrow" data-i18n="services">SERVICES</p>
+            <h3 data-i18n="serviceControl">Управление службами</h3>
+            <div class="setting-row">
+              <div><strong data-i18n="autoConnect">Автоподключение</strong>
+                <small data-i18n="startsOnBoot">Запуск при загрузке</small></div>
+              <div class="segmented">
+                <button type="button" data-service-action="autostart-on">ON</button>
+                <button type="button" data-service-action="autostart-off">OFF</button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div><strong data-i18n="healthMonitor">Health monitor</strong>
+                <small data-i18n="autoHealing">Автопроверка и recovery</small></div>
+              <div class="segmented">
+                <button type="button" data-service-action="monitor-on">ON</button>
+                <button type="button" data-service-action="monitor-off">OFF</button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div><strong data-i18n="notifications">Уведомления</strong>
+                <small data-i18n="notificationsHint">Локально, без телеметрии</small></div>
+              <label class="switch"><input id="notifications-toggle" type="checkbox" checked>
+                <span></span></label>
+            </div>
+            <div class="setting-row">
+              <div><strong data-i18n="privacyMode">Скрывать публичный IP</strong>
+                <small data-i18n="privacyModeHint">Применяется к Dashboard</small></div>
+              <label class="switch"><input id="privacy-toggle" type="checkbox">
+                <span></span></label>
+            </div>
+          </article>
+        </section>
+      </div>
+
+      <div class="page-panel" data-page-panel="about">
+        <section class="page-heading glass about-heading">
+          <div>
+            <p class="eyebrow" data-i18n="aboutProduct">О ПРОДУКТЕ</p>
+            <h2>Mazzy VPN</h2>
+            <p class="muted" data-i18n="aboutLead">
+              Безопасный центр управления VPN с общим CLI/TUI/Desktop engine.
+            </p>
+          </div>
+          <span class="health-badge ok" id="about-version">Desktop —</span>
+        </section>
+
+        <section class="about-grid">
+          <article class="glass card about-card">
+            <p class="eyebrow" data-i18n="aboutPurpose">НАЗНАЧЕНИЕ</p>
+            <h3 data-i18n="aboutPurposeTitle">Один безопасный контур управления</h3>
+            <p data-i18n="aboutPurposeText">
+              Mazzy VPN управляет AmneziaWG, WireGuard, OpenVPN и L2TP/IPsec,
+              проверяет профили и восстанавливает предыдущее соединение после тестов.
+            </p>
+            <dl class="about-meta">
+              <div><dt>Desktop</dt><dd id="about-desktop-version">—</dd></div>
+              <div><dt>Engine</dt><dd id="about-engine-version">—</dd></div>
+              <div><dt data-i18n="aboutPlatform">Платформа</dt><dd id="about-platform">—</dd></div>
+            </dl>
+          </article>
+
+          <article class="glass card about-card">
+            <p class="eyebrow" data-i18n="aboutAuthor">АВТОР И СОПРОВОЖДЕНИЕ</p>
+            <h3 id="about-author">Nik m (@mazurovn)</h3>
+            <p data-i18n="aboutAuthorText">
+              Проект создан и сопровождается Nik m. Оригинальное авторство и
+              уведомления об авторских правах должны сохраняться.
+            </p>
+            <dl class="about-meta">
+              <div><dt data-i18n="aboutCopyright">Авторское право</dt>
+                <dd>Copyright © 2026 Nik m</dd></div>
+              <div><dt>GitHub</dt><dd>github.com/mazurovn/mazzy-vpn</dd></div>
+              <div><dt data-i18n="aboutLicense">Лицензия</dt>
+                <dd id="about-license">AGPL-3.0-or-later</dd></div>
+            </dl>
+          </article>
+
+          <article class="glass card about-card about-rules">
+            <p class="eyebrow" data-i18n="aboutRules">ПРАВИЛА И БЕЗОПАСНОСТЬ</p>
+            <h3 data-i18n="aboutRulesTitle">Прозрачная работа без скрытых действий</h3>
+            <ul class="rule-list">
+              <li data-i18n="aboutRuleLocal">Профили, ключи и журналы остаются на устройстве; телеметрии нет.</li>
+              <li data-i18n="aboutRulePrivilege">Системные изменения выполняются только после стандартного разрешения ОС.</li>
+              <li data-i18n="aboutRuleTests">Live-тесты временно меняют маршруты и обязаны завершаться rollback.</li>
+              <li data-i18n="aboutRuleLicense">Изменённые сетевые версии должны соблюдать условия AGPL и предоставлять исходный код.</li>
+              <li data-i18n="aboutRuleIdentity">Нельзя выдавать изменённую сборку за оригинальный релиз или искажать авторство.</li>
+              <li data-i18n="aboutRuleProvider">Пользователь отвечает за законность VPN-провайдера и импортируемых конфигураций.</li>
+            </ul>
+            <p class="about-docs">
+              <span data-i18n="aboutDocuments">Документы:</span>
+              LICENSE · SECURITY.md · PRIVACY · Desktop roadmap
+            </p>
+          </article>
+        </section>
+      </div>
 
       <footer>
         <span id="engine-version">Mazzy VPN CLI</span>

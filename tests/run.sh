@@ -235,8 +235,8 @@ export VPNCTL_LEGACY_START="$TMP/fallback-start"
 export VPNCTL_LEGACY_STOP="$TMP/fallback-stop"
 export NO_COLOR=1
 
-"$CLI" version | grep -q '^Mazzy VPN 1\.1\.0 (mazzy-vpn; alias: vpnctl)$'
-"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.1\.0 ' ||
+"$CLI" version | grep -q '^Mazzy VPN 1\.2\.0 (mazzy-vpn; alias: vpnctl)$'
+"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.2\.0 ' ||
     fail "vpnctl compatibility wrapper is broken"
 ok "Mazzy VPN branding and compatibility alias"
 
@@ -371,6 +371,24 @@ fi
     fail "import-dir did not close target permissions"
 [[ ! -e "$TMP/import-target/openvpn/Unsafe.ovpn" ]] ||
     fail "unsafe folder profile was copied"
+
+mkdir -p "$TMP/import-files-target"
+VPNCTL_CONFIG_DIR="$TMP/import-files-target" \
+    "$CLI" import-files \
+    "$TMP/import-source/mixed/AWG.conf" \
+    "$TMP/import-source/mixed/WG.conf" >/dev/null
+[[ -f "$TMP/import-files-target/amneziawg/AWG.conf" &&
+   -f "$TMP/import-files-target/wireguard/WG.conf" ]] ||
+    fail "multi-file import did not detect both VPN protocols"
+[[ "$(stat -c %a "$TMP/import-files-target/amneziawg/AWG.conf")" == "600" ]] ||
+    fail "multi-file import did not close target permissions"
+if VPNCTL_CONFIG_DIR="$TMP/import-files-target" \
+    "$CLI" import-files \
+    "$TMP/import-source/mixed/AWG.conf" \
+    "$TMP/import-source/mixed/WG.conf" >/dev/null 2>&1; then
+    fail "multi-file import overwrote an existing profile without --force"
+fi
+ok "safe multi-file profile import"
 
 "$CLI" init-config-dir "$TMP/new-config-tree" >/dev/null
 for protocol_dir in amneziawg wireguard openvpn l2tp; do
@@ -532,6 +550,21 @@ grep -q '192\.0\.2\.10' <<<"$status_json" &&
     fail "dashboard status cache is not safely readable"
 "$CLI" _refresh-dashboard-cache
 ok "safe structured dashboard status"
+
+profiles_json="$("$CLI" profiles --json)"
+python3 -m json.tool <<<"$profiles_json" >/dev/null ||
+    fail "structured Desktop profile cache is not valid JSON"
+grep -q '"file_name":"Test Server.ovpn","name":"Test Server"' <<<"$profiles_json" ||
+    fail "Desktop profile cache is missing a sanitized profile"
+grep -q '"selected":true' <<<"$profiles_json" ||
+    fail "Desktop profile cache did not mark the selected profile"
+grep -q '192\.0\.2\.10' <<<"$profiles_json" &&
+    fail "Desktop profile cache leaked a VPN endpoint"
+grep -Eq 'PrivateKey|PublicKey|private.key|public.key' <<<"$profiles_json" &&
+    fail "Desktop profile cache leaked key material"
+[[ "$(stat -c %a "$VPNCTL_DASHBOARD_DIR/profiles.json")" == "644" ]] ||
+    fail "Desktop profile cache is not safely readable"
+ok "sanitized Desktop profile library cache"
 
 dashboard_output="$("$CLI" dashboard)"
 grep -q 'M A Z Z Y' <<<"$dashboard_output" || fail "dashboard artwork is missing"
@@ -772,6 +805,22 @@ grep -q '^disable vpnctl.service$' "$TMP/systemctl.log" || fail "service autosta
 grep -q '^disable vpnctl-health.timer$' "$TMP/systemctl.log" || fail "timer autostart was not disabled"
 ok "autostart semantics"
 
+: >"$TMP/systemctl.log"
+"$CLI" monitor on >/dev/null
+"$CLI" monitor off >/dev/null
+grep -q '^enable --now vpnctl-health.timer$' "$TMP/systemctl.log" ||
+    fail "Desktop monitor control did not enable the health timer"
+grep -q '^enable vpnctl-test-recovery.service$' "$TMP/systemctl.log" ||
+    fail "Desktop monitor control did not enable boot recovery"
+grep -q '^disable --now vpnctl-health.timer$' "$TMP/systemctl.log" ||
+    fail "Desktop monitor control did not stop the health timer"
+ok "independent health monitor control"
+
+logs_output="$("$CLI" logs --lines 250)"
+grep -q 'fake journal: -u vpnctl.service --no-pager -n 250' <<<"$logs_output" ||
+    fail "bounded Desktop log retrieval used unexpected journal arguments"
+ok "bounded service log retrieval"
+
 "$CLI" disconnect >/dev/null
 grep -q '^DESIRED=down$' "$TMP/state/active" || fail "disconnect state missing"
 ok "disconnect"
@@ -793,12 +842,15 @@ stage="$TMP/stage"
    -f "$stage/usr/local/lib/mazzy-vpn/docs/DESKTOP.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/DESKTOP_ROADMAP.en.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/DESKTOP_ROADMAP.ru.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/PLATFORM_ROADMAP.en.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/PLATFORM_ROADMAP.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/FEATURE_PARITY.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/capabilities.json" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.en.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/LICENSE" &&
-   -f "$stage/usr/local/lib/mazzy-vpn/AUTHORS.md" ]] ||
+   -f "$stage/usr/local/lib/mazzy-vpn/AUTHORS.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/PRIVACY.md" ]] ||
     fail "six-language and architecture documentation was not staged"
 [[ -f "$stage/usr/local/share/bash-completion/completions/mazzy-vpn" ]] ||
     fail "Mazzy VPN completion was not staged"

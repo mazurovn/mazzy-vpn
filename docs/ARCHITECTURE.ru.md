@@ -4,7 +4,7 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
 [English version](ARCHITECTURE.en.md) · [Главная страница](../README.md)
 
-Этот документ описывает действующую архитектуру CLI/TUI и Desktop 0.1.
+Этот документ описывает действующую архитектуру CLI/TUI и Desktop 0.2.
 Целевая архитектура самостоятельного Desktop 1.0 с общим core и versioned API:
 [план Desktop 1.0](DESKTOP_ROADMAP.ru.md). Матрица
 [паритета функций](FEATURE_PARITY.md) не позволяет выдать preview за готовое
@@ -25,7 +25,7 @@ flowchart TB
     subgraph UX["CLI и терминальный интерфейс"]
         Entry["Диспетчер команды mazzy-vpn"]
         TUI["Интерактивное меню и dashboard"]
-        Desktop["Tauri Desktop Dashboard"]
+        Desktop["Tauri Desktop control center"]
         Tray["Системный tray и фиксированное меню"]
         Commands["connect, quick, test, doctor, import"]
     end
@@ -36,6 +36,7 @@ flowchart TB
         State["Желаемое состояние и default-профиль<br/>/var/lib/vpnctl/active"]
         Runtime["Временные счётчики, locks и данные теста<br/>/run/vpnctl"]
         StatusCache["Очищенный статус без ключей и endpoint<br/>/run/mazzy-vpn/status.json"]
+        ProfileCache["Очищенный каталог профилей без путей/endpoint<br/>/run/mazzy-vpn/profiles.json"]
     end
 
     subgraph Supervisor["Контроль systemd"]
@@ -68,6 +69,7 @@ flowchart TB
     TUI --> Commands
     Tray --> Desktop
     Desktop --> StatusCache
+    Desktop --> ProfileCache
     Desktop -. фиксированный allowlist через pkexec .-> Entry
     Commands --> Validation
     Validation --> Profiles
@@ -79,6 +81,7 @@ flowchart TB
     Health --> State
     Health --> Runtime
     Health --> StatusCache
+    Entry --> ProfileCache
     Health --> Service
     BootRecovery --> State
     BootRecovery --> Service
@@ -99,20 +102,22 @@ flowchart TB
 репозитории находятся только менеджер, тесты и документация. Рабочие профили
 остаются доступными только root и имеют права `600`.
 
-## Desktop Dashboard и tray
+## Desktop control center и tray
 
 ![Mazzy VPN Desktop Dashboard — preview с тестовыми данными](images/dashboard-connected-preview.png)
 
-Desktop не открывает VPN-профили и не читает ключи. Root-процесс CLI обновляет
-атомарный JSON cache с правами `644`; в нём есть только состояние сервиса,
+Desktop открывает выбранные пользователем файлы только для передачи их
+канонических путей проверяемой операции импорта; сам он не разбирает
+VPN-профиль и не читает ключи. Root-процесс CLI атомарно обновляет status и
+profile-catalog JSON caches с правами `644`. В них есть состояние сервиса,
 выбранное отображаемое имя, протокол, интерфейс, возраст handshake, публичный
-VPN-адрес, состояния автозапуска/health monitor и счётчики профилей. Путь
-профиля, endpoint сервера и конфигурационные директивы не экспортируются.
+VPN-адрес, состояния autostart/health monitor и очищенные label профилей. Пути,
+endpoint, ключи и конфигурационные директивы не экспортируются.
 
 ```mermaid
 sequenceDiagram
     actor User as Пользователь
-    participant UI as Tauri Dashboard / tray
+    participant UI as Tauri control center / tray
     participant Cache as /run/mazzy-vpn/status.json
     participant PK as pkexec
     participant CLI as mazzy-vpn
@@ -122,18 +127,20 @@ sequenceDiagram
         UI->>Cache: прочитать очищенный статус
         Cache-->>UI: JSON schema v1
     end
-    User->>UI: Quick / Reconnect / Disconnect / Doctor
-    UI->>PK: фиксированная команда без shell
+    User->>UI: import / connect / test / Doctor / settings
+    UI->>PK: типизированная фиксированная операция без shell
     PK->>CLI: выполнить разрешённое действие
     CLI->>SD: изменить managed-туннель
     CLI->>Cache: атомарно обновить статус
     Cache-->>UI: новое состояние
 ```
 
-Закрытие окна скрывает приложение в tray; команды подключения,
-переподключения, отключения, обновления и диагностики остаются в контекстном
-меню. На Linux tray работает как companion к установленному CLI. Сборки macOS
-и Windows пока являются preview интерфейса и не заявляются как рабочий
+Закрытие окна скрывает приложение в tray. Linux-пакет содержит совместимый
+installer engine и после явного разрешения может установить или восстановить
+отсутствующие зависимости, поэтому отдельная ручная установка CLI не нужна.
+Adapter 0.2 пока запускает проверяемый engine для каждой операции; постоянный
+versioned local service API остаётся gate версии Desktop 1.0. Сборки macOS и
+Windows пока являются preview интерфейса и не заявляются как рабочий
 VPN-клиент до реализации нативных backends.
 
 ## Обычное подключение

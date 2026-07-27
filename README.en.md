@@ -132,24 +132,33 @@ If no default exists, the TUI asks for a profile and saves it as the default.
 Change the language immediately with menu item 16 or
 `mazzy-vpn language ru|en|de|zh|ja|ko`.
 
-## Desktop Dashboard and tray
+## Desktop control center and tray
 
 ![Mazzy VPN Desktop Dashboard](docs/images/dashboard-connected-preview.png)
 
-The Tauri Desktop provides the main actions in a polished window and system
-tray: Quick Connect, Reconnect, Disconnect, Refresh and Self-diagnostics. The
-Linux application is a functional companion to the installed CLI and ships as
-AppImage, DEB and RPM. macOS and Windows are UI previews until native VPN
-backends are implemented.
+The Tauri Desktop 0.2 Linux preview provides Dashboard, Profiles, Diagnostics,
+Settings and About screens plus a system tray. It bundles the compatible engine and
+installer, checks installed versions and dependencies, and can install, update
+or repair the engine after explicit authorization. Profile file/folder import,
+search, connect, validation, probes, transactional tests, Doctor fixes,
+self-tests, bounded logs, autostart and recovery-monitor controls are available
+without first installing the CLI by hand. Packages are available as AppImage,
+DEB and RPM.
 
-This is the 0.1 companion preview, not the standalone Desktop 1.0 product. The
-target bundles the shared core, installer/bootstrap, profile import/selection,
-all modes and service controls without a separate CLI installation. Development
-is synchronized through the [Desktop 1.0 plan](docs/DESKTOP_ROADMAP.en.md) and
+About records the Desktop/engine/platform versions, author, copyright, AGPL
+license, privacy principles and safe-operation rules.
+
+Desktop 0.2 is a functional Linux control-center preview, not the final
+standalone Desktop 1.0 product. The remaining gates include a shared versioned
+local service API, complete mode/fallback settings, full six-language coverage
+for the new screens, signed update/rollback, and native macOS and Windows VPN
+backends. Development is synchronized through the
+[Desktop 1.0 plan](docs/DESKTOP_ROADMAP.en.md) and
 [capability matrix](docs/FEATURE_PARITY.md).
 
-The GUI does not read profiles or keys. It consumes a sanitized status cache
-without endpoints and can invoke only a fixed CLI action allowlist. See the
+The GUI never reads VPN files after import and never reads keys. It consumes
+sanitized status/profile caches without endpoints or paths, and sends only
+typed operations from a fixed allowlist to the privileged engine. See the
 [Desktop guide](docs/DESKTOP.en.md) for installation, limitations and
 troubleshooting.
 
