@@ -1,36 +1,51 @@
-# Mazzy VPN 1.1.0
+# Mazzy VPN 1.2.0 / Desktop 0.2.0
 
-Copyright (C) 2026 Nik m ([@mazurovn](https://github.com/mazurovn)).
+Copyright (C) 2026 Nik m
+([@mazurovn](https://github.com/mazurovn)).
 
 ## English
 
-Mazzy VPN 1.1.0 adds a secure Desktop Dashboard and system tray to the
-transactional Linux CLI/TUI for AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec.
+Mazzy VPN 1.2.0 expands the safe Linux CLI/TUI and turns Desktop 0.2 into a
+self-contained Linux control-center preview for AmneziaWG, WireGuard, OpenVPN
+and NetworkManager L2TP/IPsec profiles.
 
-Highlights:
+### Highlights
 
-- interactive terminal menu and the `mazzy-vpn` command;
-- Tauri 2 Desktop Dashboard and tray with functional Linux AppImage, DEB and
-  RPM bundles;
-- sanitized JSON status cache with no endpoint, profile path or VPN secret;
-- live dashboard, selected location and saved default-config quick connection;
-- Russian, English, German, Chinese, Japanese and Korean interface selection;
-- automatic profile discovery and folder import with safe permissions;
-- validation, connectivity probes, batch tests and self-diagnostics;
-- transactional switching with automatic rollback to the last working profile;
-- systemd process restart plus independent 20-second health checks, immediate
-  recovery of an inactive desired service and reconnect after two confirmed
-  traffic failures;
-- optional AdGuard VPN fallback without publishing personal credentials;
-- installation and usage documentation in six languages;
-- macOS and Windows UI preview builds, clearly marked as non-functional until
-  native VPN backends and signing are implemented.
+- Desktop screens for Dashboard, Profiles, Diagnostics, Settings and About,
+  plus the system tray;
+- bundled compatible engine and installer in Linux Desktop packages, with
+  version/dependency checks and explicitly authorized install, update and
+  repair;
+- safe file/folder import, sanitized profile discovery, search, default/selected
+  connections and profile removal;
+- validation, endpoint probes, transactional single/batch live tests,
+  emergency recovery and connection diagnosis;
+- complete retained Doctor and self-test output, bounded service logs,
+  autostart and independent recovery-monitor controls;
+- typed Desktop operations with a fixed allowlist, argument/path validation and
+  output sanitization instead of UI-generated shell commands;
+- CLI additions for sanitized `profiles --json`, multi-file import, independent
+  monitor control and bounded logs;
+- About, privacy and security guidance with product/engine/platform versions,
+  author and AGPL license information;
+- machine-validated capability gates and bilingual roadmaps for Linux, Windows,
+  macOS, Android and iOS;
+- synchronized Wiki, Discussions FAQ/support topics and community feature
+  polls.
 
-Desktop 0.1 is a companion preview and currently requires the separately
-installed Linux CLI engine. It must not be described as the standalone Desktop
-1.0 application; that target is tracked by the capability release gates.
+### Platform status
 
-Install:
+- **Linux CLI/TUI 1.2.0:** functional release.
+- **Linux Desktop 0.2.0:** functional control-center preview with bundled
+  engine bootstrap; it remains preview until the Desktop 1.0 release gate
+  passes.
+- **Windows and macOS Desktop artifacts:** unsigned UI previews only. They do
+  not provide traffic protection until native services/backends, signing and
+  platform integration tests are complete.
+- **Android and iOS:** planned native clients; no working mobile packages are
+  included.
+
+Install the CLI/TUI from source:
 
 ```bash
 git clone https://github.com/mazurovn/mazzy-vpn.git
@@ -39,38 +54,52 @@ sudo ./install.sh
 mazzy-vpn
 ```
 
-Private VPN profiles and credentials are intentionally not included in the
-release. Import your own folder with
-`mazzy-vpn import-dir /path/to/profiles`.
+Linux Desktop packages can bootstrap the compatible engine after explicit OS
+authorization. Private VPN profiles and credentials are intentionally absent
+from all release artifacts.
 
 ## Русский
 
-Mazzy VPN 1.1.0 добавляет безопасный Desktop Dashboard и системный tray к
-транзакционному Linux CLI/TUI для AmneziaWG, WireGuard, OpenVPN и L2TP/IPsec.
+Mazzy VPN 1.2.0 расширяет безопасный Linux CLI/TUI, а Desktop 0.2 становится
+самодостаточным Linux control-center preview для профилей AmneziaWG, WireGuard,
+OpenVPN и NetworkManager L2TP/IPsec.
 
-Основные возможности:
+### Основные изменения
 
-- интерактивное терминальное меню и команда `mazzy-vpn`;
-- Tauri 2 Desktop Dashboard и tray с рабочими Linux AppImage, DEB и RPM;
-- очищенный JSON status cache без endpoint, пути профиля и VPN-секретов;
-- единый dashboard, выбранная локация и быстрое подключение default-конфига;
-- выбор русского, английского, немецкого, китайского, японского или корейского;
-- автоматическое распознавание профилей и импорт папок с безопасными правами;
-- валидация, проверка доступности, пакетные тесты и самодиагностика;
-- безопасное переключение с автоматическим возвратом к последнему рабочему профилю;
-- автозапуск systemd и независимая проверка примерно каждые 20 секунд:
-  остановленный сервис запускается сразу, а две подтверждённые ошибки трафика
-  вызывают переподключение;
-- необязательный резерв через AdGuard VPN без публикации личных данных;
-- инструкции по установке и использованию на шести языках;
-- preview-сборки macOS и Windows, явно отмеченные как нерабочие до реализации
-  нативных VPN backends и подписи.
+- экраны Desktop Dashboard, Profiles, Diagnostics, Settings и «О программе»,
+  а также системный tray;
+- совместимый engine и installer внутри Linux Desktop packages, проверка версий
+  и зависимостей, явно подтверждаемая установка, обновление и repair;
+- безопасный импорт файлов/папок, очищенный список профилей, поиск, подключение
+  default/выбранного профиля и удаление;
+- validation, endpoint probe, транзакционные одиночные/пакетные live tests,
+  emergency recovery и диагностика соединения;
+- полный сохранённый вывод Doctor и self-test, ограниченный журнал, управление
+  autostart и независимым recovery monitor;
+- типизированные Desktop operations с фиксированным allowlist, проверкой
+  аргументов/путей и очисткой вывода вместо shell-команд из UI;
+- CLI-команды для очищенного `profiles --json`, импорта нескольких файлов,
+  отдельного управления monitor и ограниченного журнала;
+- экран About, правила приватности и безопасности с версиями
+  product/engine/platform, автором и лицензией AGPL;
+- машинно проверяемые capability gates и двуязычный roadmap для Linux, Windows,
+  macOS, Android и iOS;
+- синхронизированные Wiki, Discussions FAQ/support и голосования за будущие
+  функции.
 
-Desktop 0.1 — companion preview, которому пока требуется отдельно
-установленный Linux CLI engine. Его нельзя называть самостоятельным Desktop
-1.0; готовность целевой версии определяется capability release gates.
+### Статус платформ
 
-Установка:
+- **Linux CLI/TUI 1.2.0:** функциональный релиз.
+- **Linux Desktop 0.2.0:** функциональный control-center preview со встроенным
+  bootstrap engine; статус preview сохраняется до прохождения release gate
+  Desktop 1.0.
+- **Windows и macOS Desktop artifacts:** только неподписанные UI preview. Они не
+  защищают трафик до появления нативных services/backends, подписи и platform
+  integration tests.
+- **Android и iOS:** запланированы нативные клиенты; рабочих mobile packages в
+  этом релизе нет.
+
+Установка CLI/TUI из исходников:
 
 ```bash
 git clone https://github.com/mazurovn/mazzy-vpn.git
@@ -79,18 +108,18 @@ sudo ./install.sh
 mazzy-vpn
 ```
 
-Личные VPN-профили и учётные данные намеренно не входят в релиз. Импортируйте
-свою папку командой `mazzy-vpn import-dir /путь/к/профилям`.
+Linux Desktop packages могут установить совместимый engine после явного
+системного разрешения. Личные VPN-профили и учётные данные намеренно не входят
+ни в один release artifact.
 
-## Known limitation / Известное ограничение
+## Safety / Безопасность
 
-An OpenVPN provider may reject a valid profile when its account or server
-connection limit is exhausted. Mazzy VPN reports this as a server-side failure
-and restores the previous connection instead of leaving the host offline.
+Live tests temporarily change the active VPN route and use transactional
+rollback after success, failure, timeout or termination. Review the prompt and
+save important network work before running them.
 
-Провайдер OpenVPN может отклонить исправный профиль, если исчерпан лимит
-соединений учётной записи или сервера. Mazzy VPN определяет такую ошибку как
-серверную и восстанавливает предыдущее подключение, не оставляя компьютер без
-сети.
+Live tests временно меняют активный VPN-маршрут и выполняют transactional
+rollback после успеха, ошибки, тайм-аута или завершения. Перед запуском
+прочитайте подтверждение и сохраните важную сетевую работу.
 
 Licensed under the GNU Affero General Public License v3.0 or later.
