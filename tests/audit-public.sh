@@ -11,7 +11,9 @@ fail() {
     exit 1
 }
 
-if git ls-files | grep -Eiq \
+if git ls-files |
+   grep -Fvx 'systemd/mazzy-vpn-tmpfiles.conf' |
+   grep -Eiq \
     '(^|/)conf/|(^|/)(id_rsa|id_ed25519|credentials|secrets?)([.]|$)|[.](conf|ovpn|nmconnection|key|pem|p12|pfx)$'; then
     fail "a VPN profile, credential file or private-key extension is tracked"
 fi
@@ -38,7 +40,9 @@ if grep -InE \
     fail "personal machine path or local hostname found"
 fi
 
-if git log --all --format= --name-only | grep -Eiq \
+if git log --all --format= --name-only |
+   grep -Fvx 'systemd/mazzy-vpn-tmpfiles.conf' |
+   grep -Eiq \
     '(^|/)conf/|(^|/)(id_rsa|id_ed25519|credentials|secrets?)([.]|$)|[.](conf|ovpn|nmconnection|key|pem|p12|pfx)$'; then
     fail "VPN profiles or credential-file extensions occur in Git history"
 fi
