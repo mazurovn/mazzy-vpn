@@ -51,6 +51,8 @@ def translations(javascript: str) -> dict[str, dict[str, str]]:
         check=True,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="strict",
         timeout=10,
     )
     value = json.loads(result.stdout)
