@@ -76,8 +76,8 @@ Draft PR #26 on `agent/local-api-daemon` builds the protected-service slice:
   the remaining operation domains still use the typed `pkexec` adapter;
 - bounded, concurrently drained Desktop child-process output instead of
   accumulating an arbitrary amount of helper output in GUI memory;
-- CI uses versioned Ubuntu 22.04, macOS 14 and Windows Server 2022 runner labels
-  with the declared Rust 1.85.0 toolchain rather than `latest`/`stable`.
+- CI uses versioned Ubuntu 22.04/24.04, macOS 14 and Windows Server 2022 runner
+  labels with the declared Rust 1.85.0 toolchain rather than `latest`/`stable`.
 
 Verified locally:
 
