@@ -58,6 +58,12 @@ jobs:
         working-directory: desktop
         run: npm ci
 
+      - name: Audit frontend dependencies and UI contract
+        shell: bash
+        run: |
+          npm audit --prefix desktop --audit-level=high
+          python3 tests/check-desktop-ui.py
+
       - name: Test and lint Linux backend
         if: matrix.platform == 'ubuntu-22.04'
         working-directory: desktop
@@ -127,6 +133,12 @@ jobs:
         working-directory: desktop
         run: npm ci
 
+      - name: Audit frontend dependencies and UI contract
+        shell: bash
+        run: |
+          npm audit --prefix desktop --audit-level=high
+          python3 tests/check-desktop-ui.py
+
       - name: Test and lint release backend
         if: matrix.platform == 'ubuntu-22.04'
         working-directory: desktop
@@ -144,9 +156,9 @@ jobs:
           tagName: desktop-v__VERSION__
           releaseName: "Mazzy VPN Desktop v__VERSION__ (preview)"
           releaseBody: |
-            Mazzy VPN Desktop 0.2 is a bundled-bootstrap Linux control-center preview.
+            Mazzy VPN Desktop 0.3 is an AI-ready, bundled-bootstrap Linux control-center preview.
 
-            Linux DEB/RPM bundles install the compatible Mazzy VPN 1.2 engine, protected systemd services and base runtime dependencies through the package manager; AppImage retains an explicitly authorized embedded bootstrap. Dashboard, profile import and selection, validation/probes/transactional tests, complete Doctor/self-test output, bounded logs, service/recovery settings and About/Privacy information are included.
+            Linux DEB/RPM bundles install the compatible Mazzy VPN 1.3 engine, protected systemd services and base runtime dependencies through the package manager; AppImage retains an explicitly authorized embedded bootstrap. Dashboard, profile import and selection, sortable whole-list latency checks, actual egress/location/DNS/IPv6 verification, transactional tests, complete Doctor/self-test output, clickable events, expanded tray, service/recovery settings and About/Privacy information are included.
 
             macOS and Windows bundles remain UI previews only. They do not provide traffic protection until their native Network Extension and Windows Service/Wintun backends pass the platform release gates.
 

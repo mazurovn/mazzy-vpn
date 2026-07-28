@@ -33,6 +33,8 @@ sudo mazzy-vpn import-dir ~/VPN-configs
 sudo mazzy-vpn connect amneziawg 1
 sudo mazzy-vpn quick
 sudo mazzy-vpn diagnose
+mazzy-vpn verify
+mazzy-vpn probe all --timeout 3 --jobs 4
 mazzy-vpn dashboard
 ```
 
@@ -86,6 +88,8 @@ recognized and validated files are copied.
 sudo mazzy-vpn connect amneziawg 1
 sudo mazzy-vpn quick
 sudo mazzy-vpn diagnose
+mazzy-vpn verify
+mazzy-vpn probe all --timeout 3 --jobs 4
 mazzy-vpn dashboard
 ```
 

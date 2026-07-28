@@ -1,8 +1,8 @@
 {
   "name": "mazzy-vpn-desktop",
   "private": true,
-  "version": "0.2.0",
-  "description": "Mazzy VPN Desktop Linux control center with embedded engine bootstrap",
+  "version": "0.3.0",
+  "description": "AI-ready, self-healing multi-protocol VPN client and control center",
   "author": "Nik m (@mazurovn)",
   "license": "AGPL-3.0-or-later",
   "scripts": {

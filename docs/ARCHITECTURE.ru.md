@@ -4,7 +4,7 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
 [English version](ARCHITECTURE.en.md) · [Главная страница](../README.md)
 
-Этот документ описывает действующую архитектуру CLI/TUI и Desktop 0.2.
+Этот документ описывает действующую архитектуру CLI/TUI и Desktop 0.3.
 Целевая архитектура самостоятельного Desktop 1.0 с общим core и versioned API:
 [план Desktop 1.0](DESKTOP_ROADMAP.ru.md). Матрица
 [паритета функций](FEATURE_PARITY.md) не позволяет выдать preview за готовое
@@ -39,6 +39,7 @@ flowchart TB
         ActionJournal["Idempotency и очищенный audit<br/>/var/lib/vpnctl/api-*"]
         StatusCache["Очищенный статус без ключей и endpoint<br/>/run/mazzy-vpn/status.json"]
         ProfileCache["Очищенный каталог профилей без путей/endpoint<br/>/run/mazzy-vpn/profiles.json"]
+        Verification["Ограниченные endpoint/egress проверки<br/>tests.probe / tests.verify-egress"]
     end
 
     subgraph Supervisor["Контроль systemd"]
@@ -63,6 +64,7 @@ flowchart TB
 
     Tunnel["Один управляемый VPN-интерфейс"]
     Internet["Интернет через выбранный VPN"]
+    ProbeProviders["Явные внешние проверки<br/>public IP, geo, optional speed"]
     External["Опциональный внешний fallback<br/>legacy или AdGuard"]
 
     User --> Entry
@@ -84,6 +86,9 @@ flowchart TB
     Commands --> ActionLock
     Commands --> State
     Commands --> Service
+    Commands --> Verification
+    Verification --> Tunnel
+    Verification -. без аккаунта и telemetry .-> ProbeProviders
     Commands -. транзакционный fallback .-> External
     Timer --> Health
     Health --> State
@@ -110,6 +115,18 @@ flowchart TB
 репозитории находятся только менеджер, тесты и документация. Рабочие профили
 остаются доступными только root и имеют права `600`.
 
+Каталог профилей формируется во время работы. Endpoint берётся только из
+директив протокола (`remote`, `Endpoint=` либо NetworkManager
+`gateway`/`remote`), а отображаемые metadata — из точных комментариев
+`mazzy-name`, `mazzy-location` и `mazzy-country-code`. В runtime нет списка
+серверов и эвристики country/city. Без явного country code проверка показывает
+наблюдаемую страну, но оставляет сравнение с профилем в состоянии `unknown`, а
+общий итог — в `warning`.
+
+OpenVPN использует DNS, переданный сервером/профилем. Публичный resolver молча
+не добавляется; администратор может явно задать
+`VPNCTL_OPENVPN_FALLBACK_DNS`, только если это соответствует его политике.
+
 CLI/TUI-клиент подключается к Unix socket через автоматически установленный
 `socat`. Он ограничивает размер и время ответа, проверяет identity envelope и
 при сетевой неопределённости повторяет тот же request с тем же `action_id`.
@@ -122,7 +139,7 @@ envelope. Необязательные безопасные status fields воз
 
 ## Desktop control center и tray
 
-![Mazzy VPN Desktop Dashboard — preview с тестовыми данными](images/dashboard-connected-preview.png)
+![Mazzy VPN Desktop Dashboard — русские документационные данные](images/dashboard-ru.png)
 
 Desktop открывает выбранные пользователем файлы только для передачи их
 канонических путей проверяемой операции импорта; сам он не разбирает
@@ -154,6 +171,11 @@ sequenceDiagram
     CLI->>Cache: атомарно обновить статус
     API-->>UI: очищенный outcome + состояние rollback
     Cache-->>UI: новое состояние
+    User->>UI: проверить egress / ping всех локаций
+    UI->>API: bounded read-only query
+    API->>CLI: tests.verify-egress / tests.probe
+    CLI-->>API: очищенный структурированный result
+    API-->>UI: без profile path, endpoint и key
     User->>UI: import / test / Doctor / остальные settings
     UI->>PK: временная типизированная операция без shell
     PK->>CLI: выполнить разрешённое действие
@@ -162,13 +184,22 @@ sequenceDiagram
 Закрытие окна скрывает приложение в tray. Linux-пакет содержит совместимый
 installer engine и после явного разрешения может установить или восстановить
 отсутствующие зависимости, поэтому отдельная ручная установка CLI не нужна.
-Постепенный Linux API уже обслуживает очищенные status/profile queries и
-connect, reconnect, disconnect. Он сохраняет action IDs, применяет deadlines и
-возвращает итог rollback. Import, tests, Doctor и service settings пока
+Постепенный Linux API уже обслуживает очищенные status/profile queries,
+read-only массовый endpoint probe, egress verification и connect, reconnect,
+disconnect. Для mutations он сохраняет action IDs, применяет deadlines и
+возвращает итог rollback. Import, live tests, Doctor и service settings пока
 используют типизированный `pkexec` adapter до появления соответствующих API
 handlers. Завершение миграции остаётся gate версии Desktop 1.0. Сборки macOS и
 Windows пока являются preview интерфейса и не заявляются как рабочий VPN-клиент
 до реализации нативных backends.
+
+Egress verification выполняет bounded HTTPS requests через выбранный
+интерфейс. Public-IP и два geo services вызываются только явной командой
+verify; 5-МБ speed endpoint — только после дополнительного выбора скорости.
+До передачи в webview ответы проверяются по семейству IP, identity provider,
+равенству interface-bound IPv4 и согласию страны между providers. Результат
+временный и не записывается в репозиторий. Endpoints и disclosure перечислены
+в [PRIVACY.md](../PRIVACY.md).
 
 ## Обычное подключение
 
@@ -221,8 +252,10 @@ stateDiagram-v2
     ServiceCheck --> InterfaceCheck: сервис активен
     InterfaceCheck --> FailureCounter: VPN-интерфейс отсутствует
     InterfaceCheck --> TrafficCheck: интерфейс существует
-    TrafficCheck --> Healthy: сработал любой HTTPS probe
+    TrafficCheck --> RoutePolicy: сработал VPN-bound HTTPS probe
     TrafficCheck --> FailureCounter: оба HTTPS probe не прошли
+    RoutePolicy --> Healthy: split tunnel, observer недоступен или egress совпал
+    RoutePolicy --> FailureCounter: объявлен full tunnel, но default egress другой
     FailureCounter --> WaitForNextTick: первая последовательная ошибка
     FailureCounter --> Reconnect: вторая последовательная ошибка
     StartNow --> Systemd
@@ -240,9 +273,11 @@ stateDiagram-v2
 1. `vpnctl.service` использует `Restart=always` и задержку пять секунд.
    Неожиданно завершившийся процесс восстанавливается без ожидания таймера.
 2. Health timer проверяет желаемое состояние, systemd service, локальный
-   VPN-интерфейс и два HTTPS-маршрута. Требуемый, но остановленный сервис
-   запускается сразу. Формально активный, но не передающий трафик туннель
-   перезапускается после двух последовательных неудачных проверок.
+   VPN-интерфейс и два HTTPS-маршрута. Для профиля, объявляющего full tunnel,
+   auto policy также сравнивает default и interface-bound IPv4. Требуемый, но
+   остановленный сервис запускается сразу. Не передающий трафик туннель или два
+   подтверждённых full-tunnel egress mismatch вызывают restart. Недоступность
+   observer сама по себе recovery не запускает.
 
 Ручной `disconnect` записывает `DESIRED=down` до остановки сервиса, поэтому
 монитор не отменяет осознанное отключение. Ожидающее ввода TUI не удерживает
@@ -315,7 +350,11 @@ sequenceDiagram
   Git;
 - расширенный журнал скрывает приватные и AmneziaWG obfuscation-параметры;
 - Desktop принимает только enum-действия и не передаёт пользовательскую строку
-  в shell; cache состояния не содержит endpoint или содержимое профиля;
+  в shell; Rust строго десериализует оба runtime cache, а точные opaque
+  `profile_id`/basename не позволяют одинаковым display names подменить
+  активный профиль; cache не содержат endpoint или содержимое профиля;
+- внешняя verification запускается явно, ограничена, валидируется и не
+  считается telemetry или доказательством доступности приложения;
 - неудачный тест не заменяет молча последнее рабочее соединение;
 - внешний VPN fallback опционален и не нужен обычному автовосстановлению.
 
@@ -328,6 +367,7 @@ sequenceDiagram
 | Машиночитаемый очищенный статус | `mazzy-vpn status --json` |
 | Формат и права всех профилей | `mazzy-vpn validate all` |
 | Массовые reachability и latency endpoint | `mazzy-vpn probe all --timeout 3 --jobs 4 [--json]` |
+| Фактические default/interface egress, geo agreement, DNS и IPv6 signals | `mazzy-vpn verify [--speed] [--json]` |
 | Установка и systemd | `mazzy-vpn doctor` |
 | Безопасное автоматическое исправление | `sudo mazzy-vpn doctor --fix` |
 | Полная offline-проверка | `mazzy-vpn self-test --offline` |

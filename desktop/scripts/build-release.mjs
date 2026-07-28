@@ -39,7 +39,7 @@ try {
     originalModes.set(path, mode);
     chmodSync(path, 0o755);
   }
-  result = spawnSync(executable, ["build", ...process.argv.slice(2)], {
+  result = spawnSync(executable, ["build"], {
     cwd: process.cwd(),
     env: { ...process.env, RUSTFLAGS: rustflags },
     shell: process.platform === "win32",

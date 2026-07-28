@@ -15,7 +15,6 @@ use tauri::{
 };
 
 const STATUS_FILE: &str = "/run/mazzy-vpn/status.json";
-const CLI_PATH: &str = "/usr/local/bin/mazzy-vpn";
 const API_MANIFEST: &str = include_str!("../../../api/v1/manifest.json");
 
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -24,8 +23,14 @@ enum VpnAction {
     Quick,
     Reconnect,
     Disconnect,
+    Verify,
+    ProbeAll,
     Doctor,
     Refresh,
+    AutostartOn,
+    AutostartOff,
+    MonitorOn,
+    MonitorOff,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -34,6 +39,8 @@ struct ActionResult {
     action: &'static str,
     output: String,
     code: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    data: Option<Value>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -51,8 +58,17 @@ fn action_spec(action: VpnAction) -> (&'static str, &'static [&'static str]) {
         VpnAction::Quick => ("quick", &["quick"]),
         VpnAction::Reconnect => ("reconnect", &["reconnect"]),
         VpnAction::Disconnect => ("disconnect", &["disconnect"]),
+        VpnAction::Verify => ("verify", &["verify", "--timeout", "10"]),
+        VpnAction::ProbeAll => (
+            "probe-all",
+            &["probe", "all", "--timeout", "3", "--jobs", "4"],
+        ),
         VpnAction::Doctor => ("doctor", &["doctor"]),
         VpnAction::Refresh => ("refresh", &["_refresh-dashboard-cache"]),
+        VpnAction::AutostartOn => ("autostart-on", &["autostart", "on"]),
+        VpnAction::AutostartOff => ("autostart-off", &["autostart", "off"]),
+        VpnAction::MonitorOn => ("monitor-on", &["monitor", "on"]),
+        VpnAction::MonitorOff => ("monitor-off", &["monitor", "off"]),
     }
 }
 
@@ -71,19 +87,41 @@ fn output_text(output: &Output) -> String {
 #[cfg(target_os = "linux")]
 fn execute_action(action: VpnAction) -> ActionResult {
     let (name, args) = action_spec(action);
-    let result = backend::bounded_output(Command::new("pkexec").arg(CLI_PATH).args(args));
+    let Some(cli_path) = backend::installed_cli_path() else {
+        return ActionResult {
+            success: false,
+            action: name,
+            output: "Mazzy VPN engine is not installed. Open Settings and run Install / Repair."
+                .into(),
+            code: None,
+            data: None,
+        };
+    };
+    let result = backend::bounded_output(
+        Command::new(backend::TIMEOUT_PATH)
+            .args([
+                "--foreground",
+                "--kill-after=30s",
+                "900s",
+                backend::PKEXEC_PATH,
+            ])
+            .arg(cli_path)
+            .args(args),
+    );
     match result {
         Ok(output) => ActionResult {
             success: output.status.success(),
             action: name,
             output: output_text(&output),
             code: output.status.code(),
+            data: None,
         },
         Err(error) => ActionResult {
             success: false,
             action: name,
             output: format!("Unable to start pkexec: {error}"),
             code: None,
+            data: None,
         },
     }
 }
@@ -96,6 +134,7 @@ fn execute_action(action: VpnAction) -> ActionResult {
         action: name,
         output: "Preview build: the native VPN backend is not implemented on this OS yet.".into(),
         code: None,
+        data: None,
     }
 }
 
@@ -122,17 +161,28 @@ fn read_status() -> Value {
     let data = match fs::read_to_string(STATUS_FILE) {
         Ok(data) => data,
         Err(cache_error) => {
-            let output = backend::bounded_output(Command::new(CLI_PATH).args(["status", "--json"]));
+            let Some(cli_path) = backend::installed_cli_path() else {
+                return fallback_status(format!(
+                    "{cache_error}; Mazzy VPN engine is not installed"
+                ));
+            };
+            let output = backend::bounded_output(
+                Command::new(backend::TIMEOUT_PATH)
+                    .args(["--foreground", "--kill-after=2s", "15s"])
+                    .arg(cli_path)
+                    .args(["status", "--json"]),
+            );
             return match output {
-                Ok(output) if output.status.success() => {
-                    serde_json::from_slice(&output.stdout).unwrap_or_else(fallback_status)
-                }
+                Ok(output) if output.status.success() => String::from_utf8(output.stdout)
+                    .map_err(|_| "status command returned non-UTF-8 data".to_owned())
+                    .and_then(|contents| backend::sanitize_status_cache(&contents))
+                    .unwrap_or_else(fallback_status),
                 Ok(output) => fallback_status(output_text(&output)),
                 Err(cli_error) => fallback_status(format!("{cache_error}; {cli_error}")),
             };
         }
     };
-    serde_json::from_str(&data).unwrap_or_else(fallback_status)
+    backend::sanitize_status_cache(&data).unwrap_or_else(fallback_status)
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -170,6 +220,11 @@ fn show_window(app: &AppHandle) {
     }
 }
 
+fn show_page(app: &AppHandle, page: &'static str) {
+    show_window(app);
+    let _ = app.emit("navigate-page", page);
+}
+
 #[tauri::command]
 fn show_main_window(app: AppHandle) {
     show_window(&app);
@@ -188,9 +243,96 @@ fn get_platform_info() -> PlatformInfo {
 }
 
 fn execute_tray_action(app: &AppHandle, action: VpnAction) -> ActionResult {
+    if matches!(action, VpnAction::Verify) {
+        return match backend::verify_connection_sync(10, false) {
+            Ok(result) => {
+                let verdict = result
+                    .get("verdict")
+                    .and_then(Value::as_str)
+                    .unwrap_or("failed");
+                let country = result
+                    .pointer("/geo/observed_country_code")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown");
+                let dns = result
+                    .pointer("/dns/state")
+                    .and_then(Value::as_str)
+                    .unwrap_or("unknown");
+                let findings = result
+                    .get("findings")
+                    .and_then(Value::as_array)
+                    .map_or(0, Vec::len);
+                ActionResult {
+                    success: verdict != "failed",
+                    action: "verify",
+                    output: format!(
+                        "verdict={verdict}; observed_country={country}; dns={dns}; findings={findings}"
+                    ),
+                    code: None,
+                    data: Some(result),
+                }
+            }
+            Err(error) => ActionResult {
+                success: false,
+                action: "verify",
+                output: error,
+                code: None,
+                data: None,
+            },
+        };
+    }
+    if matches!(action, VpnAction::ProbeAll) {
+        return match backend::probe_profiles_sync("all".into(), 3, 4) {
+            Ok(result) => {
+                let total = result
+                    .pointer("/summary/total")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                let reachable = result
+                    .pointer("/summary/reachable")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                let unknown = result
+                    .pointer("/summary/unknown")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                let hard_failures = ["unreachable", "invalid"]
+                    .iter()
+                    .filter_map(|field| {
+                        result
+                            .pointer(&format!("/summary/{field}"))
+                            .and_then(Value::as_u64)
+                    })
+                    .sum::<u64>();
+                ActionResult {
+                    success: total > 0 && hard_failures == 0,
+                    action: "probe-all",
+                    output: format!(
+                        "total={total}; reachable={reachable}; unknown={unknown}; hard_failures={hard_failures}"
+                    ),
+                    code: None,
+                    data: Some(result),
+                }
+            }
+            Err(error) => ActionResult {
+                success: false,
+                action: "probe-all",
+                output: error,
+                code: None,
+                data: None,
+            },
+        };
+    }
     let operation = match action {
+        VpnAction::Quick => Some(backend::OperationRequest::Quick),
         VpnAction::Reconnect => Some(backend::OperationRequest::Reconnect),
         VpnAction::Disconnect => Some(backend::OperationRequest::Disconnect),
+        VpnAction::Doctor => Some(backend::OperationRequest::Doctor { fix: false }),
+        VpnAction::Refresh => Some(backend::OperationRequest::Refresh),
+        VpnAction::AutostartOn => Some(backend::OperationRequest::Autostart { enabled: true }),
+        VpnAction::AutostartOff => Some(backend::OperationRequest::Autostart { enabled: false }),
+        VpnAction::MonitorOn => Some(backend::OperationRequest::Monitor { enabled: true }),
+        VpnAction::MonitorOff => Some(backend::OperationRequest::Monitor { enabled: false }),
         _ => None,
     };
     if let Some(operation) = operation {
@@ -200,6 +342,7 @@ fn execute_tray_action(app: &AppHandle, action: VpnAction) -> ActionResult {
             action: action_spec(action).0,
             output: result.output,
             code: result.code,
+            data: None,
         };
     }
     execute_action(action)
@@ -219,6 +362,7 @@ fn launch_tray_action(app: AppHandle, action: VpnAction) {
                 action: action_spec(action).0,
                 output: error.to_string(),
                 code: None,
+                data: None,
             },
         };
         let _ = app.emit("vpn-action-result", result);
@@ -248,6 +392,7 @@ fn main() {
             run_action,
             backend::get_profiles,
             backend::probe_profiles,
+            backend::verify_connection,
             backend::get_installation_report,
             backend::run_operation,
             backend::pick_profile_files,
@@ -257,25 +402,92 @@ fn main() {
             get_platform_info
         ])
         .setup(|app| {
+            let description = MenuItem::with_id(
+                app,
+                "description",
+                "AI-ready VPN · recovery and real egress checks",
+                false,
+                None::<&str>,
+            )?;
             let open = MenuItem::with_id(app, "open", "Open Dashboard", true, None::<&str>)?;
+            let profiles =
+                MenuItem::with_id(app, "profiles", "Profiles & Locations", true, None::<&str>)?;
+            let diagnostics = MenuItem::with_id(
+                app,
+                "diagnostics",
+                "Diagnostics & Events",
+                true,
+                None::<&str>,
+            )?;
+            let settings =
+                MenuItem::with_id(app, "settings", "Services & Settings", true, None::<&str>)?;
+            let about = MenuItem::with_id(app, "about", "About Mazzy VPN", true, None::<&str>)?;
             let quick = MenuItem::with_id(app, "quick", "Quick Connect", true, None::<&str>)?;
             let reconnect = MenuItem::with_id(app, "reconnect", "Reconnect", true, None::<&str>)?;
             let disconnect =
                 MenuItem::with_id(app, "disconnect", "Disconnect", true, None::<&str>)?;
+            let verify = MenuItem::with_id(app, "verify", "Verify VPN Egress", true, None::<&str>)?;
+            let probe_all =
+                MenuItem::with_id(app, "probe-all", "Ping All Locations", true, None::<&str>)?;
             let refresh = MenuItem::with_id(app, "refresh", "Refresh Status", true, None::<&str>)?;
             let doctor = MenuItem::with_id(app, "doctor", "Self-diagnostics", true, None::<&str>)?;
-            let separator = PredefinedMenuItem::separator(app)?;
+            let autostart_on = MenuItem::with_id(
+                app,
+                "autostart-on",
+                "Enable Auto-connect",
+                true,
+                None::<&str>,
+            )?;
+            let autostart_off = MenuItem::with_id(
+                app,
+                "autostart-off",
+                "Disable Auto-connect",
+                true,
+                None::<&str>,
+            )?;
+            let monitor_on = MenuItem::with_id(
+                app,
+                "monitor-on",
+                "Enable Health Monitor",
+                true,
+                None::<&str>,
+            )?;
+            let monitor_off = MenuItem::with_id(
+                app,
+                "monitor-off",
+                "Disable Health Monitor",
+                true,
+                None::<&str>,
+            )?;
+            let separator_one = PredefinedMenuItem::separator(app)?;
+            let separator_two = PredefinedMenuItem::separator(app)?;
+            let separator_three = PredefinedMenuItem::separator(app)?;
+            let separator_four = PredefinedMenuItem::separator(app)?;
             let quit = MenuItem::with_id(app, "quit", "Quit Mazzy VPN", true, None::<&str>)?;
             let menu = Menu::with_items(
                 app,
                 &[
+                    &description,
                     &open,
-                    &separator,
+                    &profiles,
+                    &diagnostics,
+                    &settings,
+                    &about,
+                    &separator_one,
                     &quick,
                     &reconnect,
                     &disconnect,
+                    &separator_two,
+                    &verify,
+                    &probe_all,
                     &refresh,
                     &doctor,
+                    &separator_three,
+                    &autostart_on,
+                    &autostart_off,
+                    &monitor_on,
+                    &monitor_off,
+                    &separator_four,
                     &quit,
                 ],
             )?;
@@ -286,12 +498,22 @@ fn main() {
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
-                    "open" => show_window(app),
+                    "open" => show_page(app, "dashboard"),
+                    "profiles" => show_page(app, "profiles"),
+                    "diagnostics" => show_page(app, "diagnostics"),
+                    "settings" => show_page(app, "settings"),
+                    "about" => show_page(app, "about"),
                     "quick" => launch_tray_action(app.clone(), VpnAction::Quick),
                     "reconnect" => launch_tray_action(app.clone(), VpnAction::Reconnect),
                     "disconnect" => launch_tray_action(app.clone(), VpnAction::Disconnect),
+                    "verify" => launch_tray_action(app.clone(), VpnAction::Verify),
+                    "probe-all" => launch_tray_action(app.clone(), VpnAction::ProbeAll),
                     "refresh" => launch_tray_action(app.clone(), VpnAction::Refresh),
                     "doctor" => launch_tray_action(app.clone(), VpnAction::Doctor),
+                    "autostart-on" => launch_tray_action(app.clone(), VpnAction::AutostartOn),
+                    "autostart-off" => launch_tray_action(app.clone(), VpnAction::AutostartOff),
+                    "monitor-on" => launch_tray_action(app.clone(), VpnAction::MonitorOn),
+                    "monitor-off" => launch_tray_action(app.clone(), VpnAction::MonitorOff),
                     "quit" => app.exit(0),
                     _ => {}
                 })

@@ -40,7 +40,7 @@ Desktop works without a separate CLI installation because it bundles a
 compatible client/core. CLI and TUI remain independently installable and can
 control the same core while the GUI is closed.
 
-## Delivered in the Desktop 0.2 Linux preview
+## Delivered in the Desktop 0.3 Linux preview
 
 - bundled engine installer with version and dependency readiness checks;
 - safe single-file, multi-file and folder import with protocol detection;
@@ -56,7 +56,7 @@ control the same core while the GUI is closed.
 - import inspection/preview and drag-and-drop workflow;
 - complete normal, test, emergency and fallback-policy settings;
 - a shared versioned privileged service API instead of per-action CLI process
-  invocation (the 0.2 adapter is typed but still invokes the bundled engine);
+  invocation (the 0.3 adapter is typed but still invokes the bundled engine);
 - complete six-language coverage for all new control-center screens;
 - signed updates, migration and transactional installer rollback;
 - native macOS/Windows backends, signing/notarization and system installers;

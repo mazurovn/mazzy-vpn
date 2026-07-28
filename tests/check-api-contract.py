@@ -202,6 +202,8 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
     concurrency = test_request.get("concurrency", {})
     if concurrency.get("minimum") != 1 or concurrency.get("maximum") != 8:
         fail("TestRequest must bound endpoint probe concurrency to 1..8")
+    if test_request.get("include_speed", {}).get("type") != "boolean":
+        fail("TestRequest must make the egress speed sample explicit")
     probe_result = defs.get("ProbeResult", {})
     probe_required = set(probe_result.get("required", []))
     if not {
@@ -227,6 +229,30 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
     }
     if "#/$defs/ProbeCollection" not in response_refs:
         fail("ResponseResult does not expose the structured probe collection")
+    if "#/$defs/EgressVerification" not in response_refs:
+        fail("ResponseResult does not expose structured egress verification")
+    verification = defs.get("EgressVerification", {})
+    verification_required = set(verification.get("required", []))
+    if not {
+        "verdict",
+        "tunnel",
+        "ipv4",
+        "ipv6",
+        "geo",
+        "dns",
+        "speed",
+        "findings",
+    }.issubset(verification_required):
+        fail("EgressVerification is missing user-visible trust signals")
+    speed_required = set(
+        verification.get("properties", {})
+        .get("speed", {})
+        .get("required", [])
+    )
+    if not {"requested", "measured", "mbps", "connect_ms"}.issubset(
+        speed_required
+    ):
+        fail("EgressVerification speed sample is not explicit and bounded")
 
     security = manifest.get("security")
     if not isinstance(security, dict):

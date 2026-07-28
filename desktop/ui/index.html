@@ -20,10 +20,10 @@
         <div class="brand">
           <img src="mazzy-vpn-logo.svg" alt="" class="brand-mark">
           <div>
-            <p class="eyebrow">PRIVATE NETWORK</p>
+            <p class="eyebrow" data-i18n="brandNetwork">СЕТЬ ДЛЯ ЛЮДЕЙ И ИИ</p>
             <h1>Mazzy VPN</h1>
           </div>
-          <span class="cli-pill">CLI ENGINE</span>
+          <span class="cli-pill" data-i18n="brandEngine">АВТОЛЕЧЕНИЕ</span>
         </div>
         <div class="top-actions">
           <label class="select-wrap">
@@ -133,6 +133,44 @@
         </button>
       </section>
 
+      <section class="glass verification-card" id="verification-card">
+        <div class="verification-heading">
+          <div>
+            <p class="eyebrow" data-i18n="realVerification">REAL VPN VERIFICATION</p>
+            <h3 data-i18n="realVerificationTitle">Фактический маршрут и локация</h3>
+            <p class="muted" data-i18n="realVerificationHint">
+              Сравнивает системный egress с туннелем, два источника геолокации, DNS и IPv6.
+            </p>
+          </div>
+          <div class="heading-actions">
+            <span class="health-badge" id="verification-badge"
+                  data-i18n="notVerified">НЕ ПРОВЕРЕНО</span>
+            <button class="compact-action primary" id="verify-egress-button" type="button"
+                    data-i18n="verifyNow">Проверить VPN</button>
+            <button class="compact-action" id="verify-speed-button" type="button"
+                    data-i18n="verifyWithSpeed">Проверить + скорость</button>
+          </div>
+        </div>
+        <div class="verification-grid">
+          <div><span data-i18n="observedLocation">Фактическая локация</span>
+            <strong id="verified-location">—</strong></div>
+          <div><span data-i18n="profileLocationMatch">Совпадение с профилем</span>
+            <strong id="verified-profile-match">—</strong></div>
+          <div><span data-i18n="systemEgress">Системный IPv4 egress</span>
+            <strong id="verified-route">—</strong></div>
+          <div><span data-i18n="ipv6Leak">IPv6-утечка</span>
+            <strong id="verified-ipv6">—</strong></div>
+          <div><span data-i18n="dnsRouting">DNS-маршрут</span>
+            <strong id="verified-dns">—</strong></div>
+          <div><span data-i18n="speedSample">Контрольный speed sample</span>
+            <strong id="verified-speed">—</strong></div>
+        </div>
+        <p class="verification-note" id="verification-note"
+           data-i18n="verificationDisclaimer">
+          Сайты также могут учитывать регион аккаунта, cookies, язык браузера, WebRTC и геолокацию устройства.
+        </p>
+      </section>
+
       <section class="dashboard-grid">
         <article class="glass card health-card">
           <div class="card-heading">
@@ -198,7 +236,8 @@
               <p class="eyebrow" data-i18n="activity">ACTIVITY</p>
               <h3 data-i18n="eventLog">События</h3>
             </div>
-            <span class="live-indicator"><i></i> LIVE</span>
+            <span class="live-indicator"><i></i>
+              <span data-i18n="liveStatus">РАБОТАЕТ</span></span>
           </div>
           <div class="event-list" id="event-list" aria-live="polite">
             <div class="empty-event" data-i18n="noEvents">Событий пока нет</div>
@@ -222,6 +261,8 @@
             </span>
             <button class="compact-action" id="location-health-button" type="button"
                     data-i18n="checkAllLocations">Проверить все локации</button>
+            <button class="compact-action" id="connect-fastest-button" type="button"
+                    data-i18n="connectFastest">Подключить самую быструю</button>
             <button class="compact-action primary" id="import-files-button" type="button"
                     data-i18n="importFiles">Загрузить файлы</button>
             <button class="compact-action" id="scan-folder-button" type="button"
@@ -243,6 +284,12 @@
                 <option value="wireguard">WireGuard</option>
                 <option value="openvpn">OpenVPN</option>
                 <option value="l2tp">L2TP/IPsec</option>
+              </select>
+              <select id="profile-sort" aria-label="Profile sorting">
+                <option value="recommended" data-i18n="sortRecommended">Рекомендуемые</option>
+                <option value="latency" data-i18n="sortLatency">По ping</option>
+                <option value="status" data-i18n="sortStatus">По доступности</option>
+                <option value="name" data-i18n="sortName">По имени</option>
               </select>
               <button class="icon-button" id="profiles-refresh-button" type="button"
                       aria-label="Refresh profiles">↻</button>
@@ -305,6 +352,10 @@
 
         <section class="diagnostic-layout">
           <aside class="glass card diagnostic-actions">
+            <button class="diagnostic-action" id="diagnostic-verify-button" type="button">
+              <strong data-i18n="verifyNow">Проверить VPN</strong>
+              <small data-i18n="realVerificationHint">Фактический egress, локация, DNS и IPv6</small>
+            </button>
             <button class="diagnostic-action" id="diagnose-button" type="button">
               <strong data-i18n="connectionDiagnose">Диагностика соединения</strong>
               <small data-i18n="connectionDiagnoseHint">Маршрут, DNS, туннель, handshake и интернет</small>
@@ -385,20 +436,34 @@
           <article class="glass card service-card">
             <p class="eyebrow" data-i18n="services">SERVICES</p>
             <h3 data-i18n="serviceControl">Управление службами</h3>
+            <div class="service-lifecycle">
+              <button class="compact-action primary" type="button" data-action="quick"
+                      data-i18n="startService">Запустить</button>
+              <button class="compact-action" type="button" data-action="reconnect"
+                      data-i18n="restartService">Перезапустить</button>
+              <button class="compact-action danger" type="button" data-action="disconnect"
+                      data-i18n="stopService">Остановить</button>
+            </div>
             <div class="setting-row">
               <div><strong data-i18n="autoConnect">Автоподключение</strong>
-                <small data-i18n="startsOnBoot">Запуск при загрузке</small></div>
+                <small data-i18n="startsOnBoot">Запуск при загрузке</small>
+                <span class="setting-current" id="autostart-control-state">—</span></div>
               <div class="segmented">
-                <button type="button" data-service-action="autostart-on">ON</button>
-                <button type="button" data-service-action="autostart-off">OFF</button>
+                <button type="button" data-service-action="autostart-on"
+                        data-i18n="enabled">ВКЛ</button>
+                <button type="button" data-service-action="autostart-off"
+                        data-i18n="disabled">ВЫКЛ</button>
               </div>
             </div>
             <div class="setting-row">
               <div><strong data-i18n="healthMonitor">Health monitor</strong>
-                <small data-i18n="autoHealing">Автопроверка и recovery</small></div>
+                <small data-i18n="autoHealing">Автопроверка и recovery</small>
+                <span class="setting-current" id="monitor-control-state">—</span></div>
               <div class="segmented">
-                <button type="button" data-service-action="monitor-on">ON</button>
-                <button type="button" data-service-action="monitor-off">OFF</button>
+                <button type="button" data-service-action="monitor-on"
+                        data-i18n="enabled">ВКЛ</button>
+                <button type="button" data-service-action="monitor-off"
+                        data-i18n="disabled">ВЫКЛ</button>
               </div>
             </div>
             <div class="setting-row">

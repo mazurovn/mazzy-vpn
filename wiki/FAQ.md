@@ -15,9 +15,9 @@ Copyright © 2026 Nik m. Код распространяется по GNU AGPL-3
 
 ## Какие версии сейчас рабочие?
 
-- Текущая release line: CLI/TUI 1.2.0 для Linux и функциональный Linux Desktop
-  0.2.0 preview, подготовленные в
-  [PR #22](https://github.com/mazurovn/mazzy-vpn/pull/22).
+- Опубликованная release line: CLI/TUI 1.2.0 и Linux Desktop 0.2.0 preview.
+- Исходное дерево 1.3.0/Desktop 0.3.0 остаётся release candidate, пока не
+  появились оба tag и GitHub Release.
 - Windows и macOS: только UI preview, нативные VPN backend ещё не готовы.
 - Android и iOS: planned native clients; готовых мобильных пакетов пока нет.
 
@@ -27,7 +27,7 @@ Copyright © 2026 Nik m. Код распространяется по GNU AGPL-3
 
 ## Desktop самодостаточен?
 
-Linux Desktop 0.2 содержит совместимый engine и installer. Предварительная
+Linux Desktop 0.3 содержит совместимый engine и installer. Предварительная
 ручная установка CLI не нужна. Для системного VPN backend и зависимостей
 приложение использует стандартное разрешение ОС и после установки повторяет
 проверку. До закрытия `desktop-linux-1.0` пакет остаётся preview.
@@ -56,6 +56,27 @@ Linux-профили хранятся под root в `/etc/vpnctl/profiles` с �
 Нет обязательного аккаунта и нет телеметрии. Проверка endpoint или внешней
 доступности создаёт сетевой запрос только при явном тесте либо включённом
 пользователем health monitor. См. [Безопасность и приватность](Security-and-Privacy).
+
+## Почему выбран Берлин, а сайт всё равно видит другую страну?
+
+Название выбранного профиля подтверждает только выбор конфигурации. Запустите
+`mazzy-vpn verify` или **Проверить VPN** в Desktop: проверка сравнит
+interface-bound и default IPv4 egress, два geo provider для того же IP,
+настроенный DNS route и возможную IPv6-утечку. `--speed` отдельно добавляет
+явный ограниченный 5-МБ sample.
+
+Даже `verified` — это evidence сетевого маршрута в момент проверки, а не
+гарантия конкретного сайта. Регион аккаунта, cookies, WebRTC, язык браузера,
+геолокация устройства, политика организации и risk scoring сайта могут дать
+другой результат.
+
+## Как проверить ping всех локаций и выбрать быструю?
+
+Используйте `mazzy-vpn probe all --timeout 3 --jobs 4` или **Проверить все
+локации**. Desktop показывает статус и latency, позволяет сортировать по ping и
+подключить самый быстрый из `reachable`. `unknown` для UDP не означает
+нерабочий VPN: сервер мог заблокировать ICMP. Авторизацию, handshake и routes
+подтверждает только live test с rollback.
 
 ## Что делают Doctor и «Исправить»?
 
@@ -110,9 +131,9 @@ and preserving authorship.
 
 ## Which versions work today?
 
-- Current release line: CLI/TUI 1.2.0 for Linux and the functional Linux
-  Desktop 0.2.0 preview, prepared in
-  [PR #22](https://github.com/mazurovn/mazzy-vpn/pull/22).
+- Published release line: CLI/TUI 1.2.0 and Linux Desktop 0.2.0 preview.
+- The 1.3.0/Desktop 0.3.0 source tree remains a release candidate until both
+  tags and GitHub Releases exist.
 - Windows and macOS: UI preview only; native VPN backends are not complete.
 - Android and iOS: planned native clients; no working mobile packages yet.
 
@@ -123,7 +144,7 @@ changelog entry alone, to determine readiness.
 
 ## Is Desktop self-contained?
 
-Linux Desktop 0.2 bundles a compatible engine and installer, so no prior manual
+Linux Desktop 0.3 bundles a compatible engine and installer, so no prior manual
 CLI install is required. System VPN backends and dependencies use standard OS
 authorization and are checked again afterwards. The package remains preview
 until `desktop-linux-1.0` passes.
@@ -152,6 +173,26 @@ public issue or discussion.
 There is no mandatory account and no telemetry. An endpoint/connectivity probe
 makes a network request only during an explicit test or a health monitor the
 user enabled. See [Security and privacy](Security-and-Privacy#english).
+
+## Why does a Berlin profile still look like another country to a site?
+
+A selected profile name proves only which configuration was chosen. Run
+`mazzy-vpn verify` or **Verify VPN** in Desktop. It compares interface-bound
+and default IPv4 egress, two location providers for that exact IP, configured
+DNS routing and a potential IPv6 leak. `--speed` separately adds an explicit
+bounded five-megabyte sample.
+
+Even `verified` is time-of-check network evidence, not a promise about a
+specific site. Account region, cookies, WebRTC, browser language, device
+location, organization policy and site risk scoring may still affect results.
+
+## How do I ping every location and choose a fast one?
+
+Use `mazzy-vpn probe all --timeout 3 --jobs 4` or **Check all locations**.
+Desktop shows status/latency, sorts by ping and can connect the fastest
+`reachable` entry. UDP `unknown` does not prove failure: the server may block
+ICMP. Only a transactional live test proves authentication, handshake and
+routes.
 
 ## What do Doctor and Repair do?
 

@@ -23,6 +23,7 @@ mkdir -p "$TMP/config/openvpn" "$TMP/config/wireguard" "$TMP/state" \
     "$TMP/run" "$TMP/fakebin"
 
 cat >"$TMP/config/openvpn/Test Server.ovpn" <<'EOF'
+# mazzy-country-code: BE
 client
 dev tun
 proto udp
@@ -115,7 +116,56 @@ EOF
 cat >"$TMP/fakebin/curl" <<'EOF'
 #!/usr/bin/env bash
 [[ "${FAKE_CURL_FAIL:-0}" == "1" ]] && exit 28
-printf '203.0.113.7'
+has_interface=false
+url=""
+for argument in "$@"; do
+    [[ "$argument" == "--interface" ]] && has_interface=true
+    url="$argument"
+done
+case "$url" in
+    *api6.ipify.org*)
+        if [[ "$has_interface" == true ]]; then
+            value="${FAKE_BOUND_IPV6:-}"
+        else
+            value="${FAKE_DEFAULT_IPV6:-}"
+        fi
+        [[ -n "$value" ]] || exit 7
+        printf '%s' "$value"
+        ;;
+    *ipapi.co*)
+        [[ "${FAKE_GEO_FAIL:-0}" == "1" ]] && exit 28
+        printf '{"ip":"%s","country_code":"BE","country_name":"Belgium","region":"Brussels","city":"Brussels"}' \
+            "${FAKE_GEO_IPV4:-203.0.113.7}"
+        ;;
+    *ipwho.is*)
+        [[ "${FAKE_GEO_FAIL:-0}" == "1" ]] && exit 28
+        if [[ "${FAKE_GEO_MISMATCH:-0}" == "1" ]]; then
+            country_code=DE
+            country=Germany
+            region=Berlin
+            city=Berlin
+        else
+            country_code=BE
+            country=Belgium
+            region=Brussels
+            city=Brussels
+        fi
+        printf '{"success":true,"ip":"%s","country_code":"%s","country":"%s","region":"%s","city":"%s"}' \
+            "${FAKE_GEO_IPV4:-203.0.113.7}" \
+            "$country_code" "$country" "$region" "$city"
+        ;;
+    *speed.cloudflare.com*)
+        [[ "${FAKE_SPEED_FAIL:-0}" == "1" ]] && exit 28
+        printf '12500000\t0.040'
+        ;;
+    *)
+        if [[ "$has_interface" == true ]]; then
+            printf '%s' "${FAKE_BOUND_IPV4:-203.0.113.7}"
+        else
+            printf '%s' "${FAKE_DEFAULT_IPV4:-203.0.113.7}"
+        fi
+        ;;
+esac
 EOF
 
 cat >"$TMP/fakebin/ping" <<'EOF'
@@ -151,6 +201,19 @@ EOF
 cat >"$TMP/fakebin/resolvectl" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"${FAKE_RESOLVECTL_LOG:?}"
+case "${1:-}" in
+    dns)
+        [[ "${FAKE_DNS_EMPTY:-0}" == "1" ]] ||
+            printf 'Link 7 (%s): 9.9.9.9\n' "${2:-vpnovpn0}"
+        ;;
+    domain)
+        if [[ "${FAKE_DNS_NO_DEFAULT_ROUTE:-0}" == "1" ]]; then
+            printf 'Link 7 (%s): ~corp.example\n' "${2:-vpnovpn0}"
+        else
+            printf 'Link 7 (%s): ~.\n' "${2:-vpnovpn0}"
+        fi
+        ;;
+esac
 EOF
 
 cat >"$TMP/fakebin/socat" <<'EOF'
@@ -191,6 +254,7 @@ case "$*" in
         [[ -e "${FAKE_LEGACY_ACTIVE:?}" ]] && exit 0
         exit 1
         ;;
+    "link show vpnwg0") exit 0 ;;
     "link show vpnovpn0") exit 0 ;;
     "route show default") printf 'default via 192.0.2.1 dev eth0\n'; exit 0 ;;
 esac
@@ -294,8 +358,8 @@ export VPNCTL_LEGACY_START="$TMP/fallback-start"
 export VPNCTL_LEGACY_STOP="$TMP/fallback-stop"
 export NO_COLOR=1
 
-"$CLI" version | grep -q '^Mazzy VPN 1\.2\.0 (mazzy-vpn; alias: vpnctl)$'
-"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.2\.0 ' ||
+"$CLI" version | grep -q '^Mazzy VPN 1\.3\.0 (mazzy-vpn; alias: vpnctl)$'
+"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.3\.0 ' ||
     fail "vpnctl compatibility wrapper is broken"
 ok "Mazzy VPN branding and compatibility alias"
 
@@ -330,6 +394,42 @@ grep -q 'Test Server' <<<"$list_output" || fail "profile with spaces was not lis
 grep -q '192.0.2.10:1194' <<<"$list_output" || fail "endpoint was not shown"
 ok "list handles spaces"
 
+metadata_profile="$TMP/config/openvpn/opaque-profile.ovpn"
+cat >"$metadata_profile" <<'EOF'
+# mazzy-name-extra: must not override the exact directive
+# mazzy-name: AI Workspace
+# mazzy-location-note: must not override the exact directive
+# mazzy-location: Belgium — Brussels
+# mazzy-country-code-backup: RU
+# mazzy-country-code: be
+client
+dev tun
+proto tcp
+remote 192.0.2.11 443
+<ca>
+test
+</ca>
+EOF
+chmod 600 "$metadata_profile"
+metadata_list="$("$CLI" list openvpn)"
+grep -q 'AI Workspace' <<<"$metadata_list" ||
+    fail "profile display name was not parsed from config metadata"
+rm -f -- "$VPNCTL_DASHBOARD_DIR/profiles.json"
+metadata_json="$("$CLI" profiles --json)"
+jq -e '
+    .profiles[]
+    | select(.file_name == "opaque-profile.ovpn")
+    | .name == "AI Workspace"
+      and .location == "Belgium — Brussels"
+      and .country_code == "BE"
+' <<<"$metadata_json" >/dev/null ||
+    fail "profile location/country metadata was not parsed from the config"
+if grep -Eq '192\.0\.2\.11|remote' <<<"$metadata_json"; then
+    fail "profile catalog exposed an endpoint while parsing location metadata"
+fi
+rm -f -- "$metadata_profile" "$VPNCTL_DASHBOARD_DIR/profiles.json"
+ok "profile names and locations come from config metadata with filename fallback"
+
 unsafe_profile_name="$TMP/config/openvpn/"$'Bell\aServer.ovpn'
 cp "$TMP/config/openvpn/Test Server.ovpn" "$unsafe_profile_name"
 unsafe_name_list="$("$CLI" list openvpn 2>&1)"
@@ -342,6 +442,15 @@ if "$CLI" import openvpn "$unsafe_profile_name" >/dev/null 2>&1; then
 fi
 rm -f -- "$unsafe_profile_name"
 ok "profile catalog rejects terminal control characters"
+
+bidi_profile_name="$TMP/config/openvpn/"$'office\u202Econf.ovpn'
+cp "$TMP/config/openvpn/Test Server.ovpn" "$bidi_profile_name"
+bidi_name_list="$("$CLI" list openvpn 2>&1)"
+grep -q 'имя содержит управляющие символы или скрытые Unicode-маркеры' \
+    <<<"$bidi_name_list" ||
+    fail "profile catalog did not report a Unicode direction marker"
+rm -f -- "$bidi_profile_name"
+ok "profile catalog rejects Unicode direction and zero-width spoofing markers"
 
 validate_output="$("$CLI" validate openvpn)"
 grep -q 'profiles=1 passed=1 failed=0' <<<"$validate_output" ||
@@ -657,7 +766,15 @@ foreign_option_1='dhcp-option DNS 9.9.9.9' \
 grep -q '^dns vpnovpn0 9.9.9.9$' "$TMP/resolvectl.log" || fail "DNS server was not applied"
 grep -q '^domain vpnovpn0 ~\.$' "$TMP/resolvectl.log" || fail "DNS route was not applied"
 grep -q '^revert vpnovpn0$' "$TMP/resolvectl.log" || fail "DNS was not reverted"
-ok "OpenVPN DNS lifecycle"
+dns_log_lines="$(wc -l <"$TMP/resolvectl.log")"
+"$CLI" _openvpn-dns-up vpnovpn1 >/dev/null 2>&1
+[[ "$(wc -l <"$TMP/resolvectl.log")" -eq "$dns_log_lines" ]] ||
+    fail "OpenVPN silently substituted a hard-coded public DNS server"
+VPNCTL_OPENVPN_FALLBACK_DNS='149.112.112.112' \
+    "$CLI" _openvpn-dns-up vpnovpn2
+grep -q '^dns vpnovpn2 149.112.112.112$' "$TMP/resolvectl.log" ||
+    fail "explicit OpenVPN fallback DNS was not applied"
+ok "OpenVPN DNS lifecycle avoids a hard-coded resolver"
 
 status_output="$("$CLI" status)"
 grep -q '^VPN:       active$' <<<"$status_output" || fail "status is not active"
@@ -670,6 +787,10 @@ python3 -m json.tool <<<"$status_json" >/dev/null ||
     fail "structured dashboard status is not valid JSON"
 grep -q '"profile":"Test Server"' <<<"$status_json" ||
     fail "structured dashboard status is missing the selected profile"
+grep -Eq '"profile_id":"profile-[a-f0-9]{32}"' <<<"$status_json" ||
+    fail "structured dashboard status is missing the exact profile identity"
+grep -q '"profile_file_name":"Test Server.ovpn"' <<<"$status_json" ||
+    fail "structured dashboard status is missing the exact profile filename"
 grep -q '"protocol":"openvpn","protocol_name":"OpenVPN"' <<<"$status_json" ||
     fail "structured dashboard status has inconsistent active protocol metadata"
 grep -q '"healthy":true' <<<"$status_json" ||
@@ -684,6 +805,122 @@ grep -q '192\.0\.2\.10' <<<"$status_json" &&
     fail "dashboard status cache is not group-restricted"
 "$CLI" _refresh-dashboard-cache
 ok "safe structured dashboard status"
+
+verify_json="$("$CLI" verify --json)"
+jq -e '
+    .schema_version == 1
+    and .verdict == "verified"
+    and .tunnel.active == true
+    and .tunnel.interface == "vpnovpn0"
+    and .ipv4.interface_ip == "203.0.113.7"
+    and .ipv4.default_ip == "203.0.113.7"
+    and .ipv4.same_egress == true
+    and .ipv6.potential_leak == false
+    and .geo.expected_country_code == "BE"
+    and .geo.observed_country_code == "BE"
+    and .geo.country_match == "match"
+    and .geo.providers_agree == true
+    and (.geo.providers | length) == 2
+    and .dns.state == "vpn-full-tunnel"
+    and .speed.requested == false
+    and .findings == []
+' <<<"$verify_json" >/dev/null ||
+    fail "VPN egress verification did not prove the bounded happy path"
+if grep -Eq '192\.0\.2\.10|PrivateKey|PublicKey|Test Server\.ovpn' \
+    <<<"$verify_json"; then
+    fail "VPN egress verification leaked engine-only profile data"
+fi
+
+verify_speed_json="$("$CLI" verify --speed --json)"
+jq -e '
+    .verdict == "verified"
+    and .speed.requested == true
+    and .speed.measured == true
+    and .speed.mbps == 100
+    and .speed.connect_ms == 40
+' <<<"$verify_speed_json" >/dev/null ||
+    fail "explicit bounded speed sample is invalid"
+
+cp "$TMP/config/openvpn/Test Server.ovpn" "$TMP/profile-with-country.ovpn"
+sed -i '/^[#;][[:space:]]*mazzy-country-code[[:space:]]*:/d' \
+    "$TMP/config/openvpn/Test Server.ovpn"
+verify_missing_country="$("$CLI" _verify-egress-json 3 false)"
+mv -f -- "$TMP/profile-with-country.ovpn" "$TMP/config/openvpn/Test Server.ovpn"
+jq -e '
+    .verdict == "warning"
+    and .geo.expected_country_code == null
+    and .geo.country_match == "unknown"
+    and (
+        .findings
+        | index("verify.geo.expected-country-unavailable")
+    ) != null
+' <<<"$verify_missing_country" >/dev/null ||
+    fail "VPN verification claimed verified location without explicit country metadata"
+
+verify_route_warning="$(
+    FAKE_DEFAULT_IPV4=198.51.100.9 "$CLI" _verify-egress-json 3 false
+)"
+jq -e '
+    .verdict == "warning"
+    and .ipv4.same_egress == false
+    and (.findings | index("verify.ipv4.route-mismatch")) != null
+' <<<"$verify_route_warning" >/dev/null ||
+    fail "VPN verification missed a default-route egress mismatch"
+
+verify_ipv6_warning="$(
+    FAKE_DEFAULT_IPV6=2001:db8::10 "$CLI" _verify-egress-json 3 false
+)"
+jq -e '
+    .verdict == "warning"
+    and .ipv6.potential_leak == true
+    and (.findings | index("verify.ipv6.potential-leak")) != null
+' <<<"$verify_ipv6_warning" >/dev/null ||
+    fail "VPN verification missed a potential IPv6 leak"
+
+verify_geo_warning="$(
+    FAKE_GEO_MISMATCH=1 "$CLI" _verify-egress-json 3 false
+)"
+jq -e '
+    .verdict == "warning"
+    and .geo.providers_agree == false
+    and (.findings | index("verify.geo.providers-disagree")) != null
+' <<<"$verify_geo_warning" >/dev/null ||
+    fail "VPN verification trusted disagreeing geolocation providers"
+
+verify_geo_ip_warning="$(
+    FAKE_GEO_IPV4=198.51.100.22 "$CLI" _verify-egress-json 3 false
+)"
+jq -e '
+    .verdict == "warning"
+    and (.geo.providers | length) == 0
+    and (.findings | index("verify.geo.ip-mismatch")) != null
+    and (.findings | index("verify.geo.unavailable")) != null
+' <<<"$verify_geo_ip_warning" >/dev/null ||
+    fail "VPN verification trusted location data for a different egress IP"
+
+verify_dns_warning="$(
+    FAKE_DNS_NO_DEFAULT_ROUTE=1 "$CLI" _verify-egress-json 3 false
+)"
+jq -e '
+    .verdict == "warning"
+    and .dns.state == "vpn-interface"
+    and (
+        .findings
+        | index("verify.dns.not-confirmed-full-tunnel")
+    ) != null
+' <<<"$verify_dns_warning" >/dev/null ||
+    fail "VPN verification treated partial DNS routing as full-tunnel DNS"
+
+verify_inactive="$(
+    FAKE_SYSTEMCTL_INACTIVE=1 "$CLI" _verify-egress-json 3 false
+)"
+jq -e '
+    .verdict == "failed"
+    and .tunnel.active == false
+    and (.findings | index("verify.tunnel.inactive")) != null
+' <<<"$verify_inactive" >/dev/null ||
+    fail "VPN verification accepted an inactive tunnel"
+ok "VPN egress verification rejects route, IPv6, geo, DNS and tunnel failures"
 
 profiles_json="$("$CLI" profiles --json)"
 python3 -m json.tool <<<"$profiles_json" >/dev/null ||
@@ -858,7 +1095,80 @@ sleep 0.2
 if kill -0 "$probe_ping_pid" 2>/dev/null; then
     fail "timed-out API probe left a ping worker running"
 fi
-ok "local API query envelopes expose sanitized status, profiles and probes"
+
+api_verify_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-verify-0001",
+        operation: "tests.verify-egress",
+        deadline_ms: 30000,
+        payload: {
+            timeout_seconds: 3,
+            include_speed: false
+        }
+    }'
+)"
+api_verify_response="$(
+    printf '%s\n' "$api_verify_request" | "$CLI" _api-dispatch
+)"
+jq -e '
+    .api_version == "1.0"
+    and .request_id == "request-verify-0001"
+    and .status == "ok"
+    and .result.verdict == "verified"
+    and .result.ipv4.same_egress == true
+    and .result.geo.observed_country_code == "BE"
+    and .result.geo.providers_agree == true
+    and .result.dns.state == "vpn-full-tunnel"
+    and .result.speed.requested == false
+' <<<"$api_verify_response" >/dev/null ||
+    fail "local API tests.verify-egress response is invalid"
+if grep -Eq '192\.0\.2\.10|file_name|PrivateKey|PublicKey|Test Server\.ovpn' \
+    <<<"$api_verify_response"; then
+    fail "local API tests.verify-egress leaked engine-only profile data"
+fi
+api_verify_bad_payload="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-verify-invalid-0001",
+        operation: "tests.verify-egress",
+        deadline_ms: 30000,
+        payload: {timeout_seconds: 3, include_speed: "yes"}
+    }' |
+        "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "invalid-request"
+    and .error.message_key == "api.tests.verify-egress.payload-invalid"
+' <<<"$api_verify_bad_payload" >/dev/null ||
+    fail "local API tests.verify-egress accepted an unsafe payload"
+
+mkdir -p "$VPNCTL_API_ACTION_DIR"
+(
+    flock -x 9
+    touch "$TMP/verify.locked"
+    sleep 1
+) 9>"$VPNCTL_API_ACTION_DIR/.verify.lock" &
+verify_lock_pid=$!
+for _ in {1..100}; do
+    [[ -e "$TMP/verify.locked" ]] && break
+    sleep 0.01
+done
+[[ -e "$TMP/verify.locked" ]] ||
+    fail "verify concurrency test did not acquire its lock"
+api_verify_busy_response="$(
+    "$CLI" _api-dispatch <<<"$api_verify_request"
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "busy"
+    and .error.message_key == "api.tests.verify-egress.busy"
+    and .error.retryable == true
+' <<<"$api_verify_busy_response" >/dev/null ||
+    fail "local API allowed concurrent egress checks to multiply traffic"
+wait "$verify_lock_pid"
+ok "local API query envelopes expose sanitized status, profiles, probes and egress"
 
 api_oversized_request="$(printf 'я%.0s' {1..40})"
 api_oversized_response="$(
@@ -1792,6 +2102,41 @@ if "$CLI" connect wireguard Unsafe >/dev/null 2>&1; then
 fi
 ok "unsafe hooks are rejected"
 
+: >"$TMP/systemctl.log"
+FAKE_DEFAULT_IPV4=198.51.100.9 "$CLI" _health-check >/dev/null
+if grep -q 'restart --no-block vpnctl.service' "$TMP/systemctl.log"; then
+    fail "auto health policy forced full-tunnel recovery for a split profile"
+fi
+
+: >"$TMP/systemctl.log"
+FAKE_DEFAULT_IPV4=198.51.100.9 VPNCTL_HEALTH_REQUIRE_DEFAULT_EGRESS=yes \
+    "$CLI" _health-check >/dev/null
+FAKE_DEFAULT_IPV4=198.51.100.9 VPNCTL_HEALTH_REQUIRE_DEFAULT_EGRESS=yes \
+    "$CLI" _health-check >/dev/null
+grep -q 'restart --no-block vpnctl.service' "$TMP/systemctl.log" ||
+    fail "strict health policy missed default traffic bypassing the VPN"
+ok "watchdog can enforce full-tunnel default egress without breaking split-tunnel auto mode"
+
+cat >"$TMP/config/wireguard/Full.conf" <<'EOF'
+[Interface]
+PrivateKey = test
+[Peer]
+PublicKey = test
+AllowedIPs=10.0.0.0/8,0.0.0.0/0
+Endpoint=192.0.2.21:51820
+EOF
+chmod 600 "$TMP/config/wireguard/Full.conf"
+"$CLI" connect wireguard Full >/dev/null
+: >"$TMP/systemctl.log"
+FAKE_DEFAULT_IPV4=198.51.100.9 "$CLI" _health-check >/dev/null
+FAKE_DEFAULT_IPV4=198.51.100.9 "$CLI" _health-check >/dev/null
+grep -q 'restart --no-block vpnctl.service' "$TMP/systemctl.log" ||
+    fail "auto health policy missed compact WireGuard full-tunnel AllowedIPs"
+"$CLI" connect openvpn "Test Server" >/dev/null
+rm -f -- "$TMP/config/wireguard/Full.conf"
+ok "watchdog parses compact WireGuard full-tunnel routes"
+
+: >"$TMP/systemctl.log"
 export FAKE_CURL_FAIL=1
 "$CLI" _health-check >/dev/null
 "$CLI" _health-check >/dev/null
@@ -2030,6 +2375,14 @@ grep -q 'chmodSync(path, 0o755)' \
 grep -q 'chmodSync(path, mode)' \
     "$ROOT/desktop/scripts/build-release.mjs" ||
     fail "release builder does not restore checkout modes after packaging"
+if grep -q 'process\.argv' \
+    "$ROOT/desktop/scripts/tauri-audited.mjs" \
+    "$ROOT/desktop/scripts/build-release.mjs"; then
+    fail "release scripts forward user-controlled CLI arguments"
+fi
+grep -Fq '[join("scripts", "build-release.mjs")]' \
+    "$ROOT/desktop/scripts/tauri-audited.mjs" ||
+    fail "tag release audit does not invoke the fixed release builder"
 ok "dependency bootstrap and package-owned lifecycle are declared safely"
 
 if "$ROOT/install.sh" --destdir "$TMP/invalid-language-stage" --no-deps \
@@ -2078,6 +2431,11 @@ COMP_CWORD=3
 _mazzy_vpn
 printf '%s\n' "${COMPREPLY[@]}" | grep -qx -- '--jobs' ||
     fail "Mazzy VPN completion does not include probe --jobs"
+COMP_WORDS=(mazzy-vpn verify --s)
+COMP_CWORD=2
+_mazzy_vpn
+printf '%s\n' "${COMPREPLY[@]}" | grep -qx -- '--speed' ||
+    fail "Mazzy VPN completion does not include verify --speed"
 COMP_WORDS=(mazzy-vpn language j)
 COMP_CWORD=2
 _mazzy_vpn
@@ -2140,9 +2498,19 @@ grep -q 'state.profileHealth.set(entry.profile_id, entry)' \
     fail "Desktop does not attach probe results to individual profile rows"
 grep -q 'backend::probe_profiles' "$ROOT/desktop/src-tauri/src/main.rs" ||
     fail "Desktop does not expose the typed probe command"
+grep -q 'id="profile-sort"' "$ROOT/desktop/ui/index.html" ||
+    fail "Desktop profile list has no latency/status sorting"
+grep -q 'id="connect-fastest-button"' "$ROOT/desktop/ui/index.html" ||
+    fail "Desktop cannot connect the fastest reachable location"
+grep -q 'invoke("verify_connection"' "$ROOT/desktop/ui/app.js" ||
+    fail "Desktop real VPN verification does not use the typed backend"
+grep -q 'backend::verify_connection' "$ROOT/desktop/src-tauri/src/main.rs" ||
+    fail "Desktop does not expose the typed egress verification command"
 [[ "$(grep -c 'desktop/ui/app.css' "$ROOT/desktop/src-tauri/tauri.conf.json")" -eq 3 ]] ||
     fail "Desktop CSS corresponding source is incomplete in package payloads"
-ok "Desktop shows sanitized per-location reachability, active state and latency"
+python3 "$ROOT/tests/check-desktop-ui.py" >/dev/null ||
+    fail "Desktop HTML/JavaScript/Rust contract is inconsistent"
+ok "Desktop verifies egress and exposes sortable sanitized per-location health"
 
 python3 "$ROOT/tests/check-capabilities.py" >/dev/null ||
     fail "cross-surface capability registry is inconsistent"
@@ -2151,5 +2519,9 @@ ok "CLI/TUI/Desktop capability parity and release gates"
 python3 "$ROOT/tests/check-api-contract.py" >/dev/null ||
     fail "versioned local API contract is inconsistent"
 ok "versioned local API contract"
+
+python3 "$ROOT/tests/audit-runtime-hardcodes.py" >/dev/null ||
+    fail "runtime hard-code boundaries are inconsistent"
+ok "runtime hard-code boundaries"
 
 printf '1..%d\n' "$pass"

@@ -3,7 +3,7 @@
 Copyright © 2026 Nik m ([@mazurovn](https://github.com/mazurovn)).
 Licensed under `AGPL-3.0-or-later`.
 
-![Mazzy VPN Desktop Dashboard](../docs/images/dashboard-connected-preview.png)
+![Mazzy VPN Desktop Dashboard](../docs/images/dashboard-en.png)
 
 ## English
 

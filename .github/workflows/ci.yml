@@ -15,6 +15,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Install checks
         run: sudo apt-get update && sudo apt-get install -y shellcheck openvpn gitleaks jq
@@ -46,12 +47,14 @@ jobs:
         run: python3 tests/check-capabilities.py
 
       - name: Versioned local API contract
-        run: python3 tests/check-api-contract.py
+        run: |
+          python3 tests/check-api-contract.py
+          python3 tests/check-desktop-ui.py
 
       - name: Public repository audit
         run: |
           ./tests/audit-public.sh
-          gitleaks detect --source . --redact --no-banner
+          gitleaks detect --source . --redact --no-banner --log-opts="--all"
 
       - name: Staging installer
         run: |

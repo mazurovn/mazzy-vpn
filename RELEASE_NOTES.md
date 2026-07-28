@@ -1,125 +1,140 @@
-# Mazzy VPN 1.2.0 / Desktop 0.2.0
+# Mazzy VPN 1.3.0 / Desktop 0.3.0
 
 Copyright (C) 2026 Nik m
 ([@mazurovn](https://github.com/mazurovn)).
 
+> Release-candidate text. The release is published only after tags `v1.3.0`
+> and `desktop-v0.3.0`, their GitHub Release pages and required checks exist.
+
 ## English
 
-Mazzy VPN 1.2.0 expands the safe Linux CLI/TUI and turns Desktop 0.2 into a
-self-contained Linux control-center preview for AmneziaWG, WireGuard, OpenVPN
-and NetworkManager L2TP/IPsec profiles.
+Mazzy VPN 1.3 strengthens the Linux AI-ready VPN control plane for long-running
+human, AI-agent, learning, video, open-web and work sessions. Desktop 0.3
+remains a Linux preview: it is functional, but it is not yet a signed Desktop
+1.0 product.
 
 ### Highlights
 
-- Desktop screens for Dashboard, Profiles, Diagnostics, Settings and About,
-  plus the system tray;
-- bundled compatible engine and installer in Linux Desktop packages, with
-  version/dependency checks and explicitly authorized install, update and
-  repair;
-- safe file/folder import, sanitized profile discovery, search, default/selected
-  connections and profile removal;
-- validation, endpoint probes, transactional single/batch live tests,
-  emergency recovery and connection diagnosis;
-- complete retained Doctor and self-test output, bounded service logs,
-  autostart and independent recovery-monitor controls;
-- typed Desktop operations with a fixed allowlist, argument/path validation and
-  output sanitization instead of UI-generated shell commands;
-- CLI additions for sanitized `profiles --json`, multi-file import, independent
-  monitor control and bounded logs;
-- About, privacy and security guidance with product/engine/platform versions,
-  author and AGPL license information;
-- machine-validated capability gates and bilingual roadmaps for Linux, Windows,
-  macOS, Android and iOS;
-- synchronized Wiki, Discussions FAQ/support topics and community feature
-  polls.
+- `mazzy-vpn verify [--speed] [--json]` and API v1
+  `tests.verify-egress`;
+- actual interface-bound versus default IPv4 comparison;
+- two distinct geolocation providers, both required to report the exact
+  observed egress IP and agree on country before `verified`;
+- configured full-tunnel DNS and potential IPv6-leak signals;
+- explicit bounded five-megabyte speed sample, never a background transfer;
+- whole-list location DNS/ICMP/TCP checks with bounded concurrency, latency,
+  `reachable`/`unknown`/`unreachable`/`invalid` and active-tunnel state;
+- Desktop sorting by ping/status/name and connect-fastest from measured
+  reachable entries;
+- expanded tray navigation and controls, clickable retained event detail and
+  clearer ON/OFF service state;
+- strict typed Desktop response validation and bounded compatibility helpers;
+- auto health policy that detects confirmed default-egress mismatch only for
+  declared full-tunnel profiles; split-tunnel profiles are not forced into
+  full-tunnel recovery;
+- updated architecture, privacy, installation, Wiki, platform roadmap and
+  AI-ready product description.
+
+### What `verified` means
+
+`verified` is time-of-check network evidence: the managed tunnel is active,
+default and interface IPv4 egress match, two validated geo providers agree,
+no potential IPv6 leak was observed, configured DNS routing is full-tunnel and
+there are no findings. It is not a promise that a particular AI provider,
+website or video platform accepts the session. Account region, organization
+policy, cookies, browser language, WebRTC, device location and provider-side
+risk scoring remain external.
 
 ### Platform status
 
-- **Linux CLI/TUI 1.2.0:** functional release.
-- **Linux Desktop 0.2.0:** functional control-center preview with bundled
-  engine bootstrap; it remains preview until the Desktop 1.0 release gate
-  passes.
-- **Windows and macOS Desktop artifacts:** unsigned UI previews only. They do
-  not provide traffic protection until native services/backends, signing and
-  platform integration tests are complete.
-- **Android and iOS:** planned native clients; no working mobile packages are
-  included.
+- **Linux CLI/TUI 1.3.0:** release candidate.
+- **Linux Desktop 0.3.0:** functional unsigned preview; AppImage, DEB and RPM.
+- **Windows/macOS:** unsigned UI previews without native VPN backends; do not
+  use them for traffic protection.
+- **Android/iOS:** planned native clients; no application packages are in this
+  release.
 
-Install the CLI/TUI from source:
+### Known blockers
 
-```bash
-git clone https://github.com/mazurovn/mazzy-vpn.git
-cd mazzy-vpn
-sudo ./install.sh
-mazzy-vpn
-```
-
-Linux Desktop packages can bootstrap the compatible engine after explicit OS
-authorization. Private VPN profiles and credentials are intentionally absent
-from all release artifacts.
+- most privileged Desktop domains still use the typed `pkexec` compatibility
+  adapter instead of a native service with peer identity;
+- no signed SBOM/provenance/update chain or reproducible clean-builder proof;
+- no complete clean-device distro, sleep/resume, network-change, loss/jitter,
+  crash, upgrade/rollback and soak matrix;
+- German, Chinese, Japanese and Korean still use English fallback on parts of
+  the extended Desktop screens;
+- Windows Service/Wintun, macOS Network Extension, Android `VpnService` and iOS
+  Packet Tunnel backends are not implemented.
 
 ## Русский
 
-Mazzy VPN 1.2.0 расширяет безопасный Linux CLI/TUI, а Desktop 0.2 становится
-самодостаточным Linux control-center preview для профилей AmneziaWG, WireGuard,
-OpenVPN и NetworkManager L2TP/IPsec.
+Mazzy VPN 1.3 усиливает Linux AI-ready VPN-контур для долгих сессий людей,
+AI-агентов, обучения, видео, открытого веба и рабочих систем. Desktop 0.3
+остаётся Linux preview: он функционален, но ещё не является подписанным
+Desktop 1.0 продуктом.
 
 ### Основные изменения
 
-- экраны Desktop Dashboard, Profiles, Diagnostics, Settings и «О программе»,
-  а также системный tray;
-- совместимый engine и installer внутри Linux Desktop packages, проверка версий
-  и зависимостей, явно подтверждаемая установка, обновление и repair;
-- безопасный импорт файлов/папок, очищенный список профилей, поиск, подключение
-  default/выбранного профиля и удаление;
-- validation, endpoint probe, транзакционные одиночные/пакетные live tests,
-  emergency recovery и диагностика соединения;
-- полный сохранённый вывод Doctor и self-test, ограниченный журнал, управление
-  autostart и независимым recovery monitor;
-- типизированные Desktop operations с фиксированным allowlist, проверкой
-  аргументов/путей и очисткой вывода вместо shell-команд из UI;
-- CLI-команды для очищенного `profiles --json`, импорта нескольких файлов,
-  отдельного управления monitor и ограниченного журнала;
-- экран About, правила приватности и безопасности с версиями
-  product/engine/platform, автором и лицензией AGPL;
-- машинно проверяемые capability gates и двуязычный roadmap для Linux, Windows,
-  macOS, Android и iOS;
-- синхронизированные Wiki, Discussions FAQ/support и голосования за будущие
-  функции.
+- `mazzy-vpn verify [--speed] [--json]` и API v1
+  `tests.verify-egress`;
+- сравнение фактических interface-bound и default IPv4;
+- два разных geo provider: для `verified` оба должны сообщить точный
+  наблюдаемый egress IP и согласовать страну;
+- signals настроенного full-tunnel DNS и потенциальной IPv6-утечки;
+- только явный bounded speed sample 5 МБ, без фонового трафика;
+- массовая DNS/ICMP/TCP-проверка всего списка с bounded concurrency, latency,
+  состояниями `reachable`/`unknown`/`unreachable`/`invalid` и active tunnel;
+- сортировка Desktop по ping/status/name и connect-fastest только среди
+  измеренных `reachable`;
+- расширенный tray, прямое открытие экранов, кликабельные детали событий и
+  понятное текущее ON/OFF состояние служб;
+- strict typed validation ответов Desktop и bounded compatibility helpers;
+- auto health policy обнаруживает подтверждённый default-egress mismatch для
+  профилей, объявляющих full tunnel, но не ломает split-tunnel;
+- обновлены архитектура, privacy, установка, Wiki, platform roadmap и
+  AI-ready описание продукта.
+
+### Что означает `verified`
+
+Это evidence сети в момент проверки: managed tunnel активен, default и
+interface IPv4 совпадают, два валидированных geo provider согласны,
+потенциальная IPv6-утечка не обнаружена, настроен full-tunnel DNS и нет
+findings. Это не обещание, что конкретный AI provider, сайт или видео-платформа
+примет сессию. Регион аккаунта, политика организации, cookies, язык браузера,
+WebRTC, геолокация устройства и provider-side risk scoring остаются внешними.
 
 ### Статус платформ
 
-- **Linux CLI/TUI 1.2.0:** функциональный релиз.
-- **Linux Desktop 0.2.0:** функциональный control-center preview со встроенным
-  bootstrap engine; статус preview сохраняется до прохождения release gate
-  Desktop 1.0.
-- **Windows и macOS Desktop artifacts:** только неподписанные UI preview. Они не
-  защищают трафик до появления нативных services/backends, подписи и platform
-  integration tests.
-- **Android и iOS:** запланированы нативные клиенты; рабочих mobile packages в
-  этом релизе нет.
+- **Linux CLI/TUI 1.3.0:** release candidate.
+- **Linux Desktop 0.3.0:** функциональный неподписанный preview; AppImage, DEB
+  и RPM.
+- **Windows/macOS:** неподписанные UI preview без native VPN backend; не
+  используйте их для защиты трафика.
+- **Android/iOS:** planned native clients; application packages в релизе нет.
 
-Установка CLI/TUI из исходников:
+### Известные blockers
 
-```bash
-git clone https://github.com/mazurovn/mazzy-vpn.git
-cd mazzy-vpn
-sudo ./install.sh
-mazzy-vpn
-```
-
-Linux Desktop packages могут установить совместимый engine после явного
-системного разрешения. Личные VPN-профили и учётные данные намеренно не входят
-ни в один release artifact.
+- большинство privileged Desktop domains всё ещё использует typed `pkexec`
+  compatibility adapter вместо native service с peer identity;
+- нет signed SBOM/provenance/update chain и доказанной clean-builder
+  reproducibility;
+- нет полной clean-device distro, sleep/resume, network-change, loss/jitter,
+  crash, upgrade/rollback и soak matrix;
+- части расширенных Desktop экранов для немецкого, китайского, японского и
+  корейского используют English fallback;
+- Windows Service/Wintun, macOS Network Extension, Android `VpnService` и iOS
+  Packet Tunnel backends не реализованы.
 
 ## Safety / Безопасность
 
-Live tests temporarily change the active VPN route and use transactional
-rollback after success, failure, timeout or termination. Review the prompt and
-save important network work before running them.
+Live tests temporarily change routes and use transactional rollback. Save
+important network work before starting one. Operational profiles, keys and
+credentials are intentionally absent from release artifacts. Current preview
+artifacts are unsigned; an unsigned hash is not proof of publisher identity.
 
-Live tests временно меняют активный VPN-маршрут и выполняют transactional
-rollback после успеха, ошибки, тайм-аута или завершения. Перед запуском
-прочитайте подтверждение и сохраните важную сетевую работу.
+Live tests временно меняют маршруты и используют transactional rollback.
+Сохраните важную сетевую работу до запуска. Рабочие профили, ключи и credentials
+намеренно отсутствуют в release artifacts. Текущие preview artifacts не
+подписаны; неподписанный hash не доказывает издателя.
 
 Licensed under the GNU Affero General Public License v3.0 or later.

@@ -48,9 +48,11 @@ chmod +x "Mazzy VPN Desktop_VERSION_amd64.AppImage"
 ```
 
 DEB и RPM добавляют приложение в системное меню. AppImage можно запускать без
-системной установки. Проверяйте опубликованный SHA-256.
+системной установки. Сверяйте artifact с конкретным release/Actions commit.
+Текущие preview artifacts не подписаны; неподписанный SHA-256 обнаруживает
+случайное повреждение, но сам по себе не доказывает издателя.
 
-Desktop 0.2 содержит совместимые installer/engine resources. На экране Settings
+Desktop 0.3 candidate содержит совместимые installer/engine resources. На экране Settings
 он проверяет установленную версию и зависимости и после явного системного
 разрешения устанавливает, обновляет или восстанавливает engine. Поэтому сначала
 устанавливать CLI вручную не требуется. Статус preview сохраняется до закрытия
@@ -111,10 +113,12 @@ sudo dnf install "./Mazzy VPN Desktop-VERSION-1.x86_64.rpm"
 chmod +x "Mazzy VPN Desktop_VERSION_amd64.AppImage"
 ```
 
-DEB and RPM add an application-menu entry. AppImage is portable. Verify the
-published SHA-256 checksum.
+DEB and RPM add an application-menu entry. AppImage is portable. Match the
+artifact to its release/Actions commit. Current preview artifacts are unsigned;
+an unsigned SHA-256 detects accidental corruption but does not prove the
+publisher.
 
-Desktop 0.2 contains compatible installer/engine resources. Its Settings screen
+The Desktop 0.3 candidate contains compatible installer/engine resources. Its Settings screen
 checks the installed version and dependencies and, after explicit system
 authorization, installs, updates or repairs the engine. A prior manual CLI
 installation is therefore not required. The package remains a preview until

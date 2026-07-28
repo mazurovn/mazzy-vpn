@@ -10,27 +10,32 @@ authoritative backlog; this page records the verified resumption point.
 
 ## Verified release baseline
 
-- `main` resolves to `993f32b56ebeb7baca934f5d60b5998f32ff4bcd`
-  after merging protected API PR #26, client PR #27 and Linux package-lifecycle
-  PR #28.
-- `v1.2.0` and `desktop-v0.2.0` remain at
-  `0fe11a22b4e68f4c9106e4415ebaf5a2c281cb2c`.
-- CLI/TUI 1.2.0 is the current stable release.
-- Linux Desktop 0.2.0 is a functional control-center preview.
+- GitHub `main` and local `origin/main` resolve to
+  `164f844fac2295020bb8a9a89c57affd01f837d0` after merging PR #29 with the
+  structured whole-list location probe.
+- The published stable release is CLI/TUI `v1.2.0`. The published Desktop
+  preview is `desktop-v0.2.0`.
+- CLI/TUI 1.3.0 and Linux Desktop 0.3.0 exist only on the active
+  `agent/desktop-03-diagnostics` release-candidate branch. Neither tag nor
+  GitHub Release page exists yet.
 - Windows and macOS 0.2.0 artifacts are unsigned UI previews without native
-  VPN backends.
-- Android and iOS clients are planned and have no release artifacts.
-- PR #22, API contract PR #25, protected API PR #26, client PR #27 and package
-  PR #28 are merged. PR #28 passed all required Ubuntu 22.04, macOS 14 and
-  Windows 2022 checks and was squash-merged as `993f32b`.
+  VPN backends. They must not be described as functional VPN clients.
+- Android and iOS clients are planned and have no application source or
+  release artifacts.
+- There are no open pull requests. Open backlog issues are #4–#14; PRs
+  #25–#29 are merged incremental slices, not proof that the corresponding
+  production gates are complete.
 - The uncompromising code, security, packaging and cross-platform review is in
   [`AUDIT_2026-07-28.ru.md`](AUDIT_2026-07-28.ru.md). Its production blockers
   remain authoritative until replaced by newer evidence.
 
-Release links:
+Published release links:
 
 - <https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.2.0>
 - <https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.2.0>
+
+Candidate release links must not be advertised until both pages exist:
+`v1.3.0` and `desktop-v0.3.0`.
 
 ## Community and documentation baseline
 
@@ -59,7 +64,7 @@ Release links:
 
 Merged PR #25 completed the first incremental issue #5 slice:
 
-- API contract `1.0` publishes 25 operations and 14 stable error codes;
+- API contract `1.0` publishes 26 operations and 14 stable error codes;
 - request, response, event and sanitized audit envelopes are defined;
 - `mazzy-vpn api-info --json` exposes the installed manifest without root;
 - Desktop embeds and exposes the same manifest through a read-only command;
@@ -134,7 +139,7 @@ Merged PR #28 completed the package-owned issue #4 slice:
   byte-identity, embedded source completeness and staged AppImage bootstrap,
   plus stale-bundle and previously patched executable cleanup before releases.
 
-The active `agent/location-health` issue #6 slice adds:
+Merged PR #29 completed the first location-health issue #6 slice:
 
 - bounded parallel `probe all` with configurable 1–8 workers and per-step
   DNS/ICMP/TCP timeouts;
@@ -148,13 +153,42 @@ The active `agent/location-health` issue #6 slice adds:
   every profile row;
 - complete package-owned Desktop CSS corresponding source.
 
-Verified locally:
+The active `agent/desktop-03-diagnostics` candidate adds:
 
-- shell regression suite: 68/68 on the location-health branch;
-- Rust unit tests: 17/17;
+- `mazzy-vpn verify [--speed] [--json]` and API query
+  `tests.verify-egress`;
+- conservative verification of interface-bound versus default IPv4 egress,
+  two location providers tied to the same egress IP, country agreement,
+  potential IPv6 leak and configured full-tunnel DNS;
+- optional explicit five-megabyte speed sample, never a background transfer;
+- Desktop verification card, profile sorting by ping/status/name, connect
+  fastest, clickable event details and clearer service-toggle state;
+- expanded tray navigation and actions for egress verification, whole-list
+  ping, Doctor, refresh, auto-connect and monitor control;
+- fixed `/usr/bin` package-engine preference in tray/status paths, absolute
+  privilege-helper paths and bounded compatibility processes with explicit
+  indeterminate mutation messaging;
+- strict Desktop response parsing that rejects false verdicts, wrong IP
+  families, provider-IP mismatch, duplicate providers and unexplained
+  warnings;
+- strict typed parsing of both privileged runtime caches and exact
+  `profile_id`/filename active-profile identity, including fail-closed handling
+  of duplicate display names.
+
+Verified locally for the current candidate:
+
+- shell regression suite: 74/74 in one uninterrupted final run, including
+  Unicode profile-spoofing and runtime hard-code boundary checks;
+- Rust unit tests: 22/22;
 - ShellCheck, Clippy, capability/API validators, public audit and gitleaks;
 - `npm audit --audit-level=high` reported 0 known vulnerabilities on
-  2026-07-28; Cargo and system-package advisory coverage is still absent;
+  2026-07-28; GitHub Dependabot reported no open alerts after vulnerability
+  alerts and automated security updates were enabled. A local RustSec
+  `cargo-audit` run and system-package advisory scan are still absent;
+- GitHub private vulnerability reporting is enabled. CodeQL default setup
+  (`extended`, remote and local queries) passed for Actions, JavaScript/
+  TypeScript, Python and Rust on baseline `main`; its high-severity release
+  wrapper alert is fixed locally but must be confirmed closed by PR scanning;
 - latest clean all-target release build produced AppImage, DEB and RPM without
   stale Tauri marker warnings; actual DEB/RPM metadata contains the declared
   base runtime, privilege helper, process tools, recommendations and

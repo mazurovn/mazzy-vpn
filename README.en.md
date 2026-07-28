@@ -3,11 +3,21 @@
 Created and maintained by
 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
-Mazzy VPN is a Linux VPN manager with an interactive terminal UI and an
-automation-friendly CLI. It combines AmneziaWG, WireGuard, OpenVPN and
-NetworkManager L2TP/IPsec, auto-detects and safely imports profiles, checks
-every endpoint, maintains one managed tunnel, runs live tests as transactions
-and rolls back to the previously active managed or external VPN after failure.
+Mazzy VPN is an open-source AI-ready VPN client for Linux with Desktop, tray,
+an interactive terminal UI and an automation-friendly CLI. It is built for
+stable AI sessions and agents, learning, video, the open web, remote work and
+corporate portals. It combines AmneziaWG, WireGuard, OpenVPN and NetworkManager
+L2TP/IPsec, safely imports profiles, measures every location, verifies actual
+egress/location/DNS/IPv6, maintains one managed tunnel and rolls back to the
+previously active managed or external VPN after failure.
+
+It is a client and control plane rather than a hosted VPN subscription. Use
+profiles from your VPN provider or organization; Mazzy VPN requires no project
+account and collects no telemetry.
+
+This source tree declares the 1.3.0/0.3.0 release candidate. Until both
+corresponding tags and GitHub Release pages exist, the latest published line
+remains CLI/TUI 1.2.0 and Desktop 0.2.0 preview.
 
 The primary command is `mazzy-vpn`. The installer also creates the compatibility
 aliases `vpnctl` and `mazzyvpn`.
@@ -112,6 +122,8 @@ mazzy-vpn status --json
 mazzy-vpn status --api-json        # raw local API v1 envelope
 mazzy-vpn profiles --api-json      # opaque IDs; no engine filenames
 mazzy-vpn diagnose
+mazzy-vpn verify                       # actual egress, geo, DNS and IPv6
+mazzy-vpn verify --speed               # explicit bounded 5 MB speed sample
 mazzy-vpn validate all
 mazzy-vpn probe all --timeout 3 --jobs 4
 mazzy-vpn probe all --timeout 3 --jobs 4 --json
@@ -145,16 +157,18 @@ Change the language immediately with menu item 16 or
 
 ## Desktop control center and tray
 
-![Mazzy VPN Desktop Dashboard](docs/images/dashboard-connected-preview.png)
+![Mazzy VPN Desktop Dashboard in English](docs/images/dashboard-en.png)
 
-The Tauri Desktop 0.2 Linux preview provides Dashboard, Profiles, Diagnostics,
+The Tauri Desktop 0.3 Linux preview provides Dashboard, Profiles, Diagnostics,
 Settings and About screens plus a system tray. DEB/RPM own the compatible
 engine, systemd units and base runtime dependencies through the package
 manager; AppImage retains the explicitly authorized embedded installer.
 Desktop checks installed versions and dependencies and can repair supported
 missing protocol packages after authorization. Profile file/folder import,
-search, connect, validation, probes, transactional tests, Doctor fixes,
-self-tests, bounded logs, autostart and recovery-monitor controls are available
+search, connect, sortable whole-list latency checks, fastest reachable
+selection, actual egress/location/DNS/IPv6 verification, transactional tests,
+clickable events, Doctor fixes, self-tests, bounded logs, autostart and
+recovery-monitor controls are available
 without first installing the CLI by hand. Packages are available as AppImage,
 DEB and RPM.
 
@@ -166,7 +180,7 @@ distribution.
 About records the Desktop/engine/platform versions, author, copyright, AGPL
 license, privacy principles and safe-operation rules.
 
-Desktop 0.2 is a functional Linux control-center preview, not the final
+Desktop 0.3 is a functional Linux control-center preview, not the final
 standalone Desktop 1.0 product. The language-neutral API v1 schema, protected
 Linux service and CLI/TUI/Desktop lifecycle clients are implemented, while
 remaining operation domains have not yet moved to the shared dispatcher.
@@ -214,6 +228,11 @@ batch run instead of producing a long chain of misleading timeouts.
   transactional live test proves VPN authentication and routing.
 - `diagnose` checks the default route, DNS, service, tunnel interface,
   WireGuard/AmneziaWG handshake and public Internet access through the tunnel.
+- `verify` compares interface-bound and system IPv4 egress, checks for a
+  potential IPv6 leak, compares two geolocation providers, evaluates the VPN
+  DNS route and optionally runs an explicit bounded speed sample. It reports
+  `verified`, `warning` or `failed`; it does not confuse a selected profile
+  name with the observed location.
 - `doctor` checks dependencies, AmneziaWG backend, L2TP/IPsec stack, fallback
   handlers, systemd units, profiles and saved state.
 - `self-test` combines validation, endpoint probes and doctor.

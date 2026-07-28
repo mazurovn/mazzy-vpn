@@ -8,13 +8,14 @@
 | `mazzy-vpn status --json` | очищенный структурированный статус |
 | `mazzy-vpn status --api-json` | raw response envelope local API v1 |
 | `mazzy-vpn profiles --api-json` | каталог с opaque ID без engine filenames |
-| `sudo mazzy-vpn quick` | подключить сохранённый default |
-| `sudo mazzy-vpn connect PROTOCOL PROFILE` | выбрать и подключить профиль |
-| `sudo mazzy-vpn reconnect` | безопасно перезапустить выбранный туннель |
-| `sudo mazzy-vpn disconnect` | записать `DESIRED=down` и отключить |
+| `mazzy-vpn quick` | подключить сохранённый default через local API |
+| `mazzy-vpn connect PROTOCOL PROFILE` | выбрать и подключить профиль |
+| `mazzy-vpn reconnect` | безопасно перезапустить выбранный туннель |
+| `mazzy-vpn disconnect` | записать `DESIRED=down` и отключить |
 | `mazzy-vpn list [PROTOCOL]` | список профилей |
 | `mazzy-vpn validate all` | проверить формат, директивы и права |
 | `mazzy-vpn probe all --timeout 3 --jobs 4 [--json]` | массовый DNS/ICMP/TCP probe с latency и active |
+| `mazzy-vpn verify [--speed] [--json]` | фактические egress/geo/DNS/IPv6 и optional 5-МБ sample |
 | `sudo mazzy-vpn test ...` | транзакционный тест одного профиля |
 | `sudo mazzy-vpn test-all all` | тест всех профилей с rollback |
 | `sudo mazzy-vpn emergency` | найти первый реально работающий профиль |
@@ -43,13 +44,14 @@
 | `mazzy-vpn status --json` | sanitized structured status |
 | `mazzy-vpn status --api-json` | raw local API v1 response envelope |
 | `mazzy-vpn profiles --api-json` | opaque-ID catalog without engine filenames |
-| `sudo mazzy-vpn quick` | connect the saved default |
-| `sudo mazzy-vpn connect PROTOCOL PROFILE` | select and connect a profile |
-| `sudo mazzy-vpn reconnect` | safely restart the selected tunnel |
-| `sudo mazzy-vpn disconnect` | write `DESIRED=down` and disconnect |
+| `mazzy-vpn quick` | connect the saved default through the local API |
+| `mazzy-vpn connect PROTOCOL PROFILE` | select and connect a profile |
+| `mazzy-vpn reconnect` | safely restart the selected tunnel |
+| `mazzy-vpn disconnect` | write `DESIRED=down` and disconnect |
 | `mazzy-vpn list [PROTOCOL]` | list profiles |
 | `mazzy-vpn validate all` | validate format, directives and permissions |
 | `mazzy-vpn probe all --timeout 3 --jobs 4 [--json]` | bounded batch DNS/ICMP/TCP probe with latency and active state |
+| `mazzy-vpn verify [--speed] [--json]` | actual egress/geo/DNS/IPv6 and optional 5 MB sample |
 | `sudo mazzy-vpn test ...` | transactional single-profile test |
 | `sudo mazzy-vpn test-all all` | test all profiles with rollback |
 | `sudo mazzy-vpn emergency` | find the first working profile |

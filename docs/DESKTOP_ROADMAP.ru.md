@@ -40,7 +40,7 @@ Desktop работает без отдельной установки CLI, по�
 client/core. CLI и TUI остаются доступными отдельно и могут управлять тем же
 core, даже когда GUI закрыт.
 
-## Что готово в Desktop 0.2 Linux preview
+## Что готово в Desktop 0.3 Linux preview
 
 - встроенный installer engine с проверкой версий и готовности зависимостей;
 - безопасный импорт одного/нескольких файлов и папки с определением протокола;
@@ -56,7 +56,7 @@ core, даже когда GUI закрыт.
 - предварительный просмотр импорта и drag-and-drop workflow;
 - полные настройки normal/test/emergency и fallback policy;
 - общий привилегированный versioned service API вместо отдельного CLI-процесса
-  на каждое действие (adapter 0.2 типизирован, но вызывает встроенный engine);
+  на каждое действие (adapter 0.3 типизирован, но вызывает встроенный engine);
 - полный перевод новых экранов центра управления на все шесть языков;
 - подписанные обновления, миграция и transactional rollback installer;
 - native macOS/Windows backends, signing/notarization и системные installers;

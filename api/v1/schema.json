@@ -51,6 +51,7 @@
         "profiles.inspect-import",
         "tests.validate",
         "tests.probe",
+        "tests.verify-egress",
         "services.get",
         "doctor.inspect",
         "settings.get"
@@ -128,6 +129,9 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 8
+        },
+        "include_speed": {
+          "type": "boolean"
         },
         "timeout_seconds": {
           "type": "integer",
@@ -662,6 +666,283 @@
         }
       }
     },
+    "VerificationIpv4Address": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 15,
+      "pattern": "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}$"
+    },
+    "VerificationIpv6Address": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 45,
+      "pattern": "^[0-9A-Fa-f:]+$"
+    },
+    "EgressGeoProvider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "ip",
+        "country_code",
+        "country",
+        "region",
+        "city"
+      ],
+      "properties": {
+        "provider": {
+          "enum": [
+            "ipapi",
+            "ipwho"
+          ]
+        },
+        "ip": {
+          "type": "string",
+          "maxLength": 15,
+          "pattern": "^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}$"
+        },
+        "country_code": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 2,
+          "pattern": "^[A-Z]{2}$"
+        },
+        "country": {
+          "type": "string",
+          "maxLength": 96
+        },
+        "region": {
+          "type": "string",
+          "maxLength": 96
+        },
+        "city": {
+          "type": "string",
+          "maxLength": 96
+        }
+      }
+    },
+    "EgressVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "checked_at",
+        "verdict",
+        "message_key",
+        "tunnel",
+        "ipv4",
+        "ipv6",
+        "geo",
+        "dns",
+        "speed",
+        "findings"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "checked_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "verdict": {
+          "enum": [
+            "verified",
+            "warning",
+            "failed"
+          ]
+        },
+        "message_key": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "tunnel": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "active",
+            "protocol",
+            "profile",
+            "interface"
+          ],
+          "properties": {
+            "active": {
+              "type": "boolean"
+            },
+            "protocol": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Protocol"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "profile": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 255
+            },
+            "interface": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 32,
+              "pattern": "^[A-Za-z0-9_.:-]+$"
+            }
+          }
+        },
+        "ipv4": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "interface_ip",
+            "default_ip",
+            "same_egress"
+          ],
+          "properties": {
+            "interface_ip": {
+              "$ref": "#/$defs/VerificationIpv4Address"
+            },
+            "default_ip": {
+              "$ref": "#/$defs/VerificationIpv4Address"
+            },
+            "same_egress": {
+              "type": "boolean"
+            }
+          }
+        },
+        "ipv6": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "interface_ip",
+            "default_ip",
+            "potential_leak"
+          ],
+          "properties": {
+            "interface_ip": {
+              "$ref": "#/$defs/VerificationIpv6Address"
+            },
+            "default_ip": {
+              "$ref": "#/$defs/VerificationIpv6Address"
+            },
+            "potential_leak": {
+              "type": "boolean"
+            }
+          }
+        },
+        "geo": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "expected_country_code",
+            "observed_country_code",
+            "country_match",
+            "providers_agree",
+            "providers"
+          ],
+          "properties": {
+            "expected_country_code": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Z]{2}$"
+            },
+            "observed_country_code": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Z]{2}$"
+            },
+            "country_match": {
+              "enum": [
+                "match",
+                "mismatch",
+                "unknown"
+              ]
+            },
+            "providers_agree": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "providers": {
+              "type": "array",
+              "maxItems": 2,
+              "items": {
+                "$ref": "#/$defs/EgressGeoProvider"
+              }
+            }
+          }
+        },
+        "dns": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state"
+          ],
+          "properties": {
+            "state": {
+              "enum": [
+                "vpn-full-tunnel",
+                "vpn-interface",
+                "unknown",
+                "unavailable"
+              ]
+            }
+          }
+        },
+        "speed": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "requested",
+            "measured",
+            "mbps",
+            "connect_ms"
+          ],
+          "properties": {
+            "requested": {
+              "type": "boolean"
+            },
+            "measured": {
+              "type": "boolean"
+            },
+            "mbps": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "connect_ms": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        },
+        "findings": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/Identifier"
+          }
+        }
+      }
+    },
     "ServiceState": {
       "type": "object",
       "additionalProperties": false,
@@ -914,6 +1195,9 @@
         },
         {
           "$ref": "#/$defs/ProbeCollection"
+        },
+        {
+          "$ref": "#/$defs/EgressVerification"
         },
         {
           "$ref": "#/$defs/ServiceCollection"

@@ -87,6 +87,23 @@
       "docs": ["docs/ARCHITECTURE.en.md", "docs/ARCHITECTURE.ru.md", "docs/DESKTOP.en.md", "docs/DESKTOP.ru.md"]
     },
     {
+      "id": "egress-location-verification",
+      "name_en": "Actual egress, location, DNS, IPv6 and bounded speed verification",
+      "name_ru": "Проверка фактического egress, локации, DNS, IPv6 и ограниченной скорости",
+      "owner": "shared-core",
+      "surfaces": {
+        "cli": "implemented",
+        "tui": "implemented",
+        "desktop_linux": "implemented",
+        "desktop_macos": "planned",
+        "desktop_windows": "planned",
+        "mobile_android": "planned",
+        "mobile_ios": "planned"
+      },
+      "tests": ["tests/run.sh", "tests/check-api-contract.py", "tests/check-desktop-ui.py", "desktop/src-tauri/src/backend.rs"],
+      "docs": ["docs/ARCHITECTURE.en.md", "docs/ARCHITECTURE.ru.md", "docs/DESKTOP.en.md", "docs/DESKTOP.ru.md"]
+    },
+    {
       "id": "operating-modes",
       "name_en": "Normal, test, emergency and fallback modes",
       "name_ru": "Режимы normal, test, emergency и fallback",
@@ -259,13 +276,14 @@
   ],
   "release_gates": [
     {
-      "id": "cli-tui-1.2",
+      "id": "cli-tui-1.3",
       "declared_ready": true,
       "requirements": [
         {"capability": "connection-lifecycle", "surfaces": ["cli", "tui"]},
         {"capability": "profile-import", "surfaces": ["cli", "tui"]},
         {"capability": "profile-location-selection", "surfaces": ["cli", "tui"]},
         {"capability": "validation-probe-test", "surfaces": ["cli", "tui"]},
+        {"capability": "egress-location-verification", "surfaces": ["cli", "tui"]},
         {"capability": "operating-modes", "surfaces": ["cli", "tui"]},
         {"capability": "automatic-recovery", "surfaces": ["cli", "tui"]},
         {"capability": "privilege-boundary", "surfaces": ["cli", "tui"]}
@@ -279,6 +297,7 @@
         {"capability": "profile-import", "surfaces": ["desktop_linux"]},
         {"capability": "profile-location-selection", "surfaces": ["desktop_linux"]},
         {"capability": "validation-probe-test", "surfaces": ["desktop_linux"]},
+        {"capability": "egress-location-verification", "surfaces": ["desktop_linux"]},
         {"capability": "operating-modes", "surfaces": ["desktop_linux"]},
         {"capability": "service-control", "surfaces": ["desktop_linux"]},
         {"capability": "dependency-bootstrap", "surfaces": ["desktop_linux"]},
@@ -298,6 +317,7 @@
         {"capability": "profile-import", "surfaces": ["desktop_macos"]},
         {"capability": "profile-location-selection", "surfaces": ["desktop_macos"]},
         {"capability": "validation-probe-test", "surfaces": ["desktop_macos"]},
+        {"capability": "egress-location-verification", "surfaces": ["desktop_macos"]},
         {"capability": "operating-modes", "surfaces": ["desktop_macos"]},
         {"capability": "service-control", "surfaces": ["desktop_macos"]},
         {"capability": "dependency-bootstrap", "surfaces": ["desktop_macos"]},
@@ -317,6 +337,7 @@
         {"capability": "profile-import", "surfaces": ["desktop_windows"]},
         {"capability": "profile-location-selection", "surfaces": ["desktop_windows"]},
         {"capability": "validation-probe-test", "surfaces": ["desktop_windows"]},
+        {"capability": "egress-location-verification", "surfaces": ["desktop_windows"]},
         {"capability": "operating-modes", "surfaces": ["desktop_windows"]},
         {"capability": "service-control", "surfaces": ["desktop_windows"]},
         {"capability": "dependency-bootstrap", "surfaces": ["desktop_windows"]},
@@ -336,6 +357,7 @@
         {"capability": "profile-import", "surfaces": ["mobile_android"]},
         {"capability": "profile-location-selection", "surfaces": ["mobile_android"]},
         {"capability": "validation-probe-test", "surfaces": ["mobile_android"]},
+        {"capability": "egress-location-verification", "surfaces": ["mobile_android"]},
         {"capability": "operating-modes", "surfaces": ["mobile_android"]},
         {"capability": "dashboard-tray", "surfaces": ["mobile_android"]},
         {"capability": "localization-six-languages", "surfaces": ["mobile_android"]},
@@ -354,6 +376,7 @@
         {"capability": "profile-import", "surfaces": ["mobile_ios"]},
         {"capability": "profile-location-selection", "surfaces": ["mobile_ios"]},
         {"capability": "validation-probe-test", "surfaces": ["mobile_ios"]},
+        {"capability": "egress-location-verification", "surfaces": ["mobile_ios"]},
         {"capability": "operating-modes", "surfaces": ["mobile_ios"]},
         {"capability": "dashboard-tray", "surfaces": ["mobile_ios"]},
         {"capability": "localization-six-languages", "surfaces": ["mobile_ios"]},
