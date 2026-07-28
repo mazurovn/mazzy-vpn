@@ -54,6 +54,8 @@ All notable changes to Mazzy VPN are documented here.
 - Extended `status.get` with optional safe runtime detail for CLI/TUI parity:
   desired mode, interface, handshake age, public IP, autostart, health monitor,
   failure count and fallback state; VPN endpoints remain forbidden.
+- Restored that safe runtime detail in API-backed human status and TUI
+  dashboard output without reading protected profiles.
 
 ## 1.2.0 / Desktop 0.2.0 — 2026-07-27
 

@@ -976,6 +976,21 @@ jq -e '
 ' <<<"$api_client_status" >/dev/null ||
     fail "CLI local API client did not return the status.get envelope"
 
+api_client_human_status="$(
+    VPNCTL_API_CLIENT_FORCE=1 "$CLI" status
+)"
+for expected_status_line in \
+    'Desired:   up' \
+    'Mode:      normal' \
+    'Autostart: enabled' \
+    'Monitor:   enabled' \
+    'Fallback:  inactive' \
+    'Interface: vpnovpn0' \
+    'Public IP: 203.0.113.7'; do
+    grep -qx "$expected_status_line" <<<"$api_client_human_status" ||
+        fail "CLI local API status omitted safe detail: $expected_status_line"
+done
+
 api_client_profiles="$(
     VPNCTL_API_CLIENT_FORCE=1 "$CLI" profiles --api-json
 )"
@@ -1054,6 +1069,16 @@ api_client_dashboard="$(
 )"
 grep -q 'API: 1.0' <<<"$api_client_dashboard" ||
     fail "TUI dashboard did not use the protected local API"
+grep -q 'Интерфейс: vpnovpn0' <<<"$api_client_dashboard" ||
+    fail "TUI local API dashboard omitted the tunnel interface"
+grep -q 'Внешний IP: 203.0.113.7' <<<"$api_client_dashboard" ||
+    fail "TUI local API dashboard omitted the current public IP"
+grep -q 'Автозапуск: включён' <<<"$api_client_dashboard" ||
+    fail "TUI local API dashboard omitted autostart state"
+grep -q 'Контроль здоровья: включён' <<<"$api_client_dashboard" ||
+    fail "TUI local API dashboard omitted monitor state"
+grep -q 'Резерв: внешний VPN не активен' <<<"$api_client_dashboard" ||
+    fail "TUI local API dashboard omitted fallback state"
 grep -q '192\.0\.2\.10' <<<"$api_client_dashboard" &&
     fail "TUI local API dashboard leaked the endpoint"
 

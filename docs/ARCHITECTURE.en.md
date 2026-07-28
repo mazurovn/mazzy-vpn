@@ -117,7 +117,8 @@ root API dispatcher marks its server context, so an internal engine call cannot
 re-enter the socket recursively. A direct `sudo` fallback is forbidden after a
 request may have been sent. The published schema-v1 `--json` output remains
 stable for existing automation; `--api-json` explicitly returns the raw v1
-envelope.
+envelope. Optional safe status fields restore terminal detail without exposing
+the VPN endpoint, profile filename/path or configuration.
 
 ## Desktop control center and tray
 

@@ -397,6 +397,13 @@ msg() {
                 ja) printf 'ヘルス監視' ;; ko) printf '상태 모니터' ;;
             esac
             ;;
+        connection_health_label)
+            case "$UI_LANG" in
+                ru) printf 'Состояние туннеля' ;; en) printf 'Tunnel health' ;;
+                de) printf 'Tunnelzustand' ;; zh) printf '隧道状态' ;;
+                ja) printf 'トンネル状態' ;; ko) printf '터널 상태' ;;
+            esac
+            ;;
         enabled)
             case "$UI_LANG" in
                 ru) printf 'включён' ;; en) printf 'enabled' ;; de) printf 'aktiviert' ;;
@@ -1379,6 +1386,7 @@ api_client_cmd_quick() {
 
 api_client_cmd_status() {
     local response state profile_id="" protocol="" profile_name=""
+    local desired mode interface public_ip handshake_age fallback_active fallback_name
     (($# == 0)) || die "Использование: $CLI_COMMAND status"
     response="$(api_client_query status.get)" || {
         error "Local API не вернул статус."
@@ -1411,12 +1419,39 @@ api_client_cmd_status() {
         "$(jq -r 'if .result.connection.internet_reachable then "reachable" else "unreachable" end' <<<"$response")"
     printf 'Healthy:   %s\n' \
         "$(jq -r 'if .result.connection.healthy then "yes" else "no" end' <<<"$response")"
+    desired="$(jq -r '.result.desired // ""' <<<"$response")"
+    mode="$(jq -r '.result.mode // ""' <<<"$response")"
+    interface="$(jq -r '.result.connection.interface // ""' <<<"$response")"
+    public_ip="$(jq -r '.result.connection.public_ip // ""' <<<"$response")"
+    handshake_age="$(jq -r '.result.connection.handshake_age // ""' <<<"$response")"
+    fallback_active="$(jq -r '.result.fallback.active // false' <<<"$response")"
+    fallback_name="$(jq -r '.result.fallback.display_name // ""' <<<"$response")"
+    [[ -z "$desired" ]] || printf 'Desired:   %s\n' "$desired"
+    [[ -z "$mode" ]] || printf 'Mode:      %s\n' "$mode"
+    if jq -e '.result | has("autostart")' <<<"$response" >/dev/null; then
+        printf 'Autostart: %s\n' \
+            "$(jq -r 'if .result.autostart then "enabled" else "disabled" end' <<<"$response")"
+    fi
+    if jq -e '.result | has("health_monitor")' <<<"$response" >/dev/null; then
+        printf 'Monitor:   %s\n' \
+            "$(jq -r 'if .result.health_monitor then "enabled" else "disabled" end' <<<"$response")"
+    fi
+    if [[ "$fallback_active" == "true" ]]; then
+        printf 'Fallback:  active%s\n' "${fallback_name:+ ($fallback_name)}"
+    elif jq -e '.result | has("fallback")' <<<"$response" >/dev/null; then
+        printf 'Fallback:  inactive\n'
+    fi
+    [[ -z "$interface" ]] || printf 'Interface: %s\n' "$interface"
+    [[ -z "$handshake_age" ]] ||
+        printf 'Handshake: %s sec ago\n' "$handshake_age"
+    [[ -z "$public_ip" ]] || printf 'Public IP: %s\n' "$public_ip"
     [[ "$state" == "connected" ]]
 }
 
 api_client_dashboard_render() {
     local response state profile_id="" protocol="" profile_name="" counts=""
-    local protocol_name count service_text internet_text
+    local protocol_name count service_text internet_text interface public_ip
+    local handshake_age autostart_text monitor_text fallback_text fallback_name
     response="$(api_client_query status.get)" || {
         error "Local API не вернул dashboard status."
         return 70
@@ -1429,6 +1464,25 @@ api_client_dashboard_render() {
     state="$(jq -r '.result.connection.state // "unknown"' <<<"$response")"
     profile_id="$(jq -r '.result.connection.profile_id // ""' <<<"$response")"
     protocol="$(jq -r '.result.connection.protocol // ""' <<<"$response")"
+    interface="$(jq -r '.result.connection.interface // ""' <<<"$response")"
+    public_ip="$(jq -r '.result.connection.public_ip // ""' <<<"$response")"
+    handshake_age="$(jq -r '.result.connection.handshake_age // ""' <<<"$response")"
+    if [[ "$(jq -r '.result.autostart // false' <<<"$response")" == "true" ]]; then
+        autostart_text="$(msg enabled)"
+    else
+        autostart_text="$(msg disabled)"
+    fi
+    if [[ "$(jq -r '.result.health_monitor // false' <<<"$response")" == "true" ]]; then
+        monitor_text="$(msg enabled)"
+    else
+        monitor_text="$(msg disabled)"
+    fi
+    if [[ "$(jq -r '.result.fallback.active // false' <<<"$response")" == "true" ]]; then
+        fallback_name="$(jq -r '.result.fallback.display_name // ""' <<<"$response")"
+        fallback_text="$(msg active)${fallback_name:+ ($fallback_name)}"
+    else
+        fallback_text="$(msg fallback_none)"
+    fi
     if [[ -n "$profile_id" ]]; then
         profile_name="$(
             jq -r --arg profile_id "$profile_id" '
@@ -1466,8 +1520,20 @@ api_client_dashboard_render() {
         printf '│  ◇ %s: %s\n' "$(msg protocol_label)" "$(protocol_title "$protocol")"
         printf '│  ★ %s: %s\n' "$(msg default_config)" "$profile_name"
         printf '│  ↳ API: 1.0  ·  %s: %s\n' \
-            "$(msg health_label)" \
+            "$(msg connection_health_label)" \
             "$(jq -r 'if .result.connection.healthy then "OK" else "WARN" end' <<<"$response")"
+        if [[ -n "$interface" || -n "$public_ip" ]]; then
+            printf '│  ↳ %s: %s  ·  %s: %s\n' \
+                "$(msg interface_label)" "${interface:--}" \
+                "$(msg public_ip_label)" "${public_ip:--}"
+        fi
+        [[ -z "$handshake_age" ]] ||
+            printf '│  ↳ %s: %s sec ago\n' \
+                "$(msg handshake_label)" "$handshake_age"
+        printf '│  ↳ %s: %s  ·  %s: %s\n' \
+            "$(msg autostart_label)" "$autostart_text" \
+            "$(msg health_label)" "$monitor_text"
+        printf '│  ↳ %s: %s\n' "$(msg fallback)" "$fallback_text"
     else
         printf '│  ○ %s: %s\n' "$(msg selected)" "$(msg no_profile)"
         printf '│  %s: %s\n' "$(msg internet)" "$(msg not_available)"
