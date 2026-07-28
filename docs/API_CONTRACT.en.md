@@ -36,6 +36,17 @@ Every mutation requires:
 - a sanitized audit event;
 - declared rollback semantics and a final rollback outcome.
 
+`deadline_ms` is a monotonic mutation budget, not a promise to abandon safety
+work when the response clock expires. The Linux dispatcher starts the budget
+after validating the mutation envelope, subtracts lock/preflight time and
+passes the remaining milliseconds to the executor without rounding up. It
+never starts the executor after the budget has expired. Required rollback and
+crash reconciliation use separate bounded system-service timeouts; a response
+may therefore arrive after `deadline_ms` while rollback is being completed.
+Linux clients reserve a bounded 60-second completion grace for that outcome.
+An incomplete rollback enters recovery-only mode instead of being reported as
+successful.
+
 Repeated delivery of the same action ID during the documented retention window
 must never apply the mutation twice. The Linux lifecycle dispatcher enforces
 this rule with a persistent, root-readable action journal. It keeps the newest

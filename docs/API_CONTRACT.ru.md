@@ -36,6 +36,17 @@ Socket-activated Linux transport имеет статус `partial`: он при�
 - очищенное audit event;
 - объявленную rollback-семантику и итог rollback.
 
+`deadline_ms` — монотонный бюджет mutation, а не обещание бросить обязательную
+защитную работу при истечении времени ответа. Linux dispatcher запускает
+бюджет после проверки mutation envelope, вычитает время lock/preflight и
+передаёт executor оставшиеся миллисекунды без округления вверх. После истечения
+бюджета executor не запускается. Обязательный rollback и crash reconciliation
+используют отдельные ограниченные таймауты системного сервиса, поэтому ответ
+может прийти позже `deadline_ms`, пока завершается rollback. Linux-клиенты
+резервируют для итогового outcome ограниченный completion grace в 60 секунд.
+Незавершённый rollback переводит API в recovery-only mode и не объявляется
+успешным.
+
 Повторная доставка того же action ID в пределах опубликованного окна хранения
 не должна выполнять изменение дважды. Linux lifecycle dispatcher контролирует
 это правило через постоянный root-readable action journal и по умолчанию
