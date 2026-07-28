@@ -115,7 +115,9 @@ The CLI/TUI client reaches the Unix socket through automatically installed
 retries an indeterminate transport with the same request and `action_id`. The
 root API dispatcher marks its server context, so an internal engine call cannot
 re-enter the socket recursively. A direct `sudo` fallback is forbidden after a
-request may have been sent.
+request may have been sent. The published schema-v1 `--json` output remains
+stable for existing automation; `--api-json` explicitly returns the raw v1
+envelope.
 
 ## Desktop control center and tray
 

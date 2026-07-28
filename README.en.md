@@ -109,6 +109,8 @@ mazzy-vpn disconnect
 mazzy-vpn reconnect
 mazzy-vpn status
 mazzy-vpn status --json
+mazzy-vpn status --api-json        # raw local API v1 envelope
+mazzy-vpn profiles --api-json      # opaque IDs; no engine filenames
 mazzy-vpn diagnose
 mazzy-vpn validate all
 mazzy-vpn probe all --timeout 3

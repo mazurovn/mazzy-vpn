@@ -549,8 +549,8 @@ Usage:
   mazzy-vpn quick                   connect the saved default config
   mazzy-vpn connect [PROTOCOL] [PROFILE|NUMBER]
   mazzy-vpn disconnect | reconnect
-  mazzy-vpn dashboard | status | diagnose
-  mazzy-vpn list [PROTOCOL] | profiles --json
+  mazzy-vpn dashboard | status [--json|--api-json] | diagnose
+  mazzy-vpn list [PROTOCOL] | profiles [--json|--api-json]
   mazzy-vpn validate [PROTOCOL|all]
   mazzy-vpn probe [PROTOCOL|all] [--timeout SEC]
   mazzy-vpn test [PROTOCOL] [PROFILE] [--timeout SEC] [--keep]
@@ -582,8 +582,8 @@ Verwendung:
   mazzy-vpn quick                   gespeicherte Standardkonfiguration verbinden
   mazzy-vpn connect [PROTOKOLL] [PROFIL|NUMMER]
   mazzy-vpn disconnect | reconnect
-  mazzy-vpn dashboard | status | diagnose
-  mazzy-vpn list [PROTOKOLL] | profiles --json
+  mazzy-vpn dashboard | status [--json|--api-json] | diagnose
+  mazzy-vpn list [PROTOKOLL] | profiles [--json|--api-json]
   mazzy-vpn validate [PROTOKOLL|all]
   mazzy-vpn probe [PROTOKOLL|all] [--timeout SEK]
   mazzy-vpn test [PROTOKOLL] [PROFIL] [--timeout SEK] [--keep]
@@ -615,8 +615,8 @@ Mazzy VPN — 安全便捷的 Linux VPN 管理工具
   mazzy-vpn quick                   连接已保存的默认配置
   mazzy-vpn connect [协议] [配置|编号]
   mazzy-vpn disconnect | reconnect
-  mazzy-vpn dashboard | status | diagnose
-  mazzy-vpn list [协议] | profiles --json
+  mazzy-vpn dashboard | status [--json|--api-json] | diagnose
+  mazzy-vpn list [协议] | profiles [--json|--api-json]
   mazzy-vpn validate [协议|all]
   mazzy-vpn probe [协议|all] [--timeout 秒]
   mazzy-vpn test [协议] [配置] [--timeout 秒] [--keep]
@@ -648,8 +648,8 @@ Mazzy VPN — Linux 向けの安全で使いやすい VPN 管理ツール
   mazzy-vpn quick                   保存済みの既定設定で接続
   mazzy-vpn connect [プロトコル] [プロファイル|番号]
   mazzy-vpn disconnect | reconnect
-  mazzy-vpn dashboard | status | diagnose
-  mazzy-vpn list [プロトコル] | profiles --json
+  mazzy-vpn dashboard | status [--json|--api-json] | diagnose
+  mazzy-vpn list [プロトコル] | profiles [--json|--api-json]
   mazzy-vpn validate [プロトコル|all]
   mazzy-vpn probe [プロトコル|all] [--timeout 秒]
   mazzy-vpn test [プロトコル] [プロファイル] [--timeout 秒] [--keep]
@@ -681,8 +681,8 @@ Mazzy VPN — Linux용 안전하고 편리한 VPN 관리 도구
   mazzy-vpn quick                   저장된 기본 설정으로 연결
   mazzy-vpn connect [프로토콜] [프로필|번호]
   mazzy-vpn disconnect | reconnect
-  mazzy-vpn dashboard | status | diagnose
-  mazzy-vpn list [프로토콜] | profiles --json
+  mazzy-vpn dashboard | status [--json|--api-json] | diagnose
+  mazzy-vpn list [프로토콜] | profiles [--json|--api-json]
   mazzy-vpn validate [프로토콜|all]
   mazzy-vpn probe [프로토콜|all] [--timeout 초]
   mazzy-vpn test [프로토콜] [프로필] [--timeout 초] [--keep]
@@ -712,13 +712,15 @@ Mazzy VPN - быстрое и безопасное управление VPN в L
 Использование:
   mazzy-vpn                         интерактивное TUI-меню
   mazzy-vpn list [ПРОТОКОЛ]         список серверов
-  mazzy-vpn profiles --json         безопасный список для Desktop
+  mazzy-vpn profiles --json         совместимый безопасный список для Desktop
+  mazzy-vpn profiles --api-json     v1 API envelope без engine-полей
   mazzy-vpn connect [ПРОТОКОЛ] [ПРОФИЛЬ|НОМЕР]
   mazzy-vpn quick                   быстро подключить default-конфиг
   mazzy-vpn disconnect              отключить VPN
   mazzy-vpn reconnect               переподключить выбранный профиль
   mazzy-vpn dashboard               единый dashboard состояния и проверок
-  mazzy-vpn status                  краткое состояние
+  mazzy-vpn status [--json|--api-json]
+                                    краткое состояние или JSON
   mazzy-vpn diagnose                диагностика активного соединения
   mazzy-vpn validate [ПРОТОКОЛ|all] проверить формат всех профилей
   mazzy-vpn probe [ПРОТОКОЛ|all] [--timeout СЕК]
@@ -1376,21 +1378,12 @@ api_client_cmd_quick() {
 }
 
 api_client_cmd_status() {
-    local json=false response state profile_id="" protocol="" profile_name=""
-    if [[ "${1:-}" == "--json" ]]; then
-        json=true
-        shift
-    fi
-    (($# == 0)) || die "Использование: $CLI_COMMAND status [--json]"
+    local response state profile_id="" protocol="" profile_name=""
+    (($# == 0)) || die "Использование: $CLI_COMMAND status"
     response="$(api_client_query status.get)" || {
         error "Local API не вернул статус."
         return 70
     }
-    if [[ "$json" == true ]]; then
-        printf '%s\n' "$response"
-        [[ "$(jq -r '.status' <<<"$response")" == "ok" ]]
-        return
-    fi
     [[ "$(jq -r '.status' <<<"$response")" == "ok" ]] || {
         error "Local API не смог прочитать статус."
         return 1
@@ -1886,13 +1879,6 @@ write_profiles_cache() {
 }
 
 cmd_profiles_json() {
-    if api_client_ready; then
-        api_client_query profiles.list || {
-            error "Local API не вернул каталог профилей."
-            return 70
-        }
-        return
-    fi
     if [[ -r "$PROFILES_FILE" ]]; then
         cat -- "$PROFILES_FILE"
         return 0
@@ -1905,6 +1891,17 @@ cmd_profiles_json() {
     printf '{"schema_version":1,"generated_at":0,"available":false,'
     printf '"error":"profile cache is not ready","profiles":[]}\n'
     return 1
+}
+
+cmd_profiles_api_json() {
+    api_client_ready || {
+        error "Local API socket недоступен для profiles --api-json."
+        return 70
+    }
+    api_client_query profiles.list || {
+        error "Local API не вернул каталог профилей."
+        return 70
+    }
 }
 
 choose_protocol() {
@@ -3118,14 +3115,27 @@ cmd_emergency() (
 cmd_status() {
     local protocol profile desired mode state interface endpoint handshake now age ip autostart deadline
     local fallback=""
-    if api_client_ready; then
-        api_client_cmd_status "$@"
-        return
-    fi
     if [[ "${1:-}" == "--json" ]]; then
         shift
         (($# == 0)) || die "Использование: $CLI_COMMAND status --json"
         cmd_status_json
+        return
+    fi
+    if [[ "${1:-}" == "--api-json" ]]; then
+        shift
+        (($# == 0)) || die "Использование: $CLI_COMMAND status --api-json"
+        api_client_ready || {
+            error "Local API socket недоступен для status --api-json."
+            return 70
+        }
+        api_client_query status.get || {
+            error "Local API не вернул статус."
+            return 70
+        }
+        return
+    fi
+    if api_client_ready; then
+        api_client_cmd_status "$@"
         return
     fi
     require_profile_access status "$@"
@@ -5600,9 +5610,26 @@ main() {
         api-info) cmd_api_info "$@" ;;
         list|ls) cmd_list "$@" ;;
         profiles|profile-list)
-            [[ $# -eq 0 || ($# -eq 1 && "${1:-}" == "--json") ]] ||
-                die "Использование: $CLI_COMMAND profiles --json"
-            cmd_profiles_json
+            case "${1:-}" in
+                "")
+                    (($# == 0)) ||
+                        die "Использование: $CLI_COMMAND profiles [--json|--api-json]"
+                    cmd_profiles_json
+                    ;;
+                --json)
+                    (($# == 1)) ||
+                        die "Использование: $CLI_COMMAND profiles --json"
+                    cmd_profiles_json
+                    ;;
+                --api-json)
+                    (($# == 1)) ||
+                        die "Использование: $CLI_COMMAND profiles --api-json"
+                    cmd_profiles_api_json
+                    ;;
+                *)
+                    die "Использование: $CLI_COMMAND profiles [--json|--api-json]"
+                    ;;
+            esac
             ;;
         connect|up|start|switch) cmd_connect "$@" ;;
         quick|fast) cmd_quick_connect "$@" ;;

@@ -27,6 +27,9 @@ complete cross-platform daemon exists.
 - A minor change may add optional operations, enum values or fields.
 - Unknown major versions must return `unsupported-version`.
 - Clients must use operation and error codes, not localized output text.
+- Existing `status --json` and `profiles --json` schema-v1 documents do not
+  change shape when the socket appears. Callers that need the API envelope use
+  `status --api-json` or `profiles --api-json` explicitly.
 
 ## Mutations
 
@@ -106,6 +109,11 @@ opaque `profile_id`, bounds response time and size, and verifies
 same request with the same `action_id`, so the daemon returns the stored outcome
 without applying the mutation twice. If the transport remains indeterminate,
 the client does not run the same operation through `sudo`.
+
+Desktop applies the same one-identical-retry rule to lifecycle requests. A
+failed initial socket connection may use the typed compatibility adapter
+because no request was sent; any post-connect uncertainty is returned to the
+user and never falls through to `pkexec`.
 
 The installer adds `socat` for the Unix-socket client. The user must belong to
 the `mazzy-vpn` group; a new login session may be required after initial group

@@ -74,6 +74,8 @@ mazzy-vpn reconnect
 mazzy-vpn disconnect
 mazzy-vpn status
 mazzy-vpn status --json
+mazzy-vpn status --api-json        # сырой envelope local API v1
+mazzy-vpn profiles --api-json      # opaque ID без имён файлов движка
 mazzy-vpn diagnose
 mazzy-vpn validate all
 mazzy-vpn probe all --timeout 3

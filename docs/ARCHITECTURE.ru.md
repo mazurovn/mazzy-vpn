@@ -115,7 +115,9 @@ CLI/TUI-клиент подключается к Unix socket через авто
 при сетевой неопределённости повторяет тот же request с тем же `action_id`.
 Root API-dispatch помечает server context, поэтому внутренний вызов движка не
 может рекурсивно вернуться в socket. После возможной отправки запроса прямой
-`sudo` fallback запрещён.
+`sudo` fallback запрещён. Опубликованный schema-v1 вывод `--json` остаётся
+стабильным для существующей автоматизации; `--api-json` явно возвращает raw v1
+envelope.
 
 ## Desktop control center и tray
 

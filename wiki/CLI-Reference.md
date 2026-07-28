@@ -6,6 +6,8 @@
 | `mazzy-vpn dashboard` | терминальный dashboard |
 | `mazzy-vpn status` | текстовый статус |
 | `mazzy-vpn status --json` | очищенный структурированный статус |
+| `mazzy-vpn status --api-json` | raw response envelope local API v1 |
+| `mazzy-vpn profiles --api-json` | каталог с opaque ID без engine filenames |
 | `sudo mazzy-vpn quick` | подключить сохранённый default |
 | `sudo mazzy-vpn connect PROTOCOL PROFILE` | выбрать и подключить профиль |
 | `sudo mazzy-vpn reconnect` | безопасно перезапустить выбранный туннель |
@@ -39,6 +41,8 @@
 | `mazzy-vpn dashboard` | terminal dashboard |
 | `mazzy-vpn status` | text status |
 | `mazzy-vpn status --json` | sanitized structured status |
+| `mazzy-vpn status --api-json` | raw local API v1 response envelope |
+| `mazzy-vpn profiles --api-json` | opaque-ID catalog without engine filenames |
 | `sudo mazzy-vpn quick` | connect the saved default |
 | `sudo mazzy-vpn connect PROTOCOL PROFILE` | select and connect a profile |
 | `sudo mazzy-vpn reconnect` | safely restart the selected tunnel |

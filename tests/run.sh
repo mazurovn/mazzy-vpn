@@ -967,7 +967,7 @@ fi
 ok "local API recovery fails closed and bounds persistent journals"
 
 api_client_status="$(
-    VPNCTL_API_CLIENT_FORCE=1 "$CLI" status --json
+    VPNCTL_API_CLIENT_FORCE=1 "$CLI" status --api-json
 )"
 jq -e '
     .api_version == "1.0"
@@ -977,7 +977,7 @@ jq -e '
     fail "CLI local API client did not return the status.get envelope"
 
 api_client_profiles="$(
-    VPNCTL_API_CLIENT_FORCE=1 "$CLI" profiles --json
+    VPNCTL_API_CLIENT_FORCE=1 "$CLI" profiles --api-json
 )"
 jq -e --arg profile_id "$profile_id" '
     .api_version == "1.0"
@@ -995,6 +995,25 @@ if grep -Eq 'file_name|192\.0\.2\.10|PrivateKey|PublicKey' \
     fail "CLI local API profile response leaked engine-only profile data"
 fi
 
+api_client_legacy_status="$(
+    VPNCTL_API_CLIENT_FORCE=1 "$CLI" status --json
+)"
+jq -e '
+    .schema_version == 1
+    and .service_state == "active"
+    and (has("api_version") | not)
+' <<<"$api_client_legacy_status" >/dev/null ||
+    fail "local API availability changed the stable status --json schema"
+api_client_legacy_profiles="$(
+    VPNCTL_API_CLIENT_FORCE=1 "$CLI" profiles --json
+)"
+jq -e '
+    .schema_version == 1
+    and any(.profiles[]; .file_name == "Test Server.ovpn")
+    and (has("api_version") | not)
+' <<<"$api_client_legacy_profiles" >/dev/null ||
+    fail "local API availability changed the stable profiles --json schema"
+
 api_client_list="$(
     VPNCTL_API_CLIENT_FORCE=1 "$CLI" list openvpn
 )"
@@ -1004,7 +1023,7 @@ grep -q '192\.0\.2\.10' <<<"$api_client_list" &&
     fail "CLI local API profile list leaked the endpoint"
 if FAKE_SOCAT_OVERSIZED=1 VPNCTL_API_CLIENT_FORCE=1 \
     VPNCTL_API_CLIENT_MAX_RESPONSE_BYTES=256 \
-    "$CLI" status --json >/dev/null 2>&1; then
+    "$CLI" status --api-json >/dev/null 2>&1; then
     fail "CLI local API client accepted an oversized response"
 fi
 

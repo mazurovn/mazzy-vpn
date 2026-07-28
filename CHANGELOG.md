@@ -30,6 +30,9 @@ All notable changes to Mazzy VPN are documented here.
 - Added bounded `socat` transport with response identity validation and
   same-action retry after a lost response, without an unsafe post-send `sudo`
   fallback; installers now bootstrap `socat` on supported Linux families.
+- Preserved the published schema-v1 output of `status --json` and
+  `profiles --json` regardless of socket availability; raw API v1 envelopes
+  are opt-in through `--api-json`.
 - Added crash reconciliation for orphaned API actions, bounded the completed
   action journal and rotated the sanitized root-only audit log.
 - Rejected every terminal control character in imported or manually installed
