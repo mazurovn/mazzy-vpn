@@ -1,0 +1,18 @@
+# Copyright (C) 2026 Nik m (@mazurovn)
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[Unit]
+Description=Mazzy VPN protected local API socket
+Documentation=file:/usr/local/lib/mazzy-vpn/docs/API_CONTRACT.en.md
+
+[Socket]
+ListenStream=/run/mazzy-vpn/api-v1.sock
+SocketUser=root
+SocketGroup=mazzy-vpn
+SocketMode=0660
+DirectoryMode=0755
+Accept=yes
+MaxConnections=32
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

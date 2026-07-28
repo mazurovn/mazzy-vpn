@@ -23,10 +23,22 @@ def fail(message: str) -> None:
     raise AssertionError(message)
 
 
+def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"duplicate JSON key: {key}")
+        value[key] = item
+    return value
+
+
 def load_json(path: Path) -> dict[str, Any]:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+        value = json.loads(
+            path.read_text(encoding="utf-8"),
+            object_pairs_hook=reject_duplicate_keys,
+        )
+    except (OSError, json.JSONDecodeError, ValueError) as error:
         fail(f"{path.relative_to(ROOT)} is not valid JSON: {error}")
     if not isinstance(value, dict):
         fail(f"{path.relative_to(ROOT)} must contain a JSON object")
@@ -87,8 +99,8 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
         fail("CLI contract metadata must be declared implemented")
     if transports.get("cli-json-adapter") != "partial":
         fail("the not-yet-unified CLI JSON adapter must remain partial")
-    if transports.get("protected-local-service") != "planned":
-        fail("the not-yet-implemented protected service must remain planned")
+    if transports.get("protected-local-service") != "partial":
+        fail("the incremental Linux protected service must remain partial")
 
     domains = manifest.get("domains")
     operations = manifest.get("operations")
@@ -169,6 +181,22 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
     )
     if "audit.recorded" not in event_types or "AuditEvent" not in defs:
         fail("the schema must define sanitized audit events")
+
+    status_properties = defs.get("PublicStatus", {}).get("properties", {})
+    connection_properties = defs.get("ConnectionSummary", {}).get("properties", {})
+    if not {
+        "desired",
+        "mode",
+        "autostart",
+        "health_monitor",
+        "health_failures",
+        "fallback",
+    }.issubset(status_properties):
+        fail("PublicStatus is missing optional CLI/TUI parity fields")
+    if not {"interface", "handshake_age", "public_ip"}.issubset(
+        connection_properties
+    ):
+        fail("ConnectionSummary is missing optional runtime detail fields")
 
     security = manifest.get("security")
     if not isinstance(security, dict):

@@ -71,7 +71,7 @@ fn output_text(output: &Output) -> String {
 #[cfg(target_os = "linux")]
 fn execute_action(action: VpnAction) -> ActionResult {
     let (name, args) = action_spec(action);
-    let result = Command::new("pkexec").arg(CLI_PATH).args(args).output();
+    let result = backend::bounded_output(Command::new("pkexec").arg(CLI_PATH).args(args));
     match result {
         Ok(output) => ActionResult {
             success: output.status.success(),
@@ -122,7 +122,7 @@ fn read_status() -> Value {
     let data = match fs::read_to_string(STATUS_FILE) {
         Ok(data) => data,
         Err(cache_error) => {
-            let output = Command::new(CLI_PATH).args(["status", "--json"]).output();
+            let output = backend::bounded_output(Command::new(CLI_PATH).args(["status", "--json"]));
             return match output {
                 Ok(output) if output.status.success() => {
                     serde_json::from_slice(&output.stdout).unwrap_or_else(fallback_status)
@@ -156,8 +156,8 @@ fn get_api_info() -> Result<Value, String> {
 }
 
 #[tauri::command]
-async fn run_action(action: VpnAction) -> Result<ActionResult, String> {
-    tauri::async_runtime::spawn_blocking(move || execute_action(action))
+async fn run_action(app: AppHandle, action: VpnAction) -> Result<ActionResult, String> {
+    tauri::async_runtime::spawn_blocking(move || execute_tray_action(&app, action))
         .await
         .map_err(|error| error.to_string())
 }
@@ -187,18 +187,40 @@ fn get_platform_info() -> PlatformInfo {
     platform_info()
 }
 
+fn execute_tray_action(app: &AppHandle, action: VpnAction) -> ActionResult {
+    let operation = match action {
+        VpnAction::Reconnect => Some(backend::OperationRequest::Reconnect),
+        VpnAction::Disconnect => Some(backend::OperationRequest::Disconnect),
+        _ => None,
+    };
+    if let Some(operation) = operation {
+        let result = backend::execute_operation(app, operation);
+        return ActionResult {
+            success: result.success,
+            action: action_spec(action).0,
+            output: result.output,
+            code: result.code,
+        };
+    }
+    execute_action(action)
+}
+
 fn launch_tray_action(app: AppHandle, action: VpnAction) {
     tauri::async_runtime::spawn(async move {
-        let result =
-            match tauri::async_runtime::spawn_blocking(move || execute_action(action)).await {
-                Ok(result) => result,
-                Err(error) => ActionResult {
-                    success: false,
-                    action: action_spec(action).0,
-                    output: error.to_string(),
-                    code: None,
-                },
-            };
+        let operation_app = app.clone();
+        let result = match tauri::async_runtime::spawn_blocking(move || {
+            execute_tray_action(&operation_app, action)
+        })
+        .await
+        {
+            Ok(result) => result,
+            Err(error) => ActionResult {
+                success: false,
+                action: action_spec(action).0,
+                output: error.to_string(),
+                code: None,
+            },
+        };
         let _ = app.emit("vpn-action-result", result);
     });
 }
@@ -336,6 +358,6 @@ mod tests {
             .iter()
             .find(|transport| transport["id"] == "protected-local-service")
             .expect("protected service transport");
-        assert_eq!(protected["status"], "planned");
+        assert_eq!(protected["status"], "partial");
     }
 }

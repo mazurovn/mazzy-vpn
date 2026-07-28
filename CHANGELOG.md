@@ -15,6 +15,37 @@ All notable changes to Mazzy VPN are documented here.
   from entering the frontend schema.
 - Added `versioned-local-api` to the machine-validated capability registry. The
   shared dispatcher and protected local service remain explicitly incomplete.
+- Added a systemd socket-activated Linux API transport protected by
+  `0660 root:mazzy-vpn`, with `status.get`, `profiles.list` and lifecycle
+  connect/reconnect/disconnect handlers.
+- Added opaque profile IDs, persistent idempotent action records, serialized
+  mutations, bounded deadlines, sanitized root-only audit and desired-state
+  rollback after lifecycle failures.
+- Routed Desktop lifecycle operations through the protected API when installed,
+  retaining the typed `pkexec` adapter as a compatibility fallback and for
+  operation domains not migrated yet; an indeterminate transport is retried
+  once with the identical request and action ID.
+- Added crash reconciliation for orphaned API actions, bounded the completed
+  action journal and rotated the sanitized root-only audit log.
+- Rejected every terminal control character in imported or manually installed
+  profile filenames before the name can reach CLI/TUI output.
+- Bounded Desktop child-process stdout and stderr while draining both streams
+  concurrently, preventing unbounded GUI memory growth from verbose helpers.
+- Replaced floating GitHub-hosted OS generations and Rust `stable` with
+  versioned runner labels and the declared Rust 1.85.0 toolchain.
+- Restricted sanitized runtime status/profile caches to `root:mazzy-vpn`
+  instead of exposing public IP and profile labels to every local account.
+- Enter persistent recovery-only mode when an interrupted API mutation cannot
+  be rolled back, requiring explicit administrator acknowledgement.
+- Bounded local API requests by bytes before JSON parsing and added a finite
+  receive deadline, preventing a socket client from forcing an unbounded Bash
+  read.
+- Pinned the immutable upstream commits behind the AmneziaWG tools and Go tags
+  and stop installation if a tag resolves to different source.
+- Made contract and capability validation reject ambiguous duplicate JSON keys.
+- Extended `status.get` with optional safe runtime detail for CLI/TUI parity:
+  desired mode, interface, handshake age, public IP, autostart, health monitor,
+  failure count and fallback state; VPN endpoints remain forbidden.
 
 ## 1.2.0 / Desktop 0.2.0 — 2026-07-27
 

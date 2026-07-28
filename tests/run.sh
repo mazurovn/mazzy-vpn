@@ -48,6 +48,15 @@ chmod 600 "$TMP/config/wireguard/Unsafe.conf"
 cat >"$TMP/fakebin/systemctl" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"${FAKE_SYSTEMCTL_LOG:?}"
+if [[ -n "${FAKE_SYSTEMCTL_DELAY_ONCE_FILE:-}" &&
+      ! -e "$FAKE_SYSTEMCTL_DELAY_ONCE_FILE" ]]; then
+    touch "$FAKE_SYSTEMCTL_DELAY_ONCE_FILE"
+    printf '%s\n' "$$" >"${FAKE_SYSTEMCTL_DELAY_PID_FILE:?}"
+    sleep "${FAKE_SYSTEMCTL_DELAY_ONCE_SECONDS:-10}"
+fi
+if [[ "${FAKE_SYSTEMCTL_DELAY_SECONDS:-0}" != "0" ]]; then
+    sleep "$FAKE_SYSTEMCTL_DELAY_SECONDS"
+fi
 case "$*" in
     reset-failed*vpnctl.service*)
         rm -f "${FAKE_SYSTEMCTL_COUNTER:?}"
@@ -55,6 +64,11 @@ case "$*" in
     "start vpnctl.service"|"restart vpnctl.service"|\
     "start --no-block vpnctl.service"|"restart --no-block vpnctl.service")
         [[ "${FAKE_SYSTEMCTL_START_FAIL:-0}" == "1" ]] && exit 1
+        if [[ -n "${FAKE_SYSTEMCTL_FAIL_ONCE_FILE:-}" &&
+              ! -e "$FAKE_SYSTEMCTL_FAIL_ONCE_FILE" ]]; then
+            touch "$FAKE_SYSTEMCTL_FAIL_ONCE_FILE"
+            exit 1
+        fi
         if [[ "${FAKE_SYSTEMCTL_START_LIMIT:-0}" =~ ^[0-9]+$ ]] &&
            ((FAKE_SYSTEMCTL_START_LIMIT > 0)); then
             count=0
@@ -69,6 +83,9 @@ case "$*" in
                 >"${VPNCTL_RUN_DIR:?}/test.failure"
         fi
         ;;
+    "stop vpnctl.service")
+        [[ "${FAKE_SYSTEMCTL_STOP_FAIL:-0}" == "1" ]] && exit 1
+        ;;
     "is-active vpnctl.service")
         [[ "${FAKE_SYSTEMCTL_INACTIVE:-0}" == "1" ]] && exit 3
         exit 0
@@ -77,6 +94,12 @@ case "$*" in
     *cat*) exit 0 ;;
 esac
 exit 0
+EOF
+
+cat >"$TMP/fakebin/timeout" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"${FAKE_TIMEOUT_LOG:?}"
+exec /usr/bin/timeout "$@"
 EOF
 
 cat >"$TMP/fakebin/systemd-run" <<'EOF'
@@ -210,6 +233,7 @@ chmod +x "$TMP/fallback-start" "$TMP/fallback-stop"
 export PATH="$TMP/fakebin:$PATH"
 export FAKE_SYSTEMCTL_LOG="$TMP/systemctl.log"
 export FAKE_SYSTEMCTL_COUNTER="$TMP/systemctl.counter"
+export FAKE_TIMEOUT_LOG="$TMP/timeout.log"
 export FAKE_SYSTEMD_RUN_LOG="$TMP/systemd-run.log"
 export FAKE_OPENVPN_LOG="$TMP/openvpn.log"
 export FAKE_RESOLVECTL_LOG="$TMP/resolvectl.log"
@@ -223,6 +247,8 @@ export FAKE_LEGACY_ACTIVE="$TMP/legacy.active"
 export VPNCTL_ALLOW_UNPRIVILEGED=1
 export VPNCTL_CONFIG_DIR="$TMP/config"
 export VPNCTL_STATE_DIR="$TMP/state"
+export VPNCTL_API_ACTION_DIR="$TMP/state/api-actions"
+export VPNCTL_API_AUDIT_FILE="$TMP/state/api-audit.jsonl"
 export VPNCTL_RUN_DIR="$TMP/run"
 export VPNCTL_DASHBOARD_DIR="$TMP/dashboard"
 export VPNCTL_PROBE_URL="https://probe.invalid"
@@ -270,6 +296,19 @@ list_output="$("$CLI" list openvpn)"
 grep -q 'Test Server' <<<"$list_output" || fail "profile with spaces was not listed"
 grep -q '192.0.2.10:1194' <<<"$list_output" || fail "endpoint was not shown"
 ok "list handles spaces"
+
+unsafe_profile_name="$TMP/config/openvpn/"$'Bell\aServer.ovpn'
+cp "$TMP/config/openvpn/Test Server.ovpn" "$unsafe_profile_name"
+unsafe_name_list="$("$CLI" list openvpn 2>&1)"
+grep -q 'имя содержит управляющие символы' <<<"$unsafe_name_list" ||
+    fail "profile catalog did not report a control-character filename"
+grep -q 'Bell' <<<"$unsafe_name_list" &&
+    fail "profile catalog exposed a control-character filename"
+if "$CLI" import openvpn "$unsafe_profile_name" >/dev/null 2>&1; then
+    fail "profile import accepted a control-character filename"
+fi
+rm -f -- "$unsafe_profile_name"
+ok "profile catalog rejects terminal control characters"
 
 validate_output="$("$CLI" validate openvpn)"
 grep -q 'profiles=1 passed=1 failed=0' <<<"$validate_output" ||
@@ -546,8 +585,10 @@ grep -q '"openvpn":1' <<<"$status_json" ||
     fail "structured dashboard status is missing profile counts"
 grep -q '192\.0\.2\.10' <<<"$status_json" &&
     fail "structured dashboard status leaked a VPN endpoint"
-[[ "$(stat -c %a "$VPNCTL_DASHBOARD_DIR/status.json")" == "644" ]] ||
-    fail "dashboard status cache is not safely readable"
+[[ "$(stat -c %a "$VPNCTL_DASHBOARD_DIR")" == "750" ]] ||
+    fail "dashboard cache directory is not restricted"
+[[ "$(stat -c %a "$VPNCTL_DASHBOARD_DIR/status.json")" == "640" ]] ||
+    fail "dashboard status cache is not group-restricted"
 "$CLI" _refresh-dashboard-cache
 ok "safe structured dashboard status"
 
@@ -562,9 +603,602 @@ grep -q '192\.0\.2\.10' <<<"$profiles_json" &&
     fail "Desktop profile cache leaked a VPN endpoint"
 grep -Eq 'PrivateKey|PublicKey|private.key|public.key' <<<"$profiles_json" &&
     fail "Desktop profile cache leaked key material"
-[[ "$(stat -c %a "$VPNCTL_DASHBOARD_DIR/profiles.json")" == "644" ]] ||
-    fail "Desktop profile cache is not safely readable"
+profile_id="$(
+    jq -er '.profiles[] | select(.name == "Test Server") | .profile_id' \
+        <<<"$profiles_json"
+)"
+[[ "$profile_id" =~ ^profile-[a-f0-9]{32}$ ]] ||
+    fail "Desktop profile cache does not expose an opaque stable profile ID"
+[[ "$(stat -c %a "$VPNCTL_DASHBOARD_DIR/profiles.json")" == "640" ]] ||
+    fail "Desktop profile cache is not group-restricted"
 ok "sanitized Desktop profile library cache"
+
+api_status_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-status-0001",
+        operation: "status.get",
+        payload: {}
+    }'
+)"
+api_status_response="$(printf '%s\n' "$api_status_request" | "$CLI" _api-dispatch)"
+jq -e --arg profile_id "$profile_id" '
+    .api_version == "1.0"
+    and .request_id == "request-status-0001"
+    and .status == "ok"
+    and .result.product == "Mazzy VPN"
+    and .result.connection.profile_id == $profile_id
+    and .result.connection.state == "connected"
+    and .result.connection.interface == "vpnovpn0"
+    and .result.connection.public_ip == "203.0.113.7"
+    and .result.desired == "up"
+    and .result.mode == "normal"
+    and .result.autostart == true
+    and .result.health_monitor == true
+    and .result.health_failures == 0
+    and .result.fallback.active == false
+' <<<"$api_status_response" >/dev/null ||
+    fail "local API status.get response is invalid"
+if grep -Eq '192\.0\.2\.10|endpoint|file_name|Test Server\.ovpn' \
+    <<<"$api_status_response"; then
+    fail "local API status.get detail leaked engine-only profile data"
+fi
+
+api_profiles_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-profiles-0001",
+        operation: "profiles.list",
+        payload: {}
+    }'
+)"
+api_profiles_response="$(printf '%s\n' "$api_profiles_request" | "$CLI" _api-dispatch)"
+jq -e --arg profile_id "$profile_id" '
+    .status == "ok"
+    and any(
+        .result.profiles[];
+        .profile_id == $profile_id
+        and .display_name == "Test Server"
+        and .protocol == "openvpn"
+        and .selected == true
+    )
+' <<<"$api_profiles_response" >/dev/null ||
+    fail "local API profiles.list response is invalid"
+ok "local API query envelopes expose only sanitized status and profiles"
+
+api_oversized_request="$(printf 'я%.0s' {1..40})"
+api_oversized_response="$(
+    printf '%s\n' "$api_oversized_request" |
+        VPNCTL_API_MAX_REQUEST_BYTES=64 "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "invalid-request"
+    and .error.message_key == "api.request.size"
+' <<<"$api_oversized_response" >/dev/null ||
+    fail "local API did not enforce its request limit in bytes"
+ok "local API bounds request memory before JSON parsing"
+
+api_duplicate_operation_response="$(
+    printf '%s\n' \
+        '{"api_version":"1.0","request_id":"request-duplicate-0001","operation":"status.get","\u006fperation":"profiles.list","payload":{}}' |
+        "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "invalid-request"
+    and .error.message_key == "api.request.duplicate-key"
+' <<<"$api_duplicate_operation_response" >/dev/null ||
+    fail "local API accepted a Unicode-escaped duplicate envelope key"
+
+api_duplicate_payload_response="$(
+    printf '%s\n' \
+        '{"api_version":"1.0","request_id":"request-duplicate-0002","operation":"status.get","payload":{},"payload":{}}' |
+        "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "invalid-request"
+    and .error.message_key == "api.request.duplicate-key"
+' <<<"$api_duplicate_payload_response" >/dev/null ||
+    fail "local API accepted duplicate payload objects"
+
+api_multiple_documents_response="$(
+    printf '%s\n' \
+        '{"api_version":"1.0","request_id":"request-multiple-0001","operation":"status.get","payload":{}} {"api_version":"1.0","request_id":"request-multiple-0001","operation":"profiles.list","payload":{}}' |
+        "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "invalid-request"
+    and .error.message_key == "api.request.invalid-json"
+' <<<"$api_multiple_documents_response" >/dev/null ||
+    fail "local API accepted multiple top-level JSON documents"
+ok "local API rejects ambiguous JSON envelopes before dispatch"
+
+api_bounded_query_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-bounded-query-0001",
+        operation: "status.get",
+        deadline_ms: 100,
+        payload: {}
+    }'
+)"
+: >"$FAKE_TIMEOUT_LOG"
+api_bounded_query_response="$(
+    printf '%s\n' "$api_bounded_query_request" |
+        FAKE_SYSTEMCTL_DELAY_SECONDS=5 "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "ok"
+    and .request_id == "request-bounded-query-0001"
+' <<<"$api_bounded_query_response" >/dev/null ||
+    fail "local API did not fall back to its existing cache after a bounded refresh"
+grep -Fq -- \
+    "--kill-after=2s 0.100s $CLI _refresh-dashboard-cache" \
+    "$FAKE_TIMEOUT_LOG" ||
+    fail "local API query ignored its refresh deadline"
+if find "$VPNCTL_DASHBOARD_DIR" -maxdepth 1 -type f \
+    \( -name '.status.*' -o -name '.profiles.*' \) |
+    grep -q .; then
+    fail "timed-out local API refresh left temporary cache files"
+fi
+ok "local API bounds query refreshes and cleans interrupted cache writes"
+
+api_busy_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-busy-0001",
+        operation: "lifecycle.reconnect",
+        action_id: "action-busy-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {}
+    }'
+)"
+mkdir -p "$VPNCTL_API_ACTION_DIR"
+exec 8>"$VPNCTL_API_ACTION_DIR/.mutation.lock"
+flock 8
+api_busy_response="$(
+    printf '%s\n' "$api_busy_request" | "$CLI" _api-dispatch
+)"
+flock -u 8
+exec 8>&-
+jq -e '
+    .status == "error"
+    and .error.code == "busy"
+    and .error.retryable == true
+    and .error.user_action_required == false
+' <<<"$api_busy_response" >/dev/null ||
+    fail "local API did not reject a concurrent mutation as retryable busy"
+ok "local API serializes concurrent mutations"
+
+api_audit_unavailable_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-audit-unavailable-0001",
+        operation: "lifecycle.reconnect",
+        action_id: "action-audit-unavailable-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {}
+    }'
+)"
+rm -f -- "$VPNCTL_API_AUDIT_FILE" "$VPNCTL_API_AUDIT_FILE.1"
+mkdir "$VPNCTL_API_AUDIT_FILE"
+api_audit_systemctl_count="$(wc -l <"$FAKE_SYSTEMCTL_LOG")"
+api_audit_unavailable_response="$(
+    printf '%s\n' "$api_audit_unavailable_request" |
+        "$CLI" _api-dispatch 2>/dev/null
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "internal-error"
+    and .error.message_key == "api.audit.unavailable"
+    and .error.user_action_required == true
+' <<<"$api_audit_unavailable_response" >/dev/null ||
+    fail "local API did not fail closed when its audit log was unavailable"
+[[ "$(wc -l <"$FAKE_SYSTEMCTL_LOG")" == "$api_audit_systemctl_count" ]] ||
+    fail "local API executed a mutation without a durable start audit event"
+[[ ! -e "$VPNCTL_API_ACTION_DIR/action-audit-unavailable-0001.json" ]] ||
+    fail "rejected unaudited API mutation left a running action record"
+rmdir "$VPNCTL_API_AUDIT_FILE"
+ok "local API requires a durable audit event before mutation"
+
+api_terminal_audit_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-terminal-audit-0001",
+        operation: "lifecycle.reconnect",
+        action_id: "action-terminal-audit-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {}
+    }'
+)"
+rm -f -- "$VPNCTL_API_AUDIT_FILE" "$VPNCTL_API_AUDIT_FILE.1"
+api_audit_archive_blocker="$VPNCTL_API_AUDIT_FILE.1/$(basename "$VPNCTL_API_AUDIT_FILE")"
+mkdir -p "$api_audit_archive_blocker"
+api_terminal_audit_before="$(wc -l <"$FAKE_SYSTEMCTL_LOG")"
+api_terminal_audit_response="$(
+    printf '%s\n' "$api_terminal_audit_request" |
+        VPNCTL_API_AUDIT_MAX_BYTES=1 "$CLI" _api-dispatch 2>/dev/null
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "internal-error"
+    and .error.message_key == "api.audit.unavailable"
+    and .error.user_action_required == true
+' <<<"$api_terminal_audit_response" >/dev/null ||
+    fail "local API hid a missing terminal audit event"
+api_terminal_audit_after="$(wc -l <"$FAKE_SYSTEMCTL_LOG")"
+((api_terminal_audit_after > api_terminal_audit_before)) ||
+    fail "terminal audit fault was injected before mutation execution"
+jq -e '
+    .state == "recovery-required"
+    and .action_id == "action-terminal-audit-0001"
+    and .operation == "lifecycle.reconnect"
+    and .reason == "audit-unavailable"
+' "$VPNCTL_STATE_DIR/api-recovery-required.json" >/dev/null ||
+    fail "missing terminal audit event did not enter recovery-only mode"
+jq -e '
+    .state == "completed"
+    and .outcome.action_id == "action-terminal-audit-0001"
+    and .outcome.state == "succeeded"
+' "$VPNCTL_API_ACTION_DIR/action-terminal-audit-0001.json" >/dev/null ||
+    fail "terminal audit fault lost the idempotent action outcome"
+rmdir "$api_audit_archive_blocker" "$VPNCTL_API_AUDIT_FILE.1"
+"$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
+api_terminal_audit_retry="$(
+    printf '%s\n' "$api_terminal_audit_request" | "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "ok"
+    and .result.action_id == "action-terminal-audit-0001"
+    and .result.state == "succeeded"
+' <<<"$api_terminal_audit_retry" >/dev/null ||
+    fail "acknowledged terminal audit fault lost its stored action result"
+[[ "$(wc -l <"$FAKE_SYSTEMCTL_LOG")" == "$api_terminal_audit_after" ]] ||
+    fail "terminal audit retry executed the completed mutation twice"
+rm -f -- "$VPNCTL_API_AUDIT_FILE"
+ok "local API preserves idempotency when terminal audit persistence fails"
+
+api_connect_request="$(
+    jq -cn --arg profile_id "$profile_id" '{
+        api_version: "1.0",
+        request_id: "request-connect-0001",
+        operation: "lifecycle.connect",
+        action_id: "action-connect-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {profile_id: $profile_id}
+    }'
+)"
+: >"$FAKE_SYSTEMCTL_LOG"
+api_connect_response="$(printf '%s\n' "$api_connect_request" | "$CLI" _api-dispatch)"
+jq -e '
+    .status == "ok"
+    and .result.action_id == "action-connect-0001"
+    and .result.state == "succeeded"
+    and .result.rollback.state == "not-needed"
+' <<<"$api_connect_response" >/dev/null ||
+    fail "local API lifecycle.connect did not succeed"
+api_start_count="$(grep -c '^start vpnctl.service$' "$FAKE_SYSTEMCTL_LOG")"
+api_replay_request="$(
+    jq -c '.request_id = "request-connect-replay-0001"' <<<"$api_connect_request"
+)"
+api_replay_response="$(printf '%s\n' "$api_replay_request" | "$CLI" _api-dispatch)"
+jq -e '
+    .request_id == "request-connect-replay-0001"
+    and .status == "ok"
+    and .result.state == "succeeded"
+' <<<"$api_replay_response" >/dev/null ||
+    fail "local API did not replay the stored action outcome"
+[[ "$(grep -c '^start vpnctl.service$' "$FAKE_SYSTEMCTL_LOG")" == "$api_start_count" ]] ||
+    fail "repeated local API action ID executed the mutation twice"
+[[ "$(stat -c %a "$VPNCTL_API_ACTION_DIR/action-connect-0001.json")" == "600" ]] ||
+    fail "local API action journal is not root-only"
+ok "local API mutation IDs are persistent and idempotent"
+
+export FAKE_SYSTEMCTL_FAIL_ONCE_FILE="$TMP/api-start-failed-once"
+api_rollback_request="$(
+    jq -cn --arg profile_id "$profile_id" '{
+        api_version: "1.0",
+        request_id: "request-rollback-0001",
+        operation: "lifecycle.connect",
+        action_id: "action-rollback-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {profile_id: $profile_id}
+    }'
+)"
+api_rollback_response="$(
+    printf '%s\n' "$api_rollback_request" | "$CLI" _api-dispatch
+)"
+unset FAKE_SYSTEMCTL_FAIL_ONCE_FILE
+jq -e '
+    .status == "ok"
+    and .result.state == "rolled-back"
+    and .result.state_changed == true
+    and .result.rollback.required == true
+    and .result.rollback.state == "completed"
+' <<<"$api_rollback_response" >/dev/null ||
+    fail "local API did not report a completed lifecycle rollback"
+grep -q '^DESIRED=up$' "$VPNCTL_STATE_DIR/active" ||
+    fail "local API rollback did not restore the previous desired state"
+[[ "$(grep -c '^start vpnctl.service$' "$FAKE_SYSTEMCTL_LOG")" -gt "$api_start_count" ]] ||
+    fail "local API rollback did not restart the previous managed tunnel"
+if grep -Eq 'Test Server|192\.0\.2\.10|PrivateKey|PublicKey' \
+    "$VPNCTL_API_AUDIT_FILE"; then
+    fail "local API audit log leaked profile or endpoint data"
+fi
+jq -s -e '
+    length == 4
+    and all(.[];
+        .api_version == "1.0"
+        and .event_type == "audit.recorded"
+        and (.event_id | startswith("audit-"))
+        and .payload.authorization == "system-mutate"
+        and (.payload.outcome |
+            IN("started", "succeeded", "rolled-back", "timed-out",
+               "rollback-failed"))
+    )
+' "$VPNCTL_API_AUDIT_FILE" >/dev/null ||
+    fail "local API audit log does not use sanitized v1 event envelopes"
+[[ "$(stat -c %a "$VPNCTL_API_AUDIT_FILE")" == "600" ]] ||
+    fail "local API audit log is not root-only"
+api_conflict_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-conflict-0001",
+        operation: "lifecycle.disconnect",
+        action_id: "action-connect-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {}
+    }'
+)"
+api_conflict_response="$(
+    printf '%s\n' "$api_conflict_request" | "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "conflict"
+    and .error.user_action_required == true
+' <<<"$api_conflict_response" >/dev/null ||
+    fail "local API accepted one action ID for two different mutations"
+
+api_interrupted_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-interrupted-0001",
+        operation: "lifecycle.disconnect",
+        action_id: "action-interrupted-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {}
+    }'
+)"
+api_interrupted_fingerprint="$(
+    jq -cS 'del(.request_id)' <<<"$api_interrupted_request" |
+        sha256sum |
+        awk '{ print $1 }'
+)"
+cp "$VPNCTL_STATE_DIR/active" \
+    "$VPNCTL_API_ACTION_DIR/.snapshot.action-interrupted-0001"
+sed -i 's/^DESIRED=up$/DESIRED=down/' "$VPNCTL_STATE_DIR/active"
+jq -cn \
+    --arg fingerprint "$api_interrupted_fingerprint" \
+    '{
+        fingerprint: $fingerprint,
+        state: "running",
+        operation: "lifecycle.disconnect",
+        started_at: "2026-01-01T00:00:00Z",
+        snapshot_existed: true
+    }' >"$VPNCTL_API_ACTION_DIR/action-interrupted-0001.json"
+api_stop_count="$(grep -c '^stop vpnctl.service$' "$FAKE_SYSTEMCTL_LOG" || true)"
+api_interrupted_response="$(
+    printf '%s\n' "$api_interrupted_request" | "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "ok"
+    and .result.action_id == "action-interrupted-0001"
+    and .result.state == "rolled-back"
+    and .result.rollback.state == "completed"
+    and .result.message_key == "api.action.interrupted-rolled-back"
+' <<<"$api_interrupted_response" >/dev/null ||
+    fail "local API did not reconcile an interrupted action"
+grep -q '^DESIRED=up$' "$VPNCTL_STATE_DIR/active" ||
+    fail "interrupted local API action did not restore its state snapshot"
+[[ ! -e "$VPNCTL_API_ACTION_DIR/.snapshot.action-interrupted-0001" ]] ||
+    fail "interrupted local API action left its snapshot behind"
+[[ "$(grep -c '^stop vpnctl.service$' "$FAKE_SYSTEMCTL_LOG" || true)" == \
+   "$api_stop_count" ]] ||
+    fail "interrupted local API action was executed again after recovery"
+
+api_missing_snapshot_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-missing-snapshot-0001",
+        operation: "lifecycle.disconnect",
+        action_id: "action-missing-snapshot-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {}
+    }'
+)"
+api_missing_snapshot_fingerprint="$(
+    jq -cS 'del(.request_id)' <<<"$api_missing_snapshot_request" |
+        sha256sum |
+        awk '{ print $1 }'
+)"
+jq -cn \
+    --arg fingerprint "$api_missing_snapshot_fingerprint" \
+    '{
+        fingerprint: $fingerprint,
+        state: "running",
+        operation: "lifecycle.disconnect",
+        started_at: "2026-01-01T00:00:00Z",
+        snapshot_existed: true
+    }' >"$VPNCTL_API_ACTION_DIR/action-missing-snapshot-0001.json"
+api_missing_snapshot_response="$(
+    printf '%s\n' "$api_missing_snapshot_request" | "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "internal-error"
+    and .error.message_key == "api.action.recovery-required"
+    and .error.retryable == false
+    and .error.user_action_required == true
+' <<<"$api_missing_snapshot_response" >/dev/null ||
+    fail "missing API snapshot did not enter recovery-only mode"
+api_recovery_marker="$VPNCTL_STATE_DIR/api-recovery-required.json"
+jq -e '
+    .state == "recovery-required"
+    and .action_id == "action-missing-snapshot-0001"
+    and .operation == "lifecycle.disconnect"
+    and .reason == "snapshot-missing"
+    and (.created_at | type == "string")
+' "$api_recovery_marker" >/dev/null ||
+    fail "local API recovery marker is missing or unsafe"
+[[ "$(stat -c %a "$api_recovery_marker")" == "600" ]] ||
+    fail "local API recovery marker is not root-only"
+api_blocked_stop_count="$(grep -c '^stop vpnctl.service$' "$FAKE_SYSTEMCTL_LOG" || true)"
+api_blocked_response="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-recovery-blocked-0001",
+        operation: "lifecycle.disconnect",
+        action_id: "action-recovery-blocked-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {}
+    }' | "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.message_key == "api.action.recovery-required"
+' <<<"$api_blocked_response" >/dev/null ||
+    fail "local API accepted a mutation while recovery-only mode was active"
+[[ "$(grep -c '^stop vpnctl.service$' "$FAKE_SYSTEMCTL_LOG" || true)" == \
+   "$api_blocked_stop_count" ]] ||
+    fail "recovery-only mode executed a blocked mutation"
+"$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
+[[ ! -e "$api_recovery_marker" ]] ||
+    fail "explicit administrator acknowledgement did not clear recovery-only mode"
+
+api_deadline_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-deadline-0001",
+        operation: "lifecycle.reconnect",
+        action_id: "action-deadline-0001",
+        authorization: "system-mutate",
+        deadline_ms: 500,
+        payload: {}
+    }'
+)"
+: >"$FAKE_TIMEOUT_LOG"
+api_delayed_systemctl_marker="$TMP/api-systemctl-delay-once"
+api_delayed_systemctl_pid_file="$TMP/api-systemctl-delay.pid"
+api_deadline_response="$(
+    printf '%s\n' "$api_deadline_request" |
+        FAKE_SYSTEMCTL_DELAY_ONCE_FILE="$api_delayed_systemctl_marker" \
+        FAKE_SYSTEMCTL_DELAY_PID_FILE="$api_delayed_systemctl_pid_file" \
+        FAKE_SYSTEMCTL_DELAY_ONCE_SECONDS=10 \
+        VPNCTL_API_CACHE_REFRESH_TIMEOUT_SECONDS=2 \
+        "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "ok"
+    and .result.action_id == "action-deadline-0001"
+    and .result.state == "timed-out"
+    and .result.rollback.state == "completed"
+' <<<"$api_deadline_response" >/dev/null ||
+    fail "local API did not time out and roll back a sub-second mutation"
+grep -Eq -- \
+    '--kill-after=5s 0\.[0-9]{3}s .*/mazzy-vpn reconnect' \
+    "$FAKE_TIMEOUT_LOG" ||
+    fail "local API rounded a millisecond deadline up to a full second"
+api_delayed_systemctl_pid="$(cat "$api_delayed_systemctl_pid_file")"
+if kill -0 "$api_delayed_systemctl_pid" 2>/dev/null; then
+    fail "timed-out local API mutation left a systemctl descendant running"
+fi
+ok "local API accounts preflight time and preserves millisecond deadlines"
+
+sed -i 's/^DESIRED=up$/DESIRED=down/' "$VPNCTL_STATE_DIR/active"
+api_stop_rollback_request="$(
+    jq -cn --arg profile_id "$profile_id" '{
+        api_version: "1.0",
+        request_id: "request-stop-rollback-0001",
+        operation: "lifecycle.connect",
+        action_id: "action-stop-rollback-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {profile_id: $profile_id}
+    }'
+)"
+: >"$FAKE_TIMEOUT_LOG"
+api_stop_rollback_response="$(
+    printf '%s\n' "$api_stop_rollback_request" |
+        FAKE_SYSTEMCTL_START_FAIL=1 FAKE_SYSTEMCTL_STOP_FAIL=1 \
+        VPNCTL_API_ROLLBACK_TIMEOUT_SECONDS=120 \
+        "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "ok"
+    and .result.state == "rollback-failed"
+    and .result.rollback.state == "failed"
+' <<<"$api_stop_rollback_response" >/dev/null ||
+    fail "local API reported a failed stop rollback as successful: $api_stop_rollback_response"
+[[ -s "$api_recovery_marker" ]] ||
+    fail "failed stop rollback did not enter recovery-only mode"
+grep -Fq -- \
+    '--kill-after=5s 30s systemctl stop vpnctl.service' \
+    "$FAKE_TIMEOUT_LOG" ||
+    fail "rollback timeout exceeded the client completion grace contract"
+"$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
+sed -i 's/^DESIRED=down$/DESIRED=up/' "$VPNCTL_STATE_DIR/active"
+ok "local API fails closed when rollback cannot stop the service"
+
+api_retention_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-retention-0001",
+        operation: "lifecycle.reconnect",
+        action_id: "action-retention-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {}
+    }'
+)"
+api_retention_response="$(
+    printf '%s\n' "$api_retention_request" |
+        VPNCTL_API_ACTION_MAX_RECORDS=3 VPNCTL_API_AUDIT_MAX_BYTES=1 \
+            "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "ok"
+    and .result.action_id == "action-retention-0001"
+    and .result.state == "succeeded"
+' <<<"$api_retention_response" >/dev/null ||
+    fail "local API retention test mutation failed"
+[[ "$(find "$VPNCTL_API_ACTION_DIR" -maxdepth 1 -type f -name '*.json' |
+    wc -l)" -le 3 ]] ||
+    fail "local API completed action journal exceeded its configured bound"
+[[ -r "$VPNCTL_API_ACTION_DIR/action-retention-0001.json" ]] ||
+    fail "local API pruned the current action outcome"
+[[ -s "$VPNCTL_API_AUDIT_FILE" && -s "$VPNCTL_API_AUDIT_FILE.1" ]] ||
+    fail "local API audit log did not rotate at its configured bound"
+[[ "$(stat -c %a "$VPNCTL_API_AUDIT_FILE")" == "600" &&
+   "$(stat -c %a "$VPNCTL_API_AUDIT_FILE.1")" == "600" ]] ||
+    fail "rotated local API audit files are not root-only"
+if grep -Eq 'Test Server|192\.0\.2\.10|PrivateKey|PublicKey' \
+    "$VPNCTL_API_AUDIT_FILE" "$VPNCTL_API_AUDIT_FILE.1"; then
+    fail "rotated local API audit log leaked profile or endpoint data"
+fi
+ok "local API recovery fails closed and bounds persistent journals"
 
 dashboard_output="$("$CLI" dashboard)"
 grep -q 'M A Z Z Y' <<<"$dashboard_output" || fail "dashboard artwork is missing"
@@ -881,6 +1515,16 @@ grep -q '^OnUnitActiveSec=20s$' "$stage/etc/systemd/system/vpnctl-health.timer" 
     fail "health timer interval is not the expected 20 seconds"
 [[ -f "$stage/etc/systemd/system/vpnctl-test-recovery.service" ]] ||
     fail "test recovery unit not staged"
+[[ -f "$stage/etc/systemd/system/mazzy-vpn-api.socket" &&
+   -f "$stage/etc/systemd/system/mazzy-vpn-api@.service" ]] ||
+    fail "local API systemd units were not staged"
+grep -q '^SocketMode=0660$' "$stage/etc/systemd/system/mazzy-vpn-api.socket" ||
+    fail "local API socket is not protected by mode 0660"
+grep -q '^SocketGroup=mazzy-vpn$' "$stage/etc/systemd/system/mazzy-vpn-api.socket" ||
+    fail "local API socket is not restricted to the mazzy-vpn group"
+grep -q '^NoNewPrivileges=yes$' \
+    "$stage/etc/systemd/system/mazzy-vpn-api@.service" ||
+    fail "local API request service is missing process hardening"
 grep -q 'ExecStart=/usr/local/bin/mazzy-vpn' \
     "$stage/etc/systemd/system/vpnctl.service" ||
     fail "staged service does not use Mazzy VPN command"
@@ -942,17 +1586,29 @@ if grep -Eq '^(Wants|After)=.*vpnctl-test-recovery' "$ROOT/systemd/vpnctl.servic
 fi
 ok "runtime start cannot deadlock on boot recovery"
 
+mkdir -p "$TMP/installbin"
+for install_command in bash dirname uname id sed grep tr cut head tail stat \
+    mkdir cp chmod chown find sort cmp python3 awk; do
+    install_command_path="$(
+        PATH=/usr/bin:/bin command -v "$install_command" 2>/dev/null
+    )" || fail "cannot prepare isolated installer PATH: $install_command"
+    ln -s "$install_command_path" "$TMP/installbin/$install_command"
+done
 fallback_output="$(
-    PATH="$TMP/fakebin:/usr/bin:/bin:/usr/sbin" \
+    PATH="$TMP/installbin" \
         VPNCTL_AMNEZIA_PPA_AVAILABLE=0 \
         "$ROOT/install.sh" --dry-run --yes --deps-only
 )"
 grep -q 'amneziawg-go.git' <<<"$fallback_output" ||
     fail "unsupported Ubuntu suite did not select userspace AmneziaWG"
+grep -q '61e741780e8465a67a7d7fb6cffe14a8a15d624a' <<<"$fallback_output" ||
+    fail "AmneziaWG tools source commit is not verified"
+grep -q '9f5d948bc72cc554791cfe0fb91527e4acfb6b79' <<<"$fallback_output" ||
+    fail "AmneziaWG Go source commit is not verified"
 if grep -q 'add-apt-repository' <<<"$fallback_output"; then
     fail "unsupported Ubuntu suite attempted to add the PPA"
 fi
-ok "Ubuntu without PPA uses pinned userspace fallback"
+ok "Ubuntu without PPA uses commit-verified userspace fallback"
 
 python3 "$ROOT/tests/check-capabilities.py" >/dev/null ||
     fail "cross-surface capability registry is inconsistent"

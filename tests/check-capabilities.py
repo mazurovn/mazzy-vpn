@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import sys
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,8 +22,23 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
+def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            fail(f"duplicate JSON key: {key}")
+        value[key] = item
+    return value
+
+
 def main() -> None:
-    data = json.loads(REGISTRY.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(
+            REGISTRY.read_text(encoding="utf-8"),
+            object_pairs_hook=reject_duplicate_keys,
+        )
+    except (OSError, json.JSONDecodeError) as error:
+        fail(f"cannot load registry: {error}")
     if data.get("schema_version") != 1:
         fail("schema_version must be 1")
 

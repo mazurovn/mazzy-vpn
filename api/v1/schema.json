@@ -319,6 +319,39 @@
         },
         "healthy": {
           "type": "boolean"
+        },
+        "interface": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32,
+          "pattern": "^[A-Za-z0-9_.:-]+$"
+        },
+        "handshake_age": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "public_ip": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 64,
+          "pattern": "^[0-9A-Fa-f:.]+$"
+        }
+      }
+    },
+    "FallbackSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "active"
+      ],
+      "properties": {
+        "active": {
+          "type": "boolean"
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
         }
       }
     },
@@ -347,6 +380,33 @@
         },
         "connection": {
           "$ref": "#/$defs/ConnectionSummary"
+        },
+        "desired": {
+          "enum": [
+            "up",
+            "down",
+            "unknown"
+          ]
+        },
+        "mode": {
+          "enum": [
+            "normal",
+            "test",
+            "unknown"
+          ]
+        },
+        "autostart": {
+          "type": "boolean"
+        },
+        "health_monitor": {
+          "type": "boolean"
+        },
+        "health_failures": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fallback": {
+          "$ref": "#/$defs/FallbackSummary"
         }
       }
     },

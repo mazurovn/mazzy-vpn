@@ -13,8 +13,10 @@
 `cli-json-adapter` явно имеет статус `partial`: существующие безопасные JSON
 status/profile outputs доступны, но клиенты ещё не отправляют все v1 request
 envelopes через единый dispatcher. Метаданные контракта реализованы.
-Защищённый локальный service пока явно имеет статус `planned`: публикация схемы
-не означает, что финальный daemon уже реализован.
+Socket-activated Linux transport имеет статус `partial`: он принимает
+`status.get`, `profiles.list` и три мутации `lifecycle.*`. Остальные операции и
+не-Linux transports пока `planned`, поэтому полный кроссплатформенный daemon ещё
+не заявлен готовым.
 
 ## Совместимость
 
@@ -34,8 +36,32 @@ envelopes через единый dispatcher. Метаданные контра�
 - очищенное audit event;
 - объявленную rollback-семантику и итог rollback.
 
-Повторная доставка того же action ID не должна выполнять изменение дважды.
-Это правило idempotency будет контролировать защищённый локальный service.
+`deadline_ms` — монотонный бюджет mutation, а не обещание бросить обязательную
+защитную работу при истечении времени ответа. Linux dispatcher запускает
+бюджет после проверки mutation envelope, вычитает время lock/preflight и
+передаёт executor оставшиеся миллисекунды без округления вверх. После истечения
+бюджета executor не запускается. Таймауты executor и refresh завершают всю
+process group, чтобы shell helper не продолжал старую операцию параллельно с
+rollback. Обязательный rollback и crash reconciliation используют отдельные
+ограниченные таймауты системного сервиса, поэтому ответ
+может прийти позже `deadline_ms`, пока завершается rollback. Linux-клиенты
+резервируют для итогового outcome ограниченный completion grace в 60 секунд.
+Незавершённый rollback переводит API в recovery-only mode и не объявляется
+успешным.
+
+Повторная доставка того же action ID в пределах опубликованного окна хранения
+не должна выполнять изменение дважды. Linux lifecycle dispatcher контролирует
+это правило через постоянный root-readable action journal и по умолчанию
+хранит 512 последних завершённых outcomes. Клиент не должен повторно
+использовать вытесненный action ID как новую операцию. Остальные mutation
+domains должны принять то же правило и опубликовать свою retention policy при
+переносе за service boundary.
+
+Dispatcher сохраняет rollback snapshot до перевода action в состояние
+`running`. После аварии service следующая mutation под глобальной блокировкой
+согласует все оставшиеся running records: восстанавливает snapshot и сохраняет
+терминальный outcome `rolled-back` или `rollback-failed`, не оставляя action
+навсегда busy и не выполняя его повторно.
 
 ## Безопасность frontend
 
@@ -53,3 +79,42 @@ finding codes, severity, локализуемые message keys и отдельн
 `mazzy-vpn api-info --json` без root возвращает manifest установленного
 контракта. Desktop предоставляет те же метаданные webview через read-only
 Tauri-команду. CI проверяет синхронность CLI, manifest и schema.
+
+В Linux `mazzy-vpn-api.socket` публикует `/run/mazzy-vpn/api-v1.sock` с
+правами `0660 root:mazzy-vpn`. Одно соединение принимает один JSON request,
+завершённый переводом строки, и возвращает один response. Service прекращает
+чтение на настроенном byte limit ещё до JSON parsing, в том числе если клиент
+не завершает слишком длинную строку. До dispatch принимается ровно один
+top-level JSON object; повторные envelope/payload keys, включая записанные
+через JSON Unicode escapes, отклоняются. Обновление query cache ограничено
+меньшим из необязательного query deadline и server refresh cap; при timeout
+может быть возвращён уже существующий restricted cache. Прерванное обновление
+удаляет свои временные файлы. Мутации
+сериализованы, ограничены deadline и сохраняются по action ID в root-only
+state. Audit содержит только operation ID и результат — без payload и raw
+backend output. Mutation не запускается, пока её начальное audit event не
+сохранено. Если terminal audit event нельзя записать уже после изменения
+state, завершённый action сохраняет idempotency, но API переходит в
+recovery-only mode для явной проверки администратором. По умолчанию журнал
+ограничен 512 завершёнными outcomes, а
+audit-файл ротируется при 2 МиБ с одним root-only архивом. На системах с
+ограниченным диском лимиты можно уменьшить, но нельзя отключать.
+
+Если crash reconciliation не может прочитать pre-action snapshot или
+восстановить его, daemon сохраняет root-only recovery marker и отклоняет все
+следующие API mutations. После ручной проверки и исправления текущего состояния
+администратор должен явно подтвердить его командой
+`sudo mazzy-vpn _api-clear-recovery --acknowledge-current-state`. Marker никогда
+не снимается по таймеру или после постороннего успешного request.
+
+Desktop повторяет lifecycle request ровно один раз с тем же request/action ID
+только после post-connect ошибки транспорта, когда outcome неопределён.
+Неудачное первоначальное подключение может использовать typed compatibility
+adapter, потому что request ещё не отправлен; post-connect неопределённость
+никогда не переходит в `pkexec`.
+
+`status.get` может передавать безопасные runtime details для parity терминала и
+dashboard: desired mode, interface, возраст handshake, текущий public IP,
+autostart, health monitor, число сбоев и состояние внешнего fallback. Для
+совместимости minor-версии поля необязательны. VPN endpoint, имя/путь файла
+профиля и конфигурация остаются запрещены.

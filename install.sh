@@ -13,12 +13,15 @@ DEPS_ONLY=0
 SKIP_TESTS=0
 SKIP_CHECKS=0
 LIVE_TEST=0
+PREFLIGHT_REGRESSION_DEFERRED=0
 CONFIG_SOURCE=""
 FORCE_CONFIGS=0
 INSTALL_LANG="${VPNCTL_INSTALL_LANG:-${VPNCTL_LANG:-}}"
 LANG_EXPLICIT=0
 AWG_TOOLS_VERSION="1.0.20260618-2"
 AWG_GO_VERSION="3.0.1"
+AWG_TOOLS_COMMIT="61e741780e8465a67a7d7fb6cffe14a8a15d624a"
+AWG_GO_COMMIT="9f5d948bc72cc554791cfe0fb91527e4acfb6b79"
 AMNEZIA_PPA_BASE="https://ppa.launchpadcontent.net/amnezia/ppa/ubuntu"
 
 usage() {
@@ -174,7 +177,8 @@ validate_source_tree() {
         tests/check-api-contract.py \
         completions/mazzy-vpn systemd/vpnctl.service \
         systemd/vpnctl-health.service systemd/vpnctl-health.timer \
-        systemd/vpnctl-test-recovery.service; do
+        systemd/vpnctl-test-recovery.service \
+        systemd/mazzy-vpn-api.socket systemd/mazzy-vpn-api@.service; do
         [[ -e "$SCRIPT_DIR/$required" ]] || {
             echo "Неполный дистрибутив: отсутствует $required" >&2
             return 1
@@ -209,6 +213,15 @@ run_preflight_tests() {
         "$SCRIPT_DIR/install.sh" "$SCRIPT_DIR/tests/run.sh" \
         "$SCRIPT_DIR/setup_amnezia_vpn.sh" "$SCRIPT_DIR/stop_amnezia_vpn.sh"
     bash -n "$SCRIPT_DIR/completions/mazzy-vpn" "$SCRIPT_DIR/completions/vpnctl"
+    if ! command -v jq >/dev/null 2>&1; then
+        if ((NO_DEPS)); then
+            echo "Для regression-тестов local API нужен jq; уберите --no-deps или установите jq." >&2
+            return 1
+        fi
+        echo "Regression-тесты local API будут запущены после установки jq."
+        PREFLIGHT_REGRESSION_DEFERRED=1
+        return 0
+    fi
     "$SCRIPT_DIR/tests/run.sh"
 }
 
@@ -277,10 +290,16 @@ post_install_checks() {
         failed=1
     }
     systemd-analyze verify \
+        /etc/systemd/system/mazzy-vpn-api.socket \
+        /etc/systemd/system/mazzy-vpn-api@.service \
         /etc/systemd/system/vpnctl.service \
         /etc/systemd/system/vpnctl-health.service \
         /etc/systemd/system/vpnctl-health.timer \
         /etc/systemd/system/vpnctl-test-recovery.service || failed=1
+    systemctl is-active --quiet mazzy-vpn-api.socket || {
+        echo "Local API socket не активен." >&2
+        failed=1
+    }
     NO_COLOR=1 "$bin" self-test --offline || failed=1
     if ((LIVE_TEST)); then
         NO_COLOR=1 "$bin" self-test --live || failed=1
@@ -343,6 +362,19 @@ amnezia_ppa_supports_current_ubuntu() {
         "$AMNEZIA_PPA_BASE/dists/$codename/Release" >/dev/null 2>&1
 }
 
+verify_source_commit() {
+    local repository="$1" expected="$2" component="$3" actual
+    actual="$(git -C "$repository" rev-parse HEAD 2>/dev/null)" || {
+        echo "Не удалось проверить commit для $component." >&2
+        return 1
+    }
+    if [[ "$actual" != "$expected" ]]; then
+        echo "Остановлена сборка $component: tag указывает на неожиданный commit." >&2
+        echo "Ожидался $expected, получен $actual." >&2
+        return 1
+    fi
+}
+
 install_amnezia_userspace() {
     local build_dir tools_dir go_dir
     echo "Установка официального AmneziaWG userspace backend (без модуля ядра)."
@@ -358,6 +390,8 @@ install_amnezia_userspace() {
     if ! command -v awg >/dev/null 2>&1 || ! command -v awg-quick >/dev/null 2>&1; then
         run git clone --quiet --depth 1 --branch "v$AWG_TOOLS_VERSION" \
             https://github.com/amnezia-vpn/amneziawg-tools.git "$tools_dir" || return 1
+        run verify_source_commit \
+            "$tools_dir" "$AWG_TOOLS_COMMIT" amneziawg-tools || return 1
         run make -C "$tools_dir/src" || return 1
         run install -m 755 "$tools_dir/src/wg" /usr/local/bin/awg || return 1
         run install -m 755 "$tools_dir/src/wg-quick/linux.bash" \
@@ -366,6 +400,8 @@ install_amnezia_userspace() {
     if ! amnezia_userspace_ready; then
         run git clone --quiet --depth 1 --branch "v$AWG_GO_VERSION" \
             https://github.com/amnezia-vpn/amneziawg-go.git "$go_dir" || return 1
+        run verify_source_commit \
+            "$go_dir" "$AWG_GO_COMMIT" amneziawg-go || return 1
         run go -C "$go_dir" build -trimpath -o "$build_dir/amneziawg-go" . ||
             return 1
         run install -m 755 "$build_dir/amneziawg-go" /usr/local/bin/amneziawg-go ||
@@ -379,7 +415,7 @@ install_amnezia_userspace() {
 install_debian_dependencies() {
     local -a packages=(iproute2 curl ca-certificates openvpn wireguard-tools
         network-manager network-manager-l2tp strongswan xl2tpd iputils-ping
-        netcat-openbsd)
+        netcat-openbsd jq)
     if ! run apt-get update; then
         echo "Предупреждение: один из APT-репозиториев не обновился." >&2
         echo "Продолжаю с успешно обновлёнными индексами; doctor покажет остаточные проблемы." >&2
@@ -418,7 +454,7 @@ install_debian_dependencies() {
 
 install_fedora_dependencies() {
     run dnf install -y iproute curl ca-certificates openvpn wireguard-tools \
-        NetworkManager NetworkManager-l2tp strongswan xl2tpd iputils
+        NetworkManager NetworkManager-l2tp strongswan xl2tpd iputils jq
     if ! amnezia_ready && confirm "Включить COPR amneziavpn/amneziawg?"; then
         run dnf install -y dnf-plugins-core
         run dnf copr enable -y amneziavpn/amneziawg
@@ -428,7 +464,7 @@ install_fedora_dependencies() {
 
 install_arch_dependencies() {
     run pacman -S --needed --noconfirm iproute2 curl ca-certificates openvpn \
-        wireguard-tools networkmanager-l2tp strongswan xl2tpd iputils
+        wireguard-tools networkmanager-l2tp strongswan xl2tpd iputils jq
     if ! amnezia_ready; then
         echo "AmneziaWG отсутствует. Установите amneziawg-tools и совместимый модуль из AUR вручную."
     fi
@@ -436,7 +472,7 @@ install_arch_dependencies() {
 
 install_suse_dependencies() {
     run zypper --non-interactive install iproute2 curl ca-certificates openvpn \
-        wireguard-tools NetworkManager-l2tp strongswan xl2tpd iputils
+        wireguard-tools NetworkManager-l2tp strongswan xl2tpd iputils jq
     if ! amnezia_ready; then
         echo "AmneziaWG отсутствует; автоматическая установка для openSUSE не поддерживается."
     fi
@@ -472,6 +508,26 @@ copy_profiles() {
         fi
         run install -m 600 -- "$source" "$target"
     done < <(find "$source_dir" -maxdepth 1 -type f -name "$pattern" -print0 | sort -z)
+}
+
+configure_api_access() {
+    local caller="" caller_uid=""
+    [[ -z "$DESTDIR" ]] || return 0
+    if ! getent group mazzy-vpn >/dev/null 2>&1; then
+        run groupadd --system mazzy-vpn
+    fi
+    if [[ "${SUDO_USER:-}" =~ ^[A-Za-z_][A-Za-z0-9_.-]*$ &&
+          "${SUDO_USER:-}" != root ]]; then
+        caller="$SUDO_USER"
+    elif [[ "${PKEXEC_UID:-}" =~ ^[0-9]+$ && "$PKEXEC_UID" -ge 1000 ]]; then
+        caller_uid="$PKEXEC_UID"
+        caller="$(getent passwd "$caller_uid" | cut -d: -f1)"
+    fi
+    if [[ -n "$caller" ]] && ! id -nG "$caller" | tr ' ' '\n' | grep -Fxq mazzy-vpn; then
+        run usermod -a -G mazzy-vpn "$caller"
+        echo "Пользователь '$caller' добавлен в группу mazzy-vpn."
+        echo "Для доступа к local API может потребоваться повторный вход в сеанс."
+    fi
 }
 
 install_files() {
@@ -544,6 +600,10 @@ install_files() {
     run install -m 644 "$SCRIPT_DIR/systemd/vpnctl-health.timer" "$unit_dir/vpnctl-health.timer"
     run install -m 644 "$SCRIPT_DIR/systemd/vpnctl-test-recovery.service" \
         "$unit_dir/vpnctl-test-recovery.service"
+    run install -m 644 "$SCRIPT_DIR/systemd/mazzy-vpn-api.socket" \
+        "$unit_dir/mazzy-vpn-api.socket"
+    run install -m 644 "$SCRIPT_DIR/systemd/mazzy-vpn-api@.service" \
+        "$unit_dir/mazzy-vpn-api@.service"
     run install -m 644 "$SCRIPT_DIR/completions/mazzy-vpn" \
         "$completion_dir/mazzy-vpn"
     run ln -sfn mazzy-vpn "$completion_dir/vpnctl"
@@ -576,7 +636,9 @@ install_files() {
             "$lib_dir/SECURITY.md" "$lib_dir/PRIVACY.md" \
             "$unit_dir/vpnctl.service" \
             "$unit_dir/vpnctl-health.service" "$unit_dir/vpnctl-health.timer" \
-            "$unit_dir/vpnctl-test-recovery.service" "$completion_dir/mazzy-vpn"
+            "$unit_dir/vpnctl-test-recovery.service" \
+            "$unit_dir/mazzy-vpn-api.socket" "$unit_dir/mazzy-vpn-api@.service" \
+            "$completion_dir/mazzy-vpn"
         run chown -R root:root "$DESTDIR/etc/vpnctl"
     fi
 }
@@ -596,15 +658,20 @@ if ((DEPS_ONLY == 0)); then
         run_preflight_tests
     fi
     install_files
+    configure_api_access
     import_config_source
 fi
 
 if ((NO_DEPS == 0)) && [[ -z "$DESTDIR" ]]; then
     install_dependencies
 fi
+if ((PREFLIGHT_REGRESSION_DEFERRED && DEPS_ONLY == 0)) && [[ -z "$DESTDIR" ]]; then
+    "$SCRIPT_DIR/tests/run.sh"
+fi
 
 if [[ -z "$DESTDIR" && $DEPS_ONLY -eq 0 ]]; then
     run systemctl daemon-reload
+    run systemctl enable --now mazzy-vpn-api.socket
     run systemctl enable vpnctl-test-recovery.service
     run systemctl enable --now vpnctl-health.timer
     run systemctl restart vpnctl-health.timer

@@ -35,6 +35,7 @@ flowchart TB
         ActionLock["Эксклюзивная блокировка операции"]
         State["Желаемое состояние и default-профиль<br/>/var/lib/vpnctl/active"]
         Runtime["Временные счётчики, locks и данные теста<br/>/run/vpnctl"]
+        ActionJournal["Idempotency и очищенный audit<br/>/var/lib/vpnctl/api-*"]
         StatusCache["Очищенный статус без ключей и endpoint<br/>/run/mazzy-vpn/status.json"]
         ProfileCache["Очищенный каталог профилей без путей/endpoint<br/>/run/mazzy-vpn/profiles.json"]
     end
@@ -44,6 +45,7 @@ flowchart TB
         Timer["vpnctl-health.timer<br/>примерно каждые 20 секунд"]
         Health["vpnctl-health.service"]
         BootRecovery["vpnctl-test-recovery.service"]
+        ApiSocket["mazzy-vpn-api.socket<br/>0660 root:mazzy-vpn"]
     end
 
     subgraph Data["Приватные локальные данные"]
@@ -70,7 +72,10 @@ flowchart TB
     Tray --> Desktop
     Desktop --> StatusCache
     Desktop --> ProfileCache
-    Desktop -. фиксированный allowlist через pkexec .-> Entry
+    Desktop --> ApiSocket
+    ApiSocket --> Entry
+    ApiSocket --> ActionJournal
+    Desktop -. остальные фиксированные операции через pkexec .-> Entry
     Commands --> Validation
     Validation --> Profiles
     Commands --> ActionLock
@@ -109,7 +114,8 @@ flowchart TB
 Desktop открывает выбранные пользователем файлы только для передачи их
 канонических путей проверяемой операции импорта; сам он не разбирает
 VPN-профиль и не читает ключи. Root-процесс CLI атомарно обновляет status и
-profile-catalog JSON caches с правами `644`. В них есть состояние сервиса,
+profile-catalog JSON caches с правами `0640 root:mazzy-vpn`. В них есть
+состояние сервиса,
 выбранное отображаемое имя, протокол, интерфейс, возраст handshake, публичный
 VPN-адрес, состояния autostart/health monitor и очищенные label профилей. Пути,
 endpoint, ключи и конфигурационные директивы не экспортируются.
@@ -119,6 +125,7 @@ sequenceDiagram
     actor User as Пользователь
     participant UI as Tauri control center / tray
     participant Cache as /run/mazzy-vpn/status.json
+    participant API as защищённый Unix socket
     participant PK as pkexec
     participant CLI as mazzy-vpn
     participant SD as systemd
@@ -127,21 +134,28 @@ sequenceDiagram
         UI->>Cache: прочитать очищенный статус
         Cache-->>UI: JSON schema v1
     end
-    User->>UI: import / connect / test / Doctor / settings
-    UI->>PK: типизированная фиксированная операция без shell
-    PK->>CLI: выполнить разрешённое действие
+    User->>UI: connect / reconnect / disconnect
+    UI->>API: API v1 envelope + action ID + deadline
+    API->>CLI: проверенная lifecycle-операция
     CLI->>SD: изменить managed-туннель
     CLI->>Cache: атомарно обновить статус
+    API-->>UI: очищенный outcome + состояние rollback
     Cache-->>UI: новое состояние
+    User->>UI: import / test / Doctor / остальные settings
+    UI->>PK: временная типизированная операция без shell
+    PK->>CLI: выполнить разрешённое действие
 ```
 
 Закрытие окна скрывает приложение в tray. Linux-пакет содержит совместимый
 installer engine и после явного разрешения может установить или восстановить
 отсутствующие зависимости, поэтому отдельная ручная установка CLI не нужна.
-Adapter 0.2 пока запускает проверяемый engine для каждой операции; постоянный
-versioned local service API остаётся gate версии Desktop 1.0. Сборки macOS и
-Windows пока являются preview интерфейса и не заявляются как рабочий
-VPN-клиент до реализации нативных backends.
+Постепенный Linux API уже обслуживает очищенные status/profile queries и
+connect, reconnect, disconnect. Он сохраняет action IDs, применяет deadlines и
+возвращает итог rollback. Import, tests, Doctor и service settings пока
+используют типизированный `pkexec` adapter до появления соответствующих API
+handlers. Завершение миграции остаётся gate версии Desktop 1.0. Сборки macOS и
+Windows пока являются preview интерфейса и не заявляются как рабочий VPN-клиент
+до реализации нативных backends.
 
 ## Обычное подключение
 
@@ -268,8 +282,12 @@ sequenceDiagram
 | `/etc/vpnctl/locale` | Выбранный язык | Постоянно, не является секретом |
 | `/var/lib/vpnctl/active` | Протокол, default-профиль, `DESIRED`, метаданные теста | Постоянно, root |
 | `/var/lib/vpnctl/test.*` | Снимок транзакции и rollback | Пока может понадобиться recovery |
+| `/var/lib/vpnctl/api-actions` | Action IDs, rollback snapshots и очищенные outcomes | Постоянно, каталог `700`, records `600`; по умолчанию 512 последних завершённых outcomes |
+| `/var/lib/vpnctl/api-audit.jsonl{,.1}` | Operation, решение авторизации и outcome | Постоянно, `600`; без payload/backend output; ротация 2 МиБ с одним архивом |
+| `/var/lib/vpnctl/api-recovery-required.json` | Marker отсутствующего/неудачного rollback snapshot | Постоянно, `600`; блокирует API mutations до явного подтверждения администратора |
 | `/run/vpnctl` | Locks, health-счётчик и очищенный runtime log | Очищается при загрузке |
-| `/run/mazzy-vpn/status.json` | Очищенный статус для Desktop | Пересоздаётся root, доступен для чтения, без ключей и endpoint |
+| `/run/mazzy-vpn/status.json` | Очищенный статус для Desktop | Пересоздаётся root, `0640 root:mazzy-vpn`, без ключей и endpoint |
+| `/run/mazzy-vpn/api-v1.sock` | Versioned local API transport | Socket `0660 root:mazzy-vpn`, активируется systemd |
 | `vpnctl.service` | Владеет активным managed-туннелем | Долгоживущий, под контролем systemd |
 | `vpnctl-health.timer` | Планирует независимые health-проверки | Включён для автовосстановления |
 | `vpnctl-test-recovery.service` | Исправляет прерванный тест после загрузки | Boot-time oneshot |
@@ -277,6 +295,8 @@ sequenceDiagram
 Инварианты безопасности:
 
 - один managed-туннель и одна изменяющая состояние операция одновременно;
+- прерванная API mutation согласуется по pre-action snapshot до запуска
+  следующей изменяющей операции;
 - тип профиля определяется по содержимому, затем проверяется до импорта;
 - приватные ключи, credentials, личные пути и рабочие профили не попадают в
   Git;

@@ -152,7 +152,8 @@ Object.assign(translations.ru, {
   installRepair: "Установить / обновить / исправить", installation: "УСТАНОВКА",
   engineReadiness: "Готовность движка", installedVersion: "Установлено",
   bundledVersion: "В комплекте Desktop", engineService: "Системная служба",
-  recoveryMonitor: "Recovery monitor", services: "СЛУЖБЫ", serviceControl: "Управление службами",
+  recoveryMonitor: "Recovery monitor", localApi: "Защищённый local API",
+  apiReady: "АКТИВЕН", services: "СЛУЖБЫ", serviceControl: "Управление службами",
   notifications: "Уведомления", notificationsHint: "Локально, без телеметрии",
   privacyMode: "Скрывать публичный IP", privacyModeHint: "Применяется к Dashboard",
   installed: "УСТАНОВЛЕНО", missing: "НЕТ", updateRequired: "НУЖНО ОБНОВИТЬ",
@@ -203,7 +204,8 @@ Object.assign(translations.en, {
   settingsHint: "Desktop bundles a compatible engine and can install missing dependencies.",
   installRepair: "Install / update / repair", installation: "INSTALLATION", engineReadiness: "Engine readiness",
   installedVersion: "Installed", bundledVersion: "Bundled with Desktop", engineService: "System service",
-  recoveryMonitor: "Recovery monitor", services: "SERVICES", serviceControl: "Service control",
+  recoveryMonitor: "Recovery monitor", localApi: "Protected local API", apiReady: "ACTIVE",
+  services: "SERVICES", serviceControl: "Service control",
   notifications: "Notifications", notificationsHint: "Local only, no telemetry",
   privacyMode: "Hide public IP", privacyModeHint: "Applied to Dashboard",
   installed: "INSTALLED", missing: "MISSING", updateRequired: "UPDATE REQUIRED", ready: "READY",
@@ -472,6 +474,9 @@ function renderInstallation(report) {
   $("#bundled-version").textContent = report?.bundled_version || t("missing");
   $("#service-installed").textContent = report?.service_installed ? t("installed") : t("missing");
   $("#monitor-installed").textContent = report?.monitor_installed ? t("installed") : t("missing");
+  $("#api-installed").textContent = report?.api_socket_available
+    ? t("apiReady")
+    : (report?.api_installed ? t("installed") : t("missing"));
   const badge = $("#installation-badge");
   badge.textContent = report?.needs_install ? t("updateRequired") : t("ready");
   badge.className = `health-badge ${report?.needs_install ? "bad" : "ok"}`;

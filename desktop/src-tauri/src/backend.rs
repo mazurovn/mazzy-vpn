@@ -3,16 +3,39 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+#[cfg(target_os = "linux")]
+use std::io::{BufRead, BufReader, Write};
+#[cfg(target_os = "linux")]
+use std::os::unix::net::UnixStream;
 use std::{
     env, fs,
+    io::{self, Read},
     path::{Path, PathBuf},
-    process::{Command, Output},
+    process::{Command, Output, Stdio},
+    sync::atomic::{AtomicU64, Ordering},
+    thread,
+    time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Manager};
 
 const CLI_PATH: &str = "/usr/local/bin/mazzy-vpn";
 const PROFILES_FILE: &str = "/run/mazzy-vpn/profiles.json";
+const API_SOCKET: &str = "/run/mazzy-vpn/api-v1.sock";
 const MAX_OUTPUT_BYTES: usize = 512 * 1024;
+const MAX_OUTPUT_STREAM_BYTES: usize = MAX_OUTPUT_BYTES / 2;
+const TRUNCATED_OUTPUT_MARKER: &[u8] = b"\n[output truncated]\n";
+#[cfg(target_os = "linux")]
+const MAX_API_RESPONSE_BYTES: usize = 64 * 1024;
+#[cfg(target_os = "linux")]
+const LOCAL_API_COMPLETION_GRACE_MS: u64 = 60_000;
+static API_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+enum LocalApiError {
+    Unavailable,
+    Indeterminate(String),
+}
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
@@ -106,6 +129,8 @@ pub struct InstallationReport {
     pub needs_install: bool,
     pub service_installed: bool,
     pub monitor_installed: bool,
+    pub api_installed: bool,
+    pub api_socket_available: bool,
     pub dependencies_ready: bool,
     pub missing_dependencies: usize,
     pub dependencies: Vec<DependencyState>,
@@ -370,7 +395,70 @@ fn clean_output(output: &Output) -> String {
     cleaned.trim().to_owned()
 }
 
-fn command_result(action: String, result: Result<Output, std::io::Error>) -> OperationResult {
+fn drain_bounded<R: Read>(mut reader: R, limit: usize) -> io::Result<Vec<u8>> {
+    let mut retained = Vec::with_capacity(limit.min(8192));
+    let mut buffer = [0_u8; 8192];
+    let mut truncated = false;
+
+    loop {
+        let read = reader.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        let remaining = limit.saturating_sub(retained.len());
+        let keep = remaining.min(read);
+        retained.extend_from_slice(&buffer[..keep]);
+        truncated |= keep < read;
+    }
+
+    if truncated {
+        let content_limit = limit.saturating_sub(TRUNCATED_OUTPUT_MARKER.len());
+        retained.truncate(content_limit);
+        let marker_bytes = limit.saturating_sub(retained.len());
+        retained.extend_from_slice(
+            &TRUNCATED_OUTPUT_MARKER[..marker_bytes.min(TRUNCATED_OUTPUT_MARKER.len())],
+        );
+    }
+    Ok(retained)
+}
+
+fn join_capture(
+    handle: thread::JoinHandle<io::Result<Vec<u8>>>,
+    stream: &str,
+) -> io::Result<Vec<u8>> {
+    handle.join().map_err(|_| {
+        io::Error::other(format!(
+            "Desktop output capture thread panicked while reading {stream}"
+        ))
+    })?
+}
+
+pub(crate) fn bounded_output(command: &mut Command) -> io::Result<Output> {
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn()?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| io::Error::other("Unable to capture child stdout"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| io::Error::other("Unable to capture child stderr"))?;
+    let stdout_handle = thread::spawn(move || drain_bounded(stdout, MAX_OUTPUT_STREAM_BYTES));
+    let stderr_handle = thread::spawn(move || drain_bounded(stderr, MAX_OUTPUT_STREAM_BYTES));
+
+    let status_result = child.wait();
+    let stdout = join_capture(stdout_handle, "stdout")?;
+    let stderr = join_capture(stderr_handle, "stderr")?;
+    let status = status_result?;
+    Ok(Output {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
+fn command_result(action: String, result: Result<Output, io::Error>) -> OperationResult {
     match result {
         Ok(output) => OperationResult {
             success: output.status.success(),
@@ -402,6 +490,236 @@ fn engine_root(app: &AppHandle) -> PathBuf {
     }
 }
 
+fn api_identifier(kind: &str) -> String {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let sequence = API_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    format!("{kind}-{timestamp}-{}-{sequence}", std::process::id())
+}
+
+fn profile_id(catalog: &Value, protocol: &str, file_name: &str) -> Result<String, String> {
+    catalog
+        .get("profiles")
+        .and_then(Value::as_array)
+        .and_then(|profiles| {
+            profiles.iter().find(|profile| {
+                profile.get("protocol").and_then(Value::as_str) == Some(protocol)
+                    && profile.get("file_name").and_then(Value::as_str) == Some(file_name)
+            })
+        })
+        .and_then(|profile| profile.get("profile_id"))
+        .and_then(Value::as_str)
+        .filter(|identifier| {
+            (8..=128).contains(&identifier.len())
+                && identifier.chars().enumerate().all(|(index, character)| {
+                    character.is_ascii_alphanumeric()
+                        || (index > 0 && matches!(character, '.' | '_' | ':' | '-'))
+                })
+        })
+        .map(str::to_owned)
+        .ok_or_else(|| "The profile cache does not contain a safe API profile ID".to_owned())
+}
+
+fn local_api_request(
+    request: &OperationRequest,
+    catalog: Option<&Value>,
+) -> Result<Option<(String, Value)>, String> {
+    let (action, operation, deadline_ms, payload) = match request {
+        OperationRequest::Connect {
+            protocol: selected_protocol,
+            profile,
+        } => {
+            let selected_protocol = protocol(selected_protocol, false)?;
+            let profile = profile_name(profile)?;
+            let catalog = catalog.ok_or_else(|| "The profile cache is not ready".to_owned())?;
+            let profile_id = profile_id(catalog, &selected_protocol, &profile)?;
+            (
+                "connect",
+                "lifecycle.connect",
+                60_000,
+                json!({"profile_id": profile_id}),
+            )
+        }
+        OperationRequest::Reconnect => ("reconnect", "lifecycle.reconnect", 30_000, json!({})),
+        OperationRequest::Disconnect => ("disconnect", "lifecycle.disconnect", 30_000, json!({})),
+        _ => return Ok(None),
+    };
+    Ok(Some((
+        action.into(),
+        json!({
+            "api_version": "1.0",
+            "request_id": api_identifier("request"),
+            "operation": operation,
+            "action_id": api_identifier("action"),
+            "authorization": "system-mutate",
+            "deadline_ms": deadline_ms,
+            "payload": payload
+        }),
+    )))
+}
+
+fn api_operation_result(action: String, response: Value) -> OperationResult {
+    if response.get("status").and_then(Value::as_str) == Some("ok") {
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+        let state = result
+            .get("state")
+            .and_then(Value::as_str)
+            .unwrap_or("failed");
+        let message = result
+            .get("message_key")
+            .and_then(Value::as_str)
+            .unwrap_or("api.response.malformed");
+        return OperationResult {
+            success: state == "succeeded",
+            action,
+            output: message.into(),
+            code: None,
+        };
+    }
+    let error = response.get("error").cloned().unwrap_or(Value::Null);
+    let code = error
+        .get("code")
+        .and_then(Value::as_str)
+        .unwrap_or("internal-error");
+    let message = error
+        .get("message_key")
+        .and_then(Value::as_str)
+        .unwrap_or("api.response.malformed");
+    OperationResult {
+        success: false,
+        action,
+        output: format!("{code}: {message}"),
+        code: None,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn local_api_response_timeout(request: &Value) -> std::time::Duration {
+    let deadline_ms = request
+        .get("deadline_ms")
+        .and_then(Value::as_u64)
+        .unwrap_or(5_000)
+        .clamp(100, 900_000);
+    let grace_ms = if request.get("action_id").is_some() {
+        LOCAL_API_COMPLETION_GRACE_MS
+    } else {
+        5_000
+    };
+    std::time::Duration::from_millis(deadline_ms + grace_ms)
+}
+
+#[cfg(target_os = "linux")]
+fn send_local_api(request: &Value) -> Result<Value, LocalApiError> {
+    let mut stream = UnixStream::connect(API_SOCKET).map_err(|_| LocalApiError::Unavailable)?;
+    stream
+        .set_read_timeout(Some(local_api_response_timeout(request)))
+        .map_err(|error| LocalApiError::Indeterminate(error.to_string()))?;
+    stream
+        .set_write_timeout(Some(std::time::Duration::from_secs(5)))
+        .map_err(|error| LocalApiError::Indeterminate(error.to_string()))?;
+    serde_json::to_writer(&mut stream, request)
+        .map_err(|error| LocalApiError::Indeterminate(error.to_string()))?;
+    stream
+        .write_all(b"\n")
+        .map_err(|error| LocalApiError::Indeterminate(error.to_string()))?;
+    stream
+        .flush()
+        .map_err(|error| LocalApiError::Indeterminate(error.to_string()))?;
+
+    let mut response = Vec::new();
+    BufReader::new(stream)
+        .take((MAX_API_RESPONSE_BYTES + 1) as u64)
+        .read_until(b'\n', &mut response)
+        .map_err(|error| LocalApiError::Indeterminate(error.to_string()))?;
+    if response.is_empty() || response.len() > MAX_API_RESPONSE_BYTES {
+        return Err(LocalApiError::Indeterminate(
+            "Local API returned an empty or oversized response".into(),
+        ));
+    }
+    let response: Value = serde_json::from_slice(&response).map_err(|error| {
+        LocalApiError::Indeterminate(format!("Invalid local API response: {error}"))
+    })?;
+    if response.get("api_version").and_then(Value::as_str) != Some("1.0")
+        || response.get("request_id").and_then(Value::as_str)
+            != request.get("request_id").and_then(Value::as_str)
+    {
+        return Err(LocalApiError::Indeterminate(
+            "Local API response identity does not match the request".into(),
+        ));
+    }
+    Ok(response)
+}
+
+#[cfg(target_os = "linux")]
+fn retry_indeterminate<T>(
+    mut attempt: impl FnMut() -> Result<T, LocalApiError>,
+) -> Result<T, LocalApiError> {
+    match attempt() {
+        Err(LocalApiError::Indeterminate(first_error)) => match attempt() {
+            Err(LocalApiError::Unavailable) => Err(LocalApiError::Indeterminate(format!(
+                "{first_error}; identical retry could not reconnect"
+            ))),
+            Err(LocalApiError::Indeterminate(second_error)) => Err(LocalApiError::Indeterminate(
+                format!("{first_error}; identical retry failed: {second_error}"),
+            )),
+            result => result,
+        },
+        result => result,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn send_local_api_with_retry(request: &Value) -> Result<Value, LocalApiError> {
+    retry_indeterminate(|| send_local_api(request))
+}
+
+#[cfg(target_os = "linux")]
+fn try_execute_local_api(request: &OperationRequest) -> Option<OperationResult> {
+    if !Path::new(API_SOCKET).exists() {
+        return None;
+    }
+    let catalog = fs::read_to_string(PROFILES_FILE)
+        .ok()
+        .and_then(|contents| serde_json::from_str(&contents).ok());
+    let (action, envelope) = match local_api_request(request, catalog.as_ref()) {
+        Ok(Some(specification)) => specification,
+        Ok(None) => return None,
+        Err(error) => {
+            return Some(OperationResult {
+                success: false,
+                action: "validation".into(),
+                output: error,
+                code: None,
+            });
+        }
+    };
+    let action_id = envelope
+        .get("action_id")
+        .and_then(Value::as_str)
+        .unwrap_or("unknown-action")
+        .to_owned();
+    match send_local_api_with_retry(&envelope) {
+        Ok(response) => Some(api_operation_result(action, response)),
+        Err(LocalApiError::Unavailable) => None,
+        Err(LocalApiError::Indeterminate(error)) => Some(OperationResult {
+            success: false,
+            action,
+            output: format!(
+                "Local API outcome is unknown; do not retry automatically. \
+                 Inspect action ID {action_id}: {error}"
+            ),
+            code: None,
+        }),
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn try_execute_local_api(_: &OperationRequest) -> Option<OperationResult> {
+    None
+}
+
 pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> OperationResult {
     if matches!(request, OperationRequest::Bootstrap) {
         let installer = engine_root(app).join("install.sh");
@@ -415,12 +733,13 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
         }
         return command_result(
             "bootstrap".into(),
-            Command::new("pkexec")
-                .arg("/bin/bash")
-                .arg(installer)
-                .arg("--yes")
-                .arg("--skip-tests")
-                .output(),
+            bounded_output(
+                Command::new("pkexec")
+                    .arg("/bin/bash")
+                    .arg(installer)
+                    .arg("--yes")
+                    .arg("--skip-tests"),
+            ),
         );
     }
 
@@ -444,9 +763,12 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
             code: None,
         };
     }
+    if let Some(result) = try_execute_local_api(&request) {
+        return result;
+    }
     command_result(
         action,
-        Command::new("pkexec").arg(CLI_PATH).args(args).output(),
+        bounded_output(Command::new("pkexec").arg(CLI_PATH).args(args)),
     )
 }
 
@@ -468,7 +790,7 @@ fn version_from_output(output: &str) -> Option<String> {
 }
 
 fn installed_version(path: &Path) -> Option<String> {
-    let output = Command::new(path).arg("version").output().ok()?;
+    let output = bounded_output(Command::new(path).arg("version")).ok()?;
     output
         .status
         .success()
@@ -565,6 +887,12 @@ fn dependencies() -> Vec<DependencyState> {
             "PolicyKit authorization",
             "Desktop",
             command_available("pkexec"),
+        ),
+        (
+            "jq",
+            "JSON API runtime",
+            "local API",
+            command_available("jq"),
         ),
         (
             "dns-integration",
@@ -670,16 +998,26 @@ pub fn get_installation_report(app: AppHandle) -> InstallationReport {
         .filter(|dependency| !dependency.installed)
         .count();
     let dependencies_ready = missing_dependencies == 0;
-    let needs_install =
-        !engine_installed || installed_version != bundled_version || !dependencies_ready;
+    let service_installed = Path::new("/etc/systemd/system/vpnctl.service").is_file();
+    let monitor_installed = Path::new("/etc/systemd/system/vpnctl-health.timer").is_file();
+    let api_installed = Path::new("/etc/systemd/system/mazzy-vpn-api.socket").is_file();
+    let api_socket_available = Path::new(API_SOCKET).exists();
+    let needs_install = !engine_installed
+        || installed_version != bundled_version
+        || !dependencies_ready
+        || !service_installed
+        || !monitor_installed
+        || !api_installed;
     InstallationReport {
         engine_installed,
         installed_version,
         bundled_version,
         bundled_installer: root.join("install.sh").is_file(),
         needs_install,
-        service_installed: Path::new("/etc/systemd/system/vpnctl.service").is_file(),
-        monitor_installed: Path::new("/etc/systemd/system/vpnctl-health.timer").is_file(),
+        service_installed,
+        monitor_installed,
+        api_installed,
+        api_socket_available,
         dependencies_ready,
         missing_dependencies,
         dependencies,
@@ -771,6 +1109,15 @@ mod tests {
     }
 
     #[test]
+    fn child_output_capture_is_bounded_and_marks_truncation() {
+        let input = vec![b'x'; MAX_OUTPUT_STREAM_BYTES + 1];
+        let output =
+            drain_bounded(std::io::Cursor::new(input), MAX_OUTPUT_STREAM_BYTES).expect("capture");
+        assert_eq!(output.len(), MAX_OUTPUT_STREAM_BYTES);
+        assert!(output.ends_with(TRUNCATED_OUTPUT_MARKER));
+    }
+
+    #[test]
     fn dependency_report_covers_the_cli_and_desktop_runtime() {
         let states = dependencies();
         for required in [
@@ -780,6 +1127,7 @@ mod tests {
             "systemd",
             "journalctl",
             "pkexec",
+            "jq",
             "openvpn",
             "wireguard-tools",
             "amneziawg-tools",
@@ -794,5 +1142,74 @@ mod tests {
                 "missing dependency state: {required}"
             );
         }
+    }
+
+    #[test]
+    fn lifecycle_requests_use_opaque_local_api_identifiers() {
+        let catalog = json!({
+            "profiles": [{
+                "profile_id": "profile-0123456789abcdef0123456789abcdef",
+                "protocol": "openvpn",
+                "file_name": "Server.ovpn"
+            }]
+        });
+        let (_, request) = local_api_request(
+            &OperationRequest::Connect {
+                protocol: "openvpn".into(),
+                profile: "Server.ovpn".into(),
+            },
+            Some(&catalog),
+        )
+        .expect("request mapping")
+        .expect("supported operation");
+        assert_eq!(request["operation"], "lifecycle.connect");
+        assert_eq!(
+            request["payload"]["profile_id"],
+            "profile-0123456789abcdef0123456789abcdef"
+        );
+        let encoded = serde_json::to_string(&request).expect("JSON");
+        assert!(!encoded.contains("Server.ovpn"));
+        assert_eq!(request["authorization"], "system-mutate");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn indeterminate_local_api_transport_retries_the_identical_request_once() {
+        let mut attempts = 0;
+        let result = retry_indeterminate(|| {
+            attempts += 1;
+            if attempts == 1 {
+                Err(LocalApiError::Indeterminate("lost response".into()))
+            } else {
+                Ok(json!({"status": "ok"}))
+            }
+        });
+        assert_eq!(attempts, 2);
+        assert_eq!(result.expect("retry result")["status"], "ok");
+
+        attempts = 0;
+        let unavailable: Result<Value, LocalApiError> = retry_indeterminate(|| {
+            attempts += 1;
+            Err(LocalApiError::Unavailable)
+        });
+        assert!(matches!(unavailable, Err(LocalApiError::Unavailable)));
+        assert_eq!(attempts, 1);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn mutation_transport_reserves_time_for_bounded_rollback() {
+        let request = json!({
+            "deadline_ms": 30_000,
+            "action_id": "action-01234567"
+        });
+        assert_eq!(
+            local_api_response_timeout(&request),
+            std::time::Duration::from_secs(90)
+        );
+        assert_eq!(
+            local_api_response_timeout(&json!({"deadline_ms": 5_000})),
+            std::time::Duration::from_secs(10)
+        );
     }
 }
