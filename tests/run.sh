@@ -566,8 +566,10 @@ grep -q '"openvpn":1' <<<"$status_json" ||
     fail "structured dashboard status is missing profile counts"
 grep -q '192\.0\.2\.10' <<<"$status_json" &&
     fail "structured dashboard status leaked a VPN endpoint"
-[[ "$(stat -c %a "$VPNCTL_DASHBOARD_DIR/status.json")" == "644" ]] ||
-    fail "dashboard status cache is not safely readable"
+[[ "$(stat -c %a "$VPNCTL_DASHBOARD_DIR")" == "750" ]] ||
+    fail "dashboard cache directory is not restricted"
+[[ "$(stat -c %a "$VPNCTL_DASHBOARD_DIR/status.json")" == "640" ]] ||
+    fail "dashboard status cache is not group-restricted"
 "$CLI" _refresh-dashboard-cache
 ok "safe structured dashboard status"
 
@@ -588,8 +590,8 @@ profile_id="$(
 )"
 [[ "$profile_id" =~ ^profile-[a-f0-9]{32}$ ]] ||
     fail "Desktop profile cache does not expose an opaque stable profile ID"
-[[ "$(stat -c %a "$VPNCTL_DASHBOARD_DIR/profiles.json")" == "644" ]] ||
-    fail "Desktop profile cache is not safely readable"
+[[ "$(stat -c %a "$VPNCTL_DASHBOARD_DIR/profiles.json")" == "640" ]] ||
+    fail "Desktop profile cache is not group-restricted"
 ok "sanitized Desktop profile library cache"
 
 api_status_request="$(

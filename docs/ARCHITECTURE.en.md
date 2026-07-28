@@ -113,8 +113,9 @@ profiles stay root-readable with mode `600`.
 
 Desktop opens user-selected files only long enough to pass their canonical paths
 to the validated import operation; it never parses a VPN profile or reads a key.
-A root CLI process atomically updates mode-`644` status and profile-catalog JSON
-caches. They contain service state, selected display name, protocol, interface,
+A root CLI process atomically updates mode-`0640 root:mazzy-vpn` status and
+profile-catalog JSON caches. They contain service state, selected display name,
+protocol, interface,
 handshake age, public VPN address, autostart/health-monitor state and sanitized
 profile labels. Profile paths, server endpoints, keys and configuration
 directives are not exported.
@@ -284,7 +285,7 @@ previous connection has been restored successfully.
 | `/var/lib/vpnctl/api-actions` | Completed/running action IDs, rollback snapshots and sanitized outcomes | Persistent, directory `700`, records `600`; newest 512 completed outcomes by default |
 | `/var/lib/vpnctl/api-audit.jsonl{,.1}` | Operation, authorization decision and outcome | Persistent, mode `600`; no payload/backend output; 2 MiB rotation with one archive |
 | `/run/vpnctl` | Locks, health counter and sanitized runtime log | Cleared at boot |
-| `/run/mazzy-vpn/status.json` | Sanitized Desktop status | Recreated by root, readable without keys or endpoint |
+| `/run/mazzy-vpn/status.json` | Sanitized Desktop status | Recreated by root, `0640 root:mazzy-vpn`, without keys or endpoint |
 | `/run/mazzy-vpn/api-v1.sock` | Versioned local API transport | Socket `0660 root:mazzy-vpn`, systemd activated |
 | `vpnctl.service` | Owns the active managed tunnel | Long-running, systemd supervised |
 | `vpnctl-health.timer` | Schedules independent health checks | Enabled for unattended recovery |

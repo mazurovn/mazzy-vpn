@@ -33,6 +33,8 @@ All notable changes to Mazzy VPN are documented here.
   concurrently, preventing unbounded GUI memory growth from verbose helpers.
 - Replaced floating GitHub-hosted OS generations and Rust `stable` with
   versioned runner labels and the declared Rust 1.85.0 toolchain.
+- Restricted sanitized runtime status/profile caches to `root:mazzy-vpn`
+  instead of exposing public IP and profile labels to every local account.
 - Bounded local API requests by bytes before JSON parsing and added a finite
   receive deadline, preventing a socket client from forcing an unbounded Bash
   read.

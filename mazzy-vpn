@@ -26,6 +26,7 @@ HEALTH_TIMER="${VPNCTL_HEALTH_TIMER:-vpnctl-health.timer}"
 TEST_RECOVERY_SERVICE="${VPNCTL_TEST_RECOVERY_SERVICE:-vpnctl-test-recovery.service}"
 API_SOCKET_UNIT="${VPNCTL_API_SOCKET_UNIT:-mazzy-vpn-api.socket}"
 API_SERVICE_UNIT="${VPNCTL_API_SERVICE_UNIT:-mazzy-vpn-api@.service}"
+RUNTIME_READER_GROUP="${VPNCTL_RUNTIME_READER_GROUP:-mazzy-vpn}"
 HEALTH_FAILURE_LIMIT="${VPNCTL_HEALTH_FAILURE_LIMIT:-2}"
 HEALTH_PROBE_TIMEOUT="${VPNCTL_HEALTH_PROBE_TIMEOUT:-4}"
 HEALTH_FALLBACK_PROBE_URL="${VPNCTL_HEALTH_FALLBACK_PROBE_URL:-https://1.1.1.1/cdn-cgi/trace}"
@@ -1393,19 +1394,48 @@ profile_opaque_id() {
     printf 'profile-%s\n' "$digest"
 }
 
+prepare_dashboard_dir() {
+    mkdir -p -- "$DASHBOARD_DIR" || return 1
+    if ((EUID == 0)); then
+        if getent group "$RUNTIME_READER_GROUP" >/dev/null 2>&1; then
+            chown -- "root:$RUNTIME_READER_GROUP" "$DASHBOARD_DIR" || return 1
+            chmod 750 -- "$DASHBOARD_DIR" || return 1
+        else
+            chown -- root:root "$DASHBOARD_DIR" || return 1
+            chmod 700 -- "$DASHBOARD_DIR" || return 1
+        fi
+    else
+        chmod 750 -- "$DASHBOARD_DIR" || return 1
+    fi
+}
+
+protect_dashboard_cache() {
+    local target="$1"
+    if ((EUID == 0)); then
+        if getent group "$RUNTIME_READER_GROUP" >/dev/null 2>&1; then
+            chown -- "root:$RUNTIME_READER_GROUP" "$target" || return 1
+            chmod 640 -- "$target" || return 1
+        else
+            chown -- root:root "$target" || return 1
+            chmod 600 -- "$target" || return 1
+        fi
+    else
+        chmod 640 -- "$target" || return 1
+    fi
+}
+
 write_profiles_cache() {
     local tmp
     ((EUID == 0)) || [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]] ||
         return 1
-    mkdir -p -- "$DASHBOARD_DIR" || return 1
-    chmod 755 -- "$DASHBOARD_DIR" || return 1
+    prepare_dashboard_dir || return 1
     tmp="$DASHBOARD_DIR/.profiles.$$"
     umask 077
     profiles_json_live >"$tmp" || {
         rm -f -- "$tmp"
         return 1
     }
-    chmod 644 -- "$tmp" || {
+    protect_dashboard_cache "$tmp" || {
         rm -f -- "$tmp"
         return 1
     }
@@ -2797,15 +2827,14 @@ write_dashboard_cache() {
     local tmp
     ((EUID == 0)) || [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]] ||
         return 1
-    mkdir -p -- "$DASHBOARD_DIR" || return 1
-    chmod 755 -- "$DASHBOARD_DIR" || return 1
+    prepare_dashboard_dir || return 1
     tmp="$DASHBOARD_DIR/.status.$$"
     umask 077
     dashboard_json_live >"$tmp" || {
         rm -f -- "$tmp"
         return 1
     }
-    chmod 644 -- "$tmp" || {
+    protect_dashboard_cache "$tmp" || {
         rm -f -- "$tmp"
         return 1
     }

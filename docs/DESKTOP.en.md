@@ -58,8 +58,9 @@ backends, code signing and platform-specific integration tests.
 
 The UI reads `/run/mazzy-vpn/status.json` every five seconds and reads the
 sanitized profile library from `/run/mazzy-vpn/profiles.json`. The root engine
-atomically recreates both files. They contain no endpoint, profile path, private
-key, username, password or configuration directive.
+atomically recreates both files as `0640 root:mazzy-vpn` inside a
+`0750 root:mazzy-vpn` directory. They contain no endpoint, profile path,
+private key, username, password or configuration directive.
 
 ## Window and tray actions
 
