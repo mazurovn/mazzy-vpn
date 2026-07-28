@@ -1427,23 +1427,21 @@ protect_dashboard_cache() {
     fi
 }
 
-write_profiles_cache() {
-    local tmp
+write_profiles_cache() (
+    local tmp="" tmp_token="${VPNCTL_CACHE_TMP_TOKEN:-$$}"
+    trap '[[ -z "${tmp:-}" ]] || rm -f -- "$tmp"' EXIT
+    trap 'exit 1' HUP INT TERM
     ((EUID == 0)) || [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]] ||
         return 1
     prepare_dashboard_dir || return 1
-    tmp="$DASHBOARD_DIR/.profiles.$$"
+    [[ "$tmp_token" =~ ^[A-Za-z0-9-]{1,64}$ ]] || tmp_token="$$"
+    tmp="$DASHBOARD_DIR/.profiles.$tmp_token"
     umask 077
-    profiles_json_live >"$tmp" || {
-        rm -f -- "$tmp"
-        return 1
-    }
-    protect_dashboard_cache "$tmp" || {
-        rm -f -- "$tmp"
-        return 1
-    }
-    mv -f -- "$tmp" "$PROFILES_FILE"
-}
+    profiles_json_live >"$tmp" || return 1
+    protect_dashboard_cache "$tmp" || return 1
+    mv -f -- "$tmp" "$PROFILES_FILE" || return 1
+    tmp=""
+)
 
 cmd_profiles_json() {
     if [[ -r "$PROFILES_FILE" ]]; then
@@ -2826,24 +2824,22 @@ dashboard_json_live() {
     printf '}\n'
 }
 
-write_dashboard_cache() {
-    local tmp
+write_dashboard_cache() (
+    local tmp="" tmp_token="${VPNCTL_CACHE_TMP_TOKEN:-$$}"
+    trap '[[ -z "${tmp:-}" ]] || rm -f -- "$tmp"' EXIT
+    trap 'exit 1' HUP INT TERM
     ((EUID == 0)) || [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]] ||
         return 1
     prepare_dashboard_dir || return 1
-    tmp="$DASHBOARD_DIR/.status.$$"
+    [[ "$tmp_token" =~ ^[A-Za-z0-9-]{1,64}$ ]] || tmp_token="$$"
+    tmp="$DASHBOARD_DIR/.status.$tmp_token"
     umask 077
-    dashboard_json_live >"$tmp" || {
-        rm -f -- "$tmp"
-        return 1
-    }
-    protect_dashboard_cache "$tmp" || {
-        rm -f -- "$tmp"
-        return 1
-    }
-    mv -f -- "$tmp" "$DASHBOARD_FILE"
+    dashboard_json_live >"$tmp" || return 1
+    protect_dashboard_cache "$tmp" || return 1
+    mv -f -- "$tmp" "$DASHBOARD_FILE" || return 1
+    tmp=""
     write_profiles_cache
-}
+)
 
 cmd_status_json() {
     if [[ -r "$DASHBOARD_FILE" ]]; then
@@ -2863,6 +2859,71 @@ cmd_status_json() {
 
 api_valid_identifier() {
     [[ "${1:-}" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$ ]]
+}
+
+api_request_has_unique_schema_keys() {
+    local request="$1"
+    jq --stream -s -e '
+        reduce .[] as $event (
+            {
+                seen: {},
+                payload_seen: false,
+                payload_closed: false,
+                duplicate: false
+            };
+            if .duplicate then
+                .
+            else
+                ($event[0] // []) as $path
+                | if (($path | length) == 0) then
+                    .
+                elif $path[0] == "payload" then
+                    if (($event | length) == 2) then
+                        if .payload_closed then
+                            .duplicate = true
+                        elif (($path | length) == 1) then
+                            if .payload_seen then
+                                .duplicate = true
+                            else
+                                .payload_seen = true
+                                | .payload_closed = true
+                            end
+                        elif (($path | length) == 2) then
+                            ("payload:" + ($path[1] | tojson)) as $key
+                            | if (.seen[$key] // false) then
+                                .duplicate = true
+                            else
+                                .seen[$key] = true
+                                | .payload_seen = true
+                            end
+                        else
+                            .
+                        end
+                    elif (
+                        ($event | length) == 1
+                        and ($path | length) == 2
+                    ) then
+                        .payload_closed = true
+                    else
+                        .
+                    end
+                elif (
+                    ($event | length) == 2
+                    and ($path | length) == 1
+                ) then
+                    ("top:" + ($path[0] | tojson)) as $key
+                    | if (.seen[$key] // false) then
+                        .duplicate = true
+                    else
+                        .seen[$key] = true
+                    end
+                else
+                    .
+                end
+            end
+        )
+        | (.duplicate | not)
+    ' <<<"$request" >/dev/null 2>&1
 }
 
 api_server_request_id() {
@@ -2941,14 +3002,29 @@ api_cache_refresh_timeout_seconds() {
 }
 
 api_refresh_dashboard_bounded() {
-    local seconds
+    local requested_ms="${1:-}" seconds configured_ms effective_ms duration
+    local refresh_token rc=0
     seconds="$(api_cache_refresh_timeout_seconds)"
-    timeout --foreground --kill-after=2s "${seconds}s" \
-        "$SELF" _refresh-dashboard-cache >/dev/null 2>&1
+    configured_ms=$((seconds * 1000))
+    effective_ms="$configured_ms"
+    if [[ "$requested_ms" =~ ^[1-9][0-9]*$ ]] &&
+       ((requested_ms < effective_ms)); then
+        effective_ms="$requested_ms"
+    fi
+    duration="$(api_timeout_seconds_from_ms "$effective_ms")" || return 1
+    refresh_token="api-$$-$RANDOM"
+    VPNCTL_CACHE_TMP_TOKEN="$refresh_token" \
+        timeout --kill-after=2s "${duration}s" \
+            "$SELF" _refresh-dashboard-cache >/dev/null 2>&1 || rc=$?
+    rm -f -- \
+        "$DASHBOARD_DIR/.status.$refresh_token" \
+        "$DASHBOARD_DIR/.profiles.$refresh_token"
+    return "$rc"
 }
 
 api_status_result() {
-    write_dashboard_cache >/dev/null 2>&1 || true
+    local refresh_deadline_ms="${1:-}"
+    api_refresh_dashboard_bounded "$refresh_deadline_ms" || true
     [[ -r "$DASHBOARD_FILE" && -r "$PROFILES_FILE" ]] || return 1
     jq -c --arg engine_version "$VERSION" --slurpfile catalog "$PROFILES_FILE" '
         . as $status
@@ -3052,7 +3128,8 @@ api_status_result() {
 }
 
 api_profiles_result() {
-    write_profiles_cache >/dev/null 2>&1 || true
+    local refresh_deadline_ms="${1:-}"
+    api_refresh_dashboard_bounded "$refresh_deadline_ms" || true
     [[ -r "$PROFILES_FILE" ]] || return 1
     jq -c '{
         profiles: [
@@ -3217,7 +3294,7 @@ api_audit_event() {
     )" || return 1
     umask 077
     api_rotate_audit_if_needed || return 1
-    printf '%s\n' "$event" >>"$API_AUDIT_FILE"
+    printf '%s\n' "$event" >>"$API_AUDIT_FILE" || return 1
     chmod 600 -- "$API_AUDIT_FILE"
 }
 
@@ -3273,13 +3350,13 @@ api_restore_state() {
 
     health_reset
     rollback_timeout="$(api_rollback_timeout_seconds)"
-    timeout --foreground --kill-after=5s "${rollback_timeout}s" \
+    timeout --kill-after=5s "${rollback_timeout}s" \
         systemctl reset-failed "$SERVICE_NAME" >/dev/null 2>&1 || true
     if [[ "$previous_desired" == "up" ]]; then
-        timeout --foreground --kill-after=5s "${rollback_timeout}s" \
+        timeout --kill-after=5s "${rollback_timeout}s" \
             systemctl start "$SERVICE_NAME" || return 1
     else
-        timeout --foreground --kill-after=5s "${rollback_timeout}s" \
+        timeout --kill-after=5s "${rollback_timeout}s" \
             systemctl stop "$SERVICE_NAME" || return 1
     fi
     api_refresh_dashboard_bounded || true
@@ -3316,7 +3393,17 @@ api_complete_unstarted_timeout() {
             api.journal.unavailable true true
         return 1
     }
-    api_audit_event "$action_id" "$operation" approved timed-out || true
+    if ! api_audit_event "$action_id" "$operation" approved timed-out; then
+        if api_mark_recovery_required \
+            "$action_id" "$operation" audit-unavailable; then
+            api_error_response "$request_id" internal-error \
+                api.audit.unavailable false true
+        else
+            api_error_response "$request_id" internal-error \
+                api.journal.unavailable false true
+        fi
+        return 1
+    fi
     api_ok_response "$request_id" "$outcome"
 }
 
@@ -3394,8 +3481,19 @@ api_recover_interrupted_actions() {
             recovery_failed=1
             continue
         fi
-        api_audit_event "$action_id" "$operation" approved "$audit_outcome" || true
+        if ! api_audit_event \
+            "$action_id" "$operation" approved "$audit_outcome"; then
+            if [[ -z "$recovery_reason" ]]; then
+                if ! api_mark_recovery_required \
+                    "$action_id" "$operation" audit-unavailable; then
+                    recovery_failed=1
+                    continue
+                fi
+            fi
+            recovery_failed=1
+        fi
         [[ -z "$recovery_reason" ]] || break
+        ((recovery_failed == 0)) || break
     done
     shopt -u nullglob
     ((recovery_failed == 0))
@@ -3544,7 +3642,12 @@ api_run_lifecycle_action() {
         api_error_response "$request_id" internal-error api.journal.unavailable true true
         return
     }
-    api_audit_event "$action_id" "$operation" approved started || true
+    if ! api_audit_event "$action_id" "$operation" approved started; then
+        rm -f -- "$record_file" "$snapshot"
+        api_error_response "$request_id" internal-error \
+            api.audit.unavailable true true
+        return
+    fi
 
     remaining_ms="$(api_deadline_remaining_ms "$deadline_end_ms")" || {
         api_error_response "$request_id" backend-unavailable \
@@ -3568,17 +3671,17 @@ api_run_lifecycle_action() {
 
     case "$operation" in
         lifecycle.connect)
-            timeout --foreground --kill-after=5s "${duration}s" \
+            timeout --kill-after=5s "${duration}s" \
                 "$SELF" connect "$protocol" "$profile" >"$output_file" 2>&1
             rc=$?
             ;;
         lifecycle.reconnect)
-            timeout --foreground --kill-after=5s "${duration}s" \
+            timeout --kill-after=5s "${duration}s" \
                 "$SELF" reconnect >"$output_file" 2>&1
             rc=$?
             ;;
         lifecycle.disconnect)
-            timeout --foreground --kill-after=5s "${duration}s" \
+            timeout --kill-after=5s "${duration}s" \
                 "$SELF" disconnect >"$output_file" 2>&1
             rc=$?
             ;;
@@ -3622,7 +3725,17 @@ api_run_lifecycle_action() {
         return
     }
     rm -f -- "$snapshot"
-    api_audit_event "$action_id" "$operation" approved "$audit_outcome" || true
+    if ! api_audit_event "$action_id" "$operation" approved "$audit_outcome"; then
+        if api_mark_recovery_required \
+            "$action_id" "$operation" audit-unavailable; then
+            api_error_response "$request_id" internal-error \
+                api.audit.unavailable false true
+        else
+            api_error_response "$request_id" internal-error \
+                api.journal.unavailable false true
+        fi
+        return
+    fi
     api_ok_response "$request_id" "$outcome"
 }
 
@@ -3654,9 +3767,17 @@ api_dispatch() {
             api.request.size false false
         return
     fi
-    if ! jq -e 'type == "object"' <<<"$request" >/dev/null 2>&1; then
+    if ! jq -s -e '
+        length == 1
+        and (.[0] | type == "object")
+    ' <<<"$request" >/dev/null 2>&1; then
         api_error_response "$(api_server_request_id)" invalid-request \
             api.request.invalid-json false false
+        return
+    fi
+    if ! api_request_has_unique_schema_keys "$request"; then
+        api_error_response "$(api_server_request_id)" invalid-request \
+            api.request.duplicate-key false false
         return
     fi
     allowed_keys='[
@@ -3714,14 +3835,15 @@ api_dispatch() {
                     api.query.payload-invalid false false
                 return
             fi
+            deadline_ms="$(jq -r '.deadline_ms // ""' <<<"$request")"
             if [[ "$operation" == status.get ]]; then
-                result="$(api_status_result)" || {
+                result="$(api_status_result "$deadline_ms")" || {
                     api_error_response "$request_id" backend-unavailable \
                         api.status.unavailable true false
                     return
                 }
             else
-                result="$(api_profiles_result)" || {
+                result="$(api_profiles_result "$deadline_ms")" || {
                     api_error_response "$request_id" backend-unavailable \
                         api.profiles.unavailable true false
                     return

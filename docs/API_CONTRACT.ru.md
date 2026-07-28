@@ -40,8 +40,10 @@ Socket-activated Linux transport имеет статус `partial`: он при�
 защитную работу при истечении времени ответа. Linux dispatcher запускает
 бюджет после проверки mutation envelope, вычитает время lock/preflight и
 передаёт executor оставшиеся миллисекунды без округления вверх. После истечения
-бюджета executor не запускается. Обязательный rollback и crash reconciliation
-используют отдельные ограниченные таймауты системного сервиса, поэтому ответ
+бюджета executor не запускается. Таймауты executor и refresh завершают всю
+process group, чтобы shell helper не продолжал старую операцию параллельно с
+rollback. Обязательный rollback и crash reconciliation используют отдельные
+ограниченные таймауты системного сервиса, поэтому ответ
 может прийти позже `deadline_ms`, пока завершается rollback. Linux-клиенты
 резервируют для итогового outcome ограниченный completion grace в 60 секунд.
 Незавершённый rollback переводит API в recovery-only mode и не объявляется
@@ -82,10 +84,19 @@ Tauri-команду. CI проверяет синхронность CLI, manife
 правами `0660 root:mazzy-vpn`. Одно соединение принимает один JSON request,
 завершённый переводом строки, и возвращает один response. Service прекращает
 чтение на настроенном byte limit ещё до JSON parsing, в том числе если клиент
-не завершает слишком длинную строку. Мутации
+не завершает слишком длинную строку. До dispatch принимается ровно один
+top-level JSON object; повторные envelope/payload keys, включая записанные
+через JSON Unicode escapes, отклоняются. Обновление query cache ограничено
+меньшим из необязательного query deadline и server refresh cap; при timeout
+может быть возвращён уже существующий restricted cache. Прерванное обновление
+удаляет свои временные файлы. Мутации
 сериализованы, ограничены deadline и сохраняются по action ID в root-only
 state. Audit содержит только operation ID и результат — без payload и raw
-backend output. По умолчанию журнал ограничен 512 завершёнными outcomes, а
+backend output. Mutation не запускается, пока её начальное audit event не
+сохранено. Если terminal audit event нельзя записать уже после изменения
+state, завершённый action сохраняет idempotency, но API переходит в
+recovery-only mode для явной проверки администратором. По умолчанию журнал
+ограничен 512 завершёнными outcomes, а
 audit-файл ротируется при 2 МиБ с одним root-only архивом. На системах с
 ограниченным диском лимиты можно уменьшить, но нельзя отключать.
 

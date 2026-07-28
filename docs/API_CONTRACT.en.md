@@ -40,8 +40,10 @@ Every mutation requires:
 work when the response clock expires. The Linux dispatcher starts the budget
 after validating the mutation envelope, subtracts lock/preflight time and
 passes the remaining milliseconds to the executor without rounding up. It
-never starts the executor after the budget has expired. Required rollback and
-crash reconciliation use separate bounded system-service timeouts; a response
+never starts the executor after the budget has expired. Executor and refresh
+timeouts terminate their process groups, so a timed-out shell helper is not
+left running concurrently with rollback. Required rollback and crash
+reconciliation use separate bounded system-service timeouts; a response
 may therefore arrive after `deadline_ms` while rollback is being completed.
 Linux clients reserve a bounded 60-second completion grace for that outcome.
 An incomplete rollback enters recovery-only mode instead of being reported as
@@ -82,10 +84,18 @@ On Linux, `mazzy-vpn-api.socket` exposes `/run/mazzy-vpn/api-v1.sock` as
 `root:mazzy-vpn` mode `0660`. Every connection carries one newline-terminated
 request and receives one newline-terminated response. The service stops reading
 at the configured byte limit before JSON parsing, including for a client that
-never terminates an oversized line. Mutations are serialized,
+never terminates an oversized line. It accepts exactly one top-level JSON
+object and rejects duplicate envelope or payload keys, including keys encoded
+with JSON Unicode escapes, before dispatch. Query cache refreshes are bounded
+by the smaller of the optional query deadline and the server refresh cap; an
+existing restricted cache may be returned when live refresh times out.
+Interrupted refreshes clean their private temporary files. Mutations are serialized,
 deadline-bounded and recorded by action ID under root-only state. The audit log
 contains operation IDs and outcomes only, never request payloads or backend
-output. Completed outcomes are bounded to 512 records by default. The audit
+output. A mutation is not started unless its initial audit event is durable.
+If a terminal audit event cannot be stored after state changed, the completed
+action remains idempotent but the API enters recovery-only mode for explicit
+administrator inspection. Completed outcomes are bounded to 512 records by default. The audit
 file rotates at 2 MiB and keeps one root-only archive; these limits can be
 reduced for constrained systems but must not be disabled.
 
