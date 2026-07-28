@@ -11,8 +11,18 @@ fail() {
     exit 1
 }
 
+filter_safe_system_config() {
+    grep -Fvx \
+        -e 'systemd/mazzy-vpn-tmpfiles.conf' \
+        -e 'packaging/linux/systemd/mazzy-vpn-api.socket.d/10-package-docs.conf' \
+        -e 'packaging/linux/systemd/mazzy-vpn-api@.service.d/10-package-exec.conf' \
+        -e 'packaging/linux/systemd/vpnctl-health.service.d/10-package-exec.conf' \
+        -e 'packaging/linux/systemd/vpnctl-test-recovery.service.d/10-package-exec.conf' \
+        -e 'packaging/linux/systemd/vpnctl.service.d/10-package-exec.conf'
+}
+
 if git ls-files |
-   grep -Fvx 'systemd/mazzy-vpn-tmpfiles.conf' |
+   filter_safe_system_config |
    grep -Eiq \
     '(^|/)conf/|(^|/)(id_rsa|id_ed25519|credentials|secrets?)([.]|$)|[.](conf|ovpn|nmconnection|key|pem|p12|pfx)$'; then
     fail "a VPN profile, credential file or private-key extension is tracked"
@@ -41,7 +51,7 @@ if grep -InE \
 fi
 
 if git log --all --format= --name-only |
-   grep -Fvx 'systemd/mazzy-vpn-tmpfiles.conf' |
+   filter_safe_system_config |
    grep -Eiq \
     '(^|/)conf/|(^|/)(id_rsa|id_ed25519|credentials|secrets?)([.]|$)|[.](conf|ovpn|nmconnection|key|pem|p12|pfx)$'; then
     fail "VPN profiles or credential-file extensions occur in Git history"
