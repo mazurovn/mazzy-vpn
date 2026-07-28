@@ -113,7 +113,9 @@ Verified locally:
 - ShellCheck, Clippy, capability/API validators, public audit and gitleaks;
 - the previous npm audit reported 0 vulnerabilities, but the 2026-07-28 online
   refresh was not authorized by the sandbox and must not be treated as current;
-- release-mode Linux Desktop build: DEB, RPM and AppImage;
+- latest local release-mode build produced the binary, DEB and RPM, but the
+  AppImage step failed in `linuxdeploy`; a complete clean bundle build is still
+  required;
 - the DEB-embedded CLI, installer, API docs and handoff byte-match this branch.
 
 Do not mark issue #5 complete after this slice. The remaining API domains,
