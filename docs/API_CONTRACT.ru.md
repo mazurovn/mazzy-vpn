@@ -11,8 +11,10 @@
 для задачи
 [#5](https://github.com/mazurovn/mazzy-vpn/issues/5). Текущий транспорт
 `cli-json-adapter` явно имеет статус `partial`: существующие безопасные JSON
-status/profile outputs доступны, но клиенты ещё не отправляют все v1 request
-envelopes через единый dispatcher. Метаданные контракта реализованы.
+status/profile outputs доступны, а CLI/TUI уже отправляют v1 envelopes для
+`status.get`, `profiles.list` и `lifecycle.*` через единый dispatcher. Остальные
+домены ещё используют совместимый прямой CLI-контур. Метаданные контракта
+реализованы.
 Socket-activated Linux transport имеет статус `partial`: он принимает
 `status.get`, `profiles.list` и три мутации `lifecycle.*`. Остальные операции и
 не-Linux transports пока `planned`, поэтому полный кроссплатформенный daemon ещё
@@ -25,6 +27,9 @@ Socket-activated Linux transport имеет статус `partial`: он при�
 - Изменение minor может добавлять необязательные операции, поля и enum values.
 - Неизвестная major-версия возвращает `unsupported-version`.
 - Клиенты используют operation/error codes, а не локализованный текст вывода.
+- Существующие schema-v1 документы `status --json` и `profiles --json` не
+  меняют форму при появлении socket. Для явного получения API envelope
+  используются `status --api-json` и `profiles --api-json`.
 
 ## Изменяющие операции
 
@@ -118,3 +123,25 @@ dashboard: desired mode, interface, возраст handshake, текущий pub
 autostart, health monitor, число сбоев и состояние внешнего fallback. Для
 совместимости minor-версии поля необязательны. VPN endpoint, имя/путь файла
 профиля и конфигурация остаются запрещены.
+
+Установленные CLI и TUI используют socket без `sudo` для status, списка
+профилей, connect, quick, reconnect и disconnect. Клиент передаёт только
+непрозрачный `profile_id`, задаёт ограниченный query refresh deadline,
+ограничивает время и byte size ответа и принимает ровно один response document
+с совпадающими `api_version`/`request_id`. При потере ответа тот же request
+автоматически повторяется с тем же `action_id`, поэтому daemon возвращает
+сохранённый outcome, не выполняя мутацию второй раз. Если transport остаётся
+неопределённым, клиент не запускает ту же операцию через `sudo`. При ошибке
+mutation печатается action ID для audit и recovery.
+
+Desktop применяет то же правило одного идентичного retry к lifecycle requests.
+Desktop также читает ответ до bounded EOF и принимает ровно один совпадающий
+JSON document.
+После неудачного первоначального подключения к socket разрешён typed
+compatibility adapter, потому что request ещё не отправлялся. Любая
+неопределённость после подключения возвращается пользователю и никогда не
+переходит в `pkexec`.
+
+Для Unix-socket клиента installer автоматически устанавливает `socat`.
+Пользователь должен состоять в группе `mazzy-vpn`; после первого добавления в
+группу может потребоваться новый login session.

@@ -143,6 +143,28 @@ cat >"$TMP/fakebin/resolvectl" <<'EOF'
 printf '%s\n' "$*" >>"${FAKE_RESOLVECTL_LOG:?}"
 EOF
 
+cat >"$TMP/fakebin/socat" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${FAKE_SOCAT_OVERSIZED:-0}" == "1" ]]; then
+    head -c 2048 /dev/zero | tr '\0' x
+    exit 0
+fi
+if [[ "${FAKE_SOCAT_MULTIPLE_RESPONSES:-0}" == "1" ]]; then
+    request="$(cat)"
+    for _ in 1 2; do
+        printf '%s\n' "$request" | "${FAKE_SOCAT_DISPATCH:?}" _api-dispatch
+    done
+    exit 0
+fi
+if [[ -n "${FAKE_SOCAT_LOST_RESPONSE_FILE:-}" &&
+      ! -e "$FAKE_SOCAT_LOST_RESPONSE_FILE" ]]; then
+    touch "$FAKE_SOCAT_LOST_RESPONSE_FILE"
+    "${FAKE_SOCAT_DISPATCH:?}" _api-dispatch >/dev/null
+    exit 1
+fi
+exec "${FAKE_SOCAT_DISPATCH:?}" _api-dispatch
+EOF
+
 cat >"$TMP/fakebin/ip" <<'EOF'
 #!/usr/bin/env bash
 case "$*" in
@@ -237,6 +259,7 @@ export FAKE_TIMEOUT_LOG="$TMP/timeout.log"
 export FAKE_SYSTEMD_RUN_LOG="$TMP/systemd-run.log"
 export FAKE_OPENVPN_LOG="$TMP/openvpn.log"
 export FAKE_RESOLVECTL_LOG="$TMP/resolvectl.log"
+export FAKE_SOCAT_DISPATCH="$CLI"
 export FAKE_IP_LOG="$TMP/ip.log"
 export FAKE_IP_RULES="$TMP/ip.rules"
 export FAKE_ADGUARD_LOG="$TMP/adguard.log"
@@ -1122,7 +1145,21 @@ grep -Eq -- \
     "$FAKE_TIMEOUT_LOG" ||
     fail "local API rounded a millisecond deadline up to a full second"
 api_delayed_systemctl_pid="$(cat "$api_delayed_systemctl_pid_file")"
-if kill -0 "$api_delayed_systemctl_pid" 2>/dev/null; then
+for _ in {1..20}; do
+    api_delayed_systemctl_state="$(
+        ps -o stat= -p "$api_delayed_systemctl_pid" 2>/dev/null || true
+    )"
+    if ! kill -0 "$api_delayed_systemctl_pid" 2>/dev/null ||
+       [[ "$api_delayed_systemctl_state" == Z* ]]; then
+        break
+    fi
+    sleep 0.1
+done
+api_delayed_systemctl_state="$(
+    ps -o stat= -p "$api_delayed_systemctl_pid" 2>/dev/null || true
+)"
+if kill -0 "$api_delayed_systemctl_pid" 2>/dev/null &&
+   [[ "$api_delayed_systemctl_state" != Z* ]]; then
     fail "timed-out local API mutation left a systemctl descendant running"
 fi
 ok "local API accounts preflight time and preserves millisecond deadlines"
@@ -1199,6 +1236,158 @@ if grep -Eq 'Test Server|192\.0\.2\.10|PrivateKey|PublicKey' \
     fail "rotated local API audit log leaked profile or endpoint data"
 fi
 ok "local API recovery fails closed and bounds persistent journals"
+
+api_client_status="$(
+    VPNCTL_API_CLIENT_FORCE=1 "$CLI" status --api-json
+)"
+jq -e '
+    .api_version == "1.0"
+    and .status == "ok"
+    and .result.connection.state == "connected"
+' <<<"$api_client_status" >/dev/null ||
+    fail "CLI local API client did not return the status.get envelope"
+
+api_client_human_status="$(
+    VPNCTL_API_CLIENT_FORCE=1 "$CLI" status
+)"
+for expected_status_line in \
+    'Desired:   up' \
+    'Mode:      normal' \
+    'Autostart: enabled' \
+    'Monitor:   enabled' \
+    'Fallback:  inactive' \
+    'Interface: vpnovpn0' \
+    'Public IP: 203.0.113.7'; do
+    grep -qx "$expected_status_line" <<<"$api_client_human_status" ||
+        fail "CLI local API status omitted safe detail: $expected_status_line"
+done
+
+api_client_profiles="$(
+    VPNCTL_API_CLIENT_FORCE=1 "$CLI" profiles --api-json
+)"
+jq -e --arg profile_id "$profile_id" '
+    .api_version == "1.0"
+    and .status == "ok"
+    and any(
+        .result.profiles[];
+        .profile_id == $profile_id
+        and .display_name == "Test Server"
+        and .protocol == "openvpn"
+    )
+' <<<"$api_client_profiles" >/dev/null ||
+    fail "CLI local API client did not return the profiles.list envelope"
+if grep -Eq 'file_name|192\.0\.2\.10|PrivateKey|PublicKey' \
+    <<<"$api_client_profiles"; then
+    fail "CLI local API profile response leaked engine-only profile data"
+fi
+
+api_client_legacy_status="$(
+    VPNCTL_API_CLIENT_FORCE=1 "$CLI" status --json
+)"
+jq -e '
+    .schema_version == 1
+    and .service_state == "active"
+    and (has("api_version") | not)
+' <<<"$api_client_legacy_status" >/dev/null ||
+    fail "local API availability changed the stable status --json schema"
+api_client_legacy_profiles="$(
+    VPNCTL_API_CLIENT_FORCE=1 "$CLI" profiles --json
+)"
+jq -e '
+    .schema_version == 1
+    and any(.profiles[]; .file_name == "Test Server.ovpn")
+    and (has("api_version") | not)
+' <<<"$api_client_legacy_profiles" >/dev/null ||
+    fail "local API availability changed the stable profiles --json schema"
+
+api_client_list="$(
+    VPNCTL_API_CLIENT_FORCE=1 "$CLI" list openvpn
+)"
+grep -q 'Test Server' <<<"$api_client_list" ||
+    fail "CLI local API profile list omitted the display name"
+grep -q '192\.0\.2\.10' <<<"$api_client_list" &&
+    fail "CLI local API profile list leaked the endpoint"
+if FAKE_SOCAT_OVERSIZED=1 VPNCTL_API_CLIENT_FORCE=1 \
+    VPNCTL_API_CLIENT_MAX_RESPONSE_BYTES=256 \
+    "$CLI" status --api-json >/dev/null 2>&1; then
+    fail "CLI local API client accepted an oversized response"
+fi
+if FAKE_SOCAT_MULTIPLE_RESPONSES=1 VPNCTL_API_CLIENT_FORCE=1 \
+    "$CLI" status --api-json >/dev/null 2>&1; then
+    fail "CLI local API client accepted multiple JSON response documents"
+fi
+
+for api_locale_check in \
+    "ru|Профиль 'Missing' не найден" \
+    "en|Profile 'Missing' was not found" \
+    "de|Profil 'Missing' wurde" \
+    "zh|找不到配置 'Missing'（OpenVPN）" \
+    "ja|プロファイル 'Missing' が OpenVPN に見つかりません" \
+    "ko|'Missing' 프로필을 OpenVPN에서 찾을 수 없습니다"; do
+    api_locale="${api_locale_check%%|*}"
+    api_locale_marker="${api_locale_check#*|}"
+    if api_locale_output="$(
+        VPNCTL_LANG="$api_locale" VPNCTL_API_CLIENT_FORCE=1 \
+            "$CLI" connect openvpn Missing 2>&1
+    )"; then
+        fail "localized local API client accepted a missing profile: $api_locale"
+    fi
+    grep -Fq "$api_locale_marker" <<<"$api_locale_output" ||
+        fail "local API client error is not localized for $api_locale"
+done
+
+: >"$FAKE_SYSTEMCTL_LOG"
+api_client_connect="$(
+    VPNCTL_API_CLIENT_FORCE=1 "$CLI" connect openvpn "Test Server"
+)"
+grep -q 'Подключение запущено' <<<"$api_client_connect" ||
+    fail "CLI local API connect did not report success"
+[[ "$(grep -c '^start vpnctl.service$' "$FAKE_SYSTEMCTL_LOG")" == "1" ]] ||
+    fail "CLI local API connect did not execute exactly once"
+
+: >"$FAKE_SYSTEMCTL_LOG"
+: >"$FAKE_TIMEOUT_LOG"
+rm -f "$TMP/socat-lost-response"
+api_client_reconnect="$(
+    FAKE_SOCAT_LOST_RESPONSE_FILE="$TMP/socat-lost-response" \
+        VPNCTL_API_CLIENT_COMPLETION_GRACE_SECONDS=15 \
+        VPNCTL_API_CLIENT_FORCE=1 "$CLI" reconnect
+)"
+grep -q 'Переподключение запущено' <<<"$api_client_reconnect" ||
+    fail "CLI local API reconnect did not recover from a lost response"
+[[ -e "$TMP/socat-lost-response" ]] ||
+    fail "CLI local API lost-response scenario was not exercised"
+[[ "$(grep -c '^start vpnctl.service$' "$FAKE_SYSTEMCTL_LOG")" == "1" ]] ||
+    fail "CLI local API retry executed one reconnect action twice"
+grep -Fq -- '--kill-after=2s 90s socat -T 90' \
+    "$FAKE_TIMEOUT_LOG" ||
+    fail "CLI client did not reserve the bounded rollback completion grace"
+
+api_client_dashboard="$(
+    VPNCTL_API_CLIENT_FORCE=1 "$CLI" dashboard
+)"
+grep -q 'API: 1.0' <<<"$api_client_dashboard" ||
+    fail "TUI dashboard did not use the protected local API"
+grep -q 'Интерфейс: vpnovpn0' <<<"$api_client_dashboard" ||
+    fail "TUI local API dashboard omitted the tunnel interface"
+grep -q 'Внешний IP: 203.0.113.7' <<<"$api_client_dashboard" ||
+    fail "TUI local API dashboard omitted the current public IP"
+grep -q 'Автозапуск: включён' <<<"$api_client_dashboard" ||
+    fail "TUI local API dashboard omitted autostart state"
+grep -q 'Контроль здоровья: включён' <<<"$api_client_dashboard" ||
+    fail "TUI local API dashboard omitted monitor state"
+grep -q 'Резерв: внешний VPN не активен' <<<"$api_client_dashboard" ||
+    fail "TUI local API dashboard omitted fallback state"
+grep -q '192\.0\.2\.10' <<<"$api_client_dashboard" &&
+    fail "TUI local API dashboard leaked the endpoint"
+
+api_client_disconnect="$(
+    VPNCTL_API_CLIENT_FORCE=1 "$CLI" disconnect
+)"
+grep -q 'VPN отключён' <<<"$api_client_disconnect" ||
+    fail "CLI local API disconnect did not report success"
+VPNCTL_API_CLIENT_FORCE=1 "$CLI" connect openvpn "Test Server" >/dev/null
+ok "CLI/TUI use opaque local API queries and idempotent lifecycle mutations"
 
 dashboard_output="$("$CLI" dashboard)"
 grep -q 'M A Z Z Y' <<<"$dashboard_output" || fail "dashboard artwork is missing"
@@ -1483,6 +1672,7 @@ stage="$TMP/stage"
    -f "$stage/usr/local/lib/mazzy-vpn/docs/API_CONTRACT.en.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/API_CONTRACT.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/PROJECT_STATUS.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/AUDIT_2026-07-28.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.en.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/api/v1/manifest.json" &&
@@ -1518,10 +1708,17 @@ grep -q '^OnUnitActiveSec=20s$' "$stage/etc/systemd/system/vpnctl-health.timer" 
 [[ -f "$stage/etc/systemd/system/mazzy-vpn-api.socket" &&
    -f "$stage/etc/systemd/system/mazzy-vpn-api@.service" ]] ||
     fail "local API systemd units were not staged"
+[[ -f "$stage/usr/lib/tmpfiles.d/mazzy-vpn.conf" ]] ||
+    fail "local API runtime-directory policy was not staged"
+grep -q '^d /run/mazzy-vpn 0750 root mazzy-vpn -$' \
+    "$stage/usr/lib/tmpfiles.d/mazzy-vpn.conf" ||
+    fail "local API runtime-directory policy is not group-restricted"
 grep -q '^SocketMode=0660$' "$stage/etc/systemd/system/mazzy-vpn-api.socket" ||
     fail "local API socket is not protected by mode 0660"
 grep -q '^SocketGroup=mazzy-vpn$' "$stage/etc/systemd/system/mazzy-vpn-api.socket" ||
     fail "local API socket is not restricted to the mazzy-vpn group"
+grep -q '^DirectoryMode=0750$' "$stage/etc/systemd/system/mazzy-vpn-api.socket" ||
+    fail "local API socket directory is not group-restricted"
 grep -q '^NoNewPrivileges=yes$' \
     "$stage/etc/systemd/system/mazzy-vpn-api@.service" ||
     fail "local API request service is missing process hardening"
@@ -1532,6 +1729,38 @@ grep -Eq '^StartLimitBurst=([1-9][0-9]{2,}|[1-9][0-9]{3,})$' \
     "$stage/etc/systemd/system/vpnctl.service" ||
     fail "staged service start limit is too low for test-all"
 ok "branded staged installation and aliases"
+
+installer_order_output="$(
+    VPNCTL_AMNEZIA_PPA_AVAILABLE=0 \
+        "$ROOT/install.sh" --dry-run --yes --skip-tests --skip-checks
+)"
+installer_dependency_line="$(
+    grep -En -m1 \
+        '^\+ (env DEBIAN_FRONTEND=noninteractive apt-get install |dnf install |pacman -S |zypper --non-interactive install )' \
+        <<<"$installer_order_output" |
+        cut -d: -f1
+)"
+installer_files_line="$(
+    grep -n -m1 '^+ install -d -m 755 /usr/local/bin ' \
+        <<<"$installer_order_output" |
+        cut -d: -f1
+)"
+[[ "$installer_dependency_line" =~ ^[0-9]+$ &&
+   "$installer_files_line" =~ ^[0-9]+$ &&
+   "$installer_dependency_line" -lt "$installer_files_line" ]] ||
+    fail "installer changes root-owned product files before dependencies succeed"
+python3 - "$ROOT/desktop/src-tauri/tauri.conf.json" <<'PY' ||
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    config = json.load(stream)
+linux = config["bundle"]["linux"]
+assert "pkexec" in linux["deb"]["depends"]
+assert "polkit" in linux["rpm"]["depends"]
+PY
+    fail "Desktop packages do not declare their privileged bootstrap dependency"
+ok "dependency bootstrap precedes file changes and is declared by packages"
 
 if "$ROOT/install.sh" --destdir "$TMP/invalid-language-stage" --no-deps \
     --lang invalid >/dev/null 2>&1; then
@@ -1609,6 +1838,17 @@ if grep -q 'add-apt-repository' <<<"$fallback_output"; then
     fail "unsupported Ubuntu suite attempted to add the PPA"
 fi
 ok "Ubuntu without PPA uses commit-verified userspace fallback"
+
+if ! grep -Eq 'id="notifications-toggle" type="checkbox"[[:space:]]*$' \
+        "$ROOT/desktop/ui/index.html" ||
+   ! grep -Eq '^[[:space:]]+disabled aria-disabled="true">' \
+        "$ROOT/desktop/ui/index.html"; then
+    fail "Desktop exposes an active notifications control without a backend"
+fi
+if grep -q 'mazzy-notifications' "$ROOT/desktop/ui/app.js"; then
+    fail "Desktop persists a notifications preference that has no effect"
+fi
+ok "Desktop marks unavailable notifications honestly"
 
 python3 "$ROOT/tests/check-capabilities.py" >/dev/null ||
     fail "cross-surface capability registry is inconsistent"

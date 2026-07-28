@@ -154,7 +154,7 @@ Object.assign(translations.ru, {
   bundledVersion: "В комплекте Desktop", engineService: "Системная служба",
   recoveryMonitor: "Recovery monitor", localApi: "Защищённый local API",
   apiReady: "АКТИВЕН", services: "СЛУЖБЫ", serviceControl: "Управление службами",
-  notifications: "Уведомления", notificationsHint: "Локально, без телеметрии",
+  notifications: "Уведомления", notificationsHint: "Запланировано; в preview не работает",
   privacyMode: "Скрывать публичный IP", privacyModeHint: "Применяется к Dashboard",
   installed: "УСТАНОВЛЕНО", missing: "НЕТ", updateRequired: "НУЖНО ОБНОВИТЬ",
   ready: "ГОТОВО", confirmLiveTest: "Живой тест временно изменит VPN-маршрут и затем выполнит rollback. Продолжить?",
@@ -206,7 +206,7 @@ Object.assign(translations.en, {
   installedVersion: "Installed", bundledVersion: "Bundled with Desktop", engineService: "System service",
   recoveryMonitor: "Recovery monitor", localApi: "Protected local API", apiReady: "ACTIVE",
   services: "SERVICES", serviceControl: "Service control",
-  notifications: "Notifications", notificationsHint: "Local only, no telemetry",
+  notifications: "Notifications", notificationsHint: "Planned; unavailable in this preview",
   privacyMode: "Hide public IP", privacyModeHint: "Applied to Dashboard",
   installed: "INSTALLED", missing: "MISSING", updateRequired: "UPDATE REQUIRED", ready: "READY",
   confirmLiveTest: "The live test temporarily changes VPN routes and then rolls back. Continue?",
@@ -232,7 +232,6 @@ const $ = (selector) => document.querySelector(selector);
 const state = {
   lang: localStorage.getItem("mazzy-language") || "ru",
   hideIp: localStorage.getItem("mazzy-hide-ip") === "true",
-  notifications: localStorage.getItem("mazzy-notifications") !== "false",
   page: "dashboard",
   status: null,
   profiles: [],
@@ -588,11 +587,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     state.hideIp = event.target.checked;
     localStorage.setItem("mazzy-hide-ip", String(state.hideIp));
     if (state.status) renderStatus(state.status);
-  });
-  $("#notifications-toggle").checked = state.notifications;
-  $("#notifications-toggle").addEventListener("change", (event) => {
-    state.notifications = event.target.checked;
-    localStorage.setItem("mazzy-notifications", String(state.notifications));
   });
   $("#refresh-button").addEventListener("click", () => refreshStatus(true));
   $("#hide-button").addEventListener("click", async () => {

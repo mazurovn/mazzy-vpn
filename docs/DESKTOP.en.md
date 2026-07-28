@@ -84,7 +84,9 @@ The GUI never constructs a shell string. Its Rust backend accepts an enum and
 maps it to a fixed request or argument array. Connect, reconnect and disconnect
 use `/run/mazzy-vpn/api-v1.sock` when the installed engine provides it. The
 socket is restricted to `root:mazzy-vpn`, and outcomes contain no raw backend
-output. Remaining state-changing actions use system `pkexec`, so the OS may
+output. CLI/TUI use the same socket without `sudo` for lifecycle actions and
+select profiles by opaque ID only. Remaining state-changing actions use system
+`pkexec`, so the OS may
 show its standard administrator prompt. Closing the window hides the
 application to the tray; use **Quit Mazzy VPN** for a full exit.
 
@@ -96,7 +98,8 @@ events depend on the desktop environment.
 Install one Desktop bundle from the Releases page. Then open
 **Settings → Install / update / repair**. The bundled validated installer
 detects the OS, preserves existing profiles, installs missing dependencies and
-the systemd engine/recovery/API units, then runs an offline self-test. The
+the systemd engine/recovery/API units, including `jq`/`socat`, then runs an
+offline self-test. The
 installer adds the invoking desktop user to the `mazzy-vpn` group; a new login
 session may be required before the protected socket is available to Desktop.
 
@@ -112,6 +115,11 @@ RPM:
 sudo dnf install "./Mazzy VPN Desktop-0.2.0-1.x86_64.rpm"
 ```
 
+The DEB and RPM declare the privilege-bootstrap package (`pkexec`/`polkit`),
+so the package manager installs it before first launch. The remaining VPN
+dependencies and system service are installed only after the explicit
+**Install / update / repair** action.
+
 AppImage:
 
 ```bash
@@ -119,8 +127,14 @@ chmod +x "Mazzy VPN Desktop_0.2.0_amd64.AppImage"
 ./"Mazzy VPN Desktop_0.2.0_amd64.AppImage"
 ```
 
-Replace the sample version with the downloaded file name. Verify the published
-SHA-256 checksum.
+AppImage cannot install its own privilege helper. Check `command -v pkexec`
+first and install your distribution's polkit/pkexec package manually if it is
+missing; otherwise the bundled engine bootstrap cannot start.
+
+Replace the sample version with the downloaded file name. Preview artifacts are
+currently unsigned and the workflow does not yet publish signed checksum or
+provenance metadata. Verify the source commit and its GitHub Actions run, but
+do not treat an unsigned hash as proof of the publisher.
 
 ## Languages
 

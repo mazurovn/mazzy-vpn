@@ -11,8 +11,10 @@ The published contract version is `1.0`. This is an incremental compatibility
 boundary for issue
 [#5](https://github.com/mazurovn/mazzy-vpn/issues/5). The current
 `cli-json-adapter` is explicitly `partial`: existing safe JSON status/profile
-outputs remain available, but clients do not yet submit every v1 request
-envelope through one dispatcher. Contract metadata is implemented. The
+outputs remain available, and CLI/TUI now submit v1 envelopes for `status.get`,
+`profiles.list` and `lifecycle.*` through one dispatcher. Remaining domains
+still use the compatible direct CLI control plane. Contract metadata is
+implemented. The
 socket-activated Linux transport is `partial`: it accepts `status.get`,
 `profiles.list` and the three `lifecycle.*` mutations. Other operations and
 non-Linux transports remain `planned`, so this still does not claim that the
@@ -25,6 +27,9 @@ complete cross-platform daemon exists.
 - A minor change may add optional operations, enum values or fields.
 - Unknown major versions must return `unsupported-version`.
 - Clients must use operation and error codes, not localized output text.
+- Existing `status --json` and `profiles --json` schema-v1 documents do not
+  change shape when the socket appears. Callers that need the API envelope use
+  `status --api-json` or `profiles --api-json` explicitly.
 
 ## Mutations
 
@@ -117,3 +122,24 @@ desired mode, interface, handshake age, current public IP, autostart, health
 monitor, failure count and external-fallback state. These fields are optional
 for minor-version compatibility. The VPN endpoint, profile filename/path and
 configuration remain forbidden.
+
+Installed CLI and TUI clients use the socket without `sudo` for status, profile
+listing, connect, quick, reconnect and disconnect. The client sends only an
+opaque `profile_id`, sends a bounded query refresh deadline, bounds response
+time and byte size, and accepts exactly one response document with matching
+`api_version`/`request_id`. If a response is lost, it automatically retries the
+same request with the same `action_id`, so the daemon returns the stored outcome
+without applying the mutation twice. If the transport remains indeterminate,
+the client does not run the same operation through `sudo`. Mutation failures
+print the action ID needed for audit and recovery.
+
+Desktop applies the same one-identical-retry rule to lifecycle requests. A
+Desktop response is also read to bounded EOF and must contain exactly one
+matching JSON document. A
+failed initial socket connection may use the typed compatibility adapter
+because no request was sent; any post-connect uncertainty is returned to the
+user and never falls through to `pkexec`.
+
+The installer adds `socat` for the Unix-socket client. The user must belong to
+the `mazzy-vpn` group; a new login session may be required after initial group
+enrollment.

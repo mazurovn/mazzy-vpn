@@ -25,6 +25,14 @@ All notable changes to Mazzy VPN are documented here.
   retaining the typed `pkexec` adapter as a compatibility fallback and for
   operation domains not migrated yet; an indeterminate transport is retried
   once with the identical request and action ID.
+- Routed unprivileged CLI/TUI status, profile listing, dashboard and lifecycle
+  actions through the same protected API, using opaque profile IDs only.
+- Added bounded `socat` transport with response identity validation and
+  same-action retry after a lost response, without an unsafe post-send `sudo`
+  fallback; installers now bootstrap `socat` on supported Linux families.
+- Preserved the published schema-v1 output of `status --json` and
+  `profiles --json` regardless of socket availability; raw API v1 envelopes
+  are opt-in through `--api-json`.
 - Added crash reconciliation for orphaned API actions, bounded the completed
   action journal and rotated the sanitized root-only audit log.
 - Rejected every terminal control character in imported or manually installed
@@ -46,6 +54,10 @@ All notable changes to Mazzy VPN are documented here.
 - Extended `status.get` with optional safe runtime detail for CLI/TUI parity:
   desired mode, interface, handshake age, public IP, autostart, health monitor,
   failure count and fallback state; VPN endpoints remain forbidden.
+- Restored that safe runtime detail in API-backed human status and TUI
+  dashboard output without reading protected profiles.
+- Localized new local-API client selection, transport, mutation and status
+  messages in Russian, English, German, Chinese, Japanese and Korean.
 
 ## 1.2.0 / Desktop 0.2.0 — 2026-07-27
 

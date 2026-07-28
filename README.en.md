@@ -101,14 +101,16 @@ The same scan/import/create actions are available from TUI menu item 15.
 
 ```bash
 mazzy-vpn                         # interactive TUI
-sudo mazzy-vpn quick              # connect the saved default profile
+mazzy-vpn quick                   # connect the saved default profile
 mazzy-vpn dashboard               # connection checks in one view
 mazzy-vpn list
-sudo mazzy-vpn connect amneziawg 1
-sudo mazzy-vpn disconnect
-sudo mazzy-vpn reconnect
+mazzy-vpn connect amneziawg 1
+mazzy-vpn disconnect
+mazzy-vpn reconnect
 mazzy-vpn status
 mazzy-vpn status --json
+mazzy-vpn status --api-json        # raw local API v1 envelope
+mazzy-vpn profiles --api-json      # opaque IDs; no engine filenames
 mazzy-vpn diagnose
 mazzy-vpn validate all
 mazzy-vpn probe all --timeout 3
@@ -122,6 +124,13 @@ mazzy-vpn logs
 mazzy-vpn language
 mazzy-vpn language de
 ```
+
+After installation, CLI/TUI status, list/dashboard and lifecycle commands use
+the protected `/run/mazzy-vpn/api-v1.sock` without `sudo`. The installer adds
+the user to the `mazzy-vpn` group and automatically installs `jq`/`socat`; a new
+login session may be required after initial installation. Tests, imports,
+Doctor fixes and other system operations not migrated yet still request root
+explicitly.
 
 The dashboard appears above the interactive menu and is also available as
 `mazzy-vpn dashboard`. It shows the live tunnel and Internet check, selected
@@ -150,9 +159,9 @@ About records the Desktop/engine/platform versions, author, copyright, AGPL
 license, privacy principles and safe-operation rules.
 
 Desktop 0.2 is a functional Linux control-center preview, not the final
-standalone Desktop 1.0 product. The language-neutral API v1 schema and
-read-only contract metadata are now published, while the protected local
-service and migration of every client to that dispatcher remain incomplete.
+standalone Desktop 1.0 product. The language-neutral API v1 schema, protected
+Linux service and CLI/TUI/Desktop lifecycle clients are implemented, while
+remaining operation domains have not yet moved to the shared dispatcher.
 Other gates include complete mode/fallback settings, full six-language
 coverage for the new screens, signed update/rollback, and native macOS and
 Windows VPN backends. Development is synchronized through the
@@ -253,7 +262,7 @@ Stop other devices using the same VPN account or allow the previous server
 session to expire, then retry:
 
 ```bash
-sudo mazzy-vpn connect openvpn "Example Server"
+mazzy-vpn connect openvpn "Example Server"
 mazzy-vpn diagnose
 ```
 

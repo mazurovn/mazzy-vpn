@@ -12,9 +12,10 @@ presented as a complete standalone application.
 
 Mazzy VPN is a Bash CLI/TUI, a Tauri Desktop Dashboard and a small set of
 systemd units. It keeps protocol profiles outside the source tree, uses one
-canonical desired-state file and delegates tunnel lifetime to systemd. The
-terminal menu, Desktop and automation commands share one validated CLI control
-plane and the same state transitions.
+canonical desired-state file and delegates tunnel lifetime to systemd.
+Unprivileged CLI, TUI and Desktop clients use the protected local API for
+status/profile queries and lifecycle operations; remaining commands are being
+moved incrementally from the compatible direct CLI control plane.
 
 ## Component architecture
 
@@ -69,6 +70,8 @@ flowchart TB
     Entry --> TUI
     Entry --> Commands
     TUI --> Commands
+    Entry --> ApiSocket
+    TUI --> ApiSocket
     Tray --> Desktop
     Desktop --> StatusCache
     Desktop --> ProfileCache
@@ -106,6 +109,16 @@ flowchart TB
 The control plane never embeds a provider key in source code. The public
 repository contains the manager, tests and documentation only. Operational
 profiles stay root-readable with mode `600`.
+
+The CLI/TUI client reaches the Unix socket through automatically installed
+`socat`. It bounds response size and time, validates envelope identity and
+retries an indeterminate transport with the same request and `action_id`. The
+root API dispatcher marks its server context, so an internal engine call cannot
+re-enter the socket recursively. A direct `sudo` fallback is forbidden after a
+request may have been sent. The published schema-v1 `--json` output remains
+stable for existing automation; `--api-json` explicitly returns the raw v1
+envelope. Optional safe status fields restore terminal detail without exposing
+the VPN endpoint, profile filename/path or configuration.
 
 ## Desktop control center and tray
 
