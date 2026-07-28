@@ -14,6 +14,7 @@ Status: **I** implemented · **P** partial · **R** planned · **—** not appli
 | `profile-import` | I | I | I | R | R | R | R |
 | `profile-location-selection` | I | I | I | R | R | R | R |
 | `validation-probe-test` | I | I | I | R | R | R | R |
+| `egress-location-verification` | I | I | I | R | R | R | R |
 | `operating-modes` | I | I | P | R | R | R | R |
 | `service-control` | I | P | I | R | R | — | — |
 | `dependency-bootstrap` | I | — | P | R | R | — | — |
@@ -29,7 +30,7 @@ Status: **I** implemented · **P** partial · **R** planned · **—** not appli
 
 | Gate | Declared ready | Meaning |
 |---|---:|---|
-| `cli-tui-1.2` | yes | Current Linux CLI/TUI release gate |
+| `cli-tui-1.3` | yes | Current Linux CLI/TUI release gate |
 | `desktop-linux-1.0` | **no** | Standalone Linux application; no separate CLI install |
 | `desktop-macos-1.0` | **no** | Standalone signed macOS application with native backend |
 | `desktop-windows-1.0` | **no** | Standalone signed Windows application with native backend |
@@ -42,9 +43,10 @@ ready while any required capability is `partial`, `planned` or
 
 ## Русский
 
-Desktop 0.2 — Linux control-center preview. Он уже включает установщик общего
+Desktop 0.3 — Linux control-center preview. Он уже включает установщик общего
 движка, импорт и выбор профилей, validate/probe/live-test, Doctor с полным
-выводом, журнал и управление службами. Gate Desktop 1.0 всё ещё закрыт:
+выводом, фактическую проверку egress/DNS/IPv6/локации, сортировку локаций,
+расширенный tray, журнал и управление службами. Gate Desktop 1.0 всё ещё закрыт:
 не завершены fallback-policy UI, полный перевод новых экранов на шесть языков
 и переход всех typed `pkexec`-операций к локальному versioned daemon API.
 Контракт API `1.0`, manifest, безопасные envelopes и ограниченный protected
@@ -60,9 +62,10 @@ Android и iOS пока являются только планом: UI preview �
 
 ## English
 
-Desktop 0.2 is a Linux control-center preview. It bundles the shared-engine
+Desktop 0.3 is a Linux control-center preview. It bundles the shared-engine
 installer and now exposes profile import/selection, validation, probes, live
-tests, full Doctor output, logs and service controls. The Desktop 1.0 gate
+tests, actual egress/DNS/IPv6/location verification, location sorting,
+an expanded tray, full Doctor output, logs and service controls. The Desktop 1.0 gate
 remains closed until fallback-policy UI, full six-language coverage for the new
 screens and the versioned local daemon API replace every typed `pkexec`
 operation. The API `1.0` contract, manifest, frontend-safe envelopes and a

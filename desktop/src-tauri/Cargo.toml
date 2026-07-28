@@ -1,7 +1,7 @@
 [package]
 name = "mazzy-vpn-desktop"
-version = "0.2.0"
-description = "Mazzy VPN Desktop Linux control center with embedded engine bootstrap"
+version = "0.3.0"
+description = "AI-ready, self-healing multi-protocol VPN client and control center"
 authors = ["Nik m (@mazurovn)"]
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/mazurovn/mazzy-vpn"

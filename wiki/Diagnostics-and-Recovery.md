@@ -7,12 +7,19 @@ sudo mazzy-vpn diagnose
 sudo mazzy-vpn doctor
 mazzy-vpn validate all
 mazzy-vpn probe all --timeout 3 --jobs 4
+mazzy-vpn verify
 mazzy-vpn self-test --offline
 ```
 
 `diagnose` проверяет default route, DNS, выбранный профиль, systemd service,
 VPN-интерфейс, handshake и публичный IP через интерфейс. `doctor` проверяет
 зависимости, protocol runtimes, units, профили и сохранённое состояние.
+`verify` сравнивает interface-bound/default IPv4, два geo provider именно для
+этого IP, DNS route и IPv6 signal. Один provider, расхождение country/IP,
+другой default egress или неподтверждённый DNS дают warning, а не ложный OK.
+Ожидаемая страна берётся только из явного `mazzy-country-code` в профиле:
+название и город не угадываются; без metadata итог остаётся `warning`.
+`--speed` отдельно запускает явный bounded 5-МБ sample.
 
 ## Два уровня восстановления
 
@@ -49,12 +56,21 @@ sudo mazzy-vpn diagnose
 sudo mazzy-vpn doctor
 mazzy-vpn validate all
 mazzy-vpn probe all --timeout 3 --jobs 4
+mazzy-vpn verify
 mazzy-vpn self-test --offline
 ```
 
 `diagnose` checks the default route, DNS, selected profile, systemd service,
 VPN interface, handshake and public IP through the interface. `doctor` checks
 dependencies, protocol runtimes, units, profiles and saved state.
+`verify` compares interface-bound/default IPv4, two location providers for
+that exact IP, configured DNS routing and an IPv6 signal. One provider,
+country/IP disagreement, a different default egress or unconfirmed DNS
+produces a warning instead of a false OK. `--speed` separately starts an
+explicit bounded five-megabyte sample. Expected country is read only from
+explicit `mazzy-country-code` profile metadata; it is never guessed from a
+profile name or city label, and missing metadata keeps the verdict at
+`warning`.
 
 There are two recovery layers. systemd uses `Restart=always` with a five-second
 delay. Independently, a roughly 20-second health timer immediately starts an

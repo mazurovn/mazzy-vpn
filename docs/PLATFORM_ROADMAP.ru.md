@@ -15,6 +15,32 @@ versioned local API уже отделяет lifecycle CLI/TUI/Desktop от си�
 VPN backend. Приватные ключи и
 полные конфигурации не попадают в status cache, телеметрию или публичные логи.
 
+## Контракт AI-ready надёжности
+
+«AI-ready» означает, что клиент рассчитан на долгие сессии людей и AI-агентов и
+показывает evidence, а не только label выбранного профиля. Каждая функциональная
+платформа в итоге должна реализовать:
+
+- фактические default/interface egress, DNS и IPv6 leak signals;
+- структурированное согласие geo providers, привязанное к наблюдаемому egress
+  IP;
+- endpoint latency и измерения latency/loss/jitter активного туннеля;
+- обнаружение смены сети, sleep/wake, captive portal и stalled tunnel;
+- bounded reconnect/failover со сверкой состояния и видимой причиной;
+- opt-in application-level reachability probes для AI/video workflows без
+  хранения tokens, cookies или prompts.
+
+Эти проверки не обещают, что конкретный provider примет аккаунт или сессию.
+Provider policy, политика организации, регион аккаунта, WebRTC и состояние
+устройства/браузера остаются внешними факторами. UI обязан отличать network
+evidence от заявления о доступности приложения.
+
+Зависимости должны входить в platform-native signed packages. Linux DEB/RPM
+объявляют системные packages; Windows installer содержит подписанные
+service/driver; macOS поставляет разрешённый Network Extension; Android/iOS
+встраивают native libraries в signed app. Production-клиент не должен
+скачивать и исполнять произвольный backend при первом запуске.
+
 ```mermaid
 flowchart LR
     CLI --> API["Versioned core/API"]
@@ -60,15 +86,16 @@ flowchart LR
 
 ## Linux
 
-Desktop 0.2 — функциональный preview: он включает engine/bootstrap, профили,
+Desktop 0.3 candidate — функциональный preview: он включает engine/bootstrap, профили,
 тесты, Doctor, журнал и системные настройки. До Linux Desktop 1.0 остаются
 versioned service API, полный policy/localization/accessibility parity,
 подписанные обновления, clean-device package lifecycle/rollback coverage и
 fault/soak tests. DEB/RPM теперь владеют engine/service payload и сохраняют
 user state; AppImage всё ещё использует явный host bootstrap.
 
-Релизные форматы: AppImage, DEB и RPM. Каждый артефакт получает SHA-256; статус
-production появляется только после gate `desktop-linux-1.0`.
+Релизные форматы: AppImage, DEB и RPM. Локальный SHA-256 обнаруживает случайное
+повреждение, но production требует подписанных provenance/attestation и gate
+`desktop-linux-1.0`.
 
 ## Windows
 
@@ -126,7 +153,7 @@ entitlements, сертификаты и macOS runner; их нельзя заме
 
 ## Порядок продвижения релизов
 
-1. Стабилизировать CLI/TUI 1.2 и Linux Desktop 0.2.
+1. Стабилизировать CLI/TUI 1.3 и Linux Desktop 0.3.
 2. Завершить общий API и Linux Desktop 1.0.
 3. Выпускать Windows и macOS preview независимо; production только по своему
    gate, без ожидания другой платформы.

@@ -6,7 +6,7 @@ set -uo pipefail
 PRODUCT_NAME="Mazzy VPN"
 CLI_COMMAND="mazzy-vpn"
 COMPAT_COMMAND="vpnctl"
-VERSION="1.2.0"
+VERSION="1.3.0"
 
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd -- "$(dirname -- "$SELF")" && pwd)"
@@ -35,8 +35,14 @@ API_CLIENT_MAX_RESPONSE_BYTES="${VPNCTL_API_CLIENT_MAX_RESPONSE_BYTES:-65536}"
 API_CLIENT_COMPLETION_GRACE_SECONDS="${VPNCTL_API_CLIENT_COMPLETION_GRACE_SECONDS:-60}"
 HEALTH_FAILURE_LIMIT="${VPNCTL_HEALTH_FAILURE_LIMIT:-2}"
 HEALTH_PROBE_TIMEOUT="${VPNCTL_HEALTH_PROBE_TIMEOUT:-4}"
+HEALTH_REQUIRE_DEFAULT_EGRESS="${VPNCTL_HEALTH_REQUIRE_DEFAULT_EGRESS:-auto}"
 HEALTH_FALLBACK_PROBE_URL="${VPNCTL_HEALTH_FALLBACK_PROBE_URL:-https://1.1.1.1/cdn-cgi/trace}"
 PROBE_URL="${VPNCTL_PROBE_URL:-https://api.ipify.org}"
+PROBE_V6_URL="${VPNCTL_PROBE_V6_URL:-https://api6.ipify.org}"
+VERIFY_GEO_PRIMARY_URL="${VPNCTL_VERIFY_GEO_PRIMARY_URL:-https://ipapi.co/json/}"
+VERIFY_GEO_SECONDARY_URL="${VPNCTL_VERIFY_GEO_SECONDARY_URL:-https://ipwho.is/}"
+VERIFY_SPEED_URL="${VPNCTL_VERIFY_SPEED_URL:-https://speed.cloudflare.com/__down?bytes=5000000}"
+OPENVPN_FALLBACK_DNS="${VPNCTL_OPENVPN_FALLBACK_DNS:-}"
 DASHBOARD_DIR="${VPNCTL_DASHBOARD_DIR:-/run/mazzy-vpn}"
 DASHBOARD_FILE="$DASHBOARD_DIR/status.json"
 PROFILES_FILE="$DASHBOARD_DIR/profiles.json"
@@ -772,6 +778,7 @@ Usage:
   mazzy-vpn connect [PROTOCOL] [PROFILE|NUMBER]
   mazzy-vpn disconnect | reconnect
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
+  mazzy-vpn verify [--timeout SEC] [--speed] [--json]
   mazzy-vpn list [PROTOCOL] | profiles [--json|--api-json]
   mazzy-vpn validate [PROTOCOL|all]
   mazzy-vpn probe [PROTOCOL|all] [--timeout SEC] [--jobs N] [--json]
@@ -805,6 +812,7 @@ Verwendung:
   mazzy-vpn connect [PROTOKOLL] [PROFIL|NUMMER]
   mazzy-vpn disconnect | reconnect
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
+  mazzy-vpn verify [--timeout SEK] [--speed] [--json]
   mazzy-vpn list [PROTOKOLL] | profiles [--json|--api-json]
   mazzy-vpn validate [PROTOKOLL|all]
   mazzy-vpn probe [PROTOKOLL|all] [--timeout SEK] [--jobs N] [--json]
@@ -838,6 +846,7 @@ Mazzy VPN — 安全便捷的 Linux VPN 管理工具
   mazzy-vpn connect [协议] [配置|编号]
   mazzy-vpn disconnect | reconnect
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
+  mazzy-vpn verify [--timeout 秒] [--speed] [--json]
   mazzy-vpn list [协议] | profiles [--json|--api-json]
   mazzy-vpn validate [协议|all]
   mazzy-vpn probe [协议|all] [--timeout 秒] [--jobs N] [--json]
@@ -871,6 +880,7 @@ Mazzy VPN — Linux 向けの安全で使いやすい VPN 管理ツール
   mazzy-vpn connect [プロトコル] [プロファイル|番号]
   mazzy-vpn disconnect | reconnect
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
+  mazzy-vpn verify [--timeout 秒] [--speed] [--json]
   mazzy-vpn list [プロトコル] | profiles [--json|--api-json]
   mazzy-vpn validate [プロトコル|all]
   mazzy-vpn probe [プロトコル|all] [--timeout 秒] [--jobs N] [--json]
@@ -904,6 +914,7 @@ Mazzy VPN — Linux용 안전하고 편리한 VPN 관리 도구
   mazzy-vpn connect [프로토콜] [프로필|번호]
   mazzy-vpn disconnect | reconnect
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
+  mazzy-vpn verify [--timeout 초] [--speed] [--json]
   mazzy-vpn list [프로토콜] | profiles [--json|--api-json]
   mazzy-vpn validate [프로토콜|all]
   mazzy-vpn probe [프로토콜|all] [--timeout 초] [--jobs N] [--json]
@@ -944,6 +955,8 @@ Mazzy VPN - быстрое и безопасное управление VPN в L
   mazzy-vpn status [--json|--api-json]
                                     краткое состояние или JSON
   mazzy-vpn diagnose                диагностика активного соединения
+  mazzy-vpn verify [--timeout СЕК] [--speed] [--json]
+                                    фактический egress, локация, DNS и IPv6
   mazzy-vpn validate [ПРОТОКОЛ|all] проверить формат всех профилей
   mazzy-vpn probe [ПРОТОКОЛ|all] [--timeout СЕК] [--jobs N] [--json]
                                     DNS и ping всех VPN-серверов
@@ -1034,7 +1047,21 @@ protocol_dir() {
 safe_profile_basename() {
     local name="$1"
     [[ -n "$name" && "$name" != "." && "$name" != ".." ]] || return 1
-    [[ "$name" != *[[:cntrl:]]* ]]
+    [[ "$name" != *[[:cntrl:]]* ]] && ! profile_text_has_unsafe_unicode "$name"
+}
+
+profile_text_has_unsafe_unicode() {
+    local value="$1"
+    case "$value" in
+        *$'\u00ad'*|*$'\u061c'*|*$'\u200b'*|*$'\u200c'*|*$'\u200d'*|\
+        *$'\u200e'*|*$'\u200f'*|*$'\u2028'*|*$'\u2029'*|*$'\u202a'*|\
+        *$'\u202b'*|*$'\u202c'*|*$'\u202d'*|*$'\u202e'*|*$'\u2060'*|\
+        *$'\u2061'*|*$'\u2062'*|*$'\u2063'*|*$'\u2064'*|*$'\u2066'*|\
+        *$'\u2067'*|*$'\u2068'*|*$'\u2069'*|*$'\ufeff'*)
+            return 0
+            ;;
+    esac
+    return 1
 }
 
 load_profiles() {
@@ -1062,7 +1089,7 @@ load_profiles() {
     for path in "${PROFILES[@]}"; do
         name="$(basename -- "$path")"
         safe_profile_basename "$name" || {
-            warn "Профиль пропущен: имя содержит управляющие символы"
+            warn "Профиль пропущен: имя содержит управляющие символы или скрытые Unicode-маркеры"
             continue
         }
         safe_profiles+=("$path")
@@ -1070,7 +1097,7 @@ load_profiles() {
     PROFILES=("${safe_profiles[@]}")
 }
 
-profile_name() {
+profile_file_stem() {
     local name
     name="$(basename -- "$1")"
     case "$name" in
@@ -1079,6 +1106,99 @@ profile_name() {
         *.conf) name="${name%.conf}" ;;
     esac
     printf '%s\n' "$name"
+}
+
+safe_profile_metadata() {
+    local value="$1"
+    [[ -n "$value" ]] || return 1
+    ((${#value} <= 120)) || return 1
+    [[ "$value" != *[[:cntrl:]]* ]] && ! profile_text_has_unsafe_unicode "$value"
+}
+
+profile_metadata_value() {
+    local file="$1" requested="$2" value=""
+    [[ -f "$file" && -r "$file" ]] || return 1
+    value="$(
+        LC_ALL=C awk -v requested="$requested" '
+            {
+                line=$0
+                sub(/\r$/, "", line)
+                content=line
+                sub(/^[[:space:]]*[#;][[:space:]]*/, "", content)
+                normalized=tolower(content)
+                wanted="mazzy-" requested
+                if (substr(normalized, 1, length(wanted)) == wanted) {
+                    value=substr(content, length(wanted) + 1)
+                    if (value !~ /^[[:space:]]*[:=]/) {
+                        next
+                    }
+                    sub(/^[[:space:]]*[:=][[:space:]]*/, "", value)
+                    sub(/[[:space:]]+$/, "", value)
+                    if (length(value) > 0) {
+                        print substr(value, 1, 121)
+                        exit
+                    }
+                }
+            }
+        ' "$file" 2>/dev/null
+    )"
+    safe_profile_metadata "$value" || return 1
+    printf '%s\n' "$value"
+}
+
+nmconnection_profile_name() {
+    local file="$1" value=""
+    [[ "$file" == *.nmconnection && -f "$file" && -r "$file" ]] || return 1
+    value="$(
+        LC_ALL=C awk -F= '
+            /^\[connection\][[:space:]]*$/ { section=1; next }
+            /^\[/ { section=0 }
+            section && $1 == "id" {
+                value=substr($0, index($0, "=") + 1)
+                sub(/^[[:space:]]+/, "", value)
+                sub(/[[:space:]]+$/, "", value)
+                print substr(value, 1, 121)
+                exit
+            }
+        ' "$file" 2>/dev/null
+    )"
+    safe_profile_metadata "$value" || return 1
+    printf '%s\n' "$value"
+}
+
+profile_name() {
+    local file="$1" value=""
+    value="$(profile_metadata_value "$file" name 2>/dev/null || true)"
+    [[ -n "$value" ]] ||
+        value="$(nmconnection_profile_name "$file" 2>/dev/null || true)"
+    [[ -n "$value" ]] || value="$(profile_file_stem "$file")"
+    printf '%s\n' "$value"
+}
+
+profile_location() {
+    local file="$1" value=""
+    value="$(profile_metadata_value "$file" location 2>/dev/null || true)"
+    [[ -n "$value" ]] || value="$(profile_name "$file")"
+    printf '%s\n' "$value"
+}
+
+profile_probe_label() {
+    local file="$1" name location
+    name="$(profile_name "$file")"
+    location="$(profile_location "$file")"
+    if [[ "$location" == "$name" ]]; then
+        printf '%s\n' "$name"
+    else
+        printf '%s — %s\n' "$name" "$location"
+    fi
+}
+
+profile_config_country_code() {
+    local file="$1" value=""
+    value="$(profile_metadata_value "$file" country-code 2>/dev/null || true)"
+    value="${value^^}"
+    [[ "$value" =~ ^[A-Z]{2}$ ]] || return 1
+    printf '%s\n' "$value"
 }
 
 profile_endpoint() {
@@ -1152,7 +1272,8 @@ openvpn_parser_ok() {
 }
 
 resolve_profile() {
-    local protocol="$1" requested="${2:-}" i display exact="" index
+    local protocol="$1" requested="${2:-}" i display index
+    local exact_display="" folded_display="" exact_count=0 folded_count=0
     load_profiles "$protocol"
     ((${#PROFILES[@]} > 0)) || {
         error "Для $(protocol_title "$protocol") нет профилей в $(protocol_dir "$protocol")"
@@ -1178,21 +1299,29 @@ resolve_profile() {
 
     for ((i = 0; i < ${#PROFILES[@]}; i++)); do
         display="$(profile_name "${PROFILES[i]}")"
-        if [[ "$requested" == "$display" || "$requested" == "$(basename -- "${PROFILES[i]}")" ]]; then
+        if [[ "$requested" == "$(basename -- "${PROFILES[i]}")" ]]; then
             SELECTED_PROFILE="${PROFILES[i]}"
             return 0
         fi
-        if [[ "${requested,,}" == "${display,,}" ]]; then
-            [[ -z "$exact" ]] || {
-                error "Имя '$requested' неоднозначно; используйте точное имя или номер"
-                return 1
-            }
-            exact="${PROFILES[i]}"
+        if [[ "$requested" == "$display" ]]; then
+            exact_count=$((exact_count + 1))
+            exact_display="${PROFILES[i]}"
+        elif [[ "${requested,,}" == "${display,,}" ]]; then
+            folded_count=$((folded_count + 1))
+            folded_display="${PROFILES[i]}"
         fi
     done
 
-    if [[ -n "$exact" ]]; then
-        SELECTED_PROFILE="$exact"
+    if ((exact_count == 1)); then
+        SELECTED_PROFILE="$exact_display"
+        return 0
+    fi
+    if ((exact_count > 1 || folded_count > 1)); then
+        error "Имя '$requested' неоднозначно; используйте имя файла или номер"
+        return 1
+    fi
+    if ((folded_count == 1)); then
+        SELECTED_PROFILE="$folded_display"
         return 0
     fi
     error "Профиль '$requested' не найден для $(protocol_title "$protocol")"
@@ -1793,9 +1922,23 @@ systemctl_quiet() {
 }
 
 validate_permissions() {
-    local file="$1" mode
+    local file="$1" mode owner directory directory_mode directory_owner
     mode="$(stat -c '%a' "$file" 2>/dev/null || printf '777')"
-    [[ "$mode" == "600" || "$mode" == "400" ]]
+    [[ "$mode" == "600" || "$mode" == "400" ]] || return 1
+    ((EUID == 0)) || return 0
+    owner="$(stat -c '%u' "$file" 2>/dev/null || true)"
+    [[ "$owner" == "0" ]] || return 1
+    directory="$(dirname -- "$file")"
+    while :; do
+        [[ -d "$directory" && ! -L "$directory" ]] || return 1
+        directory_owner="$(stat -c '%u' "$directory" 2>/dev/null || true)"
+        directory_mode="$(stat -c '%a' "$directory" 2>/dev/null || true)"
+        [[ "$directory_owner" == "0" && "$directory_mode" =~ ^[0-7]{3,4}$ ]] ||
+            return 1
+        (((8#$directory_mode & 8#022) == 0)) || return 1
+        [[ "$directory" == "/" ]] && break
+        directory="$(dirname -- "$directory")"
+    done
 }
 
 has_directive() {
@@ -2017,7 +2160,7 @@ probe_result_record() {
     local reachability="$6" latency_ms="$7" latency_source="$8" message_key="$9"
     local opaque_id display_name
     opaque_id="$(profile_opaque_id "$protocol" "$file")"
-    display_name="$(profile_name "$file")"
+    display_name="$(profile_probe_label "$file")"
     if [[ ! "$latency_ms" =~ ^[0-9]+$ ]]; then
         latency_ms=null
         latency_source=none
@@ -2371,8 +2514,18 @@ cmd_probe() {
 
 fix_profile_permissions() {
     local file="$1"
+    if ((EUID == 0)); then
+        chown root:root -- "$(effective_config_dir)" "$(dirname -- "$file")" "$file" ||
+            return 1
+        chmod go-w -- "$(effective_config_dir)" "$(dirname -- "$file")" ||
+            return 1
+    fi
     chmod 600 "$file" || return 1
-    check_ok "Исправлены права: $file"
+    validate_permissions "$file" || {
+        warn "Нельзя безопасно исправить всю цепочку каталогов профиля: $file"
+        return 1
+    }
+    check_ok "Исправлены владелец/права: $file"
 }
 
 cmd_list() {
@@ -2403,6 +2556,7 @@ cmd_list() {
 
 profiles_json_live() {
     local protocol file first=true selected_protocol="" selected_file="" opaque_id
+    local display_name location country_code
     selected_from_state || true
     selected_protocol="${SELECTED_PROTOCOL:-}"
     selected_file="${SELECTED_PROFILE:-}"
@@ -2414,6 +2568,9 @@ profiles_json_live() {
             [[ "$first" == true ]] || printf ','
             first=false
             opaque_id="$(profile_opaque_id "$protocol" "$file")"
+            display_name="$(profile_name "$file")"
+            location="$(profile_location "$file")"
+            country_code="$(profile_config_country_code "$file" 2>/dev/null || true)"
             printf '{'
             printf '"profile_id":"%s","protocol":"%s","protocol_name":"%s",' \
                 "$(json_escape "$opaque_id")" \
@@ -2421,8 +2578,13 @@ profiles_json_live() {
                 "$(json_escape "$(protocol_title "$protocol")")"
             printf '"file_name":"%s","name":"%s","location":"%s",' \
                 "$(json_escape "$(basename -- "$file")")" \
-                "$(json_escape "$(profile_name "$file")")" \
-                "$(json_escape "$(profile_name "$file")")"
+                "$(json_escape "$display_name")" \
+                "$(json_escape "$location")"
+            if [[ -n "$country_code" ]]; then
+                printf '"country_code":"%s",' "$(json_escape "$country_code")"
+            else
+                printf '"country_code":null,'
+            fi
             if [[ "$protocol" == "$selected_protocol" &&
                   "$file" == "$selected_file" ]]; then
                 printf '"selected":true'
@@ -2565,7 +2727,7 @@ cmd_connect() (
     validate_profile "$protocol" "$SELECTED_PROFILE" 1 ||
         die "Профиль не прошёл проверку безопасности: $SELECTED_PROFILE. Запустите $CLI_COMMAND doctor"
     validate_permissions "$SELECTED_PROFILE" ||
-        die "У профиля небезопасные права. Исправление: chmod 600 '$SELECTED_PROFILE'"
+        die "Небезопасный владелец/права профиля или каталога. Запустите $CLI_COMMAND doctor --fix"
     require_root connect "$protocol" "$(basename -- "$SELECTED_PROFILE")"
     systemd_available || die "systemd недоступен; выполните установку на системе с systemd"
     acquire_action_lock
@@ -2730,6 +2892,398 @@ public_ip() {
     result="$(curl "${args[@]}" "$PROBE_URL" 2>/dev/null)" || return 1
     ((${#result} <= 64)) && [[ "$result" =~ ^[0-9A-Fa-f:.]+$ ]] || return 1
     printf '%s\n' "$result"
+}
+
+public_ipv6() {
+    local interface="${1:-}" max_time="${2:-7}" connect_timeout=3 result
+    [[ "$max_time" =~ ^[0-9]+$ ]] || max_time=7
+    ((max_time < 1)) && return 1
+    ((max_time < connect_timeout)) && connect_timeout="$max_time"
+    local -a args=(-6 -fsS --connect-timeout "$connect_timeout" --max-time "$max_time")
+    [[ -n "$interface" ]] && args+=(--interface "$interface")
+    result="$(curl "${args[@]}" "$PROBE_V6_URL" 2>/dev/null)" || return 1
+    ((${#result} <= 64)) && [[ "$result" == *:* ]] &&
+        [[ "$result" =~ ^[0-9A-Fa-f:.]+$ ]] || return 1
+    printf '%s\n' "$result"
+}
+
+profile_expected_country_code() {
+    profile_config_country_code "$1"
+}
+
+verify_geo_record() {
+    local provider="$1" url="$2" interface="$3" max_time="$4" raw
+    local -a args=(-4 -fsS --connect-timeout 3 --max-time "$max_time")
+    [[ -n "$interface" ]] && args+=(--interface "$interface")
+    raw="$(curl "${args[@]}" "$url" 2>/dev/null)" || return 1
+    jq -ce --arg provider "$provider" '
+        def clean($limit):
+            tostring
+            | gsub("[\u0000-\u001f\u007f]"; " ")
+            | .[0:$limit];
+        (
+            if $provider == "ipapi" then
+                {
+                    provider: $provider,
+                    ip: (.ip // ""),
+                    country_code: (.country_code // ""),
+                    country: (.country_name // ""),
+                    region: (.region // ""),
+                    city: (.city // "")
+                }
+            else
+                if (.success // true) == false then error("provider failure") else . end
+                | {
+                    provider: $provider,
+                    ip: (.ip // ""),
+                    country_code: (.country_code // ""),
+                    country: (.country // ""),
+                    region: (.region // ""),
+                    city: (.city // "")
+                }
+            end
+        )
+        | .ip |= clean(64)
+        | .country_code |= (clean(2) | ascii_upcase)
+        | .country |= clean(96)
+        | .region |= clean(96)
+        | .city |= clean(96)
+        | select(.ip | test("^[0-9A-Fa-f:.]{3,64}$"))
+        | select(.country_code | test("^[A-Z]{2}$"))
+    ' <<<"$raw"
+}
+
+verify_dns_state() {
+    local interface="$1" dns="" domains=""
+    command -v resolvectl >/dev/null 2>&1 || {
+        printf 'unavailable\n'
+        return
+    }
+    dns="$(resolvectl dns "$interface" 2>/dev/null || true)"
+    [[ -n "$dns" ]] || {
+        printf 'unknown\n'
+        return
+    }
+    domains="$(resolvectl domain "$interface" 2>/dev/null || true)"
+    if grep -Eq '(^|[[:space:]])~\.($|[[:space:]])' <<<"$domains"; then
+        printf 'vpn-full-tunnel\n'
+    else
+        printf 'vpn-interface\n'
+    fi
+}
+
+verify_speed_sample() {
+    local interface="$1" max_time="$2" raw bytes_per_second first_byte
+    local mbps connect_ms
+    [[ -n "$interface" ]] || return 1
+    raw="$(
+        curl -4 -fsS --interface "$interface" \
+            --connect-timeout 5 --max-time "$max_time" \
+            --output /dev/null \
+            --write-out $'%{speed_download}\t%{time_starttransfer}' \
+            "$VERIFY_SPEED_URL" 2>/dev/null
+    )" || return 1
+    IFS=$'\t' read -r bytes_per_second first_byte <<<"$raw"
+    [[ "$bytes_per_second" =~ ^[0-9]+([.][0-9]+)?$ ]] || return 1
+    [[ "$first_byte" =~ ^[0-9]+([.][0-9]+)?$ ]] || return 1
+    mbps="$(awk -v speed="$bytes_per_second" 'BEGIN { printf "%.2f", speed * 8 / 1000000 }')"
+    connect_ms="$(awk -v seconds="$first_byte" 'BEGIN { printf "%d", seconds * 1000 + 0.5 }')"
+    jq -cn --argjson mbps "$mbps" --argjson connect_ms "$connect_ms" \
+        '{measured: true, mbps: $mbps, connect_ms: $connect_ms}'
+}
+
+verify_connection_json() {
+    local max_time="$1" include_speed="$2" protocol="" interface=""
+    local profile="" expected="" bound_v4="" default_v4="" bound_v6="" default_v6=""
+    local geo_primary="" geo_secondary="" primary_country="" secondary_country=""
+    local providers='[]' observed="" agreement=null geo_ip_mismatch=false
+    local country_match=unknown dns_state=unknown speed_result
+    local active=false route_same=false ipv6_leak=false verdict=verified
+    local message_key=verify.verified findings_json
+    local -a findings=()
+
+    if ! selected_from_state; then
+        findings+=(verify.profile.not-selected)
+        verdict=failed
+        message_key=verify.failed.no-profile
+    else
+        protocol="$SELECTED_PROTOCOL"
+        profile="$(profile_name "$SELECTED_PROFILE")"
+        expected="$(profile_expected_country_code "$SELECTED_PROFILE" 2>/dev/null || true)"
+        interface="$(interface_for_protocol "$protocol")"
+        if service_active && connection_local_ok "$protocol"; then
+            active=true
+        else
+            findings+=(verify.tunnel.inactive)
+            verdict=failed
+            message_key=verify.failed.inactive
+        fi
+    fi
+
+    if [[ "$active" == true && -n "$interface" ]]; then
+        bound_v4="$(public_ip "$interface" "$max_time" 2>/dev/null || true)"
+        default_v4="$(public_ip "" "$max_time" 2>/dev/null || true)"
+        if [[ -z "$bound_v4" ]]; then
+            findings+=(verify.ipv4.bound-unavailable)
+            verdict=failed
+            message_key=verify.failed.no-egress
+        elif [[ -n "$default_v4" && "$bound_v4" == "$default_v4" ]]; then
+            route_same=true
+        else
+            findings+=(verify.ipv4.route-mismatch)
+            [[ "$verdict" == failed ]] || verdict=warning
+            [[ "$message_key" == verify.verified ]] &&
+                message_key=verify.warning.route-mismatch
+        fi
+
+        bound_v6="$(public_ipv6 "$interface" "$max_time" 2>/dev/null || true)"
+        default_v6="$(public_ipv6 "" "$max_time" 2>/dev/null || true)"
+        if [[ -n "$default_v6" &&
+              ( -z "$bound_v6" || "$bound_v6" != "$default_v6" ) ]]; then
+            ipv6_leak=true
+            findings+=(verify.ipv6.potential-leak)
+            [[ "$verdict" == failed ]] || verdict=warning
+            [[ "$message_key" == verify.verified ]] &&
+                message_key=verify.warning.ipv6-leak
+        fi
+
+        geo_primary="$(
+            verify_geo_record ipapi "$VERIFY_GEO_PRIMARY_URL" \
+                "$interface" "$max_time" 2>/dev/null || true
+        )"
+        geo_secondary="$(
+            verify_geo_record ipwho "$VERIFY_GEO_SECONDARY_URL" \
+                "$interface" "$max_time" 2>/dev/null || true
+        )"
+        if [[ -n "$geo_primary" &&
+              "$(jq -r '.ip' <<<"$geo_primary")" != "$bound_v4" ]]; then
+            geo_primary=""
+            geo_ip_mismatch=true
+        fi
+        if [[ -n "$geo_secondary" &&
+              "$(jq -r '.ip' <<<"$geo_secondary")" != "$bound_v4" ]]; then
+            geo_secondary=""
+            geo_ip_mismatch=true
+        fi
+        if [[ "$geo_ip_mismatch" == true ]]; then
+            findings+=(verify.geo.ip-mismatch)
+            [[ "$verdict" == failed ]] || verdict=warning
+            [[ "$message_key" == verify.verified ]] &&
+                message_key=verify.warning.geo-ip-mismatch
+        fi
+        if [[ -n "$geo_primary" && -n "$geo_secondary" ]]; then
+            providers="$(jq -cn --argjson a "$geo_primary" --argjson b "$geo_secondary" '[$a, $b]')"
+            primary_country="$(jq -r '.country_code' <<<"$geo_primary")"
+            secondary_country="$(jq -r '.country_code' <<<"$geo_secondary")"
+            if [[ "$primary_country" == "$secondary_country" ]]; then
+                agreement=true
+            else
+                agreement=false
+                findings+=(verify.geo.providers-disagree)
+                [[ "$verdict" == failed ]] || verdict=warning
+                [[ "$message_key" == verify.verified ]] &&
+                    message_key=verify.warning.geo-disagreement
+            fi
+        elif [[ -n "$geo_primary" ]]; then
+            providers="$(jq -cn --argjson a "$geo_primary" '[$a]')"
+            findings+=(verify.geo.single-provider)
+            [[ "$verdict" == failed ]] || verdict=warning
+            [[ "$message_key" == verify.verified ]] &&
+                message_key=verify.warning.geo-single-provider
+        elif [[ -n "$geo_secondary" ]]; then
+            providers="$(jq -cn --argjson a "$geo_secondary" '[$a]')"
+            findings+=(verify.geo.single-provider)
+            [[ "$verdict" == failed ]] || verdict=warning
+            [[ "$message_key" == verify.verified ]] &&
+                message_key=verify.warning.geo-single-provider
+        else
+            findings+=(verify.geo.unavailable)
+            [[ "$verdict" == failed ]] || verdict=warning
+            [[ "$message_key" == verify.verified ]] &&
+                message_key=verify.warning.geo-unavailable
+        fi
+        observed="$(jq -r '.[0].country_code // ""' <<<"$providers")"
+        if [[ -n "$expected" && -n "$observed" ]]; then
+            if [[ "$expected" == "$observed" ]]; then
+                country_match=match
+            else
+                country_match=mismatch
+                findings+=(verify.geo.profile-mismatch)
+                [[ "$verdict" == failed ]] || verdict=warning
+                [[ "$message_key" == verify.verified ]] &&
+                    message_key=verify.warning.location-mismatch
+            fi
+        elif [[ -z "$expected" && -n "$observed" ]]; then
+            findings+=(verify.geo.expected-country-unavailable)
+            [[ "$verdict" == failed ]] || verdict=warning
+            [[ "$message_key" == verify.verified ]] &&
+                message_key=verify.warning.expected-country-unavailable
+        fi
+
+        dns_state="$(verify_dns_state "$interface")"
+        if [[ "$dns_state" != vpn-full-tunnel ]]; then
+            findings+=(verify.dns.not-confirmed-full-tunnel)
+            [[ "$verdict" == failed ]] || verdict=warning
+            [[ "$message_key" == verify.verified ]] &&
+                message_key=verify.warning.dns-not-confirmed
+        fi
+    fi
+
+    speed_result='{"requested":false,"measured":false,"mbps":null,"connect_ms":null}'
+    if [[ "$include_speed" == true ]]; then
+        if [[ "$active" == true && -n "$interface" ]]; then
+            speed_result="$(
+                verify_speed_sample "$interface" "$((max_time > 20 ? max_time : 20))" \
+                    2>/dev/null || true
+            )"
+        else
+            speed_result=""
+        fi
+        if [[ -n "$speed_result" ]]; then
+            speed_result="$(jq -c '. + {requested: true}' <<<"$speed_result")"
+        else
+            speed_result='{"requested":true,"measured":false,"mbps":null,"connect_ms":null}'
+            findings+=(verify.speed.unavailable)
+            [[ "$verdict" == failed ]] || verdict=warning
+            [[ "$message_key" == verify.verified ]] &&
+                message_key=verify.warning.speed-unavailable
+        fi
+    fi
+
+    findings_json="$(jq -cn --args '$ARGS.positional' -- "${findings[@]}")"
+    jq -cn \
+        --arg checked_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --arg verdict "$verdict" \
+        --arg message_key "$message_key" \
+        --arg protocol "$protocol" \
+        --arg profile "$profile" \
+        --arg interface "$interface" \
+        --arg bound_v4 "$bound_v4" \
+        --arg default_v4 "$default_v4" \
+        --arg bound_v6 "$bound_v6" \
+        --arg default_v6 "$default_v6" \
+        --arg expected "$expected" \
+        --arg observed "$observed" \
+        --arg country_match "$country_match" \
+        --arg dns_state "$dns_state" \
+        --argjson active "$active" \
+        --argjson route_same "$route_same" \
+        --argjson ipv6_leak "$ipv6_leak" \
+        --argjson agreement "$agreement" \
+        --argjson providers "$providers" \
+        --argjson speed "$speed_result" \
+        --argjson findings "$findings_json" \
+        '{
+            schema_version: 1,
+            checked_at: $checked_at,
+            verdict: $verdict,
+            message_key: $message_key,
+            tunnel: {
+                active: $active,
+                protocol: (if $protocol == "" then null else $protocol end),
+                profile: (if $profile == "" then null else $profile end),
+                interface: (if $interface == "" then null else $interface end)
+            },
+            ipv4: {
+                interface_ip: (if $bound_v4 == "" then null else $bound_v4 end),
+                default_ip: (if $default_v4 == "" then null else $default_v4 end),
+                same_egress: $route_same
+            },
+            ipv6: {
+                interface_ip: (if $bound_v6 == "" then null else $bound_v6 end),
+                default_ip: (if $default_v6 == "" then null else $default_v6 end),
+                potential_leak: $ipv6_leak
+            },
+            geo: {
+                expected_country_code: (if $expected == "" then null else $expected end),
+                observed_country_code: (if $observed == "" then null else $observed end),
+                country_match: $country_match,
+                providers_agree: $agreement,
+                providers: $providers
+            },
+            dns: {state: $dns_state},
+            speed: $speed,
+            findings: $findings
+        }'
+}
+
+render_verify_result() {
+    local result="$1" verdict observed country city
+    verdict="$(jq -r '.verdict' <<<"$result")"
+    observed="$(jq -r '.geo.observed_country_code // "—"' <<<"$result")"
+    country="$(jq -r '.geo.providers[0].country // "—"' <<<"$result")"
+    city="$(jq -r '.geo.providers[0].city // "—"' <<<"$result")"
+    printf 'VPN verification: %s\n' "$verdict"
+    printf 'Tunnel:          %s\n' "$(jq -r '.tunnel.active' <<<"$result")"
+    printf 'IPv4 egress:     %s\n' "$(jq -r '.ipv4.same_egress' <<<"$result")"
+    printf 'Observed place:  %s — %s, %s\n' "$observed" "$country" "$city"
+    printf 'Profile match:   %s\n' "$(jq -r '.geo.country_match' <<<"$result")"
+    printf 'IPv6 leak risk:  %s\n' "$(jq -r '.ipv6.potential_leak' <<<"$result")"
+    printf 'DNS route:       %s\n' "$(jq -r '.dns.state' <<<"$result")"
+    if [[ "$(jq -r '.speed.requested' <<<"$result")" == true ]]; then
+        printf 'Speed sample:    %s Mbps (first byte %s ms)\n' \
+            "$(jq -r '.speed.mbps // "unavailable"' <<<"$result")" \
+            "$(jq -r '.speed.connect_ms // "unavailable"' <<<"$result")"
+    fi
+    say "This verifies network egress, DNS routing and IPv6 signals. Sites may also use account, cookies, browser language, WebRTC or device location."
+}
+
+cmd_verify() {
+    local max_time=10 include_speed=false json_output=false payload response result
+    local -a original_args=("$@")
+    while (($#)); do
+        case "$1" in
+            --timeout)
+                shift
+                [[ $# -gt 0 ]] || die "--timeout требует число секунд"
+                max_time="$1"
+                ;;
+            --speed) include_speed=true ;;
+            --json) json_output=true ;;
+            --help|-h)
+                say "Использование: $CLI_COMMAND verify [--timeout 10] [--speed] [--json]"
+                return 0
+                ;;
+            *) die "Неизвестный параметр verify: $1" ;;
+        esac
+        shift
+    done
+    if [[ ! "$max_time" =~ ^[0-9]+$ ]] ||
+       ((max_time < 3 || max_time > 30)); then
+        die "Таймаут verify должен быть от 3 до 30 секунд"
+    fi
+
+    if api_client_ready; then
+        payload="$(
+            jq -cn \
+                --argjson timeout_seconds "$max_time" \
+                --argjson include_speed "$include_speed" \
+                '{
+                    timeout_seconds: $timeout_seconds,
+                    include_speed: $include_speed
+                }'
+        )"
+        response="$(api_client_query_payload tests.verify-egress "$payload" 180000)" || {
+            error "Local API VPN verification is unavailable"
+            return 70
+        }
+        if [[ "$(jq -r '.status' <<<"$response")" != ok ]]; then
+            error "Local API: $(jq -r '.error.code + ": " + .error.message_key' <<<"$response")"
+            return 1
+        fi
+        result="$(jq -c '.result' <<<"$response")"
+    else
+        require_profile_access verify "${original_args[@]}"
+        result="$(verify_connection_json "$max_time" "$include_speed")" ||
+            die "Не удалось проверить VPN egress"
+    fi
+
+    if [[ "$json_output" == true ]]; then
+        jq . <<<"$result"
+    else
+        render_verify_result "$result"
+    fi
+    [[ "$(jq -r '.verdict' <<<"$result")" != failed ]]
 }
 
 validate_test_timeout() {
@@ -3466,7 +4020,7 @@ cmd_test() (
     validate_profile "$protocol" "$SELECTED_PROFILE" 1 ||
         die "Профиль не прошёл проверку безопасности"
     validate_permissions "$SELECTED_PROFILE" ||
-        die "У профиля небезопасные права; требуется chmod 600"
+        die "Небезопасный владелец/права профиля или каталога; запустите $CLI_COMMAND doctor --fix"
     acquire_action_lock
     if [[ "$(state_get MODE 2>/dev/null || true)" == "test" ]]; then
         restore_test_backup "очистка незавершённого предыдущего теста" ||
@@ -3823,7 +4377,8 @@ json_escape() {
 
 dashboard_json_live() {
     local timestamp service_state="inactive" desired="unknown" mode="normal"
-    local protocol="" protocol_name="" profile="" interface="" handshake_age=""
+    local protocol="" protocol_name="" profile="" location="" interface="" handshake_age=""
+    local selected_profile_id="" selected_profile_file=""
     local tunnel_active=false internet_state="unknown" public_ip_value=""
     local autostart=false health_monitor=false fallback="" fallback_name=""
     local failure_count=0 healthy=false selected=false count profile_protocol
@@ -3847,6 +4402,9 @@ dashboard_json_live() {
         protocol="$SELECTED_PROTOCOL"
         protocol_name="$(protocol_title "$protocol")"
         profile="$(profile_name "$SELECTED_PROFILE")"
+        location="$(profile_location "$SELECTED_PROFILE")"
+        selected_profile_id="$(profile_opaque_id "$protocol" "$SELECTED_PROFILE")"
+        selected_profile_file="$(basename -- "$SELECTED_PROFILE")"
         interface="$(interface_for_protocol "$protocol")"
         if [[ "$service_state" == "active" ]] && connection_local_ok "$protocol"; then
             tunnel_active=true
@@ -3897,9 +4455,16 @@ dashboard_json_live() {
         "$tunnel_active" "$(json_escape "$internet_state")" "$healthy"
     printf '"protocol":"%s","protocol_name":"%s",' \
         "$(json_escape "$protocol")" "$(json_escape "$protocol_name")"
-    printf '"profile":"%s","location":"%s","interface":"%s",' \
-        "$(json_escape "$profile")" "$(json_escape "$profile")" \
-        "$(json_escape "$interface")"
+    printf '"profile":"%s",' "$(json_escape "$profile")"
+    if [[ -n "$selected_profile_id" && -n "$selected_profile_file" ]]; then
+        printf '"profile_id":"%s","profile_file_name":"%s",' \
+            "$(json_escape "$selected_profile_id")" \
+            "$(json_escape "$selected_profile_file")"
+    else
+        printf '"profile_id":null,"profile_file_name":null,'
+    fi
+    printf '"location":"%s","interface":"%s",' \
+        "$(json_escape "$location")" "$(json_escape "$interface")"
     if [[ "$handshake_age" =~ ^[0-9]+$ ]]; then
         printf '"handshake_age":%s,' "$handshake_age"
     else
@@ -4122,11 +4687,33 @@ api_status_result() {
         . as $status
         | (
             ($catalog[0].profiles // [])
-            | map(select(
-                .protocol == ($status.protocol // "")
-                and .name == ($status.profile // "")
-            ))
-            | first // null
+            | (
+                if (
+                    (($status.profile_id // "") | type) == "string"
+                    and (($status.profile_id // "") | test(
+                        "^profile-[a-f0-9]{32}$"
+                    ))
+                ) then
+                    map(select(
+                        .protocol == ($status.protocol // "")
+                        and .profile_id == $status.profile_id
+                    ))
+                elif (
+                    (($status.profile_file_name // "") | type) == "string"
+                    and ($status.profile_file_name // "") != ""
+                ) then
+                    map(select(
+                        .protocol == ($status.protocol // "")
+                        and .file_name == $status.profile_file_name
+                    ))
+                else
+                    map(select(
+                        .protocol == ($status.protocol // "")
+                        and .name == ($status.profile // "")
+                    ))
+                end
+                | if length == 1 then .[0] else null end
+            )
         ) as $profile
         | {
             product: "Mazzy VPN",
@@ -4293,6 +4880,52 @@ api_probe_result() {
        [[ "$(jq -r '.summary.total' <<<"$result")" -eq 0 ]]; then
         return 3
     fi
+    printf '%s\n' "$result"
+}
+
+api_verify_result() {
+    local request="$1" deadline_ms="$2"
+    local timeout_seconds include_speed duration result rc=0
+    mkdir -p -- "$API_ACTION_DIR" || return 1
+    chmod 700 -- "$API_ACTION_DIR" || return 1
+    exec 8>"$API_ACTION_DIR/.verify.lock" || return 1
+    flock -n 8 || return 75
+    timeout_seconds="$(jq -r '.payload.timeout_seconds' <<<"$request")"
+    include_speed="$(jq -r '.payload.include_speed // false' <<<"$request")"
+    duration="$(api_timeout_seconds_from_ms "$deadline_ms")" || return 1
+
+    result="$(
+        VPNCTL_API_CLIENT_DISABLE=1 \
+            timeout --kill-after=2s "${duration}s" \
+                "$SELF" _verify-egress-json "$timeout_seconds" "$include_speed"
+    )" || rc=$?
+    case "$rc" in
+        0) ;;
+        124|137) return 124 ;;
+        *) return 1 ;;
+    esac
+    jq -e '
+        .schema_version == 1
+        and (.checked_at | type == "string")
+        and (
+            .verdict == "verified"
+            or .verdict == "warning"
+            or .verdict == "failed"
+        )
+        and (.tunnel.active | type == "boolean")
+        and (.ipv4.same_egress | type == "boolean")
+        and (.ipv6.potential_leak | type == "boolean")
+        and (
+            .geo.country_match == "match"
+            or .geo.country_match == "mismatch"
+            or .geo.country_match == "unknown"
+        )
+        and (.geo.providers | type == "array")
+        and (.speed.requested | type == "boolean")
+        and (.speed.measured | type == "boolean")
+        and (.findings | type == "array")
+        and all(.findings[]; type == "string")
+    ' <<<"$result" >/dev/null 2>&1 || return 1
     printf '%s\n' "$result"
 }
 
@@ -5086,6 +5719,59 @@ api_dispatch() {
                     ;;
             esac
             ;;
+        tests.verify-egress)
+            if jq -e 'has("action_id") or has("authorization")' \
+                <<<"$request" >/dev/null 2>&1; then
+                api_error_response "$request_id" invalid-request \
+                    api.query.mutation-fields false false
+                return
+            fi
+            if ! jq -e '
+                has("deadline_ms")
+                and (.deadline_ms | type == "number")
+                and ((.deadline_ms | floor) == .deadline_ms)
+                and .deadline_ms >= 100
+                and .deadline_ms <= 900000
+                and ((.payload | keys) - [
+                    "include_speed", "timeout_seconds"
+                ] | length) == 0
+                and (.payload.timeout_seconds | type == "number")
+                and (
+                    (.payload.timeout_seconds | floor)
+                    == .payload.timeout_seconds
+                )
+                and .payload.timeout_seconds >= 3
+                and .payload.timeout_seconds <= 30
+                and (
+                    (.payload | has("include_speed") | not)
+                    or (.payload.include_speed | type == "boolean")
+                )
+            ' <<<"$request" >/dev/null 2>&1; then
+                api_error_response "$request_id" invalid-request \
+                    api.tests.verify-egress.payload-invalid false false
+                return
+            fi
+            deadline_ms="$(jq -r '.deadline_ms' <<<"$request")"
+            result="$(api_verify_result "$request" "$deadline_ms")"
+            rc=$?
+            case "$rc" in
+                0)
+                    api_ok_response "$request_id" "$result"
+                    ;;
+                124)
+                    api_error_response "$request_id" deadline-exceeded \
+                        api.tests.verify-egress.deadline true false
+                    ;;
+                75)
+                    api_error_response "$request_id" busy \
+                        api.tests.verify-egress.busy true false
+                    ;;
+                *)
+                    api_error_response "$request_id" backend-unavailable \
+                        api.tests.verify-egress.unavailable true false
+                    ;;
+            esac
+            ;;
         lifecycle.connect|lifecycle.reconnect|lifecycle.disconnect)
             if ! jq -e '
                 (.action_id | type == "string")
@@ -5674,7 +6360,7 @@ cmd_import() {
         die "Неизвестный протокол: $requested_protocol"
     [[ -f "$source" ]] || die "Файл не найден: $source"
     safe_import_name "$source" >/dev/null ||
-        die "Имя профиля содержит запрещённые управляющие символы"
+        die "Имя профиля содержит запрещённые управляющие символы или скрытые Unicode-маркеры"
     validate_profile "$protocol" "$source" 1 ||
         die "Профиль не прошёл проверку формата/безопасности"
     require_root import "$protocol" "$source" "$force"
@@ -5707,7 +6393,7 @@ cmd_import_files() {
     for file in "${files[@]}"; do
         [[ -f "$file" && -r "$file" ]] || die "Файл не найден: $file"
         safe_import_name "$file" >/dev/null ||
-            die "Имя профиля содержит запрещённые управляющие символы: $file"
+            die "Имя профиля содержит запрещённые управляющие символы или скрытые Unicode-маркеры: $file"
         protocol="$(detect_profile_protocol "$file")" ||
             die "Не удалось распознать VPN-протокол: $file"
         validate_profile "$protocol" "$file" 1 ||
@@ -5874,8 +6560,8 @@ l2tp_connection_id() {
 }
 
 openvpn_dns_up() {
-    local dev="${dev:-${1:-}}" value
-    declare -a servers=()
+    local dev="${dev:-${1:-}}" value server fallback_dns
+    declare -a servers=() fallback_servers=()
     [[ -n "$dev" ]] || return 0
     while IFS='=' read -r _ value; do
         if [[ "$value" =~ ^dhcp-option[[:space:]]+DNS[[:space:]]+([^[:space:]]+) ]]; then
@@ -5883,7 +6569,21 @@ openvpn_dns_up() {
         fi
     done < <(env | grep -E '^foreign_option_[0-9]+=' | sort -t_ -k3,3n)
 
-    ((${#servers[@]} > 0)) || servers=("1.1.1.1")
+    if ((${#servers[@]} == 0)) && [[ -n "$OPENVPN_FALLBACK_DNS" ]]; then
+        fallback_dns="${OPENVPN_FALLBACK_DNS//,/ }"
+        read -r -a fallback_servers <<<"$fallback_dns"
+        for server in "${fallback_servers[@]}"; do
+            if [[ "$server" != -* && "$server" =~ ^[0-9A-Fa-f:.]+$ ]]; then
+                servers+=("$server")
+            else
+                warn "Пропущен некорректный VPNCTL_OPENVPN_FALLBACK_DNS"
+            fi
+        done
+    fi
+    if ((${#servers[@]} == 0)); then
+        warn "OpenVPN не передал DNS; публичный DNS не подставляется автоматически"
+        return 0
+    fi
     if command -v resolvectl >/dev/null 2>&1; then
         resolvectl dns "$dev" "${servers[@]}"
         resolvectl domain "$dev" '~.'
@@ -6040,7 +6740,7 @@ service_run() {
     validate_profile "$SELECTED_PROTOCOL" "$SELECTED_PROFILE" 1 ||
         die "Профиль не прошёл проверку безопасности"
     validate_permissions "$SELECTED_PROFILE" ||
-        die "У выбранного профиля небезопасные права; требуется chmod 600"
+        die "Небезопасный владелец/права профиля или каталога; требуется root-owned profile с mode 600"
     if [[ "$mode" == "test" ]]; then
         info "TEST: расширенное логирование включено; deadline=$deadline"
         info "TEST: $(protocol_title "$SELECTED_PROTOCOL") / $(profile_name "$SELECTED_PROFILE")"
@@ -6071,15 +6771,80 @@ health_limit() {
     fi
 }
 
+health_profile_requires_default_egress() {
+    case "${HEALTH_REQUIRE_DEFAULT_EGRESS,,}" in
+        1|true|yes|on) return 0 ;;
+        0|false|no|off) return 1 ;;
+        auto|"") ;;
+        *)
+            warn "VPNCTL_HEALTH_REQUIRE_DEFAULT_EGRESS имеет неверное значение; используется auto"
+            ;;
+    esac
+    [[ -n "${SELECTED_PROTOCOL:-}" && -r "${SELECTED_PROFILE:-}" ]] || return 1
+    case "$SELECTED_PROTOCOL" in
+        amneziawg|wireguard)
+            LC_ALL=C awk -F= '
+                tolower($1) ~ /^[[:space:]]*allowedips[[:space:]]*$/ {
+                    value=substr($0, index($0, "=") + 1)
+                    count=split(value, routes, ",")
+                    for (route_index=1; route_index <= count; route_index++) {
+                        route=routes[route_index]
+                        gsub(/^[[:space:]]+|[[:space:]]+$/, "", route)
+                        if (route == "0.0.0.0/0") {
+                            found=1
+                            exit
+                        }
+                    }
+                }
+                END { exit(found ? 0 : 1) }
+            ' "$SELECTED_PROFILE"
+            ;;
+        openvpn)
+            has_directive "$SELECTED_PROFILE" redirect-gateway ||
+                grep -Eiq \
+                    '^[[:space:]]*route[[:space:]]+0\.0\.0\.0[[:space:]]+(0\.0\.0\.0|0)[[:space:]]*($|#|;)' \
+                    "$SELECTED_PROFILE"
+            ;;
+        l2tp)
+            ! grep -Eiq \
+                '^[[:space:]]*never-default[[:space:]]*=[[:space:]]*(1|true|yes)[[:space:]]*$' \
+                "$SELECTED_PROFILE"
+            ;;
+        *) return 1 ;;
+    esac
+}
+
+HEALTH_LAST_REASON=""
 health_internet_ok() {
     local interface="$1" timeout="$HEALTH_PROBE_TIMEOUT" trace
+    local bound_ip="" default_ip=""
+    HEALTH_LAST_REASON=""
     [[ "$timeout" =~ ^[1-9][0-9]*$ ]] || timeout=4
-    public_ip "$interface" "$timeout" >/dev/null && return 0
-    trace="$(
-        curl -4 -fsS --connect-timeout "$timeout" --max-time "$timeout" \
-            --interface "$interface" "$HEALTH_FALLBACK_PROBE_URL" 2>/dev/null
-    )" || return 1
-    grep -Eq '^ip=[0-9A-Fa-f:.]{3,64}$' <<<"$trace"
+    bound_ip="$(public_ip "$interface" "$timeout" 2>/dev/null || true)"
+    if [[ -z "$bound_ip" ]]; then
+        trace="$(
+            curl -4 -fsS --connect-timeout "$timeout" --max-time "$timeout" \
+                --interface "$interface" "$HEALTH_FALLBACK_PROBE_URL" 2>/dev/null
+        )" || {
+            HEALTH_LAST_REASON="нет доступа в интернет через VPN"
+            return 1
+        }
+        bound_ip="$(
+            awk -F= '/^ip=[0-9A-Fa-f:.]{3,64}$/ {print $2; exit}' <<<"$trace"
+        )"
+        [[ -n "$bound_ip" ]] || {
+            HEALTH_LAST_REASON="нет доступа в интернет через VPN"
+            return 1
+        }
+    fi
+    if health_profile_requires_default_egress; then
+        default_ip="$(public_ip "" "$timeout" 2>/dev/null || true)"
+        if [[ -n "$default_ip" && "$default_ip" != "$bound_ip" ]]; then
+            HEALTH_LAST_REASON="системный default egress идёт не через VPN"
+            return 1
+        fi
+    fi
+    return 0
 }
 
 health_acquire_action_lock() {
@@ -6166,7 +6931,7 @@ health_check() {
     fi
     interface="$(interface_for_protocol "$SELECTED_PROTOCOL")"
     if ! health_internet_ok "$interface"; then
-        health_failure "нет доступа в интернет через VPN"
+        health_failure "${HEALTH_LAST_REASON:-нет доступа в интернет через VPN}"
         return 0
     fi
     health_reset
@@ -6234,7 +6999,7 @@ dashboard_render() {
     if selected_from_state; then
         protocol="$SELECTED_PROTOCOL"
         profile="$SELECTED_PROFILE"
-        location="$(profile_name "$profile")"
+        location="$(profile_location "$profile")"
         config_name="$(basename -- "$profile")"
         interface="$(interface_for_protocol "$protocol")"
         if service_active; then
@@ -6385,6 +7150,7 @@ print_main_menu() {
  14. Полная самодиагностика
  15. Папки и импорт VPN-конфигов
  16. Язык интерфейса
+ 17. Проверить реальный VPN egress, локацию, DNS и IPv6
   0. Выход
 EOF
             ;;
@@ -6406,6 +7172,7 @@ EOF
  14. Full self-diagnostics
  15. VPN config folders and import
  16. Interface language
+ 17. Verify actual VPN egress, location, DNS and IPv6
   0. Exit
 EOF
             ;;
@@ -6427,6 +7194,7 @@ EOF
  14. Vollständige Selbstdiagnose
  15. VPN-Konfigurationsordner und Import
  16. Oberflächensprache
+ 17. Tatsächlichen VPN-Egress, Standort, DNS und IPv6 prüfen
   0. Beenden
 EOF
             ;;
@@ -6448,6 +7216,7 @@ EOF
  14. 完整自检
  15. VPN 配置文件夹与导入
  16. 界面语言
+ 17. 验证实际 VPN 出口、位置、DNS 和 IPv6
   0. 退出
 EOF
             ;;
@@ -6469,6 +7238,7 @@ EOF
  14. 完全セルフ診断
  15. VPN 設定フォルダーとインポート
  16. 表示言語
+ 17. 実際の VPN 出口、場所、DNS、IPv6 を検証
   0. 終了
 EOF
             ;;
@@ -6490,6 +7260,7 @@ EOF
  14. 전체 자가 진단
  15. VPN 설정 폴더 및 가져오기
  16. 인터페이스 언어
+ 17. 실제 VPN 출구, 위치, DNS 및 IPv6 확인
   0. 종료
 EOF
             ;;
@@ -6595,6 +7366,7 @@ interactive_menu() {
             14) cmd_self_test || true ;;
             15) menu_config_folders || true ;;
             16) menu_language || true ;;
+            17) cmd_verify || true ;;
             0) return 0 ;;
             *) warn "$(msg unknown_item)" ;;
         esac
@@ -6649,6 +7421,7 @@ main() {
         dashboard|dash) cmd_dashboard "$@" ;;
         status|show) cmd_status "$@" ;;
         diagnose|diag) cmd_diagnose "$@" ;;
+        verify|verify-egress) cmd_verify "$@" ;;
         validate|lint) cmd_validate "$@" ;;
         probe|ping) cmd_probe "$@" ;;
         test|check) cmd_test "$@" ;;
@@ -6689,6 +7462,17 @@ main() {
             [[ -z "$4" ]] || api_valid_identifier "$4" ||
                 die "Internal probe profile ID is invalid"
             probe_locations_json "$1" "$2" "$3" "$4"
+            ;;
+        _verify-egress-json)
+            [[ $# -eq 2 ]] ||
+                die "Internal verify requires timeout and speed flag"
+            if [[ ! "$1" =~ ^[0-9]+$ ]] ||
+               ((10#$1 < 3 || 10#$1 > 30)); then
+                die "Internal verify timeout is invalid"
+            fi
+            [[ "$2" == true || "$2" == false ]] ||
+                die "Internal verify speed flag is invalid"
+            verify_connection_json "$1" "$2"
             ;;
         _test-timeout) test_timeout_handler "${1:-}" ;;
         _recover-stale-test) recover_stale_test_state ;;

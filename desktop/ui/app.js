@@ -6,28 +6,30 @@ const invoke = tauri?.core?.invoke;
 
 const translations = {
   ru: {
-    language: "Язык", checking: "Проверяем соединение", waiting: "Ожидаем данные Mazzy VPN CLI",
-    protocol: "Протокол", interface: "Интерфейс", handshake: "Handshake", publicIp: "Публичный IP",
-    quickConnect: "Быстро подключить", useDefault: "Default-конфиг", reconnect: "Переподключить",
-    safeRestart: "Безопасный restart", disconnect: "Отключить", stopTunnel: "Остановить туннель",
-    doctor: "Самодиагностика", checkSystem: "Проверить систему", protection: "PROTECTION",
-    systemHealth: "Состояние системы", checkingShort: "CHECK", autoConnect: "Автоподключение",
-    startsOnBoot: "Запуск при загрузке", healthMonitor: "Health monitor",
+    language: "Язык", brandNetwork: "СЕТЬ ДЛЯ ЛЮДЕЙ И ИИ", brandEngine: "АВТОЛЕЧЕНИЕ",
+    liveStatus: "РАБОТАЕТ", checking: "Проверяем соединение", waiting: "Ожидаем данные Mazzy VPN CLI",
+    protocol: "Протокол", interface: "Интерфейс", handshake: "Рукопожатие", publicIp: "Публичный IP",
+    quickConnect: "Быстро подключить", useDefault: "Профиль по умолчанию", reconnect: "Переподключить",
+    safeRestart: "Безопасный перезапуск", disconnect: "Отключить", stopTunnel: "Остановить туннель",
+    doctor: "Самодиагностика", checkSystem: "Проверить систему", protection: "ЗАЩИТА",
+    systemHealth: "Состояние системы", checkingShort: "ПРОВЕРКА", autoConnect: "Автоподключение",
+    startsOnBoot: "Запуск при загрузке", healthMonitor: "Монитор состояния",
     autoHealing: "Автопроверка и лечение", fallback: "Резервный VPN",
-    conflictGuard: "Защита от конфликтов", configurations: "CONFIGURATIONS",
-    vpnProfiles: "VPN-профили", activity: "ACTIVITY", eventLog: "События",
+    conflictGuard: "Защита от конфликтов", configurations: "КОНФИГУРАЦИИ",
+    vpnProfiles: "VPN-профили", activity: "АКТИВНОСТЬ", eventLog: "События",
     noEvents: "Событий пока нет", neverUpdated: "Данные ещё не получены",
     connected: "VPN защищает соединение", connecting: "VPN подключается", disconnected: "VPN отключён",
     degraded: "Соединение требует внимания", internetOk: "Интернет доступен через защищённый туннель",
     internetDown: "Туннель без подтверждённого доступа в интернет", noProfile: "Профиль не выбран",
-    enabled: "ON", disabled: "OFF", inactive: "НЕТ", active: "АКТИВЕН", healthy: "HEALTHY",
+    enabled: "ВКЛ", disabled: "ВЫКЛ", inactive: "НЕТ", active: "АКТИВЕН", healthy: "ИСПРАВНО",
     attention: "ATTENTION", secondsAgo: "с назад", notReceived: "не получен", cacheStale: "Данные устарели",
     preview: "Preview: VPN backend этой ОС ещё не реализован", actionStarted: "Выполняется",
     actionDone: "Действие завершено", actionFailed: "Действие не выполнено", refreshed: "Статус обновлён",
     hidden: "скрыт", statusChanged: "Состояние VPN изменилось", update: "Обновлено"
   },
   en: {
-    language: "Language", checking: "Checking connection", waiting: "Waiting for Mazzy VPN CLI data",
+    language: "Language", brandNetwork: "AI-READY NETWORK", brandEngine: "SELF-HEALING CORE",
+    liveStatus: "LIVE", checking: "Checking connection", waiting: "Waiting for Mazzy VPN CLI data",
     protocol: "Protocol", interface: "Interface", handshake: "Handshake", publicIp: "Public IP",
     quickConnect: "Quick connect", useDefault: "Default config", reconnect: "Reconnect",
     safeRestart: "Safe restart", disconnect: "Disconnect", stopTunnel: "Stop tunnel",
@@ -47,7 +49,8 @@ const translations = {
     hidden: "hidden", statusChanged: "VPN status changed", update: "Updated"
   },
   de: {
-    language: "Sprache", checking: "Verbindung wird geprüft", waiting: "Warte auf Mazzy VPN CLI",
+    language: "Sprache", brandNetwork: "KI-BEREITES NETZ", brandEngine: "SELBSTHEILUNG",
+    liveStatus: "AKTIV", checking: "Verbindung wird geprüft", waiting: "Warte auf Mazzy VPN CLI",
     protocol: "Protokoll", interface: "Schnittstelle", handshake: "Handshake", publicIp: "Öffentliche IP",
     quickConnect: "Schnell verbinden", useDefault: "Standardkonfiguration", reconnect: "Neu verbinden",
     safeRestart: "Sicherer Neustart", disconnect: "Trennen", stopTunnel: "Tunnel stoppen",
@@ -67,7 +70,8 @@ const translations = {
     hidden: "verborgen", statusChanged: "VPN-Status geändert", update: "Aktualisiert"
   },
   zh: {
-    language: "语言", checking: "正在检查连接", waiting: "正在等待 Mazzy VPN CLI 数据",
+    language: "语言", brandNetwork: "面向 AI 的网络", brandEngine: "自恢复核心",
+    liveStatus: "运行中", checking: "正在检查连接", waiting: "正在等待 Mazzy VPN CLI 数据",
     protocol: "协议", interface: "接口", handshake: "握手", publicIp: "公网 IP",
     quickConnect: "快速连接", useDefault: "默认配置", reconnect: "重新连接", safeRestart: "安全重启",
     disconnect: "断开连接", stopTunnel: "停止隧道", doctor: "自我诊断", checkSystem: "检查系统",
@@ -85,7 +89,8 @@ const translations = {
     hidden: "已隐藏", statusChanged: "VPN 状态已变化", update: "更新时间"
   },
   ja: {
-    language: "言語", checking: "接続を確認中", waiting: "Mazzy VPN CLI のデータを待っています",
+    language: "言語", brandNetwork: "AI 対応ネットワーク", brandEngine: "自己修復コア",
+    liveStatus: "稼働中", checking: "接続を確認中", waiting: "Mazzy VPN CLI のデータを待っています",
     protocol: "プロトコル", interface: "インターフェース", handshake: "ハンドシェイク", publicIp: "公開 IP",
     quickConnect: "クイック接続", useDefault: "既定の設定", reconnect: "再接続", safeRestart: "安全な再起動",
     disconnect: "切断", stopTunnel: "トンネルを停止", doctor: "自己診断", checkSystem: "システムを確認",
@@ -103,7 +108,8 @@ const translations = {
     hidden: "非表示", statusChanged: "VPN 状態が変わりました", update: "更新"
   },
   ko: {
-    language: "언어", checking: "연결 확인 중", waiting: "Mazzy VPN CLI 데이터를 기다리는 중",
+    language: "언어", brandNetwork: "AI 지원 네트워크", brandEngine: "자가 복구 코어",
+    liveStatus: "작동 중", checking: "연결 확인 중", waiting: "Mazzy VPN CLI 데이터를 기다리는 중",
     protocol: "프로토콜", interface: "인터페이스", handshake: "핸드셰이크", publicIp: "공인 IP",
     quickConnect: "빠른 연결", useDefault: "기본 구성", reconnect: "다시 연결", safeRestart: "안전한 재시작",
     disconnect: "연결 해제", stopTunnel: "터널 중지", doctor: "자가 진단", checkSystem: "시스템 확인",
@@ -130,47 +136,61 @@ Object.assign(translations.ru, {
   importFiles: "Загрузить файлы", scanFolder: "Проверить папку", importFolder: "Импортировать папку",
   searchProfiles: "Поиск профиля или локации", allProtocols: "Все протоколы",
   profilesLoading: "Загружаем профили…", profilesEmpty: "Профили не найдены",
-  selectedProfile: "Выбран по умолчанию", connectProfile: "Подключить", testProfile: "Тест", removeProfile: "Удалить",
+  selectedProfile: "Выбран по умолчанию", connectProfile: "Подключить", testProfile: "Проверить", removeProfile: "Удалить",
   testingTools: "ТЕСТИРОВАНИЕ", testingTitle: "Проверка конфигураций",
-  testTimeout: "Таймаут живого теста", testProtocol: "Протокол",
-  validateProfiles: "Проверить формат", probeEndpoints: "DNS и ping endpoint",
-  testAllProfiles: "Живой test-all с rollback", emergencyMode: "Аварийный выбор рабочего VPN",
-  rollbackHint: "Живые тесты временно меняют маршрут и всегда используют timeout + rollback.",
-  diagnosticsCenter: "ДИАГНОСТИКА", diagnosticsTitle: "Doctor, тесты и журнал",
+  testTimeout: "Лимит времени живого теста", testProtocol: "Протокол",
+  validateProfiles: "Проверить формат", probeEndpoints: "DNS и ping сервера",
+  testAllProfiles: "Проверить все профили с откатом", emergencyMode: "Аварийный выбор рабочего VPN",
+  rollbackHint: "Живые тесты временно меняют маршрут и всегда используют лимит времени и откат.",
+  diagnosticsCenter: "ДИАГНОСТИКА", diagnosticsTitle: "Самодиагностика, тесты и журнал",
   diagnosticsHint: "Полный результат больше не скрывается: вывод сохраняется в этой панели.",
-  runDoctor: "Запустить Doctor", repairSystem: "Установить/исправить",
+  runDoctor: "Запустить самодиагностику", repairSystem: "Установить/исправить",
   connectionDiagnose: "Диагностика соединения",
-  connectionDiagnoseHint: "Маршрут, DNS, туннель, handshake и интернет",
-  offlineSelfTest: "Offline self-test", offlineSelfTestHint: "Формат, зависимости, службы и права",
-  liveSelfTest: "Live self-test", liveSelfTestHint: "Проверка туннелей с rollback",
+  connectionDiagnoseHint: "Маршрут, DNS, туннель, рукопожатие и интернет",
+  offlineSelfTest: "Проверка без подключения", offlineSelfTestHint: "Формат, зависимости, службы и права",
+  liveSelfTest: "Проверка реального туннеля", liveSelfTestHint: "Проверка туннелей с откатом",
   serviceLog: "Журнал сервиса", serviceLogHint: "Последние события без секретов", logLines: "Строк журнала",
   outputReady: "Готово к проверке", outputRunning: "Выполняется", outputSuccess: "Успешно",
   outputFailed: "Есть ошибки", diagnosticOutput: "Результат", clearOutput: "Очистить",
   outputPlaceholder: "Здесь появится полный вывод Doctor, тестов и журнала.",
   settingsCenter: "НАСТРОЙКИ", settingsTitle: "Установка и системные настройки",
-  settingsHint: "DEB/RPM управляют движком через package manager; AppImage использует явный bootstrap.",
+  settingsHint: "DEB/RPM управляют движком через менеджер пакетов; AppImage использует явную установку.",
   installRepair: "Установить / обновить / исправить", installation: "УСТАНОВКА",
   engineReadiness: "Готовность движка", installedVersion: "Установлено",
   bundledVersion: "В комплекте Desktop", installationType: "Тип установки",
-  packageManaged: "PACKAGE-MANAGED", embeddedInstall: "EMBEDDED / MANUAL",
+  packageManaged: "ЧЕРЕЗ ПАКЕТНЫЙ МЕНЕДЖЕР", embeddedInstall: "ВСТРОЕННАЯ / РУЧНАЯ",
   engineService: "Системная служба",
-  recoveryMonitor: "Recovery monitor", localApi: "Защищённый local API",
+  recoveryMonitor: "Монитор восстановления", localApi: "Защищённый локальный API",
   apiReady: "АКТИВЕН", services: "СЛУЖБЫ", serviceControl: "Управление службами",
-  notifications: "Уведомления", notificationsHint: "Запланировано; в preview не работает",
-  privacyMode: "Скрывать публичный IP", privacyModeHint: "Применяется к Dashboard",
+  notifications: "Уведомления", notificationsHint: "Запланировано; в этой версии недоступно",
+  privacyMode: "Скрывать публичный IP", privacyModeHint: "Применяется к экрану обзора",
   installed: "УСТАНОВЛЕНО", missing: "НЕТ", updateRequired: "НУЖНО ОБНОВИТЬ",
   ready: "ГОТОВО", confirmLiveTest: "Живой тест временно изменит VPN-маршрут и затем выполнит rollback. Продолжить?",
   confirmRemove: "Удалить выбранный VPN-профиль?", confirmRepair: "Запустить системную установку и исправление зависимостей?",
   profilesRefreshed: "Список профилей обновлён", noSelection: "Ничего не выбрано",
   checkAllLocations: "Проверить все локации", checkingLocations: "Проверяем локации",
-  locationReachable: "Endpoint доступен", locationUnknown: "Доступность не подтверждена",
-  locationUnreachable: "Endpoint недоступен", locationInvalid: "Некорректный endpoint",
+  locationReachable: "Сервер доступен", locationUnknown: "Доступность не подтверждена",
+  locationUnreachable: "Сервер недоступен", locationInvalid: "Некорректный адрес сервера",
   locationNotChecked: "Доступность ещё не проверялась", activeTunnel: "АКТИВЕН",
   lastChecked: "Последняя проверка",
-  endpointProbeHint: "Probe проверяет DNS/ICMP/TCP endpoint, но не подтверждает VPN-авторизацию и маршрутизацию.",
-  aboutProduct: "О ПРОДУКТЕ", aboutLead: "Безопасный центр управления VPN с общим CLI/TUI/Desktop engine.",
-  aboutPurpose: "НАЗНАЧЕНИЕ", aboutPurposeTitle: "Один безопасный контур управления",
-  aboutPurposeText: "Mazzy VPN управляет AmneziaWG, WireGuard, OpenVPN и L2TP/IPsec, проверяет профили и восстанавливает предыдущее соединение после тестов.",
+  endpointProbeHint: "Проверка измеряет DNS/ICMP/TCP доступность сервера, но не подтверждает VPN-авторизацию и маршрутизацию.",
+  connectFastest: "Подключить самую быструю", fastestUnavailable: "Сначала проверьте локации; доступный ping не найден",
+  sortRecommended: "Рекомендуемые", sortLatency: "По ping", sortStatus: "По доступности", sortName: "По имени",
+  realVerification: "РЕАЛЬНАЯ ПРОВЕРКА VPN", realVerificationTitle: "Фактический маршрут и локация",
+  realVerificationHint: "Сравнивает исходящий маршрут с туннелем, два источника геолокации, DNS и IPv6.",
+  notVerified: "НЕ ПРОВЕРЕНО", verifyNow: "Проверить VPN", verifyWithSpeed: "Проверить + скорость",
+  observedLocation: "Фактическая локация", profileLocationMatch: "Совпадение с профилем",
+  systemEgress: "Системный IPv4 egress", ipv6Leak: "IPv6-утечка", dnsRouting: "DNS-маршрут",
+  speedSample: "Контрольная проверка скорости", verified: "ПОДТВЕРЖДЕНО", warning: "ЕСТЬ РИСКИ",
+  failed: "НЕ РАБОТАЕТ", matches: "СОВПАДАЕТ", mismatch: "НЕ СОВПАДАЕТ", unknown: "НЕИЗВЕСТНО",
+  sameEgress: "Через VPN", differentEgress: "Маршрут отличается", noLeak: "Не обнаружена",
+  potentialLeak: "ВОЗМОЖНА", fullTunnelDns: "Через VPN", partialDns: "Не подтверждён полностью",
+  speedNotRun: "Не запускался", verificationDisclaimer: "Сайты также могут учитывать регион аккаунта, cookies, язык браузера, WebRTC и геолокацию устройства.",
+  startService: "Запустить", restartService: "Перезапустить", stopService: "Остановить",
+  currentState: "Сейчас",
+  aboutProduct: "О ПРОДУКТЕ", aboutLead: "AI-ready VPN для устойчивой работы с ИИ, открытым вебом, видео и корпоративными ресурсами.",
+  aboutPurpose: "НАЗНАЧЕНИЕ", aboutPurposeTitle: "Открытый и самовосстанавливающийся VPN-контур",
+  aboutPurposeText: "Mazzy VPN управляет AmneziaWG, WireGuard, OpenVPN и L2TP/IPsec, проверяет реальный egress и локации, восстанавливает соединение и помогает людям и AI-агентам сохранять стабильный сетевой доступ.",
   aboutPlatform: "Платформа", aboutAuthor: "АВТОР И СОПРОВОЖДЕНИЕ",
   aboutAuthorText: "Проект создан и сопровождается Nik m. Оригинальное авторство и уведомления об авторских правах должны сохраняться.",
   aboutCopyright: "Авторское право", aboutLicense: "Лицензия",
@@ -228,9 +248,22 @@ Object.assign(translations.en, {
   locationNotChecked: "Reachability has not been checked", activeTunnel: "ACTIVE",
   lastChecked: "Last checked",
   endpointProbeHint: "The probe checks DNS/ICMP/TCP reachability; it does not prove VPN authentication or routing.",
-  aboutProduct: "ABOUT THE PRODUCT", aboutLead: "A safe VPN control center with one CLI/TUI/Desktop engine.",
-  aboutPurpose: "PURPOSE", aboutPurposeTitle: "One validated control plane",
-  aboutPurposeText: "Mazzy VPN manages AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec, validates profiles and restores the previous connection after tests.",
+  connectFastest: "Connect fastest", fastestUnavailable: "Check locations first; no reachable latency result is available",
+  sortRecommended: "Recommended", sortLatency: "By ping", sortStatus: "By availability", sortName: "By name",
+  realVerification: "REAL VPN VERIFICATION", realVerificationTitle: "Actual route and location",
+  realVerificationHint: "Compares system egress with the tunnel, two geolocation sources, DNS and IPv6.",
+  notVerified: "NOT VERIFIED", verifyNow: "Verify VPN", verifyWithSpeed: "Verify + speed",
+  observedLocation: "Observed location", profileLocationMatch: "Profile location match",
+  systemEgress: "System IPv4 egress", ipv6Leak: "IPv6 leak", dnsRouting: "DNS routing",
+  speedSample: "Bounded speed sample", verified: "VERIFIED", warning: "RISKS FOUND",
+  failed: "FAILED", matches: "MATCH", mismatch: "MISMATCH", unknown: "UNKNOWN",
+  sameEgress: "Through VPN", differentEgress: "Route differs", noLeak: "Not detected",
+  potentialLeak: "POTENTIAL", fullTunnelDns: "Through VPN", partialDns: "Not fully confirmed",
+  speedNotRun: "Not run", verificationDisclaimer: "Sites may also use account region, cookies, browser language, WebRTC and device location.",
+  startService: "Start", restartService: "Restart", stopService: "Stop", currentState: "Current",
+  aboutProduct: "ABOUT THE PRODUCT", aboutLead: "An AI-ready VPN for resilient access to AI, the open web, video and corporate resources.",
+  aboutPurpose: "PURPOSE", aboutPurposeTitle: "An open, self-healing VPN control plane",
+  aboutPurposeText: "Mazzy VPN manages AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec, verifies actual egress and locations, recovers connections, and helps people and AI agents keep stable network access.",
   aboutPlatform: "Platform", aboutAuthor: "AUTHOR AND MAINTAINER",
   aboutAuthorText: "The project was created and is maintained by Nik m. Original authorship and copyright notices must be preserved.",
   aboutCopyright: "Copyright", aboutLicense: "License",
@@ -244,16 +277,104 @@ Object.assign(translations.en, {
   aboutDocuments: "Documents:"
 });
 
+Object.assign(translations.de, {
+  navDashboard: "Übersicht", navProfiles: "Profile", navDiagnostics: "Diagnose",
+  navSettings: "Einstellungen", navAbout: "Über",
+  checkAllLocations: "Alle Standorte prüfen", lastChecked: "Zuletzt geprüft",
+  connectFastest: "Schnellsten verbinden", fastestUnavailable: "Zuerst Standorte prüfen; kein erreichbarer Ping verfügbar",
+  sortRecommended: "Empfohlen", sortLatency: "Nach Ping", sortStatus: "Nach Erreichbarkeit", sortName: "Nach Name",
+  realVerification: "ECHTE VPN-PRÜFUNG", realVerificationTitle: "Tatsächliche Route und Standort",
+  realVerificationHint: "Vergleicht System-Egress und Tunnel, zwei Geoquellen, DNS und IPv6.",
+  notVerified: "NICHT GEPRÜFT", verifyNow: "VPN prüfen", verifyWithSpeed: "Prüfen + Geschwindigkeit",
+  observedLocation: "Ermittelter Standort", profileLocationMatch: "Profilstandort stimmt",
+  systemEgress: "System-IPv4-Egress", ipv6Leak: "IPv6-Leck", dnsRouting: "DNS-Route",
+  speedSample: "Begrenzter Geschwindigkeitstest", verified: "BESTÄTIGT", warning: "RISIKEN GEFUNDEN",
+  failed: "FEHLGESCHLAGEN", matches: "STIMMT", mismatch: "ABWEICHUNG", unknown: "UNBEKANNT",
+  sameEgress: "Über VPN", differentEgress: "Route weicht ab", noLeak: "Nicht erkannt",
+  potentialLeak: "MÖGLICH", fullTunnelDns: "Über VPN", partialDns: "Nicht vollständig bestätigt",
+  speedNotRun: "Nicht gestartet", verificationDisclaimer: "Websites können auch Kontoregion, Cookies, Browsersprache, WebRTC und Gerätestandort verwenden.",
+  startService: "Starten", restartService: "Neu starten", stopService: "Stoppen", currentState: "Aktuell"
+});
+
+Object.assign(translations.zh, {
+  navDashboard: "概览", navProfiles: "配置", navDiagnostics: "诊断",
+  navSettings: "设置", navAbout: "关于",
+  checkAllLocations: "检查所有位置", lastChecked: "上次检查",
+  connectFastest: "连接最快节点", fastestUnavailable: "请先检查位置；没有可用的延迟结果",
+  sortRecommended: "推荐", sortLatency: "按延迟", sortStatus: "按可用性", sortName: "按名称",
+  realVerification: "真实 VPN 验证", realVerificationTitle: "实际出口与位置",
+  realVerificationHint: "比较系统出口和隧道、两个地理位置来源、DNS 与 IPv6。",
+  notVerified: "未验证", verifyNow: "验证 VPN", verifyWithSpeed: "验证并测速",
+  observedLocation: "实际位置", profileLocationMatch: "与配置位置匹配",
+  systemEgress: "系统 IPv4 出口", ipv6Leak: "IPv6 泄漏", dnsRouting: "DNS 路由",
+  speedSample: "有限测速样本", verified: "已验证", warning: "发现风险",
+  failed: "失败", matches: "匹配", mismatch: "不匹配", unknown: "未知",
+  sameEgress: "通过 VPN", differentEgress: "路由不同", noLeak: "未发现",
+  potentialLeak: "可能泄漏", fullTunnelDns: "通过 VPN", partialDns: "未完全确认",
+  speedNotRun: "未运行", verificationDisclaimer: "网站还可能使用账户地区、Cookie、浏览器语言、WebRTC 和设备位置。",
+  startService: "启动", restartService: "重启", stopService: "停止", currentState: "当前"
+});
+
+Object.assign(translations.ja, {
+  navDashboard: "概要", navProfiles: "プロファイル", navDiagnostics: "診断",
+  navSettings: "設定", navAbout: "このアプリについて",
+  checkAllLocations: "すべての場所を確認", lastChecked: "最終確認",
+  connectFastest: "最速へ接続", fastestUnavailable: "先に場所を確認してください。利用可能な ping がありません",
+  sortRecommended: "おすすめ", sortLatency: "Ping 順", sortStatus: "到達性順", sortName: "名前順",
+  realVerification: "実際の VPN 検証", realVerificationTitle: "実際の出口と場所",
+  realVerificationHint: "システム出口とトンネル、2つの位置情報、DNS、IPv6 を比較します。",
+  notVerified: "未検証", verifyNow: "VPN を検証", verifyWithSpeed: "検証 + 速度",
+  observedLocation: "検出された場所", profileLocationMatch: "プロファイル位置との一致",
+  systemEgress: "システム IPv4 出口", ipv6Leak: "IPv6 リーク", dnsRouting: "DNS ルート",
+  speedSample: "制限付き速度サンプル", verified: "確認済み", warning: "リスクあり",
+  failed: "失敗", matches: "一致", mismatch: "不一致", unknown: "不明",
+  sameEgress: "VPN 経由", differentEgress: "ルートが異なる", noLeak: "検出なし",
+  potentialLeak: "可能性あり", fullTunnelDns: "VPN 経由", partialDns: "完全には未確認",
+  speedNotRun: "未実行", verificationDisclaimer: "サイトはアカウント地域、Cookie、ブラウザー言語、WebRTC、端末位置も使用できます。",
+  startService: "開始", restartService: "再起動", stopService: "停止", currentState: "現在"
+});
+
+Object.assign(translations.ko, {
+  navDashboard: "개요", navProfiles: "프로필", navDiagnostics: "진단",
+  navSettings: "설정", navAbout: "정보",
+  checkAllLocations: "모든 위치 확인", lastChecked: "마지막 확인",
+  connectFastest: "가장 빠른 위치 연결", fastestUnavailable: "먼저 위치를 확인하세요. 사용 가능한 ping 결과가 없습니다",
+  sortRecommended: "추천", sortLatency: "Ping 순", sortStatus: "도달성 순", sortName: "이름 순",
+  realVerification: "실제 VPN 검증", realVerificationTitle: "실제 출구와 위치",
+  realVerificationHint: "시스템 출구와 터널, 두 위치 정보 제공자, DNS 및 IPv6를 비교합니다.",
+  notVerified: "검증 안 됨", verifyNow: "VPN 검증", verifyWithSpeed: "검증 + 속도",
+  observedLocation: "관측 위치", profileLocationMatch: "프로필 위치 일치",
+  systemEgress: "시스템 IPv4 출구", ipv6Leak: "IPv6 유출", dnsRouting: "DNS 경로",
+  speedSample: "제한된 속도 샘플", verified: "검증됨", warning: "위험 발견",
+  failed: "실패", matches: "일치", mismatch: "불일치", unknown: "알 수 없음",
+  sameEgress: "VPN 경유", differentEgress: "경로 다름", noLeak: "감지 안 됨",
+  potentialLeak: "가능성 있음", fullTunnelDns: "VPN 경유", partialDns: "완전히 확인되지 않음",
+  speedNotRun: "실행 안 함", verificationDisclaimer: "사이트는 계정 지역, 쿠키, 브라우저 언어, WebRTC 및 기기 위치도 사용할 수 있습니다.",
+  startService: "시작", restartService: "다시 시작", stopService: "중지", currentState: "현재"
+});
+
 const $ = (selector) => document.querySelector(selector);
+const supportedLanguages = new Set(["ru", "en", "de", "zh", "ja", "ko"]);
+const previewParameters = new URLSearchParams(window.location.search);
+const localDocumentationHosts = new Set(["127.0.0.1", "localhost", "[::1]"]);
+const documentationPreview =
+  !window.__TAURI_INTERNALS__ &&
+  window.location.protocol === "http:" &&
+  localDocumentationHosts.has(window.location.hostname) &&
+  previewParameters.get("preview") === "docs";
+const previewLanguage = previewParameters.get("lang");
 const state = {
-  lang: localStorage.getItem("mazzy-language") || "ru",
-  hideIp: localStorage.getItem("mazzy-hide-ip") === "true",
+  lang: documentationPreview && supportedLanguages.has(previewLanguage)
+    ? previewLanguage
+    : localStorage.getItem("mazzy-language") || "ru",
+  hideIp: documentationPreview ? false : localStorage.getItem("mazzy-hide-ip") !== "false",
   page: "dashboard",
   status: null,
   profiles: [],
   profileHealth: new Map(),
   probeCheckedAt: null,
   probeRunningScope: null,
+  verification: null,
   installation: null,
   platformInfo: null,
   lastSignature: "",
@@ -279,6 +400,7 @@ function applyLanguage() {
   if (state.status) renderStatus(state.status);
   renderProfiles();
   renderProbeCheckedAt();
+  renderVerification();
   if (state.installation) renderInstallation(state.installation);
   renderAbout();
 }
@@ -289,13 +411,24 @@ function setMiniState(selector, enabled, activeLabel = "enabled", inactiveLabel 
   node.className = `mini-state ${enabled ? "on" : ""}`;
 }
 
-function addEvent(title, detail = "", type = "success") {
-  state.events.unshift({ title, detail, type, time: new Date() });
+function addEvent(title, detail = "", type = "success", output = detail) {
+  state.events.unshift({ title, detail, type, output, time: new Date() });
   state.events = state.events.slice(0, 7);
   const list = $("#event-list");
   list.replaceChildren(...state.events.map((event) => {
-    const row = document.createElement("div");
+    const row = document.createElement("button");
+    row.type = "button";
     row.className = `event ${event.type}`;
+    row.title = t("diagnosticOutput");
+    row.addEventListener("click", () => {
+      showOperationResult({
+        success: event.type !== "error",
+        action: event.title,
+        output: event.output || event.detail
+      }, event.title);
+      showPage("diagnostics");
+      $("#operation-output")?.focus();
+    });
     const dot = document.createElement("span");
     dot.className = "event-dot";
     const copy = document.createElement("div");
@@ -321,6 +454,7 @@ function showToast(message, error = false) {
 }
 
 function showPage(page) {
+  if (!["dashboard", "profiles", "diagnostics", "settings", "about"].includes(page)) return;
   state.page = page;
   document.querySelectorAll("[data-page]").forEach((button) => {
     button.classList.toggle("active", button.dataset.page === page);
@@ -328,6 +462,253 @@ function showPage(page) {
   document.querySelectorAll("[data-page-panel]").forEach((panel) => {
     panel.classList.toggle("active", panel.dataset.pagePanel === page);
   });
+}
+
+// Documentation-only browser fixture. Runtime profiles always come from get_profiles/API.
+function documentationPreviewData() {
+  if (!documentationPreview) throw new Error("Documentation fixture is disabled");
+  const localizedLocation = {
+    ru: ["Бельгия", "Брюссель"],
+    en: ["Belgium", "Brussels"],
+    de: ["Belgien", "Brüssel"],
+    zh: ["比利时", "布鲁塞尔"],
+    ja: ["ベルギー", "ブリュッセル"],
+    ko: ["벨기에", "브뤼셀"]
+  }[state.lang] || ["Belgium", "Brussels"];
+  const [country, city] = localizedLocation;
+  const checkedAt = new Date().toISOString();
+  const profileNames = {
+    ru: [
+      "Бельгия — Брюссель", "Германия — Берлин", "Нидерланды — Амстердам",
+      "Франция — Париж", "Великобритания — Лондон"
+    ],
+    en: [
+      "Belgium — Brussels", "Germany — Berlin", "Netherlands — Amsterdam",
+      "France — Paris", "United Kingdom — London"
+    ],
+    de: [
+      "Belgien — Brüssel", "Deutschland — Berlin", "Niederlande — Amsterdam",
+      "Frankreich — Paris", "Vereinigtes Königreich — London"
+    ],
+    zh: ["比利时 — 布鲁塞尔", "德国 — 柏林", "荷兰 — 阿姆斯特丹", "法国 — 巴黎", "英国 — 伦敦"],
+    ja: [
+      "ベルギー — ブリュッセル", "ドイツ — ベルリン", "オランダ — アムステルダム",
+      "フランス — パリ", "イギリス — ロンドン"
+    ],
+    ko: [
+      "벨기에 — 브뤼셀", "독일 — 베를린", "네덜란드 — 암스테르담",
+      "프랑스 — 파리", "영국 — 런던"
+    ]
+  }[state.lang] || [
+    "Belgium — Brussels", "Germany — Berlin", "Netherlands — Amsterdam",
+    "France — Paris", "United Kingdom — London"
+  ];
+  const protocols = ["openvpn", "amneziawg", "wireguard", "openvpn", "l2tp"];
+  const protocolNames = ["OpenVPN", "AmneziaWG", "WireGuard", "OpenVPN", "L2TP/IPsec"];
+  const profileIds = ["be-brussels", "de-berlin", "nl-amsterdam", "fr-paris", "gb-london"]
+    .map((name) => `profile-docs-${name}`);
+  const profiles = profileNames.map((name, index) => ({
+    profile_id: profileIds[index],
+    name,
+    location: name,
+    protocol: protocols[index],
+    protocol_name: protocolNames[index],
+    file_name: `documentation-${profileIds[index]}.conf`,
+    selected: index === 0
+  }));
+  const latencies = [24, 31, 37, 46, null];
+  const reachability = ["reachable", "reachable", "reachable", "reachable", "unknown"];
+  const probeResults = profiles.map((profile, index) => ({
+    profile_id: profile.profile_id,
+    display_name: profile.name,
+    protocol: profile.protocol,
+    selected: profile.selected,
+    active: index === 0,
+    transport: index === 4 ? "udp" : "tcp",
+    reachability: reachability[index],
+    latency_ms: latencies[index],
+    latency_source: latencies[index] === null ? "none" : index === 1 ? "tcp" : "icmp",
+    message_key: latencies[index] === null ? "probe.unknown" : "probe.reachable"
+  }));
+  return {
+    checkedAt,
+    status: {
+      available: true,
+      generated_at: Math.floor(Date.now() / 1000),
+      product: "Mazzy VPN",
+      version: "1.3.0",
+      service_state: "active",
+      desired: "up",
+      internet: "up",
+      tunnel_active: true,
+      healthy: true,
+      health_failures: 0,
+      protocol: "openvpn",
+      protocol_name: "OpenVPN",
+      profile: profiles[0].name,
+      selected: profiles[0].file_name,
+      location: profiles[0].name,
+      interface: "vpnovpn0",
+      handshake_age: 18,
+      public_ip: "203.0.113.7",
+      autostart: true,
+      health_monitor: true,
+      fallback: { active: false },
+      profiles: { amneziawg: 1, wireguard: 1, openvpn: 2, l2tp: 1 }
+    },
+    profiles,
+    probe: {
+      schema_version: 1,
+      checked_at: checkedAt,
+      scope: "all",
+      timeout_seconds: 3,
+      concurrency: 4,
+      duration_ms: 842,
+      summary: {
+        total: 5, reachable: 4, unknown: 1, unreachable: 0, invalid: 0, active: 1
+      },
+      results: probeResults
+    },
+    verification: {
+      schema_version: 1,
+      checked_at: checkedAt,
+      verdict: "verified",
+      message_key: "verify.verified",
+      tunnel: {
+        active: true,
+        protocol: "openvpn",
+        profile: profiles[0].name,
+        interface: "vpnovpn0"
+      },
+      ipv4: {
+        interface_ip: "203.0.113.7",
+        default_ip: "203.0.113.7",
+        same_egress: true
+      },
+      ipv6: {
+        interface_ip: null,
+        default_ip: null,
+        potential_leak: false
+      },
+      geo: {
+        expected_country_code: "BE",
+        observed_country_code: "BE",
+        country_match: "match",
+        providers_agree: true,
+        providers: [
+          {
+            provider: "ipapi",
+            ip: "203.0.113.7",
+            country_code: "BE",
+            country,
+            region: city,
+            city
+          },
+          {
+            provider: "ipwho",
+            ip: "203.0.113.7",
+            country_code: "BE",
+            country,
+            region: city,
+            city
+          }
+        ]
+      },
+      dns: { state: "vpn-full-tunnel" },
+      speed: { requested: true, measured: true, mbps: 84.6, connect_ms: 164 },
+      findings: []
+    },
+    installation: {
+      engine_installed: true,
+      package_managed: true,
+      installed_version: "1.3.0",
+      bundled_version: "1.3.0",
+      bundled_installer: true,
+      needs_install: false,
+      service_installed: true,
+      monitor_installed: true,
+      api_installed: true,
+      api_socket_available: true,
+      dependencies_ready: true,
+      missing_dependencies: 0,
+      dependencies: [
+        {
+          id: "curl", label: "curl", installed: true,
+          required_for: state.lang === "ru" ? "проверка маршрута" : "route verification"
+        },
+        {
+          id: "openvpn", label: "OpenVPN", installed: true,
+          required_for: state.lang === "ru" ? "профили OpenVPN" : "OpenVPN profiles"
+        },
+        {
+          id: "wireguard", label: "WireGuard tools", installed: true,
+          required_for: state.lang === "ru" ? "профили WireGuard" : "WireGuard profiles"
+        }
+      ]
+    },
+    platform: {
+      functional: true,
+      os: "linux",
+      desktop_version: "0.3.0",
+      author: "Nik m (@mazurovn)",
+      license: "AGPL-3.0-or-later"
+    }
+  };
+}
+
+function renderDocumentationPreview() {
+  const fixture = documentationPreviewData();
+  const bannerText = {
+    ru: "ПРЕДПРОСМОТР ДОКУМЕНТАЦИИ · ТЕСТОВЫЕ ДАННЫЕ RFC 5737",
+    en: "DOCUMENTATION PREVIEW · RFC 5737 TEST DATA",
+    de: "DOKUMENTATIONSVORSCHAU · RFC-5737-TESTDATEN",
+    zh: "文档预览 · RFC 5737 测试数据",
+    ja: "ドキュメントプレビュー · RFC 5737 テストデータ",
+    ko: "문서 미리보기 · RFC 5737 테스트 데이터"
+  };
+  document.body.classList.add("documentation-preview");
+  const banner = document.createElement("div");
+  banner.className = "preview-banner";
+  banner.setAttribute("role", "status");
+  banner.textContent = bannerText[state.lang] || bannerText.en;
+  document.body.prepend(banner);
+  state.status = fixture.status;
+  state.profiles = fixture.profiles;
+  state.profileHealth.clear();
+  fixture.probe.results.forEach((entry) => state.profileHealth.set(entry.profile_id, entry));
+  state.probeCheckedAt = fixture.probe.checked_at;
+  state.installation = fixture.installation;
+  state.platformInfo = fixture.platform;
+  renderStatus(fixture.status);
+  state.verification = fixture.verification;
+  renderProfiles();
+  renderProbeCheckedAt();
+  renderVerification();
+  renderInstallation(fixture.installation);
+  renderAbout();
+  const verification = verificationOutput(fixture.verification);
+  showOperationResult({
+    success: true,
+    action: "verify",
+    output: verification
+  }, t("verifyNow"));
+  addEvent(t("verified"), `${fixture.status.location} · 24 ms`, "success", verification);
+  addEvent(t("checkAllLocations"), "4/5 · 24–46 ms", "success",
+    formatProbeOutput(fixture.probe));
+  showPage(previewParameters.get("page") || "dashboard");
+}
+
+function setServiceControlState(service, enabled) {
+  document.querySelectorAll(`[data-service-action^="${service}-"]`).forEach((button) => {
+    const active = button.dataset.serviceAction === `${service}-${enabled ? "on" : "off"}`;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  const node = $(`#${service}-control-state`);
+  if (node) {
+    node.textContent = `${t("currentState")}: ${enabled ? t("enabled") : t("disabled")}`;
+    node.className = `setting-current ${enabled ? "on" : ""}`;
+  }
 }
 
 function operationTimeout() {
@@ -347,9 +728,131 @@ function showOperationResult(result, title = "") {
   const output = $("#operation-output");
   const status = $("#operation-state");
   $("#operation-title").textContent = title || result?.action || t("diagnosticOutput");
-  status.textContent = result?.success ? t("outputSuccess") : t("outputFailed");
-  status.className = `operation-state ${result?.success ? "success" : "error"}`;
+  const warning = result?.severity === "warning";
+  status.textContent = warning ? t("warning")
+    : result?.success ? t("outputSuccess") : t("outputFailed");
+  status.className = `operation-state ${warning ? "warning" : result?.success ? "success" : "error"}`;
   output.textContent = result?.output?.trim() || (result?.success ? t("actionDone") : t("actionFailed"));
+}
+
+function verificationOutput(result) {
+  const provider = result?.geo?.providers?.[0] || {};
+  const maskIp = (value) => !value ? "—" : state.hideIp ? "•••.•••.•••.•••" : value;
+  return [
+    `verdict=${result?.verdict || "unknown"}`,
+    `checked_at=${result?.checked_at || "—"}`,
+    `tunnel.active=${Boolean(result?.tunnel?.active)}`,
+    `tunnel.protocol=${result?.tunnel?.protocol || "—"}`,
+    `tunnel.interface=${result?.tunnel?.interface || "—"}`,
+    `ipv4.interface=${maskIp(result?.ipv4?.interface_ip)}`,
+    `ipv4.default=${maskIp(result?.ipv4?.default_ip)}`,
+    `ipv4.same_egress=${Boolean(result?.ipv4?.same_egress)}`,
+    `ipv6.potential_leak=${Boolean(result?.ipv6?.potential_leak)}`,
+    `geo.observed=${result?.geo?.observed_country_code || "—"} ${provider.country || ""} ${provider.city || ""}`.trim(),
+    `geo.expected=${result?.geo?.expected_country_code || "—"}`,
+    `geo.match=${result?.geo?.country_match || "unknown"}`,
+    `geo.providers_agree=${result?.geo?.providers_agree ?? "unknown"}`,
+    `dns.state=${result?.dns?.state || "unknown"}`,
+    `speed=${result?.speed?.measured ? `${result.speed.mbps} Mbps` : t("speedNotRun")}`,
+    "",
+    ...(result?.findings || [])
+  ].join("\n");
+}
+
+function renderVerification() {
+  const card = $("#verification-card");
+  if (!card) return;
+  const result = state.verification;
+  const badge = $("#verification-badge");
+  if (!result) {
+    card.className = "glass verification-card";
+    badge.textContent = t("notVerified");
+    badge.className = "health-badge";
+    $("#verified-location").textContent = "—";
+    $("#verified-profile-match").textContent = "—";
+    $("#verified-route").textContent = "—";
+    $("#verified-ipv6").textContent = "—";
+    $("#verified-dns").textContent = "—";
+    $("#verified-speed").textContent = t("speedNotRun");
+    $("#verification-note").textContent = t("verificationDisclaimer");
+    return;
+  }
+  const verdict = result.verdict || "failed";
+  card.className = `glass verification-card ${verdict}`;
+  badge.textContent = t(verdict);
+  badge.className = `health-badge ${verdict === "verified" ? "ok" : verdict === "failed" ? "bad" : ""}`;
+  const provider = result?.geo?.providers?.[0] || {};
+  const location = [provider.country, provider.city].filter(Boolean).join(" · ");
+  $("#verified-location").textContent = location
+    ? `${result?.geo?.observed_country_code || "—"} · ${location}`
+    : result?.geo?.observed_country_code || t("unknown");
+  const matches = {
+    match: t("matches"),
+    mismatch: t("mismatch"),
+    unknown: t("unknown")
+  };
+  $("#verified-profile-match").textContent = matches[result?.geo?.country_match] || t("unknown");
+  $("#verified-route").textContent = result?.ipv4?.same_egress ? t("sameEgress") : t("differentEgress");
+  $("#verified-ipv6").textContent = result?.ipv6?.potential_leak ? t("potentialLeak") : t("noLeak");
+  $("#verified-dns").textContent = result?.dns?.state === "vpn-full-tunnel"
+    ? t("fullTunnelDns") : t("partialDns");
+  $("#verified-speed").textContent = result?.speed?.measured
+    ? `${result.speed.mbps} Mbps · ${result.speed.connect_ms} ms`
+    : t("speedNotRun");
+  const checked = new Date(result.checked_at);
+  const time = Number.isNaN(checked.getTime()) ? "" : checked.toLocaleTimeString([], {
+    hour: "2-digit", minute: "2-digit", second: "2-digit"
+  });
+  $("#verification-note").textContent = `${time ? `${t("lastChecked")}: ${time}. ` : ""}${t("verificationDisclaimer")}`;
+}
+
+async function verifyConnection(includeSpeed = false) {
+  if (state.busy) return null;
+  setBusy(true);
+  const title = includeSpeed ? t("verifyWithSpeed") : t("verifyNow");
+  $("#operation-state").textContent = t("outputRunning");
+  $("#operation-state").className = "operation-state running";
+  $("#operation-title").textContent = title;
+  $("#operation-output").textContent = `${t("actionStarted")}: ${title}…`;
+  showToast(`${t("actionStarted")}: ${title}`);
+  try {
+    if (!invoke) throw new Error("Tauri runtime is unavailable");
+    const result = await invoke("verify_connection", {
+      timeout: 10,
+      includeSpeed
+    });
+    state.verification = result;
+    renderVerification();
+    const success = result?.verdict !== "failed";
+    const output = verificationOutput(result);
+    showOperationResult({
+      success,
+      severity: result?.verdict === "warning" ? "warning" : result?.verdict,
+      action: "verify",
+      output
+    }, title);
+    addEvent(
+      t(result?.verdict || "failed"),
+      `${result?.geo?.observed_country_code || t("unknown")} · ${result?.dns?.state || "unknown"}`,
+      result?.verdict === "verified" ? "success" : result?.verdict === "warning" ? "warning" : "error",
+      output
+    );
+    showToast(t(result?.verdict || "failed"), result?.verdict === "failed");
+    if (result?.verdict === "failed") showPage("diagnostics");
+    return result;
+  } catch (error) {
+    const message = String(error);
+    state.verification = null;
+    renderVerification();
+    showOperationResult({ success: false, action: "verify", output: message }, title);
+    addEvent(t("actionFailed"), message, "error", message);
+    showToast(`${t("actionFailed")}: ${message}`, true);
+    showPage("diagnostics");
+    return null;
+  } finally {
+    setBusy(false);
+    await refreshStatus(false);
+  }
 }
 
 function renderStatus(data) {
@@ -377,6 +880,8 @@ function renderStatus(data) {
 
   setMiniState("#autostart-state", Boolean(data?.autostart));
   setMiniState("#monitor-state", Boolean(data?.health_monitor));
+  setServiceControlState("autostart", Boolean(data?.autostart));
+  setServiceControlState("monitor", Boolean(data?.health_monitor));
   setMiniState("#fallback-state", Boolean(data?.fallback?.active), "active", "inactive");
   if (data?.fallback?.active) $("#fallback-state").classList.add("warn");
 
@@ -412,6 +917,8 @@ function renderStatus(data) {
     : "";
   if (state.lastActiveProfileSignature !== activeProfileSignature) {
     state.lastActiveProfileSignature = activeProfileSignature;
+    state.verification = null;
+    renderVerification();
     if (state.profiles.length) renderProfiles();
   }
 }
@@ -425,6 +932,28 @@ function renderProfiles() {
     const matchesProtocol = protocol === "all" || profile.protocol === protocol;
     const haystack = `${profile.name || ""} ${profile.location || ""} ${profile.protocol_name || ""}`.toLocaleLowerCase();
     return matchesProtocol && (!query || haystack.includes(query));
+  });
+  const sortMode = $("#profile-sort")?.value || "recommended";
+  const reachabilityRank = { reachable: 0, unknown: 1, unreachable: 3, invalid: 4 };
+  const activeProfile = (profile) => statusMatchesProfile(profile);
+  profiles.sort((left, right) => {
+    const leftHealth = state.profileHealth.get(left.profile_id);
+    const rightHealth = state.profileHealth.get(right.profile_id);
+    const leftLatency = Number.isFinite(leftHealth?.latency_ms) ? leftHealth.latency_ms : Infinity;
+    const rightLatency = Number.isFinite(rightHealth?.latency_ms) ? rightHealth.latency_ms : Infinity;
+    const leftStatus = reachabilityRank[leftHealth?.reachability] ?? 2;
+    const rightStatus = reachabilityRank[rightHealth?.reachability] ?? 2;
+    const nameOrder = String(left.name || left.file_name).localeCompare(
+      String(right.name || right.file_name), state.lang, { sensitivity: "base" }
+    );
+    if (sortMode === "name") return nameOrder;
+    if (sortMode === "latency") return leftLatency - rightLatency || leftStatus - rightStatus || nameOrder;
+    if (sortMode === "status") return leftStatus - rightStatus || leftLatency - rightLatency || nameOrder;
+    return Number(activeProfile(right)) - Number(activeProfile(left))
+      || leftStatus - rightStatus
+      || leftLatency - rightLatency
+      || Number(right.selected) - Number(left.selected)
+      || nameOrder;
   });
   if (!profiles.length) {
     const empty = document.createElement("div");
@@ -440,11 +969,7 @@ function renderProfiles() {
     const liveStatusAvailable = state.status?.available !== false
       && Number(state.status?.generated_at || 0) > 0;
     const active = liveStatusAvailable
-      ? Boolean(
-        state.status?.tunnel_active
-        && state.status?.protocol === profile.protocol
-        && state.status?.profile === (profile.name || profile.file_name)
-      )
+      ? statusMatchesProfile(profile)
       : Boolean(health?.active);
     const row = document.createElement("div");
     row.className = `profile-item${profile.selected ? " selected" : ""}`
@@ -457,7 +982,11 @@ function renderProfiles() {
     const name = document.createElement("strong");
     name.textContent = profile.name || profile.file_name;
     const detail = document.createElement("small");
-    detail.textContent = `${profile.protocol_name || profile.protocol}${profile.selected ? ` · ${t("selectedProfile")}` : ""}`;
+    const location = profile.location && profile.location !== profile.name
+      ? `${profile.location} · `
+      : "";
+    detail.textContent = `${location}${profile.protocol_name || profile.protocol}`
+      + `${profile.selected ? ` · ${t("selectedProfile")}` : ""}`;
     const healthLine = document.createElement("small");
     healthLine.className = `profile-health${health?.reachability ? ` ${health.reachability}` : ""}`;
     const healthLabels = {
@@ -508,6 +1037,53 @@ function renderProfiles() {
     row.append(marker, copy, actions);
     return row;
   }));
+}
+
+function statusMatchesProfile(profile) {
+  if (
+    state.status?.available === false
+    || Number(state.status?.generated_at || 0) <= 0
+    || !state.status?.tunnel_active
+    || state.status?.protocol !== profile.protocol
+  ) {
+    return false;
+  }
+  if (typeof state.status.profile_id === "string" && state.status.profile_id) {
+    return state.status.profile_id === profile.profile_id;
+  }
+  if (
+    typeof state.status.profile_file_name === "string"
+    && state.status.profile_file_name
+  ) {
+    return state.status.profile_file_name === profile.file_name;
+  }
+  const legacyMatches = state.profiles.filter((candidate) =>
+    candidate.protocol === state.status.protocol
+    && (candidate.name || candidate.file_name) === state.status.profile);
+  return legacyMatches.length === 1
+    && legacyMatches[0].profile_id === profile.profile_id;
+}
+
+function fastestReachableProfile() {
+  return state.profiles
+    .map((profile) => ({ profile, health: state.profileHealth.get(profile.profile_id) }))
+    .filter(({ health }) => health?.reachability === "reachable"
+      && Number.isFinite(health?.latency_ms))
+    .sort((left, right) => left.health.latency_ms - right.health.latency_ms)[0]?.profile || null;
+}
+
+async function connectFastestProfile() {
+  const profile = fastestReachableProfile();
+  if (!profile) {
+    showToast(t("fastestUnavailable"), true);
+    showPage("profiles");
+    return;
+  }
+  await runOperation({
+    kind: "connect",
+    protocol: profile.protocol,
+    profile: profile.file_name
+  }, `${t("connectFastest")}: ${profile.name || profile.file_name}`);
 }
 
 async function refreshProfiles(manual = false) {
@@ -598,16 +1174,18 @@ async function checkLocations(protocol = "all", title = "") {
     const hardFailures = Number(result?.summary?.unreachable || 0)
       + Number(result?.summary?.invalid || 0);
     const success = Number(result?.summary?.total || 0) > 0 && hardFailures === 0;
+    const output = formatProbeOutput(result);
     const operation = {
       success,
       action: "probe",
-      output: formatProbeOutput(result)
+      output
     };
     showOperationResult(operation, operationTitle);
     addEvent(
       success ? t("actionDone") : t("actionFailed"),
       `reachable=${result?.summary?.reachable || 0}, unknown=${result?.summary?.unknown || 0}`,
-      success ? "success" : "error"
+      success ? "success" : "error",
+      output
     );
     showToast(success ? t("actionDone") : t("actionFailed"), !success);
     return result;
@@ -645,7 +1223,30 @@ function renderInstallation(report) {
     const row = document.createElement("div");
     row.className = `dependency${dependency.installed ? " installed" : ""}`;
     const label = document.createElement("span");
-    label.textContent = `${dependency.label} · ${dependency.required_for}`;
+    const russianLabels = {
+      ping: "ICMP ping", getent: "DNS-резолвер",
+      systemd: "systemd и временные службы", journalctl: "системный журнал",
+      pkexec: "авторизация PolicyKit", jq: "среда JSON API",
+      socat: "клиент локального API", "dns-integration": "интеграция DNS",
+      "wireguard-tools": "инструменты WireGuard",
+      "amneziawg-tools": "инструменты AmneziaWG",
+      "amneziawg-backend": "модуль или userspace-движок AmneziaWG",
+      "l2tp-transport": "транспорт L2TP"
+    };
+    const russianPurposes = {
+      core: "ядро", Desktop: "Desktop", "local API": "локальный API",
+      "CLI / TUI local API": "локальный API CLI/TUI", "VPN DNS": "DNS VPN",
+      "route verification": "проверка маршрута",
+      "OpenVPN profiles": "профили OpenVPN",
+      "WireGuard profiles": "профили WireGuard"
+    };
+    const dependencyLabel = state.lang === "ru"
+      ? russianLabels[dependency.id] || dependency.label
+      : dependency.label;
+    const dependencyPurpose = state.lang === "ru"
+      ? russianPurposes[dependency.required_for] || dependency.required_for
+      : dependency.required_for;
+    label.textContent = `${dependencyLabel} · ${dependencyPurpose}`;
     const status = document.createElement("span");
     status.textContent = dependency.installed ? "OK" : t("missing");
     row.append(label, status);
@@ -761,12 +1362,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
   $("#profile-search").addEventListener("input", renderProfiles);
   $("#protocol-filter").addEventListener("change", renderProfiles);
+  $("#profile-sort").addEventListener("change", renderProfiles);
   $("#profiles-refresh-button").addEventListener("click", async () => {
     await runOperation({ kind: "refresh" }, t("profilesRefreshed"), false);
     await refreshProfiles(true);
   });
   $("#location-health-button").addEventListener("click", () =>
     checkLocations("all", t("checkAllLocations")));
+  $("#connect-fastest-button").addEventListener("click", connectFastestProfile);
+  $("#verify-egress-button").addEventListener("click", () => verifyConnection(false));
+  $("#verify-speed-button").addEventListener("click", () => verifyConnection(true));
 
   $("#import-files-button").addEventListener("click", async () => {
     if (!invoke || state.busy) return;
@@ -817,6 +1422,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   $("#doctor-button").addEventListener("click", () =>
     runOperation({ kind: "doctor", fix: false }, t("runDoctor")));
+  $("#diagnostic-verify-button").addEventListener("click", () => verifyConnection(false));
   $("#diagnose-button").addEventListener("click", () =>
     runOperation({ kind: "diagnose" }, t("connectionDiagnose")));
   $("#doctor-fix-button").addEventListener("click", () => {
@@ -858,15 +1464,46 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   if (tauri?.event?.listen) {
+    await tauri.event.listen("navigate-page", ({ payload }) => {
+      showPage(String(payload || "dashboard"));
+    });
     await tauri.event.listen("vpn-action-result", ({ payload }) => {
-      const detail = payload?.output?.trim().split("\n").slice(-1)[0] || "";
-      addEvent(payload?.success ? t("actionDone") : t("actionFailed"), detail,
-        payload?.success ? "success" : "error");
-      showOperationResult(payload, payload?.action || t("diagnosticOutput"));
-      showToast(payload?.success ? t("actionDone") : `${t("actionFailed")}: ${detail}`, !payload?.success);
-      if (payload?.action === "doctor" || !payload?.success) showPage("diagnostics");
+      let displayPayload = payload;
+      let eventType = payload?.success ? "success" : "error";
+      if (payload?.action === "verify" && payload?.data) {
+        state.verification = payload.data;
+        renderVerification();
+        displayPayload = {
+          ...payload,
+          severity: payload.data.verdict === "warning" ? "warning" : payload.data.verdict,
+          output: verificationOutput(payload.data)
+        };
+        eventType = payload.data.verdict === "verified" ? "success"
+          : payload.data.verdict === "warning" ? "warning" : "error";
+      } else if (payload?.action === "probe-all" && payload?.data) {
+        state.profileHealth.clear();
+        (payload.data.results || []).forEach((entry) => {
+          state.profileHealth.set(entry.profile_id, entry);
+        });
+        state.probeCheckedAt = payload.data.checked_at || null;
+        renderProfiles();
+        renderProbeCheckedAt();
+        displayPayload = { ...payload, output: formatProbeOutput(payload.data) };
+      }
+      const detail = displayPayload?.output?.trim().split("\n").slice(-1)[0] || "";
+      addEvent(displayPayload?.success ? t("actionDone") : t("actionFailed"), detail,
+        eventType, displayPayload?.output);
+      showOperationResult(displayPayload, displayPayload?.action || t("diagnosticOutput"));
+      showToast(displayPayload?.success ? t("actionDone")
+        : `${t("actionFailed")}: ${detail}`, !displayPayload?.success);
+      if (displayPayload?.action === "doctor" || !displayPayload?.success) showPage("diagnostics");
       refreshStatus(false);
     });
+  }
+
+  if (documentationPreview) {
+    renderDocumentationPreview();
+    return;
   }
 
   if (invoke) {

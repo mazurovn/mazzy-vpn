@@ -3,11 +3,21 @@
 Автор и сопровождающий проекта:
 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
-Mazzy VPN — менеджер VPN для Linux с интерактивным терминальным интерфейсом и
-CLI для автоматизации. Он объединяет OpenVPN, WireGuard, AmneziaWG и
-L2TP/IPsec: распознаёт и безопасно импортирует профили, проверяет каждый
-endpoint, запускает только один управляемый туннель, выполняет живые тесты в
-транзакции и возвращает предыдущее рабочее соединение после ошибки.
+Mazzy VPN — открытый AI-ready VPN-клиент для Linux с Desktop, tray,
+интерактивным TUI и CLI для автоматизации. Он предназначен для устойчивых
+AI-сессий и агентов, обучения, видео, открытого веба, удалённой работы и
+корпоративных порталов. Клиент объединяет OpenVPN, WireGuard, AmneziaWG и
+L2TP/IPsec, безопасно импортирует профили, измеряет все локации, проверяет
+фактический egress/локацию/DNS/IPv6 и восстанавливает предыдущее соединение
+после ошибки.
+
+Это клиент и контур управления, а не собственная VPN-подписка. Используйте
+профили своего VPN-провайдера или организации; учётная запись Mazzy VPN и
+телеметрия не требуются.
+
+В исходном дереве объявлен release candidate 1.3.0/0.3.0. Пока не опубликованы
+оба соответствующих tag и GitHub Release, последней выпущенной линией остаются
+CLI/TUI 1.2.0 и Desktop 0.2.0 preview.
 
 Основная команда — `mazzy-vpn`. Совместимые aliases: `vpnctl` и `mazzyvpn`.
 
@@ -77,6 +87,8 @@ mazzy-vpn status --json
 mazzy-vpn status --api-json        # сырой envelope local API v1
 mazzy-vpn profiles --api-json      # opaque ID без имён файлов движка
 mazzy-vpn diagnose
+mazzy-vpn verify                       # реальный egress, geo, DNS и IPv6
+mazzy-vpn verify --speed               # явный ограниченный sample 5 MB
 mazzy-vpn validate all
 mazzy-vpn probe all --timeout 3 --jobs 4
 mazzy-vpn probe all --timeout 3 --jobs 4 --json
@@ -126,16 +138,18 @@ ping серверов, emergency recovery, doctor, автозапуск и жу�
 
 ## Desktop control center и tray
 
-![Mazzy VPN Desktop Dashboard](docs/images/dashboard-connected-preview.png)
+![Mazzy VPN Desktop Dashboard на русском](docs/images/dashboard-ru.png)
 
-Tauri Desktop 0.2 для Linux содержит экраны Dashboard, Profiles, Diagnostics,
+Tauri Desktop 0.3 для Linux содержит экраны Dashboard, Profiles, Diagnostics,
 Settings и «О программе», а также системный tray. DEB/RPM устанавливают
 совместимый engine, systemd units и базовые runtime-зависимости через package
 manager; AppImage сохраняет явно разрешённый embedded installer. Клиент
 проверяет версии и зависимости и после разрешения может исправить недостающие
 поддерживаемые protocol packages. Доступны импорт файлов и
-папок, поиск и выбор профиля, подключение, validation, probe, транзакционные
-тесты, Doctor с исправлениями, self-test, ограниченный журнал, autostart и
+папок, поиск и выбор профиля, сортировка всего списка по ping, выбор самой
+быстрой доступной локации, проверка фактического egress/локации/DNS/IPv6,
+транзакционные тесты, кликабельные события, Doctor с исправлениями, self-test,
+ограниченный журнал, расширенный tray, autostart и
 управление recovery monitor. Предварительно устанавливать CLI вручную не нужно.
 Linux-пакеты выпускаются как AppImage, DEB и RPM.
 
@@ -147,7 +161,7 @@ install/upgrade/remove, rollback/fault и signing gates на каждом
 «О программе» показывает версии Desktop/engine/platform, автора, copyright,
 лицензию AGPL, принципы приватности и правила безопасной работы.
 
-Desktop 0.2 — полноценный центр управления Linux в статусе preview, но ещё не
+Desktop 0.3 — полноценный центр управления Linux в статусе preview, но ещё не
 финальный самостоятельный Desktop 1.0. Язык-независимая схема API v1,
 защищённый Linux service и lifecycle-клиенты CLI/TUI/Desktop уже реализованы,
 но остальные operation domains ещё не переведены на единый dispatcher. Для

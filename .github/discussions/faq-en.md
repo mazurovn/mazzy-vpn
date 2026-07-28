@@ -12,21 +12,29 @@ A version is published only when it has a tag and a page in
 [GitHub Releases](https://github.com/mazurovn/mazzy-vpn/releases). A version in
 `main`, the changelog or a draft PR is not a release.
 
-The current release line is CLI/TUI 1.2.0 and Desktop 0.2.0 preview, prepared
-in [PR #22](https://github.com/mazurovn/mazzy-vpn/pull/22). Treat it as a
-release candidate while either tag `v1.2.0`/`desktop-v0.2.0` or its
-corresponding Release page is missing.
+The published release line is CLI/TUI 1.2.0 and Desktop 0.2.0 preview. The
+1.3.0/Desktop 0.3.0 source tree is a release candidate until both tags and
+their corresponding Release pages exist.
 
 ## Does Desktop require a separate CLI install?
 
-Linux Desktop 0.2 bundles a compatible engine and installer, so no prior manual
+Linux Desktop 0.3 bundles a compatible engine and installer, so no prior manual
 CLI install is required. System changes run only after standard OS
 authorization.
+
+## How do I verify the VPN uses the expected route and location?
+
+Run `mazzy-vpn verify` or use **Verify VPN** in Desktop. It compares
+interface-bound and default IPv4 egress, validates two location providers
+against that exact IP, checks configured DNS routing and flags a potential
+IPv6 leak. `--speed` adds a separate explicit bounded five-megabyte sample.
+This is time-of-check network evidence; account region, cookies, WebRTC and
+device location may still affect a site.
 
 ## Does a successful build mean the VPN works on every OS?
 
 No. CI proves that the UI builds on Linux, macOS and Windows; it does not prove
-that a platform VPN backend works. Linux Desktop 0.2 is a functional
+that a platform VPN backend works. Linux Desktop 0.3 is a functional
 control-center preview. Windows/macOS artifacts remain UI previews until native
 backends, signed installers and platform integration tests are complete.
 
@@ -45,7 +53,7 @@ publish a working profile, private key, password, PSK, endpoint or complete log.
 ## What does Doctor check?
 
 Versions, dependencies, profiles, systemd, desired state, VPN interface and
-connectivity. Desktop 0.2 shows the complete result and bounded logs. Repair is
+connectivity. Desktop 0.3 shows the complete result and bounded logs. Repair is
 a separate action that explains system changes and requires confirmation.
 
 ## Are live tests safe?

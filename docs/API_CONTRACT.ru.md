@@ -12,13 +12,14 @@
 [#5](https://github.com/mazurovn/mazzy-vpn/issues/5). Текущий транспорт
 `cli-json-adapter` явно имеет статус `partial`: существующие безопасные JSON
 status/profile outputs доступны, а CLI/TUI уже отправляют v1 envelopes для
-`status.get`, `profiles.list`, `tests.probe` и `lifecycle.*` через единый
+`status.get`, `profiles.list`, `tests.probe`, `tests.verify-egress` и
+`lifecycle.*` через единый
 dispatcher. Остальные
 домены ещё используют совместимый прямой CLI-контур. Метаданные контракта
 реализованы.
 Socket-activated Linux transport имеет статус `partial`: он принимает
-`status.get`, `profiles.list`, ограниченный query `tests.probe` и три мутации
-`lifecycle.*`. Остальные операции и
+`status.get`, `profiles.list`, ограниченные queries `tests.probe` и
+`tests.verify-egress`, а также три мутации `lifecycle.*`. Остальные операции и
 не-Linux transports пока `planned`, поэтому полный кроссплатформенный daemon ещё
 не заявлен готовым.
 
@@ -139,8 +140,32 @@ default/active, transport, `reachability`, необязательный цело
 применяет request deadline ко всей worker group и сериализует batch probes
 глобальным lock, чтобы параллельные socket clients не умножали сетевую нагрузку.
 
+`tests.verify-egress` — read-only query с общим lock и ограниченным deadline.
+Payload содержит только `timeout_seconds` и явный выбор `include_speed`.
+Response передаёт:
+
+- активные tunnel protocol/display name/interface;
+- interface-bound и default IPv4 с признаком равенства;
+- interface-bound/default IPv6 и флаг потенциальной утечки;
+- ожидаемую/наблюдаемую страну, agreement providers и не более двух
+  валидированных provider records;
+- состояние настроенного DNS route;
+- необязательный ограниченный speed sample;
+- verdict, message key и уникальные finding codes.
+
+Engine принимает geo record только для точного interface-bound IPv4. Для
+`verified` нужны два разных providers, согласовавших страну, одинаковый
+default/interface IPv4 egress, отсутствие потенциальной IPv6-утечки,
+full-tunnel DNS и пустой список findings. Strict Desktop parser повторно
+проверяет эти инварианты и отклоняет неизвестные поля, неверные семейства IP,
+дубликат provider, несовпадение provider IP и необъяснённый non-verified
+verdict. Response не содержит VPN endpoint, profile path, key или
+configuration. По умолчанию `include_speed=false`; 5-МБ transfer никогда не
+запускается неявно.
+
 Установленные CLI и TUI используют socket без `sudo` для status, списка
-профилей, batch endpoint probe, connect, quick, reconnect и disconnect. Клиент
+профилей, batch endpoint probe, egress verification, connect, quick, reconnect
+и disconnect. Клиент
 передаёт только
 непрозрачный `profile_id`, задаёт ограниченный query refresh deadline,
 ограничивает время и byte size ответа и принимает ровно один response document
@@ -155,7 +180,9 @@ Desktop также читает ответ до bounded EOF и принимае�
 JSON document.
 Проверка списка локаций в Desktop использует структурированный `tests.probe`
 и связывает очищенный результат с opaque profile ID, не разбирая raw CLI text.
-После неудачного первоначального подключения к socket разрешён typed
+Desktop egress verification принимает strict structured result
+`tests.verify-egress`. После неудачного первоначального подключения к socket
+разрешён typed
 compatibility adapter, потому что request ещё не отправлялся. Любая
 неопределённость после подключения возвращается пользователю и никогда не
 переходит в `pkexec`.

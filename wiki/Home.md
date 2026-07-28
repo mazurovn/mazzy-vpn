@@ -6,15 +6,19 @@
 
 Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
-Mazzy VPN — open-source VPN manager с безопасным CLI/TUI, автоматическим
-восстановлением и самостоятельным Tauri Desktop control center для Linux.
+Mazzy VPN — open-source AI-ready VPN-клиент для устойчивой работы людей и
+AI-агентов с ИИ, видео, открытым вебом и рабочими системами. Он объединяет
+безопасный CLI/TUI, автоматическое восстановление, реальные проверки egress и
+Tauri Desktop control center для Linux.
 Windows/macOS пока являются UI preview, Android/iOS — planned native clients.
 
-Mazzy VPN is an open-source VPN manager with a safe CLI/TUI, automatic
-self-healing and a self-contained Tauri Desktop control center for Linux.
+Mazzy VPN is an open-source AI-ready VPN client for resilient human and
+AI-agent access to AI, video, the open web and work systems. It combines a safe
+CLI/TUI, automatic self-healing, actual egress checks and a Tauri Desktop
+control center for Linux.
 Windows/macOS remain UI previews; Android/iOS are planned native clients.
 
-![Mazzy VPN Desktop Dashboard](https://raw.githubusercontent.com/mazurovn/mazzy-vpn/main/docs/images/dashboard-connected-preview.png)
+![Mazzy VPN Desktop Dashboard](https://raw.githubusercontent.com/mazurovn/mazzy-vpn/main/docs/images/dashboard-en.png)
 
 ## Русский
 

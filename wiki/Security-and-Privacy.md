@@ -19,7 +19,7 @@ Mazzy VPN не использует обязательный cloud account и н
 
 ## Защита runtime
 
-- профили `600`, каталоги `700`;
+- root-owned профили `600`, вся цепочка каталогов без group/world write;
 - повторная проверка профиля внутри root service;
 - запрет executable hooks/includes/plugins;
 - один managed tunnel и одна изменяющая операция;
@@ -28,7 +28,12 @@ Mazzy VPN не использует обязательный cloud account и н
 - redaction приватных параметров в расширенных журналах;
 - Desktop CSP без remote scripts;
 - Desktop enum allowlist без shell;
-- status cache без endpoint, path и config content.
+- status cache без endpoint, path и config content;
+- строгая Rust-валидация status/profile cache до передачи в WebView;
+- активный профиль определяется по opaque `profile_id` или точному basename;
+  одинаковые display names не считаются достаточной идентичностью;
+- отсутствие неявного публичного DNS: OpenVPN использует переданный сервером
+  DNS либо явный `VPNCTL_OPENVPN_FALLBACK_DNS`.
 
 ## Проверки репозитория
 
@@ -62,11 +67,14 @@ Private or preshared keys, OpenVPN client keys and auth files, IPsec/PPP
 credentials, operational profiles, personal paths and user endpoint lists are
 never published.
 
-Runtime controls include mode-`600` profiles, mode-`700` directories, repeated
+Runtime controls include root-owned mode-`600` profiles, a complete root-owned
+directory chain with no group/world write, repeated
 root-side validation, rejection of executable hooks/includes/plugins,
 serialized mutations, atomic desired state, transactional rollback and log
 redaction. Desktop uses a restrictive CSP, enum action allowlist, no shell and
-a cache with no endpoint, path or config content.
+a strictly validated cache with no endpoint, path or config content. OpenVPN
+uses server-provided DNS or an explicit `VPNCTL_OPENVPN_FALLBACK_DNS`; it no
+longer silently substitutes a public resolver.
 
 The repository runs public-tree audit, Gitleaks, npm audit, Rust tests and
 Clippy. GitHub Actions are pinned to full commit SHAs. Do not put a secret in a

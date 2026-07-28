@@ -6,18 +6,32 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 [План самостоятельного Desktop 1.0](DESKTOP_ROADMAP.ru.md) ·
 [Паритет функций](FEATURE_PARITY.md) · [Главная страница](../README.md)
 
-![Mazzy VPN Desktop Dashboard — preview с тестовыми данными](images/dashboard-connected-preview.png)
+![Mazzy VPN Desktop Dashboard — русские документационные данные](images/dashboard-ru.png)
 
 Mazzy VPN Desktop — приложение на Tauri 2 с общим движком `mazzy-vpn`.
-Linux-пакет 0.2 включает совместимый engine installer: отдельная предварительная
+Linux-пакет 0.3 включает совместимый engine installer: отдельная предварительная
 установка CLI больше не требуется. CLI и TUI остаются самостоятельными
 клиентами того же движка и состояния.
 
-> **Статус 0.2:** Linux control-center уже покрывает основной рабочий цикл, но
+> **Статус 0.3:** Linux control-center уже покрывает основной рабочий цикл, но
 > остаётся preview до закрытия [release gates](FEATURE_PARITY.md). Для Desktop
-> 1.0 ещё нужны полный fallback-policy UI, перевод новых экранов на все шесть
-> языков и перенос оставшихся typed `pkexec`-операций в частично реализованный
+> 1.0 ещё нужны общий native service, полный fallback-policy UI, перевод всех
+> экранов на шесть языков, подписанные обновления, clean-device integration
+> tests и перенос оставшихся typed `pkexec`-операций в частично реализованный
 > versioned local API.
+
+## Визуальный обзор
+
+Все кадры используют документационные адреса RFC 5737 и видимый banner
+тестовых данных. В них нет рабочего профиля, endpoint или IP пользователя.
+
+| Профили, ping и выбор быстрой локации | Полный вывод диагностики |
+|---|---|
+| ![Профили и latency](images/profiles-ru.png) | ![Doctor и проверка VPN](images/diagnostics-ru.png) |
+
+| Установка и явное состояние служб | Dashboard на других языках |
+|---|---|
+| ![Зависимости и службы](images/settings-ru.png) | [English](images/dashboard-en.png) · [Русский](images/dashboard-ru.png) · [Deutsch](images/dashboard-de.png) · [中文](images/dashboard-zh.png) · [日本語](images/dashboard-ja.png) · [한국어](images/dashboard-ko.png) |
 
 ## Статус платформ
 
@@ -31,9 +45,10 @@ macOS и Windows preview не нужно использовать как сре�
 Для полноценной поддержки нужны нативные Network Extension/launchd и Windows
 service/Wintun backends, подпись кода и platform-specific тесты.
 
-## Экраны Desktop 0.2
+## Экраны Desktop 0.3
 
-1. **Обзор** — туннель, интернет, IP, handshake, health, recovery и tray.
+1. **Обзор** — туннель, интернет, IP, handshake, health, recovery, проверка
+   фактического egress и tray.
 2. **Профили** — безопасный импорт файлов/папок, поиск, протоколы, выбор
    локации/default-профиля, удаление, массовая проверка endpoint с отдельными
    reachability/latency/active и точечный live-test.
@@ -57,12 +72,23 @@ service/Wintun backends, подпись кода и platform-specific тесты
 - локальный журнал действий текущего сеанса интерфейса;
 - свежесть cache, чтобы устаревшие данные не выглядели актуальными.
 
+Health monitor автоматически требует default egress только для профилей,
+которые объявляют full tunnel. Split-tunnel сохраняет endpoint-only health,
+если администратор явно не задал
+`VPNCTL_HEALTH_REQUIRE_DEFAULT_EGRESS=yes`. Recovery запускается после двух
+подтверждённых расхождений default/interface IPv4; недоступность observer сама
+по себе не вызывает reconnect. Geo и speed проверки в фоне не выполняются.
+
 Статус обновляется каждые пять секунд из `/run/mazzy-vpn/status.json`.
 Санитизированная библиотека профилей читается из
 `/run/mazzy-vpn/profiles.json`. Root engine пересоздаёт оба файла атомарно.
 Файлы имеют права `0640 root:mazzy-vpn`, а каталог —
 `0750 root:mazzy-vpn`. Они не содержат endpoint, пути профилей, приватные
-ключи, логины, пароли или конфигурационные директивы.
+ключи, логины, пароли или конфигурационные директивы. Rust десериализует оба
+cache в закрытые `deny_unknown_fields` типы и проверяет внутренние инварианты
+до передачи в WebView. Активная строка определяется по opaque `profile_id` или
+точному basename конфига; legacy fallback по display name разрешён только при
+единственном совпадении.
 
 ## Действия в окне и tray
 
@@ -71,6 +97,8 @@ service/Wintun backends, подпись кода и platform-specific тесты
 | Quick Connect | `mazzy-vpn quick` |
 | Reconnect | `mazzy-vpn reconnect` |
 | Disconnect | `mazzy-vpn disconnect` |
+| Проверить фактические egress/локацию | `mazzy-vpn verify` |
+| Явный ограниченный speed sample | `mazzy-vpn verify --speed` |
 | Self-diagnostics | `mazzy-vpn doctor` |
 | Диагностика активного соединения | `mazzy-vpn diagnose` |
 | Refresh Status | `mazzy-vpn _refresh-dashboard-cache` |
@@ -82,11 +110,45 @@ service/Wintun backends, подпись кода и platform-specific тесты
 | Service settings | `mazzy-vpn autostart` / `monitor` |
 | Logs | `mazzy-vpn logs --lines N` |
 
+Из tray теперь можно сразу открыть Обзор, Профили, Диагностику, Настройки или
+«О программе». Там же доступны Quick Connect, Reconnect, Disconnect, проверка
+фактического egress, ping всего списка локаций, refresh, Doctor, отдельные
+включение/выключение автоподключения и monitor, а также Quit. Первая
+неактивная строка описывает AI-ready клиент с recovery и реальными проверками;
+она намеренно не выдаётся за индикатор текущего состояния.
+
 Probe локаций намеренно отделён от живого VPN-теста. `reachable` подтверждает
 DNS и доступность ICMP или TCP endpoint; `unknown` сохраняет частый случай,
 когда UDP VPN-сервер блокирует ICMP. Это не заявление о работе credentials,
 handshake или маршрутизации туннеля — для такого доказательства нужен
 подтверждённый live-test.
+
+## Проверка фактической работы VPN
+
+**Проверить VPN** отвечает на другой вопрос, чем probe списка:
+
+- активны ли выбранный туннель и его интерфейс;
+- совпадает ли публичный IPv4 запроса, привязанного к VPN-интерфейсу, с egress
+  системного default route;
+- относятся ли ответы двух независимых geo providers именно к этому IPv4 и
+  совпадает ли определённая ими страна;
+- соответствует ли фактическая страна явному `mazzy-country-code` из профиля,
+  если он задан; имя и город не используются для угадывания ожидаемой страны,
+  а отсутствие metadata оставляет итог в `warning`;
+- не выходит ли default IPv6 мимо IPv6, привязанного к туннелю;
+- настроен ли `systemd-resolved` с DNS route `~.` на VPN-интерфейсе;
+- по отдельному запросу пользователя выполняется ограниченный 5-МБ speed
+  sample через VPN. В фоне он никогда не запускается.
+
+Результат — `verified`, `warning` или `failed` с машинно-читаемыми finding
+codes. Публичные IP в GUI по умолчанию скрыты. Один geo provider, расхождение
+providers, несовпадение provider IP, другой системный egress, возможная
+IPv6-утечка или неподтверждённый full-tunnel DNS не могут дать `verified`.
+
+Это сетевые доказательства, а не обещание принятия сессии любым сайтом. Сайт
+может дополнительно учитывать регион аккаунта, политику организации, cookies,
+язык браузера, WebRTC или геолокацию устройства. Список внешних проверочных
+сервисов приведён в [PRIVACY.md](../PRIVACY.md).
 
 GUI не строит shell-строку. Rust backend принимает enum и сопоставляет его
 фиксированному request или массиву аргументов. Connect, reconnect и disconnect
@@ -125,13 +187,13 @@ package manager не сохранил сведения о вызвавшем п�
 DEB:
 
 ```bash
-sudo apt install "./Mazzy VPN Desktop_0.2.0_amd64.deb"
+sudo apt install "./Mazzy VPN Desktop_0.3.0_amd64.deb"
 ```
 
 RPM:
 
 ```bash
-sudo dnf install "./Mazzy VPN Desktop-0.2.0-1.x86_64.rpm"
+sudo dnf install "./Mazzy VPN Desktop-0.3.0-1.x86_64.rpm"
 ```
 
 Для DEB/RPM действие **Установить / обновить / исправить** запускает
@@ -144,8 +206,8 @@ package rollback/fault injection, доставка AmneziaWG и подпись.
 AppImage:
 
 ```bash
-chmod +x "Mazzy VPN Desktop_0.2.0_amd64.AppImage"
-./"Mazzy VPN Desktop_0.2.0_amd64.AppImage"
+chmod +x "Mazzy VPN Desktop_0.3.0_amd64.AppImage"
+./"Mazzy VPN Desktop_0.3.0_amd64.AppImage"
 ```
 
 AppImage не может установить собственный privilege helper. Сначала проверьте
@@ -162,7 +224,7 @@ checksum или provenance. Проверяйте source commit и его GitHub 
 ## Языки
 
 Dashboard 0.1 полностью поддерживал русский, английский, немецкий, китайский,
-японский и корейский. Новые экраны 0.2 полностью переведены на русский и
+японский и корейский. Новые экраны 0.3 полностью переведены на русский и
 английский; для остальных языков пока используется английский fallback, поэтому
 release gate локализации честно остаётся `partial`. Выбор сохраняется локально
 и синхронизируется с общим engine.

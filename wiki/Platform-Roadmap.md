@@ -19,7 +19,7 @@
 
 ## Порядок
 
-1. CLI/TUI 1.2 и Linux Desktop 0.2.
+1. CLI/TUI 1.3 и Linux Desktop 0.3.
 2. Versioned core/API и Linux Desktop 1.0.
 3. Независимые Windows/macOS previews и platform gates.
 4. Android/iOS proof-of-concept на общем профильном контракте.
@@ -50,7 +50,7 @@ not WebView/Desktop wrappers.
 
 ## Order
 
-1. CLI/TUI 1.2 and Linux Desktop 0.2.
+1. CLI/TUI 1.3 and Linux Desktop 0.3.
 2. Versioned core/API and Linux Desktop 1.0.
 3. Independent Windows/macOS previews and platform gates.
 4. Android/iOS proofs of concept on the common profile contract.

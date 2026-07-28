@@ -10,9 +10,9 @@ License: GNU AGPL-3.0-or-later.
 
 ## Current status
 
-- The current release line is CLI/TUI 1.2 for Linux and the functional Linux
-  Desktop 0.2 preview, prepared in
-  [PR #22](https://github.com/mazurovn/mazzy-vpn/pull/22).
+- The published release line is CLI/TUI 1.2 for Linux and the functional Linux
+  Desktop 0.2 preview. The 1.3/Desktop 0.3 source tree is a release candidate
+  until both tags and GitHub Releases exist.
 - Windows/macOS — UI preview without a production VPN backend.
 - Android/iOS — planned native clients; no working mobile packages yet.
 

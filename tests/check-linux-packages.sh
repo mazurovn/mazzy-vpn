@@ -206,6 +206,15 @@ for listing in "$TMP/deb-files" "$TMP/rpm-files"; do
         /usr/bin/mazzyvpn \
         /usr/bin/vpnctl \
         /usr/lib/mazzy-vpn/api/v1/manifest.json \
+        /usr/lib/mazzy-vpn/desktop/package-lock.json \
+        /usr/lib/mazzy-vpn/desktop/package.json \
+        /usr/lib/mazzy-vpn/desktop/scripts/build-release.mjs \
+        /usr/lib/mazzy-vpn/desktop/scripts/tauri-audited.mjs \
+        /usr/lib/mazzy-vpn/desktop/src-tauri/Cargo.lock \
+        /usr/lib/mazzy-vpn/desktop/src-tauri/Cargo.toml \
+        /usr/lib/mazzy-vpn/desktop/src-tauri/build.rs \
+        /usr/lib/mazzy-vpn/desktop/src-tauri/capabilities/default.json \
+        /usr/lib/mazzy-vpn/desktop/ui/mazzy-vpn-logo.svg \
         /usr/lib/systemd/system/mazzy-vpn-api.socket \
         /usr/lib/systemd/system/mazzy-vpn-api.socket.d/10-package-docs.conf \
         /usr/lib/systemd/system/mazzy-vpn-api@.service \
@@ -240,6 +249,15 @@ for extracted_root in "$deb_root" "$rpm_root"; do
     cmp -s "$ROOT/desktop/ui/app.js" \
         "$extracted_root/usr/lib/mazzy-vpn/desktop/ui/app.js" ||
         fail "package Desktop UI logic differs from source"
+    cmp -s "$ROOT/desktop/package-lock.json" \
+        "$extracted_root/usr/lib/mazzy-vpn/desktop/package-lock.json" ||
+        fail "package npm lockfile differs from source"
+    cmp -s "$ROOT/desktop/src-tauri/Cargo.lock" \
+        "$extracted_root/usr/lib/mazzy-vpn/desktop/src-tauri/Cargo.lock" ||
+        fail "package Cargo lockfile differs from source"
+    cmp -s "$ROOT/desktop/scripts/tauri-audited.mjs" \
+        "$extracted_root/usr/lib/mazzy-vpn/desktop/scripts/tauri-audited.mjs" ||
+        fail "package audited release wrapper differs from source"
     cmp -s "$ROOT/packaging/linux/systemd/vpnctl.service.d/10-package-exec.conf" \
         "$extracted_root/usr/lib/systemd/system/vpnctl.service.d/10-package-exec.conf" ||
         fail "package service override differs from source"
@@ -249,12 +267,22 @@ for relative in \
     mazzy-vpn \
     install.sh \
     api/v1/manifest.json \
+    desktop/package-lock.json \
+    desktop/package.json \
+    desktop/scripts/build-release.mjs \
+    desktop/scripts/tauri-audited.mjs \
+    desktop/src-tauri/Cargo.lock \
+    desktop/src-tauri/Cargo.toml \
+    desktop/src-tauri/build.rs \
+    desktop/src-tauri/capabilities/default.json \
+    desktop/src-tauri/icons/icon.png \
     desktop/src-tauri/src/backend.rs \
     desktop/src-tauri/src/main.rs \
     desktop/src-tauri/tauri.conf.json \
     desktop/ui/app.css \
     desktop/ui/app.js \
     desktop/ui/index.html \
+    desktop/ui/mazzy-vpn-logo.svg \
     packaging/linux/post-install.sh \
     tests/check-capabilities.py \
     tests/check-linux-packages.sh \
@@ -271,6 +299,15 @@ cmp -s "$ROOT/desktop/ui/app.css" "$appimage_engine/desktop/ui/app.css" ||
     fail "AppImage embedded Desktop CSS differs from source"
 cmp -s "$ROOT/desktop/ui/app.js" "$appimage_engine/desktop/ui/app.js" ||
     fail "AppImage embedded Desktop UI logic differs from source"
+cmp -s "$ROOT/desktop/package-lock.json" \
+    "$appimage_engine/desktop/package-lock.json" ||
+    fail "AppImage embedded npm lockfile differs from source"
+cmp -s "$ROOT/desktop/src-tauri/Cargo.lock" \
+    "$appimage_engine/desktop/src-tauri/Cargo.lock" ||
+    fail "AppImage embedded Cargo lockfile differs from source"
+cmp -s "$ROOT/desktop/scripts/tauri-audited.mjs" \
+    "$appimage_engine/desktop/scripts/tauri-audited.mjs" ||
+    fail "AppImage audited release wrapper differs from source"
 cmp -s "$ROOT/desktop/src-tauri/tauri.conf.json" \
     "$appimage_engine/desktop/src-tauri/tauri.conf.json" ||
     fail "AppImage package configuration differs from source"

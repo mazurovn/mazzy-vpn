@@ -4,15 +4,9 @@
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
-const [command, ...args] = process.argv.slice(2);
-if (command !== "build") {
-  console.error("tauri-audited only permits the Tauri build command");
-  process.exit(2);
-}
-
 const build = spawnSync(
   process.execPath,
-  [join("scripts", "build-release.mjs"), ...args],
+  [join("scripts", "build-release.mjs")],
   {
     cwd: process.cwd(),
     stdio: "inherit",

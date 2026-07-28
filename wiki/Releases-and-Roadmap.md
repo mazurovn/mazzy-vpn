@@ -1,24 +1,34 @@
 # Релизы и roadmap
 
-## 1.2.0 / Desktop 0.2.0 — preview release line
+## 1.3.0 / Desktop 0.3.0 — release candidate
 
 - Linux control center с Dashboard, Profiles, Diagnostics и Settings;
 - встроенный installer/engine, проверка версий и зависимостей, install/repair;
 - импорт файлов/папок, поиск/выбор профиля и безопасные profile actions;
 - validate, probe, transactional tests, test-all и emergency;
 - полный вывод Doctor, self-test и bounded logs;
+- фактическая проверка default/interface egress, двух geo providers, DNS и
+  IPv6 с optional bounded speed sample;
+- массовый ping списка, сортировка по latency/status/name и connect fastest;
+- расширенный tray, кликабельные события и понятные service states;
 - управление autostart и независимым health monitor;
 - типизированный Rust adapter без shell-команд и расширенные parity tests;
 - экран «О программе» с версиями, автором, лицензией, приватностью и правилами;
 - Android/iOS release gates и общий platform roadmap.
 
-Desktop 0.2 не требует предварительной ручной установки CLI, но остаётся
+Desktop 0.3 не требует предварительной ручной установки CLI, но остаётся
 preview до versioned service API, полного паритета режимов/локализаций,
 подписанного update/rollback и закрытия platform release gates.
 
-Фактическая публикация определяется наличием tags `v1.2.0` и
-`desktop-v0.2.0` и соответствующих страниц в GitHub Releases. Пока хотя бы
+Фактическая публикация определяется наличием tags `v1.3.0` и
+`desktop-v0.3.0` и соответствующих страниц в GitHub Releases. Пока хотя бы
 одного из них нет, release line считается кандидатом.
+
+## 1.2.0 / Desktop 0.2.0 — опубликованная release line
+
+Это текущие опубликованные stable CLI/TUI и Linux Desktop preview. Версия в
+source, changelog или PR не заменяет их до появления нового tag и GitHub
+Release.
 
 ## 1.1.0
 
@@ -70,21 +80,27 @@ CLI engine и не является самостоятельным Desktop VPN-�
 
 # Releases and roadmap
 
-Version 1.2.0 / Desktop 0.2.0 is the current preview release line. It expands the Linux preview
+Version 1.3.0 / Desktop 0.3.0 is the current release candidate. It expands the Linux preview
 into a Dashboard/Profiles/Diagnostics/Settings control center with bundled
 engine bootstrap, version/dependency checks, file/folder import, profile
 actions, validation/probes/transactional tests, complete Doctor/self-test/log
 output, service controls and a typed Rust adapter.
-It also adds an About screen, explicit privacy rules and Android/iOS release
-gates.
+It also adds actual default/interface egress verification, two-provider
+location agreement, DNS/IPv6 signals, an optional bounded speed sample,
+whole-list ping sorting/connect-fastest, an expanded tray, clickable events,
+an About screen, explicit privacy rules and Android/iOS release gates.
 
-Desktop 0.2 does not require a prior manual CLI installation, but remains a
+Desktop 0.3 does not require a prior manual CLI installation, but remains a
 preview until the versioned service API, complete mode/localization parity,
 signed update/rollback and platform release gates are complete.
 
-Publication is determined by tags `v1.2.0` and `desktop-v0.2.0` and their
+Publication is determined by tags `v1.3.0` and `desktop-v0.3.0` and their
 corresponding GitHub Release pages. Treat the release line as a candidate while
 either one is missing.
+
+Version 1.2.0 / Desktop 0.2.0 remains the published release line. A source
+version, changelog entry or PR does not replace it until a new tag and GitHub
+Release exist.
 
 Version 1.1.0 adds the sanitized status cache, Tauri Dashboard and tray,
 functional Linux AppImage/DEB/RPM bundles, macOS/Windows UI previews, bilingual

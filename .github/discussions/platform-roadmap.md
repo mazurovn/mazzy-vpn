@@ -16,7 +16,7 @@
 себе не подтверждают работу VPN backend. Android/iOS будут нативными клиентами,
 а не WebView/Desktop wrapper.
 
-Порядок: стабилизировать CLI/TUI 1.2 и Linux Desktop 0.2 → общий versioned API и
+Порядок: стабилизировать CLI/TUI 1.3 и Linux Desktop 0.3 → общий versioned API и
 Linux Desktop 1.0 → независимые Windows/macOS previews → Android/iOS proof of
 concept → отдельные mobile alpha/beta/production.
 
@@ -27,7 +27,7 @@ machine-validated release gate passes. A UI preview, signature or version
 number does not prove that a VPN backend works. Android/iOS will be native
 clients, not WebView/Desktop wrappers.
 
-Order: stabilize CLI/TUI 1.2 and Linux Desktop 0.2 → common versioned API and
+Order: stabilize CLI/TUI 1.3 and Linux Desktop 0.3 → common versioned API and
 Linux Desktop 1.0 → independent Windows/macOS previews → Android/iOS proofs of
 concept → independent mobile alpha/beta/production.
 

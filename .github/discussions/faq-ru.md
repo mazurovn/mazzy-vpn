@@ -12,22 +12,30 @@
 [GitHub Releases](https://github.com/mazurovn/mazzy-vpn/releases). Версия в
 `main`, changelog или draft PR ещё не является релизом.
 
-Текущая release line — CLI/TUI 1.2.0 и Desktop 0.2.0 preview, подготовленные в
-[PR #22](https://github.com/mazurovn/mazzy-vpn/pull/22). Пока отсутствует хотя
-бы один из tags `v1.2.0`/`desktop-v0.2.0` или соответствующая страница Release,
-эту версию нужно считать release candidate.
+Опубликованная release line — CLI/TUI 1.2.0 и Desktop 0.2.0 preview. Исходное
+дерево 1.3.0/Desktop 0.3.0 остаётся release candidate, пока не существуют оба
+tags и соответствующие Release pages.
 
 ## Desktop требует отдельной установки CLI?
 
-Linux Desktop 0.2 содержит совместимый engine и installer, поэтому
+Linux Desktop 0.3 содержит совместимый engine и installer, поэтому
 предварительная ручная установка CLI не требуется. Системные изменения
 выполняются только
 после стандартной авторизации ОС.
 
+## Как проверить фактические маршрут и локацию VPN?
+
+Запустите `mazzy-vpn verify` или **Проверить VPN** в Desktop. Проверка сравнит
+interface-bound/default IPv4, валидирует два geo providers именно для этого IP,
+проверит настроенный DNS route и возможную IPv6-утечку. `--speed` отдельно
+добавляет явный bounded 5-МБ sample. Это evidence сети в момент проверки;
+регион аккаунта, cookies, WebRTC и геолокация устройства всё ещё могут влиять
+на сайт.
+
 ## Означает ли успешная сборка рабочий VPN на любой ОС?
 
 Нет. CI подтверждает, что UI собирается на Linux, macOS и Windows, но не
-подменяет проверку VPN backend. Linux Desktop 0.2 — функциональный control-center
+подменяет проверку VPN backend. Linux Desktop 0.3 — функциональный control-center
 preview. Windows/macOS artifacts остаются UI preview до появления нативных
 backend, подписанных installers и platform integration tests.
 
@@ -46,7 +54,7 @@ Windows, macOS или mobile.
 ## Что проверяет Doctor?
 
 Версии, зависимости, профили, systemd, desired state, VPN-интерфейс и
-соединение. Desktop 0.2 показывает полный результат и ограниченный журнал.
+соединение. Desktop 0.3 показывает полный результат и ограниченный журнал.
 Исправление запускается отдельно, объясняет системные изменения и требует
 подтверждения.
 

@@ -10,9 +10,9 @@ VPN-доступ и не предоставляет серверы: вы исп�
 
 ## Текущий статус
 
-- Текущая release line — CLI/TUI 1.2 для Linux и функциональный Linux Desktop
-  0.2 preview, подготовленные в
-  [PR #22](https://github.com/mazurovn/mazzy-vpn/pull/22).
+- Опубликованная release line — CLI/TUI 1.2 для Linux и функциональный Linux
+  Desktop 0.2 preview. Source 1.3/Desktop 0.3 остаётся release candidate до
+  появления обоих tags и GitHub Releases.
 - Windows/macOS — UI preview без production VPN backend.
 - Android/iOS — planned native clients; готовых мобильных пакетов пока нет.
 

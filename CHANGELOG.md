@@ -4,6 +4,68 @@ All notable changes to Mazzy VPN are documented here.
 
 ## Unreleased
 
+- Added `mazzy-vpn verify [--speed] [--json]` and the protected read-only API
+  query `tests.verify-egress`.
+- Compare interface-bound and default IPv4 egress, require two distinct
+  geolocation providers to report that exact IP and agree on country, inspect
+  full-tunnel DNS configuration and flag a potential IPv6 leak.
+- Keep the five-megabyte speed sample explicit and bounded; geo and speed
+  services never run from the background health monitor.
+- Made the health monitor detect two confirmed default-egress mismatches for
+  profiles that declare a full tunnel while leaving split-tunnel profiles in
+  automatic endpoint-only mode. Failure of both bounded connectivity observers
+  still counts as a health failure; inability to compare only the default
+  egress does not.
+- Parse WireGuard/AmneziaWG `AllowedIPs` as a comma-separated route list, so
+  compact valid forms such as `AllowedIPs=0.0.0.0/0` cannot silently bypass
+  full-tunnel health enforcement.
+- Parse optional `mazzy-name`, `mazzy-location` and `mazzy-country-code`
+  metadata from profile comments, use NetworkManager's connection ID where
+  available and fall back to the profile filename only when the protocol has
+  no standard location field.
+- Removed country/city inference from profile names. Expected-country
+  comparison now requires explicit `mazzy-country-code`; actual country always
+  comes from the interface-bound egress checks. Missing expected-country
+  metadata produces a warning instead of a false `verified` location.
+- Removed the silent `1.1.1.1` OpenVPN DNS fallback. DNS now comes from the VPN
+  server/profile or an explicit `VPNCTL_OPENVPN_FALLBACK_DNS` administrator
+  setting, preserving corporate split-DNS behavior.
+- Strictly validate the root-owned Desktop profile cache before exposing it to
+  the WebView and added a runtime hard-code boundary audit separating
+  loopback-only documentation fixtures from operational paths.
+- Strictly validate the privileged Desktop status cache and identify the
+  active profile by opaque ID or exact config filename. Duplicate display
+  names can no longer create a false active row or ambiguous API status.
+- Reject duplicate profile identities and Unicode direction/zero-width
+  spoofing markers across the CLI cache and Desktop boundary; root runtime also
+  requires root-owned profile files under a complete root-owned,
+  non-group/world-writable directory chain.
+- Made both release scripts ignore all caller arguments; the tag-only audited
+  Tauri wrapper always invokes one fixed builder and that builder always runs
+  `tauri build`, closing a CodeQL high-severity user-controlled security-gate
+  finding.
+- Completed the package-owned corresponding-source payload with npm/Cargo
+  manifests and locks, build/release scripts, Tauri capabilities, icons and
+  the SVG logo; assembled-package audits require their presence and byte
+  identity.
+- Added Desktop profile sorting by ping/status/name, connect-fastest, an actual
+  egress card, IP-hidden-by-default behavior and clickable event details.
+- Expanded the tray with direct page navigation, actual egress verification,
+  whole-list location ping, Doctor, refresh and explicit auto-connect/monitor
+  controls. Tray probes now update the same structured UI state as window
+  actions.
+- Added strict Desktop verification parsing that rejects unknown fields, false
+  verdicts, wrong IP families, provider-IP mismatch, duplicate providers and
+  unexplained warnings.
+- Bounded all Desktop compatibility processes and use absolute system paths for
+  the privilege/timeout helpers. A timed-out mutation is reported as
+  indeterminate and still remains a migration gate for the native service.
+- Kept Linux-only egress/probe adapters out of macOS and Windows builds; preview
+  bundles now return an explicit unsupported-platform error instead of trying
+  Linux paths. The cross-platform UI validator also decodes Node output as
+  UTF-8 rather than the Windows system code page.
+- Updated AI-ready positioning, architecture, privacy, installation,
+  cross-platform dependency strategy, Wiki and bilingual release documentation.
 - Added bounded parallel whole-location endpoint checks to CLI/TUI and Desktop,
   with structured local API `tests.probe` results, per-profile active state,
   ICMP/TCP latency and sanitized JSON that never exposes an endpoint.

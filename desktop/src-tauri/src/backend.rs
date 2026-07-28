@@ -8,8 +8,10 @@ use std::io::Write;
 #[cfg(target_os = "linux")]
 use std::os::unix::net::UnixStream;
 use std::{
+    collections::HashSet,
     env, fs,
     io::{self, Read},
+    net::IpAddr,
     path::{Path, PathBuf},
     process::{Command, Output, Stdio},
     sync::atomic::{AtomicU64, Ordering},
@@ -20,6 +22,8 @@ use tauri::{AppHandle, Manager};
 
 const SYSTEM_CLI_PATH: &str = "/usr/bin/mazzy-vpn";
 const LOCAL_CLI_PATH: &str = "/usr/local/bin/mazzy-vpn";
+pub(crate) const TIMEOUT_PATH: &str = "/usr/bin/timeout";
+pub(crate) const PKEXEC_PATH: &str = "/usr/bin/pkexec";
 const PROFILES_FILE: &str = "/run/mazzy-vpn/profiles.json";
 const API_SOCKET: &str = "/run/mazzy-vpn/api-v1.sock";
 const MAX_OUTPUT_BYTES: usize = 512 * 1024;
@@ -152,6 +156,83 @@ struct LocationProbeCollection {
     results: Vec<LocationProbeEntry>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct EgressTunnel {
+    active: bool,
+    protocol: Option<String>,
+    profile: Option<String>,
+    interface: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct EgressIpv4 {
+    interface_ip: Option<String>,
+    default_ip: Option<String>,
+    same_egress: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct EgressIpv6 {
+    interface_ip: Option<String>,
+    default_ip: Option<String>,
+    potential_leak: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct EgressGeoProvider {
+    provider: String,
+    ip: String,
+    country_code: String,
+    country: String,
+    region: String,
+    city: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct EgressGeo {
+    expected_country_code: Option<String>,
+    observed_country_code: Option<String>,
+    country_match: String,
+    providers_agree: Option<bool>,
+    providers: Vec<EgressGeoProvider>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct EgressDns {
+    state: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct EgressSpeed {
+    requested: bool,
+    measured: bool,
+    mbps: Option<f64>,
+    connect_ms: Option<u64>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct EgressVerification {
+    schema_version: u8,
+    checked_at: String,
+    verdict: String,
+    message_key: String,
+    tunnel: EgressTunnel,
+    ipv4: EgressIpv4,
+    ipv6: EgressIpv6,
+    geo: EgressGeo,
+    dns: EgressDns,
+    speed: EgressSpeed,
+    findings: Vec<String>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct DependencyState {
     pub id: &'static str,
@@ -177,6 +258,77 @@ pub struct InstallationReport {
     pub dependencies: Vec<DependencyState>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct ProfileCacheEntry {
+    profile_id: String,
+    protocol: String,
+    protocol_name: String,
+    file_name: String,
+    name: String,
+    location: String,
+    #[serde(default)]
+    country_code: Option<String>,
+    selected: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct ProfileCache {
+    schema_version: u8,
+    generated_at: u64,
+    profiles: Vec<ProfileCacheEntry>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct DashboardFallback {
+    active: bool,
+    name: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct DashboardProfileCounts {
+    amneziawg: u64,
+    wireguard: u64,
+    openvpn: u64,
+    l2tp: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct DashboardStatus {
+    schema_version: u8,
+    generated_at: u64,
+    product: String,
+    version: String,
+    language: String,
+    selected: bool,
+    service_state: String,
+    desired: String,
+    mode: String,
+    tunnel_active: bool,
+    internet: String,
+    healthy: bool,
+    protocol: String,
+    protocol_name: String,
+    profile: String,
+    #[serde(default)]
+    profile_id: Option<String>,
+    #[serde(default)]
+    profile_file_name: Option<String>,
+    location: String,
+    interface: String,
+    handshake_age: Option<u64>,
+    public_ip: String,
+    autostart: bool,
+    health_monitor: bool,
+    fallback: DashboardFallback,
+    health_failures: u64,
+    profiles: DashboardProfileCounts,
+}
+
 fn select_cli_path(system_installed: bool, local_installed: bool) -> Option<&'static Path> {
     if system_installed {
         Some(Path::new(SYSTEM_CLI_PATH))
@@ -187,7 +339,7 @@ fn select_cli_path(system_installed: bool, local_installed: bool) -> Option<&'st
     }
 }
 
-fn installed_cli_path() -> Option<&'static Path> {
+pub(crate) fn installed_cli_path() -> Option<&'static Path> {
     select_cli_path(
         Path::new(SYSTEM_CLI_PATH).is_file(),
         Path::new(LOCAL_CLI_PATH).is_file(),
@@ -223,7 +375,7 @@ fn profile_name(value: &str) -> Result<String, String> {
         && value.len() <= 255
         && !value.contains('/')
         && !value.contains('\\')
-        && !value.chars().any(char::is_control);
+        && !value.chars().any(unsafe_frontend_character);
     valid
         .then(|| value.to_owned())
         .ok_or_else(|| "Unsafe or empty profile name".to_owned())
@@ -539,6 +691,88 @@ fn command_result(action: String, result: Result<Output, io::Error>) -> Operatio
     }
 }
 
+fn operation_deadline_seconds(request: &OperationRequest) -> u64 {
+    match request {
+        OperationRequest::Quick
+        | OperationRequest::Reconnect
+        | OperationRequest::Disconnect
+        | OperationRequest::Connect { .. }
+        | OperationRequest::Autostart { .. }
+        | OperationRequest::Monitor { .. }
+        | OperationRequest::RemoveProfile { .. } => 300,
+        OperationRequest::Refresh
+        | OperationRequest::Logs { .. }
+        | OperationRequest::Language { .. } => 120,
+        OperationRequest::Validate { .. } | OperationRequest::Diagnose => 600,
+        OperationRequest::Probe { .. } => 900,
+        OperationRequest::Test { timeout, .. } => u64::from(*timeout).saturating_add(180),
+        OperationRequest::TestAll { .. } => 7_200,
+        OperationRequest::Emergency { .. } => 1_800,
+        OperationRequest::SelfTest { live, .. } => {
+            if *live {
+                1_800
+            } else {
+                600
+            }
+        }
+        OperationRequest::Doctor { fix } => {
+            if *fix {
+                1_800
+            } else {
+                600
+            }
+        }
+        OperationRequest::ImportFiles { .. } | OperationRequest::ImportFolder { .. } => 1_800,
+        OperationRequest::Bootstrap => 1_800,
+    }
+}
+
+fn operation_changes_system(request: &OperationRequest) -> bool {
+    !matches!(
+        request,
+        OperationRequest::Refresh
+            | OperationRequest::Validate { .. }
+            | OperationRequest::Probe { .. }
+            | OperationRequest::SelfTest { live: false, .. }
+            | OperationRequest::Doctor { fix: false }
+            | OperationRequest::Diagnose
+            | OperationRequest::Logs { .. }
+    )
+}
+
+fn timed_privileged_output(
+    program: &Path,
+    args: &[String],
+    deadline_seconds: u64,
+) -> io::Result<Output> {
+    bounded_output(
+        Command::new(TIMEOUT_PATH)
+            .args(["--foreground", "--kill-after=30s"])
+            .arg(format!("{deadline_seconds}s"))
+            .arg(PKEXEC_PATH)
+            .arg(program)
+            .args(args),
+    )
+}
+
+fn timed_operation_result(
+    action: String,
+    result: Result<Output, io::Error>,
+    changes_system: bool,
+) -> OperationResult {
+    let mut operation = command_result(action, result);
+    if matches!(operation.code, Some(124 | 137)) {
+        operation.output = if changes_system {
+            "The operation exceeded its safety deadline. Network state may have changed; \
+             refresh status and run Doctor before retrying."
+                .into()
+        } else {
+            "The read-only operation exceeded its safety deadline and was stopped.".into()
+        };
+    }
+    operation
+}
+
 fn engine_root(app: &AppHandle) -> PathBuf {
     let bundled = app
         .path()
@@ -785,7 +1019,465 @@ fn probe_result_from_response(response: Value) -> Result<Value, String> {
     sanitize_probe_collection(result)
 }
 
-fn probe_profiles_sync(
+fn safe_frontend_text(value: &str, maximum: usize, allow_empty: bool) -> bool {
+    (allow_empty || !value.is_empty())
+        && value.chars().count() <= maximum
+        && !value.chars().any(unsafe_frontend_character)
+}
+
+fn unsafe_frontend_character(value: char) -> bool {
+    value.is_control()
+        || matches!(
+            value,
+            '\u{00ad}'
+                | '\u{061c}'
+                | '\u{200b}'..='\u{200f}'
+                | '\u{2028}'..='\u{202e}'
+                | '\u{2060}'..='\u{2064}'
+                | '\u{2066}'..='\u{2069}'
+                | '\u{feff}'
+        )
+}
+
+fn valid_country_code(value: &str) -> bool {
+    value.len() == 2 && value.bytes().all(|byte| byte.is_ascii_uppercase())
+}
+
+fn sanitize_profile_cache(contents: &str) -> Result<Value, String> {
+    let cache: ProfileCache =
+        serde_json::from_str(contents).map_err(|_| "The profile cache is malformed".to_owned())?;
+    if cache.schema_version != 1 || cache.profiles.len() > 1_024 {
+        return Err("The profile cache has an unsupported shape".to_owned());
+    }
+    let selected_count = cache
+        .profiles
+        .iter()
+        .filter(|profile| profile.selected)
+        .count();
+    if selected_count > 1 {
+        return Err("The profile cache selects multiple profiles".to_owned());
+    }
+    let mut profile_ids = HashSet::with_capacity(cache.profiles.len());
+    let mut profile_files = HashSet::with_capacity(cache.profiles.len());
+    for profile in &cache.profiles {
+        let expected_protocol_name = match profile.protocol.as_str() {
+            "amneziawg" => "AmneziaWG",
+            "wireguard" => "WireGuard",
+            "openvpn" => "OpenVPN",
+            "l2tp" => "L2TP/IPsec",
+            _ => return Err("The profile cache contains an unsupported protocol".to_owned()),
+        };
+        let extension_valid = match profile.protocol.as_str() {
+            "amneziawg" | "wireguard" => profile.file_name.ends_with(".conf"),
+            "openvpn" => {
+                profile.file_name.ends_with(".ovpn") || profile.file_name.ends_with(".conf")
+            }
+            "l2tp" => profile.file_name.ends_with(".nmconnection"),
+            _ => false,
+        };
+        if !profile_ids.insert(profile.profile_id.as_str())
+            || !profile_files.insert((profile.protocol.as_str(), profile.file_name.as_str()))
+            || !valid_api_identifier(&profile.profile_id)
+            || profile.protocol_name != expected_protocol_name
+            || profile_name(&profile.file_name).is_err()
+            || !extension_valid
+            || !safe_frontend_text(&profile.name, 255, false)
+            || !safe_frontend_text(&profile.location, 255, false)
+            || profile
+                .country_code
+                .as_deref()
+                .is_some_and(|value| !valid_country_code(value))
+        {
+            return Err("The profile cache contains unsafe profile metadata".to_owned());
+        }
+    }
+    serde_json::to_value(cache).map_err(|_| "The profile cache could not be sanitized".to_owned())
+}
+
+pub(crate) fn sanitize_status_cache(contents: &str) -> Result<Value, String> {
+    let status: DashboardStatus =
+        serde_json::from_str(contents).map_err(|_| "The status cache is malformed".to_owned())?;
+    let protocol_name = match status.protocol.as_str() {
+        "" => "",
+        "amneziawg" => "AmneziaWG",
+        "wireguard" => "WireGuard",
+        "openvpn" => "OpenVPN",
+        "l2tp" => "L2TP/IPsec",
+        _ => return Err("The status cache contains an unsupported protocol".to_owned()),
+    };
+    let selected_identity_is_complete =
+        status.profile_id.is_some() == status.profile_file_name.is_some();
+    let selected_metadata_is_safe = !status.protocol.is_empty()
+        && safe_frontend_text(&status.profile, 255, false)
+        && safe_frontend_text(&status.location, 255, false)
+        && status
+            .profile_id
+            .as_deref()
+            .is_none_or(valid_api_identifier)
+        && status
+            .profile_file_name
+            .as_deref()
+            .is_none_or(|name| profile_name(name).is_ok());
+    let unselected_metadata_is_empty = status.protocol.is_empty()
+        && status.protocol_name.is_empty()
+        && status.profile.is_empty()
+        && status.profile_id.is_none()
+        && status.profile_file_name.is_none()
+        && status.location.is_empty()
+        && status.interface.is_empty()
+        && status.handshake_age.is_none()
+        && status.public_ip.is_empty();
+    let public_ip_is_safe = status.public_ip.is_empty()
+        || status
+            .public_ip
+            .parse::<IpAddr>()
+            .is_ok_and(|address| !address.is_unspecified());
+    let interface_is_safe = status.interface.is_empty()
+        || (status.interface.len() <= 32
+            && status
+                .interface
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"_.:-".contains(&byte)));
+    let profile_counts_are_bounded = [
+        status.profiles.amneziawg,
+        status.profiles.wireguard,
+        status.profiles.openvpn,
+        status.profiles.l2tp,
+    ]
+    .into_iter()
+    .all(|count| count <= 1_024);
+    let fallback_is_consistent = if status.fallback.active {
+        safe_frontend_text(&status.fallback.name, 128, false)
+    } else {
+        status.fallback.name.is_empty()
+    };
+
+    if status.schema_version != 1
+        || status.product != "Mazzy VPN"
+        || !safe_frontend_text(&status.version, 64, false)
+        || status.language.is_empty()
+        || status.language.len() > 16
+        || !status
+            .language
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        || !matches!(status.service_state.as_str(), "active" | "inactive")
+        || !matches!(status.desired.as_str(), "up" | "down" | "unknown")
+        || !matches!(status.mode.as_str(), "normal" | "test")
+        || !matches!(status.internet.as_str(), "up" | "down" | "unknown")
+        || status.protocol_name != protocol_name
+        || !selected_identity_is_complete
+        || !interface_is_safe
+        || !public_ip_is_safe
+        || !profile_counts_are_bounded
+        || status.health_failures > 1_000_000
+        || !fallback_is_consistent
+        || (status.selected && !selected_metadata_is_safe)
+        || (!status.selected && !unselected_metadata_is_empty)
+        || (status.tunnel_active
+            && (!status.selected
+                || status.service_state != "active"
+                || status.interface.is_empty()))
+        || (status.healthy
+            && (!status.tunnel_active || status.internet != "up" || status.health_failures != 0))
+    {
+        return Err("The status cache contains unsafe or inconsistent data".to_owned());
+    }
+    serde_json::to_value(status).map_err(|_| "The status cache could not be sanitized".to_owned())
+}
+
+fn valid_optional_ip_family(value: &Option<String>, ipv4: bool) -> bool {
+    value.as_deref().is_none_or(|ip| {
+        ip.len() <= 64
+            && ip
+                .parse::<IpAddr>()
+                .is_ok_and(|address| address.is_ipv4() == ipv4)
+    })
+}
+
+fn sanitize_egress_verification(result: Value) -> Result<Value, String> {
+    let verification: EgressVerification = serde_json::from_value(result)
+        .map_err(|_| "The VPN egress check returned a malformed result".to_owned())?;
+    let protocol_valid =
+        |value: &str| matches!(value, "amneziawg" | "wireguard" | "openvpn" | "l2tp");
+    let verdict_valid = matches!(
+        verification.verdict.as_str(),
+        "verified" | "warning" | "failed"
+    );
+    if verification.schema_version != 1
+        || !safe_frontend_text(&verification.checked_at, 64, false)
+        || !verdict_valid
+        || !valid_api_identifier(&verification.message_key)
+        || verification
+            .tunnel
+            .protocol
+            .as_deref()
+            .is_some_and(|value| !protocol_valid(value))
+        || verification
+            .tunnel
+            .profile
+            .as_deref()
+            .is_some_and(|value| !safe_frontend_text(value, 255, false))
+        || verification
+            .tunnel
+            .interface
+            .as_deref()
+            .is_some_and(|value| {
+                value.is_empty()
+                    || value.len() > 32
+                    || !value
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || b"_.:-".contains(&byte))
+            })
+        || !valid_optional_ip_family(&verification.ipv4.interface_ip, true)
+        || !valid_optional_ip_family(&verification.ipv4.default_ip, true)
+        || !valid_optional_ip_family(&verification.ipv6.interface_ip, false)
+        || !valid_optional_ip_family(&verification.ipv6.default_ip, false)
+        || !matches!(
+            verification.geo.country_match.as_str(),
+            "match" | "mismatch" | "unknown"
+        )
+        || verification
+            .geo
+            .expected_country_code
+            .as_deref()
+            .is_some_and(|value| !valid_country_code(value))
+        || verification
+            .geo
+            .observed_country_code
+            .as_deref()
+            .is_some_and(|value| !valid_country_code(value))
+        || verification.geo.providers.len() > 2
+        || !matches!(
+            verification.dns.state.as_str(),
+            "vpn-full-tunnel" | "vpn-interface" | "unknown" | "unavailable"
+        )
+        || verification.findings.len() > 32
+        || verification
+            .findings
+            .iter()
+            .any(|finding| !valid_api_identifier(finding))
+    {
+        return Err("The VPN egress check returned an invalid result".to_owned());
+    }
+
+    let present_tunnel_fields = [
+        verification.tunnel.protocol.is_some(),
+        verification.tunnel.profile.is_some(),
+        verification.tunnel.interface.is_some(),
+    ];
+    if verification.tunnel.active && present_tunnel_fields.iter().any(|present| !present) {
+        return Err("The VPN egress check omitted active tunnel details".to_owned());
+    }
+    if verification.ipv4.same_egress
+        && (verification.ipv4.interface_ip.is_none()
+            || verification.ipv4.interface_ip != verification.ipv4.default_ip)
+    {
+        return Err("The VPN egress check reported inconsistent IPv4 routing".to_owned());
+    }
+    if verification.ipv6.potential_leak
+        && (verification.ipv6.default_ip.is_none()
+            || verification.ipv6.interface_ip == verification.ipv6.default_ip)
+    {
+        return Err("The VPN egress check reported an inconsistent IPv6 leak".to_owned());
+    }
+
+    for provider in &verification.geo.providers {
+        let provider_ip = provider.ip.parse::<IpAddr>();
+        if !matches!(provider.provider.as_str(), "ipapi" | "ipwho")
+            || provider.ip.len() > 64
+            || !provider_ip.is_ok_and(|address| address.is_ipv4())
+            || !valid_country_code(&provider.country_code)
+            || verification.ipv4.interface_ip.as_deref() != Some(provider.ip.as_str())
+            || !safe_frontend_text(&provider.country, 96, true)
+            || !safe_frontend_text(&provider.region, 96, true)
+            || !safe_frontend_text(&provider.city, 96, true)
+        {
+            return Err("The VPN egress check returned unsafe location data".to_owned());
+        }
+    }
+    let unique_providers: HashSet<&str> = verification
+        .geo
+        .providers
+        .iter()
+        .map(|provider| provider.provider.as_str())
+        .collect();
+    if unique_providers.len() != verification.geo.providers.len() {
+        return Err("The VPN egress check duplicated a location provider".to_owned());
+    }
+    let observed = verification
+        .geo
+        .providers
+        .first()
+        .map(|provider| provider.country_code.as_str())
+        .filter(|country| !country.is_empty());
+    if observed != verification.geo.observed_country_code.as_deref() {
+        return Err("The VPN egress check returned inconsistent location data".to_owned());
+    }
+    if verification.geo.providers_agree.is_some() != (verification.geo.providers.len() == 2) {
+        return Err("The VPN egress check returned inconsistent provider agreement".to_owned());
+    }
+    if let Some(agree) = verification.geo.providers_agree {
+        let countries_equal = verification.geo.providers[0].country_code
+            == verification.geo.providers[1].country_code;
+        if agree != countries_equal {
+            return Err("The VPN egress check returned false provider agreement".to_owned());
+        }
+    }
+
+    match verification.geo.country_match.as_str() {
+        "match" => {
+            if verification.geo.expected_country_code.is_none()
+                || verification.geo.expected_country_code != verification.geo.observed_country_code
+            {
+                return Err("The VPN egress check returned a false location match".to_owned());
+            }
+        }
+        "mismatch" => {
+            if verification.geo.expected_country_code.is_none()
+                || verification.geo.observed_country_code.is_none()
+                || verification.geo.expected_country_code == verification.geo.observed_country_code
+            {
+                return Err("The VPN egress check returned a false location mismatch".to_owned());
+            }
+        }
+        _ => {}
+    }
+
+    let speed_valid = if verification.speed.measured {
+        verification.speed.requested
+            && verification
+                .speed
+                .mbps
+                .is_some_and(|value| value.is_finite() && (0.0..=100_000.0).contains(&value))
+            && verification
+                .speed
+                .connect_ms
+                .is_some_and(|value| value <= 120_000)
+    } else {
+        verification.speed.mbps.is_none() && verification.speed.connect_ms.is_none()
+    };
+    if !speed_valid {
+        return Err("The VPN speed sample returned inconsistent data".to_owned());
+    }
+
+    let unique_findings: HashSet<&str> = verification.findings.iter().map(String::as_str).collect();
+    if unique_findings.len() != verification.findings.len() {
+        return Err("The VPN egress check duplicated findings".to_owned());
+    }
+    if verification.verdict != "verified" && verification.findings.is_empty() {
+        return Err("The VPN egress check returned an unexplained verdict".to_owned());
+    }
+    if verification.verdict != "failed"
+        && (!verification.tunnel.active || verification.ipv4.interface_ip.is_none())
+    {
+        return Err("The VPN egress verdict contradicts the tunnel state".to_owned());
+    }
+    if verification.verdict == "verified"
+        && (!verification.tunnel.active
+            || !verification.ipv4.same_egress
+            || verification.ipv6.potential_leak
+            || verification.geo.expected_country_code.is_none()
+            || verification.geo.country_match != "match"
+            || verification.geo.providers_agree != Some(true)
+            || verification.dns.state != "vpn-full-tunnel"
+            || !verification.findings.is_empty())
+    {
+        return Err("The VPN egress check returned a false verified verdict".to_owned());
+    }
+
+    serde_json::to_value(verification)
+        .map_err(|_| "The VPN egress result could not be sanitized".to_owned())
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn verify_api_request(timeout_seconds: u16, include_speed: bool) -> Value {
+    json!({
+        "api_version": "1.0",
+        "request_id": api_identifier("request"),
+        "operation": "tests.verify-egress",
+        "deadline_ms": 240_000,
+        "payload": {
+            "timeout_seconds": timeout_seconds,
+            "include_speed": include_speed
+        }
+    })
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn verify_result_from_response(response: Value) -> Result<Value, String> {
+    if response.get("status").and_then(Value::as_str) != Some("ok") {
+        let code = response
+            .pointer("/error/code")
+            .and_then(Value::as_str)
+            .unwrap_or("internal-error");
+        let message = response
+            .pointer("/error/message_key")
+            .and_then(Value::as_str)
+            .unwrap_or("api.response.malformed");
+        return Err(format!("{code}: {message}"));
+    }
+    let result = response
+        .get("result")
+        .cloned()
+        .ok_or_else(|| "The VPN egress check returned a malformed result".to_owned())?;
+    sanitize_egress_verification(result)
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn verify_connection_sync(
+    timeout_seconds: u16,
+    include_speed: bool,
+) -> Result<Value, String> {
+    timeout(timeout_seconds, 3, 30)?;
+
+    if Path::new(API_SOCKET).exists() {
+        let request = verify_api_request(timeout_seconds, include_speed);
+        match send_local_api_with_retry(&request) {
+            Ok(response) => return verify_result_from_response(response),
+            Err(LocalApiError::Unavailable) => {}
+            Err(LocalApiError::Indeterminate(error)) => {
+                return Err(format!(
+                    "The local API verification outcome is unknown; it was not repeated \
+                     through another privilege path: {error}"
+                ));
+            }
+        }
+    }
+
+    let cli_path = installed_cli_path().ok_or_else(|| {
+        "Mazzy VPN engine is not installed. Open Settings and run Install / Repair.".to_owned()
+    })?;
+    let mut command = Command::new(TIMEOUT_PATH);
+    command
+        .args(["--foreground", "--kill-after=2s", "240s", PKEXEC_PATH])
+        .arg(cli_path)
+        .args(["verify", "--timeout"])
+        .arg(timeout_seconds.to_string())
+        .arg("--json");
+    if include_speed {
+        command.arg("--speed");
+    }
+    let output = bounded_output(&mut command).map_err(|error| error.to_string())?;
+    if let Ok(result) = serde_json::from_slice::<Value>(&output.stdout) {
+        if let Ok(sanitized) = sanitize_egress_verification(result) {
+            return Ok(sanitized);
+        }
+    }
+    Err(clean_output(&output))
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn verify_connection_sync(
+    timeout_seconds: u16,
+    _include_speed: bool,
+) -> Result<Value, String> {
+    timeout(timeout_seconds, 3, 30)?;
+    Err("Preview build: actual VPN egress verification is available on Linux only.".to_owned())
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn probe_profiles_sync(
     selected_protocol: String,
     timeout_seconds: u16,
     concurrency: u8,
@@ -796,7 +1488,6 @@ fn probe_profiles_sync(
         return Err("Probe concurrency must be between 1 and 8".to_owned());
     }
 
-    #[cfg(target_os = "linux")]
     if Path::new(API_SOCKET).exists() {
         let request = probe_api_request(
             &selected_protocol,
@@ -819,8 +1510,17 @@ fn probe_profiles_sync(
     let cli_path = installed_cli_path().ok_or_else(|| {
         "Mazzy VPN engine is not installed. Open Settings and run Install / Repair.".to_owned()
     })?;
-    let mut command = Command::new("pkexec");
+    let probe_deadline = probe_deadline_ms(
+        cached_profile_count(&selected_protocol),
+        timeout_seconds,
+        concurrency,
+    )
+    .div_ceil(1_000);
+    let mut command = Command::new(TIMEOUT_PATH);
     command
+        .args(["--foreground", "--kill-after=2s"])
+        .arg(format!("{probe_deadline}s"))
+        .arg(PKEXEC_PATH)
         .arg(cli_path)
         .arg("probe")
         .arg(&selected_protocol)
@@ -836,6 +1536,20 @@ fn probe_profiles_sync(
         }
     }
     Err(clean_output(&output))
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn probe_profiles_sync(
+    selected_protocol: String,
+    timeout_seconds: u16,
+    concurrency: u8,
+) -> Result<Value, String> {
+    protocol(&selected_protocol, true)?;
+    timeout(timeout_seconds, 1, 30)?;
+    if !(1..=8).contains(&concurrency) {
+        return Err("Probe concurrency must be between 1 and 8".to_owned());
+    }
+    Err("Preview build: VPN profile reachability checks are available on Linux only.".to_owned())
 }
 
 fn api_operation_result(action: String, action_id: &str, response: Value) -> OperationResult {
@@ -1010,13 +1724,15 @@ fn try_execute_local_api(_: &OperationRequest) -> Option<OperationResult> {
 pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> OperationResult {
     if matches!(request, OperationRequest::Bootstrap) {
         if Path::new(SYSTEM_CLI_PATH).is_file() {
-            return command_result(
+            return timed_operation_result(
                 "bootstrap".into(),
                 bounded_output(
-                    Command::new("pkexec")
+                    Command::new(TIMEOUT_PATH)
+                        .args(["--foreground", "--kill-after=30s", "1800s", PKEXEC_PATH])
                         .arg(SYSTEM_CLI_PATH)
                         .args(["doctor", "--fix"]),
                 ),
+                true,
             );
         }
         let installer = engine_root(app).join("install.sh");
@@ -1028,15 +1744,17 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
                 code: None,
             };
         }
-        return command_result(
+        return timed_operation_result(
             "bootstrap".into(),
             bounded_output(
-                Command::new("pkexec")
+                Command::new(TIMEOUT_PATH)
+                    .args(["--foreground", "--kill-after=30s", "1800s", PKEXEC_PATH])
                     .arg("/bin/bash")
                     .arg(installer)
                     .arg("--yes")
                     .arg("--skip-tests"),
             ),
+            true,
         );
     }
 
@@ -1063,9 +1781,12 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
     if let Some(result) = try_execute_local_api(&request) {
         return result;
     }
-    command_result(
+    let deadline_seconds = operation_deadline_seconds(&request);
+    let changes_system = operation_changes_system(&request);
+    timed_operation_result(
         action,
-        bounded_output(Command::new("pkexec").arg(cli_path).args(args)),
+        timed_privileged_output(cli_path, &args, deadline_seconds),
+        changes_system,
     )
 }
 
@@ -1087,7 +1808,13 @@ fn version_from_output(output: &str) -> Option<String> {
 }
 
 fn installed_version(path: &Path) -> Option<String> {
-    let output = bounded_output(Command::new(path).arg("version")).ok()?;
+    let output = bounded_output(
+        Command::new(TIMEOUT_PATH)
+            .args(["--foreground", "--kill-after=2s", "10s"])
+            .arg(path)
+            .arg("version"),
+    )
+    .ok()?;
     output
         .status
         .success()
@@ -1277,7 +2004,7 @@ fn dependencies() -> Vec<DependencyState> {
 pub fn get_profiles() -> Value {
     fs::read_to_string(PROFILES_FILE)
         .ok()
-        .and_then(|contents| serde_json::from_str(&contents).ok())
+        .and_then(|contents| sanitize_profile_cache(&contents).ok())
         .unwrap_or_else(|| {
             json!({
                 "schema_version": 1,
@@ -1300,6 +2027,13 @@ pub async fn probe_profiles(
     })
     .await
     .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn verify_connection(timeout: u16, include_speed: bool) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || verify_connection_sync(timeout, include_speed))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -1558,6 +2292,313 @@ mod tests {
         let mut unsafe_response = response;
         unsafe_response["result"]["results"][0]["endpoint"] = json!("vpn.invalid:1194");
         assert!(probe_result_from_response(unsafe_response).is_err());
+    }
+
+    fn verified_egress_response() -> Value {
+        json!({
+            "status": "ok",
+            "result": {
+                "schema_version": 1,
+                "checked_at": "2026-07-28T12:00:00Z",
+                "verdict": "verified",
+                "message_key": "verify.verified",
+                "tunnel": {
+                    "active": true,
+                    "protocol": "openvpn",
+                    "profile": "Belgium Brussels",
+                    "interface": "vpnovpn0"
+                },
+                "ipv4": {
+                    "interface_ip": "203.0.113.7",
+                    "default_ip": "203.0.113.7",
+                    "same_egress": true
+                },
+                "ipv6": {
+                    "interface_ip": null,
+                    "default_ip": null,
+                    "potential_leak": false
+                },
+                "geo": {
+                    "expected_country_code": "BE",
+                    "observed_country_code": "BE",
+                    "country_match": "match",
+                    "providers_agree": true,
+                    "providers": [
+                        {
+                            "provider": "ipapi",
+                            "ip": "203.0.113.7",
+                            "country_code": "BE",
+                            "country": "Belgium",
+                            "region": "Brussels",
+                            "city": "Brussels"
+                        },
+                        {
+                            "provider": "ipwho",
+                            "ip": "203.0.113.7",
+                            "country_code": "BE",
+                            "country": "Belgium",
+                            "region": "Brussels",
+                            "city": "Brussels"
+                        }
+                    ]
+                },
+                "dns": {"state": "vpn-full-tunnel"},
+                "speed": {
+                    "requested": false,
+                    "measured": false,
+                    "mbps": null,
+                    "connect_ms": null
+                },
+                "findings": []
+            }
+        })
+    }
+
+    #[test]
+    fn egress_request_is_explicit_bounded_and_contains_no_profile_data() {
+        let request = verify_api_request(10, true);
+        assert_eq!(request["operation"], "tests.verify-egress");
+        assert_eq!(request["deadline_ms"], 240_000);
+        assert_eq!(request["payload"]["timeout_seconds"], 10);
+        assert_eq!(request["payload"]["include_speed"], true);
+        let encoded = serde_json::to_string(&request).expect("JSON");
+        assert!(!encoded.contains("profile"));
+        assert!(!encoded.contains("endpoint"));
+        assert!(!encoded.contains("key"));
+    }
+
+    #[test]
+    fn egress_response_rejects_false_verdicts_and_unknown_fields() {
+        let response = verified_egress_response();
+        let result = verify_result_from_response(response.clone()).expect("egress result");
+        assert_eq!(result["verdict"], "verified");
+        assert_eq!(result["geo"]["observed_country_code"], "BE");
+
+        let mut false_verdict = response.clone();
+        false_verdict["result"]["ipv6"]["potential_leak"] = json!(true);
+        assert!(verify_result_from_response(false_verdict).is_err());
+
+        let mut wrong_provider_ip = response.clone();
+        wrong_provider_ip["result"]["geo"]["providers"][0]["ip"] = json!("198.51.100.22");
+        assert!(verify_result_from_response(wrong_provider_ip).is_err());
+
+        let mut wrong_ip_family = response.clone();
+        wrong_ip_family["result"]["ipv4"]["interface_ip"] = json!("2001:db8::1");
+        wrong_ip_family["result"]["ipv4"]["default_ip"] = json!("2001:db8::1");
+        assert!(verify_result_from_response(wrong_ip_family).is_err());
+
+        let mut duplicate_provider = response.clone();
+        duplicate_provider["result"]["geo"]["providers"][1]["provider"] = json!("ipapi");
+        assert!(verify_result_from_response(duplicate_provider).is_err());
+
+        let mut unexplained_warning = response.clone();
+        unexplained_warning["result"]["verdict"] = json!("warning");
+        assert!(verify_result_from_response(unexplained_warning).is_err());
+
+        let mut missing_expected_country = response.clone();
+        missing_expected_country["result"]["geo"]["expected_country_code"] = Value::Null;
+        missing_expected_country["result"]["geo"]["country_match"] = json!("unknown");
+        assert!(verify_result_from_response(missing_expected_country).is_err());
+
+        let mut unsafe_response = response;
+        unsafe_response["result"]["endpoint"] = json!("vpn.invalid:1194");
+        assert!(verify_result_from_response(unsafe_response).is_err());
+    }
+
+    #[test]
+    fn profile_cache_accepts_config_metadata_and_rejects_runtime_injection() {
+        let cache = json!({
+            "schema_version": 1,
+            "generated_at": 1,
+            "profiles": [{
+                "profile_id": "profile-0123456789abcdef0123456789abcdef",
+                "protocol": "openvpn",
+                "protocol_name": "OpenVPN",
+                "file_name": "opaque-profile.ovpn",
+                "name": "AI workspace",
+                "location": "Belgium — Brussels",
+                "country_code": "BE",
+                "selected": true
+            }]
+        });
+        let encoded = serde_json::to_string(&cache).expect("profile cache JSON");
+        let sanitized = sanitize_profile_cache(&encoded).expect("sanitized profile cache");
+        assert_eq!(sanitized["profiles"][0]["location"], "Belgium — Brussels");
+
+        let mut endpoint_injection = cache.clone();
+        endpoint_injection["profiles"][0]["endpoint"] = json!("vpn.invalid:1194");
+        assert!(
+            sanitize_profile_cache(
+                &serde_json::to_string(&endpoint_injection).expect("injected cache JSON")
+            )
+            .is_err()
+        );
+
+        let mut path_injection = cache;
+        path_injection["profiles"][0]["file_name"] = json!("../escape.ovpn");
+        assert!(
+            sanitize_profile_cache(
+                &serde_json::to_string(&path_injection).expect("path cache JSON")
+            )
+            .is_err()
+        );
+
+        let duplicate = json!({
+            "schema_version": 1,
+            "generated_at": 1,
+            "profiles": [
+                {
+                    "profile_id": "profile-0123456789abcdef0123456789abcdef",
+                    "protocol": "openvpn",
+                    "protocol_name": "OpenVPN",
+                    "file_name": "first.ovpn",
+                    "name": "First",
+                    "location": "First",
+                    "country_code": null,
+                    "selected": false
+                },
+                {
+                    "profile_id": "profile-0123456789abcdef0123456789abcdef",
+                    "protocol": "openvpn",
+                    "protocol_name": "OpenVPN",
+                    "file_name": "second.ovpn",
+                    "name": "Second",
+                    "location": "Second",
+                    "country_code": null,
+                    "selected": false
+                }
+            ]
+        });
+        assert!(
+            sanitize_profile_cache(
+                &serde_json::to_string(&duplicate).expect("duplicate cache JSON")
+            )
+            .is_err()
+        );
+
+        let mut bidi_injection = json!({
+            "schema_version": 1,
+            "generated_at": 1,
+            "profiles": [{
+                "profile_id": "profile-fedcba9876543210fedcba9876543210",
+                "protocol": "wireguard",
+                "protocol_name": "WireGuard",
+                "file_name": "safe.conf",
+                "name": "Safe",
+                "location": "Safe",
+                "country_code": null,
+                "selected": false
+            }]
+        });
+        bidi_injection["profiles"][0]["name"] = json!("office\u{202e}conf");
+        assert!(
+            sanitize_profile_cache(
+                &serde_json::to_string(&bidi_injection).expect("bidi cache JSON")
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn status_cache_requires_safe_exact_profile_identity_and_invariants() {
+        let status = json!({
+            "schema_version": 1,
+            "generated_at": 1,
+            "product": "Mazzy VPN",
+            "version": "1.3.0",
+            "language": "en",
+            "selected": true,
+            "service_state": "active",
+            "desired": "up",
+            "mode": "normal",
+            "tunnel_active": true,
+            "internet": "up",
+            "healthy": true,
+            "protocol": "openvpn",
+            "protocol_name": "OpenVPN",
+            "profile": "AI workspace",
+            "profile_id": "profile-0123456789abcdef0123456789abcdef",
+            "profile_file_name": "opaque-profile.ovpn",
+            "location": "Belgium — Brussels",
+            "interface": "vpnovpn0",
+            "handshake_age": null,
+            "public_ip": "203.0.113.7",
+            "autostart": true,
+            "health_monitor": true,
+            "fallback": {"active": false, "name": ""},
+            "health_failures": 0,
+            "profiles": {
+                "amneziawg": 0,
+                "wireguard": 0,
+                "openvpn": 1,
+                "l2tp": 0
+            }
+        });
+        let encoded = serde_json::to_string(&status).expect("status cache JSON");
+        let sanitized = sanitize_status_cache(&encoded).expect("sanitized status cache");
+        assert_eq!(
+            sanitized["profile_id"],
+            "profile-0123456789abcdef0123456789abcdef"
+        );
+
+        let mut unknown_field = status.clone();
+        unknown_field["endpoint"] = json!("vpn.invalid:1194");
+        assert!(
+            sanitize_status_cache(
+                &serde_json::to_string(&unknown_field).expect("injected status JSON")
+            )
+            .is_err()
+        );
+
+        let mut mismatched_identity = status.clone();
+        mismatched_identity["profile_file_name"] = Value::Null;
+        assert!(
+            sanitize_status_cache(
+                &serde_json::to_string(&mismatched_identity).expect("partial identity JSON")
+            )
+            .is_err()
+        );
+
+        let mut false_health = status.clone();
+        false_health["internet"] = json!("down");
+        assert!(
+            sanitize_status_cache(
+                &serde_json::to_string(&false_health).expect("false health JSON")
+            )
+            .is_err()
+        );
+
+        let mut bidi_profile = status;
+        bidi_profile["profile"] = json!("office\u{202e}conf");
+        assert!(
+            sanitize_status_cache(&serde_json::to_string(&bidi_profile).expect("bidi status JSON"))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn compatibility_processes_have_bounded_deadlines_and_mutation_semantics() {
+        assert_eq!(
+            operation_deadline_seconds(&OperationRequest::Test {
+                protocol: "openvpn".into(),
+                profile: "Server".into(),
+                timeout: 600,
+            }),
+            780
+        );
+        assert_eq!(
+            operation_deadline_seconds(&OperationRequest::TestAll {
+                protocol: "all".into(),
+                timeout: 600,
+            }),
+            7_200
+        );
+        assert!(!operation_changes_system(&OperationRequest::Doctor {
+            fix: false
+        }));
+        assert!(operation_changes_system(&OperationRequest::Doctor {
+            fix: true
+        }));
     }
 
     #[test]

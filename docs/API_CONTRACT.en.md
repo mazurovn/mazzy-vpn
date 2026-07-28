@@ -12,11 +12,13 @@ boundary for issue
 [#5](https://github.com/mazurovn/mazzy-vpn/issues/5). The current
 `cli-json-adapter` is explicitly `partial`: existing safe JSON status/profile
 outputs remain available, and CLI/TUI now submit v1 envelopes for `status.get`,
-`profiles.list`, `tests.probe` and `lifecycle.*` through one dispatcher. Remaining domains
+`profiles.list`, `tests.probe`, `tests.verify-egress` and `lifecycle.*` through
+one dispatcher. Remaining domains
 still use the compatible direct CLI control plane. Contract metadata is
 implemented. The
 socket-activated Linux transport is `partial`: it accepts `status.get`,
-`profiles.list`, the bounded `tests.probe` query and the three `lifecycle.*`
+`profiles.list`, the bounded `tests.probe`/`tests.verify-egress` queries and
+the three `lifecycle.*`
 mutations. Other operations and
 non-Linux transports remain `planned`, so this still does not claim that the
 complete cross-platform daemon exists.
@@ -137,8 +139,32 @@ transactional live test with rollback. The server applies the request deadline
 to the entire worker group and serializes batch probes with a global lock so
 concurrent socket clients cannot multiply network load.
 
+`tests.verify-egress` is a read-only, globally serialized query with a bounded
+deadline. Its payload contains only `timeout_seconds` and the explicit
+`include_speed` choice. The response reports:
+
+- active tunnel protocol/display name/interface;
+- interface-bound and default IPv4 plus their equality;
+- interface-bound/default IPv6 and a potential-leak flag;
+- expected/observed country, provider agreement and up to two validated
+  provider records;
+- configured DNS route state;
+- an optional bounded speed sample;
+- a verdict, message key and unique finding codes.
+
+The engine accepts location data only when the provider reports the exact
+interface-bound IPv4. A `verified` result requires two distinct providers that
+agree on country, matching default/interface IPv4 egress, no potential IPv6
+leak, full-tunnel DNS state and no findings. The strict Desktop parser
+recomputes these invariants and rejects unknown fields, invalid IP families,
+provider duplication, provider-IP mismatch and unexplained non-verified
+verdicts. The response contains no VPN endpoint, profile path, key or
+configuration. `include_speed=false` is the default; the five-megabyte transfer
+is never implicit.
+
 Installed CLI and TUI clients use the socket without `sudo` for status, profile
-listing, batch endpoint probes, connect, quick, reconnect and disconnect. The client sends only an
+listing, batch endpoint probes, egress verification, connect, quick, reconnect
+and disconnect. The client sends only an
 opaque `profile_id`, sends a bounded query refresh deadline, bounds response
 time and byte size, and accepts exactly one response document with matching
 `api_version`/`request_id`. If a response is lost, it automatically retries the
@@ -152,8 +178,9 @@ Desktop response is also read to bounded EOF and must contain exactly one
 matching JSON document. A
 Desktop location check consumes the structured `tests.probe` result and binds
 each sanitized result to its opaque profile ID; it does not parse raw CLI text.
-A
-failed initial socket connection may use the typed compatibility adapter
+Desktop egress verification consumes the strict structured
+`tests.verify-egress` result. A failed initial socket connection may use the
+typed compatibility adapter
 because no request was sent; any post-connect uncertainty is returned to the
 user and never falls through to `pkexec`.
 
