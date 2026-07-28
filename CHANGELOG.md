@@ -35,6 +35,9 @@ All notable changes to Mazzy VPN are documented here.
 - Pinned the immutable upstream commits behind the AmneziaWG tools and Go tags
   and stop installation if a tag resolves to different source.
 - Made contract and capability validation reject ambiguous duplicate JSON keys.
+- Extended `status.get` with optional safe runtime detail for CLI/TUI parity:
+  desired mode, interface, handshake age, public IP, autostart, health monitor,
+  failure count and fallback state; VPN endpoints remain forbidden.
 
 ## 1.2.0 / Desktop 0.2.0 — 2026-07-27
 

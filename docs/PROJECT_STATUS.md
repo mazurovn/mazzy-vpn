@@ -67,6 +67,7 @@ Draft PR #26 on `agent/local-api-daemon` builds the protected-service slice:
 - systemd socket activation at `/run/mazzy-vpn/api-v1.sock`, protected by
   `0660 root:mazzy-vpn`;
 - `status.get`, `profiles.list` and all three `lifecycle.*` operations;
+- optional frontend-safe runtime status detail without VPN endpoints or paths;
 - opaque profile IDs instead of paths or filenames in API requests;
 - persistent action-ID idempotency, serialized mutations and bounded deadlines;
 - crash recovery for orphaned actions, bounded persistent journals, rotating

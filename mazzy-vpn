@@ -2911,11 +2911,64 @@ api_status_result() {
                     healthy: ($status.healthy // false)
                 }
                 + (
+                    if (($status.interface // "") | test("^[A-Za-z0-9_.:-]{1,32}$"))
+                    then {interface: $status.interface}
+                    else {}
+                    end
+                )
+                + (
+                    if (($status.handshake_age // null) | type) == "number"
+                        and ($status.handshake_age | floor) == $status.handshake_age
+                        and $status.handshake_age >= 0
+                    then {handshake_age: $status.handshake_age}
+                    else {}
+                    end
+                )
+                + (
+                    if (($status.public_ip // "") | test("^[0-9A-Fa-f:.]{3,64}$"))
+                    then {public_ip: $status.public_ip}
+                    else {}
+                    end
+                )
+                + (
                     if $profile == null then {}
                     else {
                         protocol: $profile.protocol,
                         profile_id: $profile.profile_id
                     }
+                    end
+                )
+            ),
+            desired: (
+                if ($status.desired // "") == "up" then "up"
+                elif ($status.desired // "") == "down" then "down"
+                else "unknown"
+                end
+            ),
+            mode: (
+                if ($status.mode // "") == "normal" then "normal"
+                elif ($status.mode // "") == "test" then "test"
+                else "unknown"
+                end
+            ),
+            autostart: ($status.autostart // false),
+            health_monitor: ($status.health_monitor // false),
+            health_failures: (
+                if (($status.health_failures // 0) | type) == "number"
+                    and ($status.health_failures | floor) == $status.health_failures
+                    and $status.health_failures >= 0
+                then $status.health_failures
+                else 0
+                end
+            ),
+            fallback: (
+                {active: ($status.fallback.active // false)}
+                + (
+                    if (($status.fallback.name // "") | type) == "string"
+                        and (($status.fallback.name // "") | length) > 0
+                        and (($status.fallback.name // "") | length) <= 64
+                    then {display_name: $status.fallback.name}
+                    else {}
                     end
                 )
             )

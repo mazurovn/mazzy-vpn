@@ -83,3 +83,9 @@ and action ID, only after a post-connect transport failure makes the outcome
 indeterminate. A failed initial socket connection may use the typed
 compatibility adapter because no request was sent; post-connect uncertainty
 never falls through to `pkexec`.
+
+`status.get` may add safe runtime detail for terminal/dashboard parity:
+desired mode, interface, handshake age, current public IP, autostart, health
+monitor, failure count and external-fallback state. These fields are optional
+for minor-version compatibility. The VPN endpoint, profile filename/path and
+configuration remain forbidden.

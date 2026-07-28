@@ -608,8 +608,20 @@ jq -e --arg profile_id "$profile_id" '
     and .result.product == "Mazzy VPN"
     and .result.connection.profile_id == $profile_id
     and .result.connection.state == "connected"
+    and .result.connection.interface == "vpnovpn0"
+    and .result.connection.public_ip == "203.0.113.7"
+    and .result.desired == "up"
+    and .result.mode == "normal"
+    and .result.autostart == true
+    and .result.health_monitor == true
+    and .result.health_failures == 0
+    and .result.fallback.active == false
 ' <<<"$api_status_response" >/dev/null ||
     fail "local API status.get response is invalid"
+if grep -Eq '192\.0\.2\.10|endpoint|file_name|Test Server\.ovpn' \
+    <<<"$api_status_response"; then
+    fail "local API status.get detail leaked engine-only profile data"
+fi
 
 api_profiles_request="$(
     jq -cn '{

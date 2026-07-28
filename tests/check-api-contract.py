@@ -182,6 +182,22 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
     if "audit.recorded" not in event_types or "AuditEvent" not in defs:
         fail("the schema must define sanitized audit events")
 
+    status_properties = defs.get("PublicStatus", {}).get("properties", {})
+    connection_properties = defs.get("ConnectionSummary", {}).get("properties", {})
+    if not {
+        "desired",
+        "mode",
+        "autostart",
+        "health_monitor",
+        "health_failures",
+        "fallback",
+    }.issubset(status_properties):
+        fail("PublicStatus is missing optional CLI/TUI parity fields")
+    if not {"interface", "handshake_age", "public_ip"}.issubset(
+        connection_properties
+    ):
+        fail("ConnectionSummary is missing optional runtime detail fields")
+
     security = manifest.get("security")
     if not isinstance(security, dict):
         fail("manifest security policy is missing")

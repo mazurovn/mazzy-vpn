@@ -83,3 +83,9 @@ Desktop повторяет lifecycle request ровно один раз с те�
 Неудачное первоначальное подключение может использовать typed compatibility
 adapter, потому что request ещё не отправлен; post-connect неопределённость
 никогда не переходит в `pkexec`.
+
+`status.get` может передавать безопасные runtime details для parity терминала и
+dashboard: desired mode, interface, возраст handshake, текущий public IP,
+autostart, health monitor, число сбоев и состояние внешнего fallback. Для
+совместимости minor-версии поля необязательны. VPN endpoint, имя/путь файла
+профиля и конфигурация остаются запрещены.
