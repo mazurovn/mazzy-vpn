@@ -79,7 +79,9 @@ Draft PR #26 on `agent/local-api-daemon` builds the protected-service slice:
 - CI uses versioned Ubuntu 22.04/24.04, macOS 14 and Windows Server 2022 runner
   labels with the declared Rust 1.85.0 toolchain rather than `latest`/`stable`;
 - status/profile caches are atomically published as `0640 root:mazzy-vpn`
-  under a group-restricted runtime directory.
+  under a group-restricted runtime directory;
+- failed or missing crash-recovery snapshots persist a root-only marker that
+  blocks later API mutations until explicit administrator acknowledgement.
 
 Verified locally:
 

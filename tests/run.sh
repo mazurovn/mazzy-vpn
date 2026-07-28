@@ -841,6 +841,77 @@ grep -q '^DESIRED=up$' "$VPNCTL_STATE_DIR/active" ||
    "$api_stop_count" ]] ||
     fail "interrupted local API action was executed again after recovery"
 
+api_missing_snapshot_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-missing-snapshot-0001",
+        operation: "lifecycle.disconnect",
+        action_id: "action-missing-snapshot-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {}
+    }'
+)"
+api_missing_snapshot_fingerprint="$(
+    jq -cS 'del(.request_id)' <<<"$api_missing_snapshot_request" |
+        sha256sum |
+        awk '{ print $1 }'
+)"
+jq -cn \
+    --arg fingerprint "$api_missing_snapshot_fingerprint" \
+    '{
+        fingerprint: $fingerprint,
+        state: "running",
+        operation: "lifecycle.disconnect",
+        started_at: "2026-01-01T00:00:00Z",
+        snapshot_existed: true
+    }' >"$VPNCTL_API_ACTION_DIR/action-missing-snapshot-0001.json"
+api_missing_snapshot_response="$(
+    printf '%s\n' "$api_missing_snapshot_request" | "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "internal-error"
+    and .error.message_key == "api.action.recovery-required"
+    and .error.retryable == false
+    and .error.user_action_required == true
+' <<<"$api_missing_snapshot_response" >/dev/null ||
+    fail "missing API snapshot did not enter recovery-only mode"
+api_recovery_marker="$VPNCTL_STATE_DIR/api-recovery-required.json"
+jq -e '
+    .state == "recovery-required"
+    and .action_id == "action-missing-snapshot-0001"
+    and .operation == "lifecycle.disconnect"
+    and .reason == "snapshot-missing"
+    and (.created_at | type == "string")
+' "$api_recovery_marker" >/dev/null ||
+    fail "local API recovery marker is missing or unsafe"
+[[ "$(stat -c %a "$api_recovery_marker")" == "600" ]] ||
+    fail "local API recovery marker is not root-only"
+api_blocked_stop_count="$(grep -c '^stop vpnctl.service$' "$FAKE_SYSTEMCTL_LOG" || true)"
+api_blocked_response="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-recovery-blocked-0001",
+        operation: "lifecycle.disconnect",
+        action_id: "action-recovery-blocked-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {}
+    }' | "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.message_key == "api.action.recovery-required"
+' <<<"$api_blocked_response" >/dev/null ||
+    fail "local API accepted a mutation while recovery-only mode was active"
+[[ "$(grep -c '^stop vpnctl.service$' "$FAKE_SYSTEMCTL_LOG" || true)" == \
+   "$api_blocked_stop_count" ]] ||
+    fail "recovery-only mode executed a blocked mutation"
+"$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
+[[ ! -e "$api_recovery_marker" ]] ||
+    fail "explicit administrator acknowledgement did not clear recovery-only mode"
+
 api_retention_request="$(
     jq -cn '{
         api_version: "1.0",
@@ -877,7 +948,7 @@ if grep -Eq 'Test Server|192\.0\.2\.10|PrivateKey|PublicKey' \
     "$VPNCTL_API_AUDIT_FILE" "$VPNCTL_API_AUDIT_FILE.1"; then
     fail "rotated local API audit log leaked profile or endpoint data"
 fi
-ok "local API recovers interrupted actions and bounds persistent journals"
+ok "local API recovery fails closed and bounds persistent journals"
 
 dashboard_output="$("$CLI" dashboard)"
 grep -q 'M A Z Z Y' <<<"$dashboard_output" || fail "dashboard artwork is missing"

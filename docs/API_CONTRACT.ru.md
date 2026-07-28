@@ -78,6 +78,13 @@ backend output. По умолчанию журнал ограничен 512 за
 audit-файл ротируется при 2 МиБ с одним root-only архивом. На системах с
 ограниченным диском лимиты можно уменьшить, но нельзя отключать.
 
+Если crash reconciliation не может прочитать pre-action snapshot или
+восстановить его, daemon сохраняет root-only recovery marker и отклоняет все
+следующие API mutations. После ручной проверки и исправления текущего состояния
+администратор должен явно подтвердить его командой
+`sudo mazzy-vpn _api-clear-recovery --acknowledge-current-state`. Marker никогда
+не снимается по таймеру или после постороннего успешного request.
+
 Desktop повторяет lifecycle request ровно один раз с тем же request/action ID
 только после post-connect ошибки транспорта, когда outcome неопределён.
 Неудачное первоначальное подключение может использовать typed compatibility

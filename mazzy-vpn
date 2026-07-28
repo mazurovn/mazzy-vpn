@@ -17,6 +17,7 @@ STATE_DIR="${VPNCTL_STATE_DIR:-/var/lib/vpnctl}"
 STATE_FILE="$STATE_DIR/active"
 API_ACTION_DIR="${VPNCTL_API_ACTION_DIR:-$STATE_DIR/api-actions}"
 API_AUDIT_FILE="${VPNCTL_API_AUDIT_FILE:-$STATE_DIR/api-audit.jsonl}"
+API_RECOVERY_MARKER="$STATE_DIR/api-recovery-required.json"
 API_MAX_REQUEST_BYTES="${VPNCTL_API_MAX_REQUEST_BYTES:-65536}"
 API_ACTION_MAX_RECORDS="${VPNCTL_API_ACTION_MAX_RECORDS:-512}"
 API_AUDIT_MAX_BYTES="${VPNCTL_API_AUDIT_MAX_BYTES:-2097152}"
@@ -3040,6 +3041,38 @@ api_write_record() {
     mv -f -- "$tmp" "$target"
 }
 
+api_mark_recovery_required() {
+    local action_id="$1" operation="$2" reason="$3" marker tmp content
+    marker="$API_RECOVERY_MARKER"
+    mkdir -p -- "$STATE_DIR" || return 1
+    chmod 700 -- "$STATE_DIR" || return 1
+    content="$(
+        jq -cn \
+            --arg action_id "$action_id" \
+            --arg operation "$operation" \
+            --arg reason "$reason" \
+            --arg created_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+                state: "recovery-required",
+                action_id: $action_id,
+                operation: $operation,
+                reason: $reason,
+                created_at: $created_at
+            }'
+    )" || return 1
+    tmp="$(mktemp "$STATE_DIR/.api-recovery.XXXXXX")" || return 1
+    umask 077
+    printf '%s\n' "$content" >"$tmp" || {
+        rm -f -- "$tmp"
+        return 1
+    }
+    chmod 600 -- "$tmp" || {
+        rm -f -- "$tmp"
+        return 1
+    }
+    mv -f -- "$tmp" "$marker"
+}
+
 api_prune_completed_actions() {
     local preserve_action_id="${1:-}" record base action_id state completed_at
     local max_records remove_count entry
@@ -3225,7 +3258,9 @@ api_store_completed_action() {
 
 api_recover_interrupted_actions() {
     local record base action_id fingerprint operation snapshot_existed snapshot
-    local legacy_snapshot outcome rollback_state audit_outcome recovery_failed=0
+    local legacy_snapshot outcome rollback_state audit_outcome recovery_reason
+    local recovery_failed=0
+    [[ ! -e "$API_RECOVERY_MARKER" ]] || return 1
     shopt -s nullglob
     for record in "$API_ACTION_DIR"/*.json; do
         [[ "$(jq -r '.state // ""' "$record" 2>/dev/null || true)" == "running" ]] ||
@@ -3240,6 +3275,7 @@ api_recover_interrupted_actions() {
         operation="$(jq -r '.operation // ""' "$record" 2>/dev/null || true)"
         snapshot_existed="$(jq -r '.snapshot_existed // ""' "$record" 2>/dev/null || true)"
         snapshot="$API_ACTION_DIR/.snapshot.$action_id"
+        recovery_reason=""
 
         if [[ "$snapshot_existed" != true && "$snapshot_existed" != false ]]; then
             legacy_snapshot=""
@@ -3269,12 +3305,23 @@ api_recover_interrupted_actions() {
                     "$action_id" rollback-failed true true failed \
                     api.action.interrupted-rollback-failed)"
                 audit_outcome=rollback-failed
+                recovery_reason="rollback-failed"
             fi
         else
             outcome="$(api_action_outcome \
                 "$action_id" rollback-failed true true failed \
                 api.action.interrupted-snapshot-missing)"
             audit_outcome=rollback-failed
+            recovery_reason="snapshot-missing"
+        fi
+
+        if [[ -n "$recovery_reason" ]]; then
+            if ! api_mark_recovery_required \
+                "$action_id" "$operation" "$recovery_reason"; then
+                recovery_failed=1
+                continue
+            fi
+            recovery_failed=1
         fi
 
         if [[ -z "$fingerprint" || -z "$operation" ]] ||
@@ -3284,6 +3331,7 @@ api_recover_interrupted_actions() {
             continue
         fi
         api_audit_event "$action_id" "$operation" approved "$audit_outcome" || true
+        [[ -z "$recovery_reason" ]] || break
     done
     shopt -u nullglob
     ((recovery_failed == 0))
@@ -3467,6 +3515,12 @@ api_run_lifecycle_action() {
                 "$action_id" rollback-failed true true failed \
                 api.action.rollback-failed)"
             audit_outcome=rollback-failed
+            if ! api_mark_recovery_required \
+                "$action_id" "$operation" rollback-failed; then
+                api_error_response "$request_id" internal-error \
+                    api.journal.unavailable false true
+                return
+            fi
         fi
     fi
     api_store_completed_action "$record_file" "$fingerprint" "$operation" "$outcome" || {
@@ -3923,6 +3977,26 @@ doctor_fix() {
     fi
 }
 
+cmd_api_clear_recovery() {
+    require_root _api-clear-recovery "$@"
+    [[ $# == 1 && "$1" == "--acknowledge-current-state" ]] ||
+        die "Usage: $CLI_COMMAND _api-clear-recovery --acknowledge-current-state"
+    mkdir -p -- "$API_ACTION_DIR" ||
+        die "Unable to open the local API action journal"
+    chmod 700 -- "$API_ACTION_DIR" ||
+        die "Unable to protect the local API action journal"
+    exec 7>"$API_ACTION_DIR/.mutation.lock"
+    flock -n 7 ||
+        die "Cannot acknowledge recovery while another API mutation is active"
+    if [[ -e "$API_RECOVERY_MARKER" ]]; then
+        rm -f -- "$API_RECOVERY_MARKER" ||
+            die "Unable to clear the local API recovery marker"
+        say "Local API recovery-only mode cleared after explicit administrator acknowledgement."
+    else
+        say "Local API recovery-only mode is not active."
+    fi
+}
+
 cmd_doctor() {
     local fix=0
     require_profile_access doctor "$@"
@@ -3944,6 +4018,12 @@ cmd_doctor() {
     doctor_fallback_checks
     doctor_unit_checks
     doctor_profile_checks
+    if [[ -e "$API_RECOVERY_MARKER" ]]; then
+        check_fail "Local API recovery-only mode is active after a failed rollback"
+        if ((EUID == 0)); then
+            say "После ручной проверки состояния: sudo $CLI_COMMAND _api-clear-recovery --acknowledge-current-state"
+        fi
+    fi
     if [[ -r "$STATE_FILE" ]]; then
         if selected_from_state; then
             check_ok "Сохранённый выбор корректен"
@@ -5075,6 +5155,7 @@ main() {
             write_dashboard_cache
             ;;
         _api-dispatch) api_dispatch ;;
+        _api-clear-recovery) cmd_api_clear_recovery "$@" ;;
         _test-timeout) test_timeout_handler "${1:-}" ;;
         _recover-stale-test) recover_stale_test_state ;;
         _dedupe-quick-policy)

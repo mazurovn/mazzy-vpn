@@ -78,6 +78,13 @@ output. Completed outcomes are bounded to 512 records by default. The audit
 file rotates at 2 MiB and keeps one root-only archive; these limits can be
 reduced for constrained systems but must not be disabled.
 
+If crash reconciliation cannot read the pre-action snapshot or cannot restore
+it, the daemon persists a root-only recovery marker and rejects every later API
+mutation. After manually inspecting and repairing the current VPN state, an
+administrator must explicitly acknowledge it with
+`sudo mazzy-vpn _api-clear-recovery --acknowledge-current-state`. The marker is
+never cleared by a timer or an unrelated successful request.
+
 Desktop retries a lifecycle request exactly once, using the identical request
 and action ID, only after a post-connect transport failure makes the outcome
 indeterminate. A failed initial socket connection may use the typed
