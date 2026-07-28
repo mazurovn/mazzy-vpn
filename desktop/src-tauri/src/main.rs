@@ -71,7 +71,7 @@ fn output_text(output: &Output) -> String {
 #[cfg(target_os = "linux")]
 fn execute_action(action: VpnAction) -> ActionResult {
     let (name, args) = action_spec(action);
-    let result = Command::new("pkexec").arg(CLI_PATH).args(args).output();
+    let result = backend::bounded_output(Command::new("pkexec").arg(CLI_PATH).args(args));
     match result {
         Ok(output) => ActionResult {
             success: output.status.success(),
@@ -122,7 +122,7 @@ fn read_status() -> Value {
     let data = match fs::read_to_string(STATUS_FILE) {
         Ok(data) => data,
         Err(cache_error) => {
-            let output = Command::new(CLI_PATH).args(["status", "--json"]).output();
+            let output = backend::bounded_output(Command::new(CLI_PATH).args(["status", "--json"]));
             return match output {
                 Ok(output) if output.status.success() => {
                     serde_json::from_slice(&output.stdout).unwrap_or_else(fallback_status)

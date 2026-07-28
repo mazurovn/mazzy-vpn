@@ -29,6 +29,8 @@ All notable changes to Mazzy VPN are documented here.
   action journal and rotated the sanitized root-only audit log.
 - Rejected every terminal control character in imported or manually installed
   profile filenames before the name can reach CLI/TUI output.
+- Bounded Desktop child-process stdout and stderr while draining both streams
+  concurrently, preventing unbounded GUI memory growth from verbose helpers.
 - Bounded local API requests by bytes before JSON parsing and added a finite
   receive deadline, preventing a socket client from forcing an unbounded Bash
   read.

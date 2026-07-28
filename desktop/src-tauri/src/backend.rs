@@ -4,14 +4,16 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 #[cfg(target_os = "linux")]
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Write};
 #[cfg(target_os = "linux")]
 use std::os::unix::net::UnixStream;
 use std::{
     env, fs,
+    io::{self, Read},
     path::{Path, PathBuf},
-    process::{Command, Output},
+    process::{Command, Output, Stdio},
     sync::atomic::{AtomicU64, Ordering},
+    thread,
     time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Manager};
@@ -20,6 +22,8 @@ const CLI_PATH: &str = "/usr/local/bin/mazzy-vpn";
 const PROFILES_FILE: &str = "/run/mazzy-vpn/profiles.json";
 const API_SOCKET: &str = "/run/mazzy-vpn/api-v1.sock";
 const MAX_OUTPUT_BYTES: usize = 512 * 1024;
+const MAX_OUTPUT_STREAM_BYTES: usize = MAX_OUTPUT_BYTES / 2;
+const TRUNCATED_OUTPUT_MARKER: &[u8] = b"\n[output truncated]\n";
 #[cfg(target_os = "linux")]
 const MAX_API_RESPONSE_BYTES: usize = 64 * 1024;
 static API_SEQUENCE: AtomicU64 = AtomicU64::new(1);
@@ -389,7 +393,70 @@ fn clean_output(output: &Output) -> String {
     cleaned.trim().to_owned()
 }
 
-fn command_result(action: String, result: Result<Output, std::io::Error>) -> OperationResult {
+fn drain_bounded<R: Read>(mut reader: R, limit: usize) -> io::Result<Vec<u8>> {
+    let mut retained = Vec::with_capacity(limit.min(8192));
+    let mut buffer = [0_u8; 8192];
+    let mut truncated = false;
+
+    loop {
+        let read = reader.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        let remaining = limit.saturating_sub(retained.len());
+        let keep = remaining.min(read);
+        retained.extend_from_slice(&buffer[..keep]);
+        truncated |= keep < read;
+    }
+
+    if truncated {
+        let content_limit = limit.saturating_sub(TRUNCATED_OUTPUT_MARKER.len());
+        retained.truncate(content_limit);
+        let marker_bytes = limit.saturating_sub(retained.len());
+        retained.extend_from_slice(
+            &TRUNCATED_OUTPUT_MARKER[..marker_bytes.min(TRUNCATED_OUTPUT_MARKER.len())],
+        );
+    }
+    Ok(retained)
+}
+
+fn join_capture(
+    handle: thread::JoinHandle<io::Result<Vec<u8>>>,
+    stream: &str,
+) -> io::Result<Vec<u8>> {
+    handle.join().map_err(|_| {
+        io::Error::other(format!(
+            "Desktop output capture thread panicked while reading {stream}"
+        ))
+    })?
+}
+
+pub(crate) fn bounded_output(command: &mut Command) -> io::Result<Output> {
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn()?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| io::Error::other("Unable to capture child stdout"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| io::Error::other("Unable to capture child stderr"))?;
+    let stdout_handle = thread::spawn(move || drain_bounded(stdout, MAX_OUTPUT_STREAM_BYTES));
+    let stderr_handle = thread::spawn(move || drain_bounded(stderr, MAX_OUTPUT_STREAM_BYTES));
+
+    let status_result = child.wait();
+    let stdout = join_capture(stdout_handle, "stdout")?;
+    let stderr = join_capture(stderr_handle, "stderr")?;
+    let status = status_result?;
+    Ok(Output {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
+fn command_result(action: String, result: Result<Output, io::Error>) -> OperationResult {
     match result {
         Ok(output) => OperationResult {
             success: output.status.success(),
@@ -649,12 +716,13 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
         }
         return command_result(
             "bootstrap".into(),
-            Command::new("pkexec")
-                .arg("/bin/bash")
-                .arg(installer)
-                .arg("--yes")
-                .arg("--skip-tests")
-                .output(),
+            bounded_output(
+                Command::new("pkexec")
+                    .arg("/bin/bash")
+                    .arg(installer)
+                    .arg("--yes")
+                    .arg("--skip-tests"),
+            ),
         );
     }
 
@@ -683,7 +751,7 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
     }
     command_result(
         action,
-        Command::new("pkexec").arg(CLI_PATH).args(args).output(),
+        bounded_output(Command::new("pkexec").arg(CLI_PATH).args(args)),
     )
 }
 
@@ -705,7 +773,7 @@ fn version_from_output(output: &str) -> Option<String> {
 }
 
 fn installed_version(path: &Path) -> Option<String> {
-    let output = Command::new(path).arg("version").output().ok()?;
+    let output = bounded_output(Command::new(path).arg("version")).ok()?;
     output
         .status
         .success()
@@ -1021,6 +1089,15 @@ mod tests {
             .output()
             .expect("printf");
         assert_eq!(clean_output(&output), "FAIL");
+    }
+
+    #[test]
+    fn child_output_capture_is_bounded_and_marks_truncation() {
+        let input = vec![b'x'; MAX_OUTPUT_STREAM_BYTES + 1];
+        let output =
+            drain_bounded(std::io::Cursor::new(input), MAX_OUTPUT_STREAM_BYTES).expect("capture");
+        assert_eq!(output.len(), MAX_OUTPUT_STREAM_BYTES);
+        assert!(output.ends_with(TRUNCATED_OUTPUT_MARKER));
     }
 
     #[test]

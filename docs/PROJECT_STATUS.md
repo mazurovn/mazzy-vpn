@@ -73,12 +73,14 @@ Draft PR #26 on `agent/local-api-daemon` builds the protected-service slice:
 - crash recovery for orphaned actions, bounded persistent journals, rotating
   root-only sanitized audit and explicit desired-state rollback;
 - Desktop lifecycle routing through the API with a compatibility fallback while
-  the remaining operation domains still use the typed `pkexec` adapter.
+  the remaining operation domains still use the typed `pkexec` adapter;
+- bounded, concurrently drained Desktop child-process output instead of
+  accumulating an arbitrary amount of helper output in GUI memory.
 
 Verified locally:
 
 - shell regression suite: 58/58 on PR #26;
-- Rust unit tests: 10/10;
+- Rust unit tests: 11/11;
 - ShellCheck, Clippy, capability/API validators, public audit and gitleaks;
 - the previous npm audit reported 0 vulnerabilities, but the 2026-07-28 online
   refresh was not authorized by the sandbox and must not be treated as current;
