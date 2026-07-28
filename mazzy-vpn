@@ -799,8 +799,15 @@ protocol_dir() {
     fi
 }
 
+safe_profile_basename() {
+    local name="$1"
+    [[ -n "$name" && "$name" != "." && "$name" != ".." ]] || return 1
+    [[ "$name" != *[[:cntrl:]]* ]]
+}
+
 load_profiles() {
-    local protocol="$1" dir path
+    local protocol="$1" dir path name
+    local -a safe_profiles=()
     PROFILES=()
     dir="$(protocol_dir "$protocol")"
     [[ -d "$dir" ]] || return 0
@@ -820,6 +827,15 @@ load_profiles() {
                 ;;
         esac
     )
+    for path in "${PROFILES[@]}"; do
+        name="$(basename -- "$path")"
+        safe_profile_basename "$name" || {
+            warn "Профиль пропущен: имя содержит управляющие символы"
+            continue
+        }
+        safe_profiles+=("$path")
+    done
+    PROFILES=("${safe_profiles[@]}")
 }
 
 profile_name() {
@@ -3383,6 +3399,7 @@ api_run_lifecycle_action() {
 api_dispatch() {
     local request="" request_id operation result action_id authorization deadline_ms
     local allowed_keys
+    local LC_ALL=C
     ((EUID == 0)) || [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]] || {
         api_error_response "$(api_server_request_id)" permission-denied \
             api.transport.root-required false true
@@ -3395,8 +3412,9 @@ api_dispatch() {
             return
         }
     done
-    [[ "$API_MAX_REQUEST_BYTES" =~ ^[1-9][0-9]*$ ]] || API_MAX_REQUEST_BYTES=65536
-    if ! IFS= read -r -t 5 request; then
+    [[ "$API_MAX_REQUEST_BYTES" =~ ^[1-9][0-9]*$ ]] &&
+        ((API_MAX_REQUEST_BYTES <= 1048576)) || API_MAX_REQUEST_BYTES=65536
+    if ! IFS= read -r -t 5 -n "$((API_MAX_REQUEST_BYTES + 1))" request; then
         api_error_response "$(api_server_request_id)" invalid-request \
             api.request.missing false false
         return
@@ -3990,9 +4008,7 @@ import_target_dir() {
 safe_import_name() {
     local name
     name="$(basename -- "$1")"
-    [[ -n "$name" && "$name" != "." && "$name" != ".." ]] || return 1
-    [[ "$name" != *$'\n'* && "$name" != *$'\r'* && "$name" != *$'\033'* ]] ||
-        return 1
+    safe_profile_basename "$name" || return 1
     printf '%s\n' "$name"
 }
 

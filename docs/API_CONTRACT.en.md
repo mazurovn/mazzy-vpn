@@ -69,9 +69,17 @@ synchronized.
 
 On Linux, `mazzy-vpn-api.socket` exposes `/run/mazzy-vpn/api-v1.sock` as
 `root:mazzy-vpn` mode `0660`. Every connection carries one newline-terminated
-request and receives one newline-terminated response. Mutations are serialized,
+request and receives one newline-terminated response. The service stops reading
+at the configured byte limit before JSON parsing, including for a client that
+never terminates an oversized line. Mutations are serialized,
 deadline-bounded and recorded by action ID under root-only state. The audit log
 contains operation IDs and outcomes only, never request payloads or backend
 output. Completed outcomes are bounded to 512 records by default. The audit
 file rotates at 2 MiB and keeps one root-only archive; these limits can be
 reduced for constrained systems but must not be disabled.
+
+Desktop retries a lifecycle request exactly once, using the identical request
+and action ID, only after a post-connect transport failure makes the outcome
+indeterminate. A failed initial socket connection may use the typed
+compatibility adapter because no request was sent; post-connect uncertainty
+never falls through to `pkexec`.

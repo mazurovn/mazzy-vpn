@@ -23,7 +23,18 @@ All notable changes to Mazzy VPN are documented here.
   rollback after lifecycle failures.
 - Routed Desktop lifecycle operations through the protected API when installed,
   retaining the typed `pkexec` adapter as a compatibility fallback and for
-  operation domains not migrated yet.
+  operation domains not migrated yet; an indeterminate transport is retried
+  once with the identical request and action ID.
+- Added crash reconciliation for orphaned API actions, bounded the completed
+  action journal and rotated the sanitized root-only audit log.
+- Rejected every terminal control character in imported or manually installed
+  profile filenames before the name can reach CLI/TUI output.
+- Bounded local API requests by bytes before JSON parsing and added a finite
+  receive deadline, preventing a socket client from forcing an unbounded Bash
+  read.
+- Pinned the immutable upstream commits behind the AmneziaWG tools and Go tags
+  and stop installation if a tag resolves to different source.
+- Made contract and capability validation reject ambiguous duplicate JSON keys.
 
 ## 1.2.0 / Desktop 0.2.0 — 2026-07-27
 

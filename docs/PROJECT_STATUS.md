@@ -19,7 +19,8 @@ authoritative backlog; this page records the verified resumption point.
 - Windows and macOS 0.2.0 artifacts are unsigned UI previews without native
   VPN backends.
 - Android and iOS clients are planned and have no release artifacts.
-- PR #22 and API contract PR #25 are merged.
+- PR #22 and API contract PR #25 are merged. Protected API PR #26 is open as a
+  Draft PR; stacked CLI/TUI API client PR #27 is also open as a Draft.
 
 Release links:
 
@@ -61,26 +62,28 @@ Merged PR #25 completed the first incremental issue #5 slice:
 - CI validates operation IDs, authorization, audit, deadlines, rollback
   semantics and the frontend forbidden-field policy.
 
-The active `agent/local-api-daemon` branch builds the next vertical slice:
+Draft PR #26 on `agent/local-api-daemon` builds the protected-service slice:
 
 - systemd socket activation at `/run/mazzy-vpn/api-v1.sock`, protected by
   `0660 root:mazzy-vpn`;
 - `status.get`, `profiles.list` and all three `lifecycle.*` operations;
 - opaque profile IDs instead of paths or filenames in API requests;
 - persistent action-ID idempotency, serialized mutations and bounded deadlines;
-- root-only sanitized audit and explicit desired-state rollback;
+- crash recovery for orphaned actions, bounded persistent journals, rotating
+  root-only sanitized audit and explicit desired-state rollback;
 - Desktop lifecycle routing through the API with a compatibility fallback while
   the remaining operation domains still use the typed `pkexec` adapter.
 
 Verified locally:
 
-- shell regression suite: 55/55;
-- Rust unit tests: 9/9;
+- shell regression suite: 58/58 on PR #26;
+- Rust unit tests: 10/10;
 - ShellCheck, Clippy, capability/API validators, public audit and gitleaks;
-- npm audit: 0 vulnerabilities;
+- the previous npm audit reported 0 vulnerabilities, but the 2026-07-28 online
+  refresh was not authorized by the sandbox and must not be treated as current;
 - staged installer reads the installed contract through the staged CLI.
 
 Do not mark issue #5 complete after this slice. The remaining API domains,
-independently installed CLI/TUI client migration, stale-running-action recovery,
-cross-version compatibility and broader crash/concurrency tests remain separate
-acceptance criteria.
+independently installed CLI/TUI client migration, native caller identity,
+strict end-to-end deadlines, long-lived idempotency semantics and real-host
+crash/concurrency tests remain separate acceptance criteria.

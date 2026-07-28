@@ -278,6 +278,19 @@ grep -q 'Test Server' <<<"$list_output" || fail "profile with spaces was not lis
 grep -q '192.0.2.10:1194' <<<"$list_output" || fail "endpoint was not shown"
 ok "list handles spaces"
 
+unsafe_profile_name="$TMP/config/openvpn/"$'Bell\aServer.ovpn'
+cp "$TMP/config/openvpn/Test Server.ovpn" "$unsafe_profile_name"
+unsafe_name_list="$("$CLI" list openvpn 2>&1)"
+grep -q 'имя содержит управляющие символы' <<<"$unsafe_name_list" ||
+    fail "profile catalog did not report a control-character filename"
+grep -q 'Bell' <<<"$unsafe_name_list" &&
+    fail "profile catalog exposed a control-character filename"
+if "$CLI" import openvpn "$unsafe_profile_name" >/dev/null 2>&1; then
+    fail "profile import accepted a control-character filename"
+fi
+rm -f -- "$unsafe_profile_name"
+ok "profile catalog rejects terminal control characters"
+
 validate_output="$("$CLI" validate openvpn)"
 grep -q 'profiles=1 passed=1 failed=0' <<<"$validate_output" ||
     fail "valid profile was not accepted by validate"
@@ -619,6 +632,47 @@ jq -e --arg profile_id "$profile_id" '
 ' <<<"$api_profiles_response" >/dev/null ||
     fail "local API profiles.list response is invalid"
 ok "local API query envelopes expose only sanitized status and profiles"
+
+api_oversized_request="$(printf 'я%.0s' {1..40})"
+api_oversized_response="$(
+    printf '%s\n' "$api_oversized_request" |
+        VPNCTL_API_MAX_REQUEST_BYTES=64 "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "invalid-request"
+    and .error.message_key == "api.request.size"
+' <<<"$api_oversized_response" >/dev/null ||
+    fail "local API did not enforce its request limit in bytes"
+ok "local API bounds request memory before JSON parsing"
+
+api_busy_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-busy-0001",
+        operation: "lifecycle.reconnect",
+        action_id: "action-busy-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {}
+    }'
+)"
+mkdir -p "$VPNCTL_API_ACTION_DIR"
+exec 8>"$VPNCTL_API_ACTION_DIR/.mutation.lock"
+flock 8
+api_busy_response="$(
+    printf '%s\n' "$api_busy_request" | "$CLI" _api-dispatch
+)"
+flock -u 8
+exec 8>&-
+jq -e '
+    .status == "error"
+    and .error.code == "busy"
+    and .error.retryable == true
+    and .error.user_action_required == false
+' <<<"$api_busy_response" >/dev/null ||
+    fail "local API did not reject a concurrent mutation as retryable busy"
+ok "local API serializes concurrent mutations"
 
 api_connect_request="$(
     jq -cn --arg profile_id "$profile_id" '{
@@ -1197,17 +1251,29 @@ if grep -Eq '^(Wants|After)=.*vpnctl-test-recovery' "$ROOT/systemd/vpnctl.servic
 fi
 ok "runtime start cannot deadlock on boot recovery"
 
+mkdir -p "$TMP/installbin"
+for install_command in bash dirname uname id sed grep tr cut head tail stat \
+    mkdir cp chmod chown find sort cmp python3 awk; do
+    install_command_path="$(
+        PATH=/usr/bin:/bin command -v "$install_command" 2>/dev/null
+    )" || fail "cannot prepare isolated installer PATH: $install_command"
+    ln -s "$install_command_path" "$TMP/installbin/$install_command"
+done
 fallback_output="$(
-    PATH="$TMP/fakebin:/usr/bin:/bin:/usr/sbin" \
+    PATH="$TMP/installbin" \
         VPNCTL_AMNEZIA_PPA_AVAILABLE=0 \
         "$ROOT/install.sh" --dry-run --yes --deps-only
 )"
 grep -q 'amneziawg-go.git' <<<"$fallback_output" ||
     fail "unsupported Ubuntu suite did not select userspace AmneziaWG"
+grep -q '61e741780e8465a67a7d7fb6cffe14a8a15d624a' <<<"$fallback_output" ||
+    fail "AmneziaWG tools source commit is not verified"
+grep -q '9f5d948bc72cc554791cfe0fb91527e4acfb6b79' <<<"$fallback_output" ||
+    fail "AmneziaWG Go source commit is not verified"
 if grep -q 'add-apt-repository' <<<"$fallback_output"; then
     fail "unsupported Ubuntu suite attempted to add the PPA"
 fi
-ok "Ubuntu without PPA uses pinned userspace fallback"
+ok "Ubuntu without PPA uses commit-verified userspace fallback"
 
 python3 "$ROOT/tests/check-capabilities.py" >/dev/null ||
     fail "cross-surface capability registry is inconsistent"

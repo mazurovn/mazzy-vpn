@@ -69,9 +69,17 @@ Tauri-команду. CI проверяет синхронность CLI, manife
 
 В Linux `mazzy-vpn-api.socket` публикует `/run/mazzy-vpn/api-v1.sock` с
 правами `0660 root:mazzy-vpn`. Одно соединение принимает один JSON request,
-завершённый переводом строки, и возвращает один response. Мутации
+завершённый переводом строки, и возвращает один response. Service прекращает
+чтение на настроенном byte limit ещё до JSON parsing, в том числе если клиент
+не завершает слишком длинную строку. Мутации
 сериализованы, ограничены deadline и сохраняются по action ID в root-only
 state. Audit содержит только operation ID и результат — без payload и raw
 backend output. По умолчанию журнал ограничен 512 завершёнными outcomes, а
 audit-файл ротируется при 2 МиБ с одним root-only архивом. На системах с
 ограниченным диском лимиты можно уменьшить, но нельзя отключать.
+
+Desktop повторяет lifecycle request ровно один раз с тем же request/action ID
+только после post-connect ошибки транспорта, когда outcome неопределён.
+Неудачное первоначальное подключение может использовать typed compatibility
+adapter, потому что request ещё не отправлен; post-connect неопределённость
+никогда не переходит в `pkexec`.

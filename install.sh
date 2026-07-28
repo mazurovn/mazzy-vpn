@@ -20,6 +20,8 @@ INSTALL_LANG="${VPNCTL_INSTALL_LANG:-${VPNCTL_LANG:-}}"
 LANG_EXPLICIT=0
 AWG_TOOLS_VERSION="1.0.20260618-2"
 AWG_GO_VERSION="3.0.1"
+AWG_TOOLS_COMMIT="61e741780e8465a67a7d7fb6cffe14a8a15d624a"
+AWG_GO_COMMIT="9f5d948bc72cc554791cfe0fb91527e4acfb6b79"
 AMNEZIA_PPA_BASE="https://ppa.launchpadcontent.net/amnezia/ppa/ubuntu"
 
 usage() {
@@ -360,6 +362,19 @@ amnezia_ppa_supports_current_ubuntu() {
         "$AMNEZIA_PPA_BASE/dists/$codename/Release" >/dev/null 2>&1
 }
 
+verify_source_commit() {
+    local repository="$1" expected="$2" component="$3" actual
+    actual="$(git -C "$repository" rev-parse HEAD 2>/dev/null)" || {
+        echo "Не удалось проверить commit для $component." >&2
+        return 1
+    }
+    if [[ "$actual" != "$expected" ]]; then
+        echo "Остановлена сборка $component: tag указывает на неожиданный commit." >&2
+        echo "Ожидался $expected, получен $actual." >&2
+        return 1
+    fi
+}
+
 install_amnezia_userspace() {
     local build_dir tools_dir go_dir
     echo "Установка официального AmneziaWG userspace backend (без модуля ядра)."
@@ -375,6 +390,8 @@ install_amnezia_userspace() {
     if ! command -v awg >/dev/null 2>&1 || ! command -v awg-quick >/dev/null 2>&1; then
         run git clone --quiet --depth 1 --branch "v$AWG_TOOLS_VERSION" \
             https://github.com/amnezia-vpn/amneziawg-tools.git "$tools_dir" || return 1
+        run verify_source_commit \
+            "$tools_dir" "$AWG_TOOLS_COMMIT" amneziawg-tools || return 1
         run make -C "$tools_dir/src" || return 1
         run install -m 755 "$tools_dir/src/wg" /usr/local/bin/awg || return 1
         run install -m 755 "$tools_dir/src/wg-quick/linux.bash" \
@@ -383,6 +400,8 @@ install_amnezia_userspace() {
     if ! amnezia_userspace_ready; then
         run git clone --quiet --depth 1 --branch "v$AWG_GO_VERSION" \
             https://github.com/amnezia-vpn/amneziawg-go.git "$go_dir" || return 1
+        run verify_source_commit \
+            "$go_dir" "$AWG_GO_COMMIT" amneziawg-go || return 1
         run go -C "$go_dir" build -trimpath -o "$build_dir/amneziawg-go" . ||
             return 1
         run install -m 755 "$build_dir/amneziawg-go" /usr/local/bin/amneziawg-go ||

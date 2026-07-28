@@ -25,6 +25,7 @@ const MAX_API_RESPONSE_BYTES: usize = 64 * 1024;
 static API_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[cfg(target_os = "linux")]
+#[derive(Debug)]
 enum LocalApiError {
     Unavailable,
     Indeterminate(String),
@@ -568,6 +569,29 @@ fn send_local_api(request: &Value) -> Result<Value, LocalApiError> {
 }
 
 #[cfg(target_os = "linux")]
+fn retry_indeterminate<T>(
+    mut attempt: impl FnMut() -> Result<T, LocalApiError>,
+) -> Result<T, LocalApiError> {
+    match attempt() {
+        Err(LocalApiError::Indeterminate(first_error)) => match attempt() {
+            Err(LocalApiError::Unavailable) => Err(LocalApiError::Indeterminate(format!(
+                "{first_error}; identical retry could not reconnect"
+            ))),
+            Err(LocalApiError::Indeterminate(second_error)) => Err(LocalApiError::Indeterminate(
+                format!("{first_error}; identical retry failed: {second_error}"),
+            )),
+            result => result,
+        },
+        result => result,
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn send_local_api_with_retry(request: &Value) -> Result<Value, LocalApiError> {
+    retry_indeterminate(|| send_local_api(request))
+}
+
+#[cfg(target_os = "linux")]
 fn try_execute_local_api(request: &OperationRequest) -> Option<OperationResult> {
     if !Path::new(API_SOCKET).exists() {
         return None;
@@ -592,7 +616,7 @@ fn try_execute_local_api(request: &OperationRequest) -> Option<OperationResult> 
         .and_then(Value::as_str)
         .unwrap_or("unknown-action")
         .to_owned();
-    match send_local_api(&envelope) {
+    match send_local_api_with_retry(&envelope) {
         Ok(response) => Some(api_operation_result(action, response)),
         Err(LocalApiError::Unavailable) => None,
         Err(LocalApiError::Indeterminate(error)) => Some(OperationResult {
@@ -1052,5 +1076,29 @@ mod tests {
         let encoded = serde_json::to_string(&request).expect("JSON");
         assert!(!encoded.contains("Server.ovpn"));
         assert_eq!(request["authorization"], "system-mutate");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn indeterminate_local_api_transport_retries_the_identical_request_once() {
+        let mut attempts = 0;
+        let result = retry_indeterminate(|| {
+            attempts += 1;
+            if attempts == 1 {
+                Err(LocalApiError::Indeterminate("lost response".into()))
+            } else {
+                Ok(json!({"status": "ok"}))
+            }
+        });
+        assert_eq!(attempts, 2);
+        assert_eq!(result.expect("retry result")["status"], "ok");
+
+        attempts = 0;
+        let unavailable: Result<Value, LocalApiError> = retry_indeterminate(|| {
+            attempts += 1;
+            Err(LocalApiError::Unavailable)
+        });
+        assert!(matches!(unavailable, Err(LocalApiError::Unavailable)));
+        assert_eq!(attempts, 1);
     }
 }

@@ -23,10 +23,22 @@ def fail(message: str) -> None:
     raise AssertionError(message)
 
 
+def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"duplicate JSON key: {key}")
+        value[key] = item
+    return value
+
+
 def load_json(path: Path) -> dict[str, Any]:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+        value = json.loads(
+            path.read_text(encoding="utf-8"),
+            object_pairs_hook=reject_duplicate_keys,
+        )
+    except (OSError, json.JSONDecodeError, ValueError) as error:
         fail(f"{path.relative_to(ROOT)} is not valid JSON: {error}")
     if not isinstance(value, dict):
         fail(f"{path.relative_to(ROOT)} must contain a JSON object")
