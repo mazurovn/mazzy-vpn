@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 #[cfg(target_os = "linux")]
-use std::io::{BufRead, BufReader, Write};
+use std::io::Write;
 #[cfg(target_os = "linux")]
 use std::os::unix::net::UnixStream;
 use std::{
@@ -560,7 +560,7 @@ fn local_api_request(
     )))
 }
 
-fn api_operation_result(action: String, response: Value) -> OperationResult {
+fn api_operation_result(action: String, action_id: &str, response: Value) -> OperationResult {
     if response.get("status").and_then(Value::as_str) == Some("ok") {
         let result = response.get("result").cloned().unwrap_or(Value::Null);
         let state = result
@@ -574,7 +574,11 @@ fn api_operation_result(action: String, response: Value) -> OperationResult {
         return OperationResult {
             success: state == "succeeded",
             action,
-            output: message.into(),
+            output: if state == "succeeded" {
+                message.into()
+            } else {
+                format!("{message}; action ID: {action_id}")
+            },
             code: None,
         };
     }
@@ -590,7 +594,7 @@ fn api_operation_result(action: String, response: Value) -> OperationResult {
     OperationResult {
         success: false,
         action,
-        output: format!("{code}: {message}"),
+        output: format!("{code}: {message}; action ID: {action_id}"),
         code: None,
     }
 }
@@ -608,6 +612,27 @@ fn local_api_response_timeout(request: &Value) -> std::time::Duration {
         5_000
     };
     std::time::Duration::from_millis(deadline_ms + grace_ms)
+}
+
+#[cfg(target_os = "linux")]
+fn parse_local_api_response(response: &[u8], request: &Value) -> Result<Value, LocalApiError> {
+    if response.is_empty() || response.len() > MAX_API_RESPONSE_BYTES {
+        return Err(LocalApiError::Indeterminate(
+            "Local API returned an empty or oversized response".into(),
+        ));
+    }
+    let response: Value = serde_json::from_slice(response).map_err(|error| {
+        LocalApiError::Indeterminate(format!("Invalid local API response: {error}"))
+    })?;
+    if response.get("api_version").and_then(Value::as_str) != Some("1.0")
+        || response.get("request_id").and_then(Value::as_str)
+            != request.get("request_id").and_then(Value::as_str)
+    {
+        return Err(LocalApiError::Indeterminate(
+            "Local API response identity does not match the request".into(),
+        ));
+    }
+    Ok(response)
 }
 
 #[cfg(target_os = "linux")]
@@ -629,27 +654,11 @@ fn send_local_api(request: &Value) -> Result<Value, LocalApiError> {
         .map_err(|error| LocalApiError::Indeterminate(error.to_string()))?;
 
     let mut response = Vec::new();
-    BufReader::new(stream)
+    stream
         .take((MAX_API_RESPONSE_BYTES + 1) as u64)
-        .read_until(b'\n', &mut response)
+        .read_to_end(&mut response)
         .map_err(|error| LocalApiError::Indeterminate(error.to_string()))?;
-    if response.is_empty() || response.len() > MAX_API_RESPONSE_BYTES {
-        return Err(LocalApiError::Indeterminate(
-            "Local API returned an empty or oversized response".into(),
-        ));
-    }
-    let response: Value = serde_json::from_slice(&response).map_err(|error| {
-        LocalApiError::Indeterminate(format!("Invalid local API response: {error}"))
-    })?;
-    if response.get("api_version").and_then(Value::as_str) != Some("1.0")
-        || response.get("request_id").and_then(Value::as_str)
-            != request.get("request_id").and_then(Value::as_str)
-    {
-        return Err(LocalApiError::Indeterminate(
-            "Local API response identity does not match the request".into(),
-        ));
-    }
-    Ok(response)
+    parse_local_api_response(&response, request)
 }
 
 #[cfg(target_os = "linux")]
@@ -701,7 +710,7 @@ fn try_execute_local_api(request: &OperationRequest) -> Option<OperationResult> 
         .unwrap_or("unknown-action")
         .to_owned();
     match send_local_api_with_retry(&envelope) {
-        Ok(response) => Some(api_operation_result(action, response)),
+        Ok(response) => Some(api_operation_result(action, &action_id, response)),
         Err(LocalApiError::Unavailable) => None,
         Err(LocalApiError::Indeterminate(error)) => Some(OperationResult {
             success: false,
@@ -893,6 +902,12 @@ fn dependencies() -> Vec<DependencyState> {
             "JSON API runtime",
             "local API",
             command_available("jq"),
+        ),
+        (
+            "socat",
+            "Unix-socket API client",
+            "CLI / TUI local API",
+            command_available("socat"),
         ),
         (
             "dns-integration",
@@ -1128,6 +1143,7 @@ mod tests {
             "journalctl",
             "pkexec",
             "jq",
+            "socat",
             "openvpn",
             "wireguard-tools",
             "amneziawg-tools",
@@ -1170,6 +1186,39 @@ mod tests {
         let encoded = serde_json::to_string(&request).expect("JSON");
         assert!(!encoded.contains("Server.ovpn"));
         assert_eq!(request["authorization"], "system-mutate");
+    }
+
+    #[test]
+    fn local_api_failures_keep_the_action_id_for_recovery() {
+        let result = api_operation_result(
+            "reconnect".into(),
+            "action-01234567",
+            json!({
+                "status": "error",
+                "error": {
+                    "code": "internal-error",
+                    "message_key": "api.audit.unavailable"
+                }
+            }),
+        );
+        assert!(!result.success);
+        assert!(result.output.contains("action-01234567"));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn local_api_parser_rejects_multiple_response_documents() {
+        let request = json!({
+            "api_version": "1.0",
+            "request_id": "request-01234567"
+        });
+        let response = br#"{"api_version":"1.0","request_id":"request-01234567","status":"ok"}
+{"api_version":"1.0","request_id":"request-01234567","status":"ok"}
+"#;
+        assert!(matches!(
+            parse_local_api_response(response, &request),
+            Err(LocalApiError::Indeterminate(_))
+        ));
     }
 
     #[cfg(target_os = "linux")]

@@ -1324,6 +1324,7 @@ api_client_identifier() {
 api_client_send() {
     local request="$1" request_id deadline_ms timeout_seconds grace_seconds=5
     local response="" rc=1 attempt
+    local LC_ALL=C
     request_id="$(jq -r '.request_id // ""' <<<"$request")"
     deadline_ms="$(jq -r '.deadline_ms // 5000' <<<"$request")"
     [[ "$deadline_ms" =~ ^[0-9]+$ ]] || deadline_ms=5000
@@ -1340,7 +1341,7 @@ api_client_send() {
     for attempt in 1 2; do
         response="$(
             printf '%s\n' "$request" |
-                timeout --foreground --kill-after=2s "${timeout_seconds}s" \
+                timeout --kill-after=2s "${timeout_seconds}s" \
                     socat -T "$timeout_seconds" - "UNIX-CONNECT:$API_SOCKET" \
                     2>/dev/null |
                 head -c "$((API_CLIENT_MAX_RESPONSE_BYTES + 1))"
@@ -1348,10 +1349,13 @@ api_client_send() {
         rc=$?
         if ((rc == 0)) &&
            ((${#response} > 0 && ${#response} <= API_CLIENT_MAX_RESPONSE_BYTES)) &&
-           jq -e --arg request_id "$request_id" '
-               .api_version == "1.0"
-               and .request_id == $request_id
-               and (.status == "ok" or .status == "error")
+           jq -s -e --arg request_id "$request_id" '
+               length == 1
+               and (
+                   .[0].api_version == "1.0"
+                   and .[0].request_id == $request_id
+                   and (.[0].status == "ok" or .[0].status == "error")
+               )
            ' <<<"$response" >/dev/null 2>&1; then
             printf '%s\n' "$response"
             return 0
@@ -1361,16 +1365,18 @@ api_client_send() {
 }
 
 api_client_query() {
-    local operation="$1" request_id request
+    local operation="$1" request_id request deadline_ms=5000
     request_id="$(api_client_identifier request)"
     request="$(
         jq -cn \
             --arg request_id "$request_id" \
             --arg operation "$operation" \
+            --argjson deadline_ms "$deadline_ms" \
             '{
                 api_version: "1.0",
                 request_id: $request_id,
                 operation: $operation,
+                deadline_ms: $deadline_ms,
                 payload: {}
             }'
     )"
@@ -1539,14 +1545,14 @@ api_client_mutation() {
         code="$(jq -r '.error.code // "internal-error"' <<<"$response")"
         message="$(jq -r '.error.message_key // "api.response.malformed"' <<<"$response")"
         error "$(msg api_rejected "$code" "$message")"
-        [[ "$code" != "busy" ]] ||
-            error "$(msg api_action_id "$action_id")"
+        error "$(msg api_action_id "$action_id")"
         return 1
     fi
     state="$(jq -r '.result.state // "failed"' <<<"$response")"
     if [[ "$state" != "succeeded" ]]; then
         message="$(jq -r '.result.message_key // "api.response.malformed"' <<<"$response")"
         error "$(msg api_failed_state "$state" "$message")"
+        error "$(msg api_action_id "$action_id")"
         return 1
     fi
 }

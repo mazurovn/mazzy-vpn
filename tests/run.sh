@@ -149,6 +149,13 @@ if [[ "${FAKE_SOCAT_OVERSIZED:-0}" == "1" ]]; then
     head -c 2048 /dev/zero | tr '\0' x
     exit 0
 fi
+if [[ "${FAKE_SOCAT_MULTIPLE_RESPONSES:-0}" == "1" ]]; then
+    request="$(cat)"
+    for _ in 1 2; do
+        printf '%s\n' "$request" | "${FAKE_SOCAT_DISPATCH:?}" _api-dispatch
+    done
+    exit 0
+fi
 if [[ -n "${FAKE_SOCAT_LOST_RESPONSE_FILE:-}" &&
       ! -e "$FAKE_SOCAT_LOST_RESPONSE_FILE" ]]; then
     touch "$FAKE_SOCAT_LOST_RESPONSE_FILE"
@@ -1138,7 +1145,21 @@ grep -Eq -- \
     "$FAKE_TIMEOUT_LOG" ||
     fail "local API rounded a millisecond deadline up to a full second"
 api_delayed_systemctl_pid="$(cat "$api_delayed_systemctl_pid_file")"
-if kill -0 "$api_delayed_systemctl_pid" 2>/dev/null; then
+for _ in {1..20}; do
+    api_delayed_systemctl_state="$(
+        ps -o stat= -p "$api_delayed_systemctl_pid" 2>/dev/null || true
+    )"
+    if ! kill -0 "$api_delayed_systemctl_pid" 2>/dev/null ||
+       [[ "$api_delayed_systemctl_state" == Z* ]]; then
+        break
+    fi
+    sleep 0.1
+done
+api_delayed_systemctl_state="$(
+    ps -o stat= -p "$api_delayed_systemctl_pid" 2>/dev/null || true
+)"
+if kill -0 "$api_delayed_systemctl_pid" 2>/dev/null &&
+   [[ "$api_delayed_systemctl_state" != Z* ]]; then
     fail "timed-out local API mutation left a systemctl descendant running"
 fi
 ok "local API accounts preflight time and preserves millisecond deadlines"
@@ -1291,6 +1312,10 @@ if FAKE_SOCAT_OVERSIZED=1 VPNCTL_API_CLIENT_FORCE=1 \
     "$CLI" status --api-json >/dev/null 2>&1; then
     fail "CLI local API client accepted an oversized response"
 fi
+if FAKE_SOCAT_MULTIPLE_RESPONSES=1 VPNCTL_API_CLIENT_FORCE=1 \
+    "$CLI" status --api-json >/dev/null 2>&1; then
+    fail "CLI local API client accepted multiple JSON response documents"
+fi
 
 for api_locale_check in \
     "ru|Профиль 'Missing' не найден" \
@@ -1334,7 +1359,7 @@ grep -q 'Переподключение запущено' <<<"$api_client_reconn
     fail "CLI local API lost-response scenario was not exercised"
 [[ "$(grep -c '^start vpnctl.service$' "$FAKE_SYSTEMCTL_LOG")" == "1" ]] ||
     fail "CLI local API retry executed one reconnect action twice"
-grep -Fq -- '--foreground --kill-after=2s 90s socat -T 90' \
+grep -Fq -- '--kill-after=2s 90s socat -T 90' \
     "$FAKE_TIMEOUT_LOG" ||
     fail "CLI client did not reserve the bounded rollback completion grace"
 
@@ -1647,6 +1672,7 @@ stage="$TMP/stage"
    -f "$stage/usr/local/lib/mazzy-vpn/docs/API_CONTRACT.en.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/API_CONTRACT.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/PROJECT_STATUS.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/AUDIT_2026-07-28.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.en.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/api/v1/manifest.json" &&
@@ -1682,10 +1708,17 @@ grep -q '^OnUnitActiveSec=20s$' "$stage/etc/systemd/system/vpnctl-health.timer" 
 [[ -f "$stage/etc/systemd/system/mazzy-vpn-api.socket" &&
    -f "$stage/etc/systemd/system/mazzy-vpn-api@.service" ]] ||
     fail "local API systemd units were not staged"
+[[ -f "$stage/usr/lib/tmpfiles.d/mazzy-vpn.conf" ]] ||
+    fail "local API runtime-directory policy was not staged"
+grep -q '^d /run/mazzy-vpn 0750 root mazzy-vpn -$' \
+    "$stage/usr/lib/tmpfiles.d/mazzy-vpn.conf" ||
+    fail "local API runtime-directory policy is not group-restricted"
 grep -q '^SocketMode=0660$' "$stage/etc/systemd/system/mazzy-vpn-api.socket" ||
     fail "local API socket is not protected by mode 0660"
 grep -q '^SocketGroup=mazzy-vpn$' "$stage/etc/systemd/system/mazzy-vpn-api.socket" ||
     fail "local API socket is not restricted to the mazzy-vpn group"
+grep -q '^DirectoryMode=0750$' "$stage/etc/systemd/system/mazzy-vpn-api.socket" ||
+    fail "local API socket directory is not group-restricted"
 grep -q '^NoNewPrivileges=yes$' \
     "$stage/etc/systemd/system/mazzy-vpn-api@.service" ||
     fail "local API request service is missing process hardening"
@@ -1696,6 +1729,38 @@ grep -Eq '^StartLimitBurst=([1-9][0-9]{2,}|[1-9][0-9]{3,})$' \
     "$stage/etc/systemd/system/vpnctl.service" ||
     fail "staged service start limit is too low for test-all"
 ok "branded staged installation and aliases"
+
+installer_order_output="$(
+    VPNCTL_AMNEZIA_PPA_AVAILABLE=0 \
+        "$ROOT/install.sh" --dry-run --yes --skip-tests --skip-checks
+)"
+installer_dependency_line="$(
+    grep -En -m1 \
+        '^\+ (env DEBIAN_FRONTEND=noninteractive apt-get install |dnf install |pacman -S |zypper --non-interactive install )' \
+        <<<"$installer_order_output" |
+        cut -d: -f1
+)"
+installer_files_line="$(
+    grep -n -m1 '^+ install -d -m 755 /usr/local/bin ' \
+        <<<"$installer_order_output" |
+        cut -d: -f1
+)"
+[[ "$installer_dependency_line" =~ ^[0-9]+$ &&
+   "$installer_files_line" =~ ^[0-9]+$ &&
+   "$installer_dependency_line" -lt "$installer_files_line" ]] ||
+    fail "installer changes root-owned product files before dependencies succeed"
+python3 - "$ROOT/desktop/src-tauri/tauri.conf.json" <<'PY' ||
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    config = json.load(stream)
+linux = config["bundle"]["linux"]
+assert "pkexec" in linux["deb"]["depends"]
+assert "polkit" in linux["rpm"]["depends"]
+PY
+    fail "Desktop packages do not declare their privileged bootstrap dependency"
+ok "dependency bootstrap precedes file changes and is declared by packages"
 
 if "$ROOT/install.sh" --destdir "$TMP/invalid-language-stage" --no-deps \
     --lang invalid >/dev/null 2>&1; then
@@ -1773,6 +1838,17 @@ if grep -q 'add-apt-repository' <<<"$fallback_output"; then
     fail "unsupported Ubuntu suite attempted to add the PPA"
 fi
 ok "Ubuntu without PPA uses commit-verified userspace fallback"
+
+if ! grep -Eq 'id="notifications-toggle" type="checkbox"[[:space:]]*$' \
+        "$ROOT/desktop/ui/index.html" ||
+   ! grep -Eq '^[[:space:]]+disabled aria-disabled="true">' \
+        "$ROOT/desktop/ui/index.html"; then
+    fail "Desktop exposes an active notifications control without a backend"
+fi
+if grep -q 'mazzy-notifications' "$ROOT/desktop/ui/app.js"; then
+    fail "Desktop persists a notifications preference that has no effect"
+fi
+ok "Desktop marks unavailable notifications honestly"
 
 python3 "$ROOT/tests/check-capabilities.py" >/dev/null ||
     fail "cross-surface capability registry is inconsistent"

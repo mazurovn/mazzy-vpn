@@ -117,6 +117,13 @@ jobs:
         working-directory: desktop
         run: npm ci
 
+      - name: Test and lint release backend
+        if: matrix.platform == 'ubuntu-22.04'
+        working-directory: desktop
+        run: |
+          npm run test
+          cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
       - name: Build and attach preview bundles
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
@@ -126,12 +133,12 @@ jobs:
           tagName: desktop-v__VERSION__
           releaseName: "Mazzy VPN Desktop v__VERSION__ (preview)"
           releaseBody: |
-            Mazzy VPN Desktop 0.2 is a self-contained Linux control-center preview.
+            Mazzy VPN Desktop 0.2 is a bundled-bootstrap Linux control-center preview.
 
             Linux bundles include the compatible Mazzy VPN 1.2 engine installer and public runtime resources; no prior manual CLI installation is required. Dashboard, profile import and selection, validation/probes/transactional tests, complete Doctor/self-test output, bounded logs, service/recovery settings and About/Privacy information are included.
 
             macOS and Windows bundles remain UI previews only. They do not provide traffic protection until their native Network Extension and Windows Service/Wintun backends pass the platform release gates.
 
-            These preview artifacts are unsigned; review the checksums and project documentation before use.
+            These preview artifacts are unsigned and do not have a production trust chain. Review the source commit, workflow run and project documentation before use.
           releaseDraft: true
           prerelease: true

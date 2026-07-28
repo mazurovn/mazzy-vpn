@@ -43,6 +43,18 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "linux": {
+      "deb": {
+        "depends": [
+          "pkexec"
+        ]
+      },
+      "rpm": {
+        "depends": [
+          "polkit"
+        ]
+      }
+    },
     "resources": {
       "../../mazzy-vpn": "engine/mazzy-vpn",
       "../../vpnctl": "engine/vpnctl",

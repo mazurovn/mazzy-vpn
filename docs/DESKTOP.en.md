@@ -115,6 +115,11 @@ RPM:
 sudo dnf install "./Mazzy VPN Desktop-0.2.0-1.x86_64.rpm"
 ```
 
+The DEB and RPM declare the privilege-bootstrap package (`pkexec`/`polkit`),
+so the package manager installs it before first launch. The remaining VPN
+dependencies and system service are installed only after the explicit
+**Install / update / repair** action.
+
 AppImage:
 
 ```bash
@@ -122,8 +127,14 @@ chmod +x "Mazzy VPN Desktop_0.2.0_amd64.AppImage"
 ./"Mazzy VPN Desktop_0.2.0_amd64.AppImage"
 ```
 
-Replace the sample version with the downloaded file name. Verify the published
-SHA-256 checksum.
+AppImage cannot install its own privilege helper. Check `command -v pkexec`
+first and install your distribution's polkit/pkexec package manually if it is
+missing; otherwise the bundled engine bootstrap cannot start.
+
+Replace the sample version with the downloaded file name. Preview artifacts are
+currently unsigned and the workflow does not yet publish signed checksum or
+provenance metadata. Verify the source commit and its GitHub Actions run, but
+do not treat an unsigned hash as proof of the publisher.
 
 ## Languages
 

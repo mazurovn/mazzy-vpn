@@ -171,6 +171,7 @@ validate_source_tree() {
         docs/PLATFORM_ROADMAP.en.md docs/PLATFORM_ROADMAP.ru.md \
         docs/FEATURE_PARITY.md docs/capabilities.json \
         docs/API_CONTRACT.en.md docs/API_CONTRACT.ru.md docs/PROJECT_STATUS.md \
+        docs/AUDIT_2026-07-28.ru.md \
         api/v1/manifest.json api/v1/schema.json \
         desktop/README.md \
         tests/run.sh tests/audit-public.sh tests/check-capabilities.py \
@@ -178,7 +179,8 @@ validate_source_tree() {
         completions/mazzy-vpn systemd/vpnctl.service \
         systemd/vpnctl-health.service systemd/vpnctl-health.timer \
         systemd/vpnctl-test-recovery.service \
-        systemd/mazzy-vpn-api.socket systemd/mazzy-vpn-api@.service; do
+        systemd/mazzy-vpn-api.socket systemd/mazzy-vpn-api@.service \
+        systemd/mazzy-vpn-tmpfiles.conf; do
         [[ -e "$SCRIPT_DIR/$required" ]] || {
             echo "Неполный дистрибутив: отсутствует $required" >&2
             return 1
@@ -275,6 +277,7 @@ post_install_checks() {
        -r /usr/local/lib/mazzy-vpn/docs/API_CONTRACT.en.md &&
        -r /usr/local/lib/mazzy-vpn/docs/API_CONTRACT.ru.md &&
        -r /usr/local/lib/mazzy-vpn/docs/PROJECT_STATUS.md &&
+       -r /usr/local/lib/mazzy-vpn/docs/AUDIT_2026-07-28.ru.md &&
        -r /usr/local/lib/mazzy-vpn/api/v1/manifest.json &&
        -r /usr/local/lib/mazzy-vpn/api/v1/schema.json &&
        -r /usr/local/lib/mazzy-vpn/LICENSE &&
@@ -541,10 +544,11 @@ install_files() {
     local api_dir="$lib_dir/api/v1"
     local config_dir="$DESTDIR/etc/vpnctl/profiles"
     local unit_dir="$DESTDIR/etc/systemd/system"
+    local tmpfiles_dir="$DESTDIR/usr/lib/tmpfiles.d"
     local completion_dir="$DESTDIR/usr/local/share/bash-completion/completions"
 
     run install -d -m 755 "$bin_dir" "$lib_dir" "$docs_dir" "$api_dir" \
-        "$unit_dir" "$completion_dir"
+        "$unit_dir" "$tmpfiles_dir" "$completion_dir"
     run install -d -m 700 "$DESTDIR/etc/vpnctl" "$config_dir" \
         "$config_dir/amneziawg" "$config_dir/wireguard" \
         "$config_dir/openvpn" "$config_dir/l2tp"
@@ -590,6 +594,8 @@ install_files() {
         "$docs_dir/API_CONTRACT.ru.md"
     run install -m 644 "$SCRIPT_DIR/docs/PROJECT_STATUS.md" \
         "$docs_dir/PROJECT_STATUS.md"
+    run install -m 644 "$SCRIPT_DIR/docs/AUDIT_2026-07-28.ru.md" \
+        "$docs_dir/AUDIT_2026-07-28.ru.md"
     run install -m 644 "$SCRIPT_DIR/api/v1/manifest.json" \
         "$api_dir/manifest.json"
     run install -m 644 "$SCRIPT_DIR/api/v1/schema.json" \
@@ -608,6 +614,8 @@ install_files() {
         "$unit_dir/mazzy-vpn-api.socket"
     run install -m 644 "$SCRIPT_DIR/systemd/mazzy-vpn-api@.service" \
         "$unit_dir/mazzy-vpn-api@.service"
+    run install -m 644 "$SCRIPT_DIR/systemd/mazzy-vpn-tmpfiles.conf" \
+        "$tmpfiles_dir/mazzy-vpn.conf"
     run install -m 644 "$SCRIPT_DIR/completions/mazzy-vpn" \
         "$completion_dir/mazzy-vpn"
     run ln -sfn mazzy-vpn "$completion_dir/vpnctl"
@@ -634,7 +642,7 @@ install_files() {
             "$docs_dir/PLATFORM_ROADMAP.ru.md" \
             "$docs_dir/FEATURE_PARITY.md" "$docs_dir/capabilities.json" \
             "$docs_dir/API_CONTRACT.en.md" "$docs_dir/API_CONTRACT.ru.md" \
-            "$docs_dir/PROJECT_STATUS.md" \
+            "$docs_dir/PROJECT_STATUS.md" "$docs_dir/AUDIT_2026-07-28.ru.md" \
             "$api_dir/manifest.json" "$api_dir/schema.json" \
             "$lib_dir/LICENSE" "$lib_dir/AUTHORS.md" "$lib_dir/CHANGELOG.md" \
             "$lib_dir/SECURITY.md" "$lib_dir/PRIVACY.md" \
@@ -642,6 +650,7 @@ install_files() {
             "$unit_dir/vpnctl-health.service" "$unit_dir/vpnctl-health.timer" \
             "$unit_dir/vpnctl-test-recovery.service" \
             "$unit_dir/mazzy-vpn-api.socket" "$unit_dir/mazzy-vpn-api@.service" \
+            "$tmpfiles_dir/mazzy-vpn.conf" \
             "$completion_dir/mazzy-vpn"
         run chown -R root:root "$DESTDIR/etc/vpnctl"
     fi
@@ -657,13 +666,8 @@ if [[ -z "$DESTDIR" && $EUID -ne 0 && $DRY_RUN -eq 0 ]]; then
     exit 1
 fi
 
-if ((DEPS_ONLY == 0)); then
-    if [[ -z "$DESTDIR" ]]; then
-        run_preflight_tests
-    fi
-    install_files
-    configure_api_access
-    import_config_source
+if ((DEPS_ONLY == 0)) && [[ -z "$DESTDIR" ]]; then
+    run_preflight_tests
 fi
 
 if ((NO_DEPS == 0)) && [[ -z "$DESTDIR" ]]; then
@@ -673,7 +677,14 @@ if ((PREFLIGHT_REGRESSION_DEFERRED && DEPS_ONLY == 0)) && [[ -z "$DESTDIR" ]]; t
     "$SCRIPT_DIR/tests/run.sh"
 fi
 
+if ((DEPS_ONLY == 0)); then
+    install_files
+    configure_api_access
+    import_config_source
+fi
+
 if [[ -z "$DESTDIR" && $DEPS_ONLY -eq 0 ]]; then
+    run systemd-tmpfiles --create /usr/lib/tmpfiles.d/mazzy-vpn.conf
     run systemctl daemon-reload
     run systemctl enable --now mazzy-vpn-api.socket
     run systemctl enable vpnctl-test-recovery.service

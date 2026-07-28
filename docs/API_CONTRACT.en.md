@@ -125,13 +125,17 @@ configuration remain forbidden.
 
 Installed CLI and TUI clients use the socket without `sudo` for status, profile
 listing, connect, quick, reconnect and disconnect. The client sends only an
-opaque `profile_id`, bounds response time and size, and verifies
+opaque `profile_id`, sends a bounded query refresh deadline, bounds response
+time and byte size, and accepts exactly one response document with matching
 `api_version`/`request_id`. If a response is lost, it automatically retries the
 same request with the same `action_id`, so the daemon returns the stored outcome
 without applying the mutation twice. If the transport remains indeterminate,
-the client does not run the same operation through `sudo`.
+the client does not run the same operation through `sudo`. Mutation failures
+print the action ID needed for audit and recovery.
 
 Desktop applies the same one-identical-retry rule to lifecycle requests. A
+Desktop response is also read to bounded EOF and must contain exactly one
+matching JSON document. A
 failed initial socket connection may use the typed compatibility adapter
 because no request was sent; any post-connect uncertainty is returned to the
 user and never falls through to `pkexec`.
