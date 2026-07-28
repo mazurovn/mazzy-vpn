@@ -125,6 +125,7 @@ language_native_name() {
 
 msg() {
     local key="$1"
+    shift
     case "$key" in
         tagline)
             case "$UI_LANG" in
@@ -459,6 +460,217 @@ msg() {
                 zh) printf '尚未设置默认配置，请立即选择' ;;
                 ja) printf '既定の設定がありません。今すぐ選択してください' ;;
                 ko) printf '기본 설정이 없습니다. 지금 선택하세요' ;;
+            esac
+            ;;
+        api_dependency_missing)
+            case "$UI_LANG" in
+                ru) printf 'Local API доступен, но не установлен %s. Запустите install.sh.' "${1:-}" ;;
+                en) printf 'The local API is available, but %s is not installed. Run install.sh.' "${1:-}" ;;
+                de) printf 'Die lokale API ist verfügbar, aber %s ist nicht installiert. Führen Sie install.sh aus.' "${1:-}" ;;
+                zh) printf '本地 API 可用，但未安装 %s。请运行 install.sh。' "${1:-}" ;;
+                ja) printf 'ローカル API は利用できますが、%s が未インストールです。install.sh を実行してください。' "${1:-}" ;;
+                ko) printf '로컬 API를 사용할 수 있지만 %s이(가) 설치되지 않았습니다. install.sh를 실행하세요.' "${1:-}" ;;
+            esac
+            ;;
+        api_socket_unavailable)
+            case "$UI_LANG" in
+                ru) printf 'Local API socket недоступен для %s.' "${1:-}" ;;
+                en) printf 'The local API socket is unavailable for %s.' "${1:-}" ;;
+                de) printf 'Der lokale API-Socket ist für %s nicht verfügbar.' "${1:-}" ;;
+                zh) printf '本地 API socket 无法用于 %s。' "${1:-}" ;;
+                ja) printf 'ローカル API ソケットは %s では利用できません。' "${1:-}" ;;
+                ko) printf '로컬 API 소켓을 %s에 사용할 수 없습니다.' "${1:-}" ;;
+            esac
+            ;;
+        api_profiles_unavailable)
+            case "$UI_LANG" in
+                ru) printf 'Local API не вернул каталог профилей.' ;;
+                en) printf 'The local API did not return the profile catalog.' ;;
+                de) printf 'Die lokale API hat keinen Profilkatalog zurückgegeben.' ;;
+                zh) printf '本地 API 未返回配置目录。' ;;
+                ja) printf 'ローカル API からプロファイル一覧が返されませんでした。' ;;
+                ko) printf '로컬 API가 프로필 목록을 반환하지 않았습니다.' ;;
+            esac
+            ;;
+        api_empty_profiles)
+            case "$UI_LANG" in
+                ru) printf 'Профилей нет' ;; en) printf 'No profiles' ;;
+                de) printf 'Keine Profile' ;; zh) printf '没有配置' ;;
+                ja) printf 'プロファイルがありません' ;; ko) printf '프로필 없음' ;;
+            esac
+            ;;
+        api_protocol_required)
+            case "$UI_LANG" in
+                ru) printf 'Укажите протокол: amneziawg, wireguard, openvpn или l2tp' ;;
+                en) printf 'Specify a protocol: amneziawg, wireguard, openvpn, or l2tp' ;;
+                de) printf 'Protokoll angeben: amneziawg, wireguard, openvpn oder l2tp' ;;
+                zh) printf '请指定协议：amneziawg、wireguard、openvpn 或 l2tp' ;;
+                ja) printf 'プロトコルを指定してください: amneziawg、wireguard、openvpn、l2tp' ;;
+                ko) printf '프로토콜을 지정하세요: amneziawg, wireguard, openvpn 또는 l2tp' ;;
+            esac
+            ;;
+        api_unknown_protocol)
+            case "$UI_LANG" in
+                ru) printf 'Неизвестный протокол: %s' "${1:-}" ;;
+                en) printf 'Unknown protocol: %s' "${1:-}" ;;
+                de) printf 'Unbekanntes Protokoll: %s' "${1:-}" ;;
+                zh) printf '未知协议：%s' "${1:-}" ;;
+                ja) printf '不明なプロトコル: %s' "${1:-}" ;;
+                ko) printf '알 수 없는 프로토콜: %s' "${1:-}" ;;
+            esac
+            ;;
+        api_no_profiles)
+            case "$UI_LANG" in
+                ru) printf 'Для %s нет профилей' "${1:-}" ;;
+                en) printf 'No profiles are available for %s' "${1:-}" ;;
+                de) printf 'Für %s sind keine Profile verfügbar' "${1:-}" ;;
+                zh) printf '%s 没有可用配置' "${1:-}" ;;
+                ja) printf '%s のプロファイルがありません' "${1:-}" ;;
+                ko) printf '%s용 프로필이 없습니다' "${1:-}" ;;
+            esac
+            ;;
+        api_profile_required)
+            case "$UI_LANG" in
+                ru) printf 'Укажите профиль или его номер. Список: %s list %s' "${1:-}" "${2:-}" ;;
+                en) printf 'Specify a profile or number. List: %s list %s' "${1:-}" "${2:-}" ;;
+                de) printf 'Profil oder Nummer angeben. Liste: %s list %s' "${1:-}" "${2:-}" ;;
+                zh) printf '请指定配置或编号。列表：%s list %s' "${1:-}" "${2:-}" ;;
+                ja) printf 'プロファイルまたは番号を指定してください。一覧: %s list %s' "${1:-}" "${2:-}" ;;
+                ko) printf '프로필 또는 번호를 지정하세요. 목록: %s list %s' "${1:-}" "${2:-}" ;;
+            esac
+            ;;
+        api_profile_ambiguous)
+            case "$UI_LANG" in
+                ru) printf "Имя '%s' неоднозначно; используйте точное имя или номер" "${1:-}" ;;
+                en) printf "Name '%s' is ambiguous; use the exact name or number" "${1:-}" ;;
+                de) printf "Der Name '%s' ist mehrdeutig; exakten Namen oder Nummer verwenden" "${1:-}" ;;
+                zh) printf "名称 '%s' 不明确；请使用完整名称或编号" "${1:-}" ;;
+                ja) printf "名前「%s」は曖昧です。正確な名前または番号を使用してください" "${1:-}" ;;
+                ko) printf "'%s' 이름이 모호합니다. 정확한 이름이나 번호를 사용하세요" "${1:-}" ;;
+            esac
+            ;;
+        api_profile_not_found)
+            case "$UI_LANG" in
+                ru) printf "Профиль '%s' не найден для %s" "${1:-}" "${2:-}" ;;
+                en) printf "Profile '%s' was not found for %s" "${1:-}" "${2:-}" ;;
+                de) printf "Profil '%s' wurde für %s nicht gefunden" "${1:-}" "${2:-}" ;;
+                zh) printf "找不到配置 '%s'（%s）" "${1:-}" "${2:-}" ;;
+                ja) printf "プロファイル '%s' が %s に見つかりません" "${1:-}" "${2:-}" ;;
+                ko) printf "'%s' 프로필을 %s에서 찾을 수 없습니다" "${1:-}" "${2:-}" ;;
+            esac
+            ;;
+        api_lost_response)
+            case "$UI_LANG" in
+                ru) printf 'Ответ local API потерян или невалиден; повтор через sudo запрещён.' ;;
+                en) printf 'The local API response was lost or invalid; retry through sudo is forbidden.' ;;
+                de) printf 'Die Antwort der lokalen API fehlt oder ist ungültig; Wiederholung über sudo ist verboten.' ;;
+                zh) printf '本地 API 响应丢失或无效；禁止通过 sudo 重试。' ;;
+                ja) printf 'ローカル API の応答が失われたか無効です。sudo 経由の再試行は禁止されています。' ;;
+                ko) printf '로컬 API 응답이 손실되었거나 유효하지 않습니다. sudo 재시도는 금지됩니다.' ;;
+            esac
+            ;;
+        api_action_id)
+            case "$UI_LANG" in
+                ru) printf 'Безопасный action ID для проверки/повтора: %s' "${1:-}" ;;
+                en) printf 'Safe action ID for inspection/retry: %s' "${1:-}" ;;
+                de) printf 'Sichere Action-ID für Prüfung/Wiederholung: %s' "${1:-}" ;;
+                zh) printf '用于检查/重试的安全 action ID：%s' "${1:-}" ;;
+                ja) printf '確認・再試行用の安全な action ID: %s' "${1:-}" ;;
+                ko) printf '검사/재시도를 위한 안전한 action ID: %s' "${1:-}" ;;
+            esac
+            ;;
+        api_rejected)
+            case "$UI_LANG" in
+                ru) printf 'Local API отклонил операцию: %s (%s)' "${1:-}" "${2:-}" ;;
+                en) printf 'The local API rejected the operation: %s (%s)' "${1:-}" "${2:-}" ;;
+                de) printf 'Die lokale API hat den Vorgang abgelehnt: %s (%s)' "${1:-}" "${2:-}" ;;
+                zh) printf '本地 API 拒绝了操作：%s（%s）' "${1:-}" "${2:-}" ;;
+                ja) printf 'ローカル API が操作を拒否しました: %s (%s)' "${1:-}" "${2:-}" ;;
+                ko) printf '로컬 API가 작업을 거부했습니다: %s (%s)' "${1:-}" "${2:-}" ;;
+            esac
+            ;;
+        api_failed_state)
+            case "$UI_LANG" in
+                ru) printf 'Операция завершилась состоянием %s (%s)' "${1:-}" "${2:-}" ;;
+                en) printf 'The operation finished in state %s (%s)' "${1:-}" "${2:-}" ;;
+                de) printf 'Der Vorgang endete im Zustand %s (%s)' "${1:-}" "${2:-}" ;;
+                zh) printf '操作以状态 %s 结束（%s）' "${1:-}" "${2:-}" ;;
+                ja) printf '操作は状態 %s で終了しました (%s)' "${1:-}" "${2:-}" ;;
+                ko) printf '작업이 %s 상태로 종료되었습니다 (%s)' "${1:-}" "${2:-}" ;;
+            esac
+            ;;
+        api_selected)
+            case "$UI_LANG" in
+                ru) printf 'Выбран %s: %s' "${1:-}" "${2:-}" ;;
+                en) printf 'Selected %s: %s' "${1:-}" "${2:-}" ;;
+                de) printf 'Ausgewählt: %s — %s' "${1:-}" "${2:-}" ;;
+                zh) printf '已选择 %s：%s' "${1:-}" "${2:-}" ;;
+                ja) printf '%s を選択: %s' "${1:-}" "${2:-}" ;;
+                ko) printf '%s 선택됨: %s' "${1:-}" "${2:-}" ;;
+            esac
+            ;;
+        api_connect_started)
+            case "$UI_LANG" in
+                ru) printf 'Подключение запущено. Проверка: %s status' "${1:-}" ;;
+                en) printf 'Connection started. Check: %s status' "${1:-}" ;;
+                de) printf 'Verbindung gestartet. Prüfen: %s status' "${1:-}" ;;
+                zh) printf '连接已启动。检查：%s status' "${1:-}" ;;
+                ja) printf '接続を開始しました。確認: %s status' "${1:-}" ;;
+                ko) printf '연결을 시작했습니다. 확인: %s status' "${1:-}" ;;
+            esac
+            ;;
+        api_disconnected)
+            case "$UI_LANG" in
+                ru) printf 'VPN отключён.' ;; en) printf 'VPN disconnected.' ;;
+                de) printf 'VPN getrennt.' ;; zh) printf 'VPN 已断开。' ;;
+                ja) printf 'VPN を切断しました。' ;; ko) printf 'VPN 연결이 해제되었습니다.' ;;
+            esac
+            ;;
+        api_reconnect_started)
+            case "$UI_LANG" in
+                ru) printf 'Переподключение запущено.' ;; en) printf 'Reconnection started.' ;;
+                de) printf 'Erneute Verbindung gestartet.' ;; zh) printf '已开始重新连接。' ;;
+                ja) printf '再接続を開始しました。' ;; ko) printf '재연결을 시작했습니다.' ;;
+            esac
+            ;;
+        api_status_unavailable)
+            case "$UI_LANG" in
+                ru) printf 'Local API не вернул статус.' ;;
+                en) printf 'The local API did not return status.' ;;
+                de) printf 'Die lokale API hat keinen Status zurückgegeben.' ;;
+                zh) printf '本地 API 未返回状态。' ;;
+                ja) printf 'ローカル API から状態が返されませんでした。' ;;
+                ko) printf '로컬 API가 상태를 반환하지 않았습니다.' ;;
+            esac
+            ;;
+        api_status_invalid)
+            case "$UI_LANG" in
+                ru) printf 'Local API не смог прочитать статус.' ;;
+                en) printf 'The local API could not provide a valid status.' ;;
+                de) printf 'Die lokale API konnte keinen gültigen Status liefern.' ;;
+                zh) printf '本地 API 无法提供有效状态。' ;;
+                ja) printf 'ローカル API から有効な状態を取得できませんでした。' ;;
+                ko) printf '로컬 API에서 유효한 상태를 가져올 수 없습니다.' ;;
+            esac
+            ;;
+        api_dashboard_unavailable)
+            case "$UI_LANG" in
+                ru) printf 'Local API не вернул статус dashboard.' ;;
+                en) printf 'The local API did not return dashboard status.' ;;
+                de) printf 'Die lokale API hat keinen Dashboard-Status zurückgegeben.' ;;
+                zh) printf '本地 API 未返回仪表板状态。' ;;
+                ja) printf 'ローカル API からダッシュボード状態が返されませんでした。' ;;
+                ko) printf '로컬 API가 대시보드 상태를 반환하지 않았습니다.' ;;
+            esac
+            ;;
+        api_dashboard_invalid)
+            case "$UI_LANG" in
+                ru) printf 'Local API не смог построить dashboard.' ;;
+                en) printf 'The local API could not build the dashboard.' ;;
+                de) printf 'Die lokale API konnte das Dashboard nicht erstellen.' ;;
+                zh) printf '本地 API 无法构建仪表板。' ;;
+                ja) printf 'ローカル API でダッシュボードを構築できませんでした。' ;;
+                ko) printf '로컬 API가 대시보드를 구성할 수 없습니다.' ;;
             esac
             ;;
         *) printf '%s' "$key" ;;
@@ -1082,7 +1294,7 @@ api_client_ready() {
     api_client_candidate || return 1
     for dependency in head jq socat timeout; do
         command -v "$dependency" >/dev/null 2>&1 ||
-            die "Local API доступен, но не установлен $dependency. Запустите install.sh."
+            die "$(msg api_dependency_missing "$dependency")"
     done
     [[ "$API_CLIENT_MAX_RESPONSE_BYTES" =~ ^[1-9][0-9]*$ ]] ||
         API_CLIENT_MAX_RESPONSE_BYTES=65536
@@ -1158,7 +1370,7 @@ api_client_query() {
 api_client_fetch_profiles() {
     local response
     response="$(api_client_query profiles.list)" || {
-        error "Local API не вернул каталог профилей."
+        error "$(msg api_profiles_unavailable)"
         return 70
     }
     if [[ "$(jq -r '.status' <<<"$response")" != "ok" ]]; then
@@ -1178,7 +1390,7 @@ api_client_print_profile_list() {
     )
     printf '\n%s%s%s\n' "$C_BOLD" "$(protocol_title "$protocol")" "$C_RESET"
     if ((${#entries[@]} == 0)); then
-        printf '  Профилей нет\n'
+        printf '  %s\n' "$(msg api_empty_profiles)"
         return 0
     fi
     for entry in "${entries[@]}"; do
@@ -1194,7 +1406,7 @@ api_client_print_profile_list() {
 api_client_choose_protocol() {
     local answer protocol count index=1
     stdin_interactive || {
-        error "Укажите протокол: amneziawg, wireguard, openvpn или l2tp"
+        error "$(msg api_protocol_required)"
         return 1
     }
     printf '\n%s\n' "$(msg choose_protocol)" >&2
@@ -1226,7 +1438,7 @@ api_client_resolve_profile() {
         protocol="$(api_client_choose_protocol)" || return 1
     else
         protocol="$(canonical_protocol "$requested_protocol")" ||
-            die "Неизвестный протокол: $requested_protocol"
+            die "$(msg api_unknown_protocol "$requested_protocol")"
     fi
     matches="$(
         jq -c --arg protocol "$protocol" '
@@ -1235,12 +1447,12 @@ api_client_resolve_profile() {
     )"
     match_count="$(jq -r 'length' <<<"$matches")"
     ((match_count > 0)) || {
-        error "Для $(protocol_title "$protocol") нет профилей"
+        error "$(msg api_no_profiles "$(protocol_title "$protocol")")"
         return 1
     }
     if [[ -z "$requested_profile" ]]; then
         stdin_interactive || {
-            error "Укажите профиль или его номер. Список: $CLI_COMMAND list $protocol"
+            error "$(msg api_profile_required "$CLI_COMMAND" "$protocol")"
             return 1
         }
         api_client_print_profile_list "$protocol" >&2
@@ -1270,13 +1482,14 @@ api_client_resolve_profile() {
                     ' <<<"$matches"
                 )"
             elif ((match_count > 1)); then
-                error "Имя '$requested_profile' неоднозначно; используйте точное имя или номер"
+                error "$(msg api_profile_ambiguous "$requested_profile")"
                 return 1
             fi
         fi
     fi
     [[ -n "$selected" && "$selected" != "null" ]] || {
-        error "Профиль '$requested_profile' не найден для $(protocol_title "$protocol")"
+        error "$(msg api_profile_not_found "$requested_profile" \
+            "$(protocol_title "$protocol")")"
         return 1
     }
     API_CLIENT_SELECTED_PROFILE_ID="$(jq -r '.profile_id' <<<"$selected")"
@@ -1307,57 +1520,58 @@ api_client_mutation() {
             }'
     )"
     response="$(api_client_send "$request")" || {
-        error "Ответ local API потерян или невалиден; повтор через sudo запрещён."
-        error "Безопасный action ID для проверки журнала: $action_id"
+        error "$(msg api_lost_response)"
+        error "$(msg api_action_id "$action_id")"
         return 70
     }
     status="$(jq -r '.status' <<<"$response")"
     if [[ "$status" != "ok" ]]; then
         code="$(jq -r '.error.code // "internal-error"' <<<"$response")"
         message="$(jq -r '.error.message_key // "api.response.malformed"' <<<"$response")"
-        error "Local API отклонил операцию: $code ($message)"
+        error "$(msg api_rejected "$code" "$message")"
         [[ "$code" != "busy" ]] ||
-            error "Action ID для безопасной проверки/повтора: $action_id"
+            error "$(msg api_action_id "$action_id")"
         return 1
     fi
     state="$(jq -r '.result.state // "failed"' <<<"$response")"
     if [[ "$state" != "succeeded" ]]; then
         message="$(jq -r '.result.message_key // "api.response.malformed"' <<<"$response")"
-        error "Операция завершилась состоянием $state ($message)"
+        error "$(msg api_failed_state "$state" "$message")"
         return 1
     fi
 }
 
 api_client_cmd_connect() {
     api_client_resolve_profile "${1:-}" "${2:-}" || return
-    info "Выбран $(protocol_title "$API_CLIENT_SELECTED_PROTOCOL"): $API_CLIENT_SELECTED_PROFILE_NAME"
+    info "$(msg api_selected "$(protocol_title "$API_CLIENT_SELECTED_PROTOCOL")" \
+        "$API_CLIENT_SELECTED_PROFILE_NAME")"
     api_client_mutation lifecycle.connect \
         "$(jq -cn --arg profile_id "$API_CLIENT_SELECTED_PROFILE_ID" \
             '{profile_id: $profile_id}')" 60000 || return
-    say "Подключение запущено. Проверка: $CLI_COMMAND status"
+    say "$(msg api_connect_started "$CLI_COMMAND")"
 }
 
 api_client_cmd_disconnect() {
     (($# == 0)) || die "Использование: $CLI_COMMAND disconnect"
     api_client_mutation lifecycle.disconnect '{}' 30000 || return
-    say "VPN отключён."
+    say "$(msg api_disconnected)"
 }
 
 api_client_cmd_reconnect() {
     (($# == 0)) || die "Использование: $CLI_COMMAND reconnect"
     api_client_mutation lifecycle.reconnect '{}' 30000 || return
-    say "Переподключение запущено."
+    say "$(msg api_reconnect_started)"
 }
 
 api_client_cmd_quick() {
     local response state profile_id profile_name=""
     (($# == 0)) || die "Использование: $CLI_COMMAND quick"
     response="$(api_client_query status.get)" || {
-        error "Local API не вернул статус."
+        error "$(msg api_status_unavailable)"
         return 70
     }
     [[ "$(jq -r '.status' <<<"$response")" == "ok" ]] || {
-        error "Local API не смог прочитать статус."
+        error "$(msg api_status_invalid)"
         return 1
     }
     state="$(jq -r '.result.connection.state // "unknown"' <<<"$response")"
@@ -1389,11 +1603,11 @@ api_client_cmd_status() {
     local desired mode interface public_ip handshake_age fallback_active fallback_name
     (($# == 0)) || die "Использование: $CLI_COMMAND status"
     response="$(api_client_query status.get)" || {
-        error "Local API не вернул статус."
+        error "$(msg api_status_unavailable)"
         return 70
     }
     [[ "$(jq -r '.status' <<<"$response")" == "ok" ]] || {
-        error "Local API не смог прочитать статус."
+        error "$(msg api_status_invalid)"
         return 1
     }
     state="$(jq -r '.result.connection.state // "unknown"' <<<"$response")"
@@ -1453,11 +1667,11 @@ api_client_dashboard_render() {
     local protocol_name count service_text internet_text interface public_ip
     local handshake_age autostart_text monitor_text fallback_text fallback_name
     response="$(api_client_query status.get)" || {
-        error "Local API не вернул dashboard status."
+        error "$(msg api_dashboard_unavailable)"
         return 70
     }
     [[ "$(jq -r '.status' <<<"$response")" == "ok" ]] || {
-        error "Local API не смог построить dashboard."
+        error "$(msg api_dashboard_invalid)"
         return 1
     }
     api_client_fetch_profiles || return
@@ -1961,11 +2175,11 @@ cmd_profiles_json() {
 
 cmd_profiles_api_json() {
     api_client_ready || {
-        error "Local API socket недоступен для profiles --api-json."
+        error "$(msg api_socket_unavailable 'profiles --api-json')"
         return 70
     }
     api_client_query profiles.list || {
-        error "Local API не вернул каталог профилей."
+        error "$(msg api_profiles_unavailable)"
         return 70
     }
 }
@@ -3191,11 +3405,11 @@ cmd_status() {
         shift
         (($# == 0)) || die "Использование: $CLI_COMMAND status --api-json"
         api_client_ready || {
-            error "Local API socket недоступен для status --api-json."
+            error "$(msg api_socket_unavailable 'status --api-json')"
             return 70
         }
         api_client_query status.get || {
-            error "Local API не вернул статус."
+            error "$(msg api_status_unavailable)"
             return 70
         }
         return

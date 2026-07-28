@@ -56,6 +56,8 @@ All notable changes to Mazzy VPN are documented here.
   failure count and fallback state; VPN endpoints remain forbidden.
 - Restored that safe runtime detail in API-backed human status and TUI
   dashboard output without reading protected profiles.
+- Localized new local-API client selection, transport, mutation and status
+  messages in Russian, English, German, Chinese, Japanese and Korean.
 
 ## 1.2.0 / Desktop 0.2.0 — 2026-07-27
 

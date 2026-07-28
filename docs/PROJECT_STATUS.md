@@ -98,6 +98,8 @@ The active stacked `agent/cli-tui-api-client` branch adds the next client slice:
   available only through explicit `--api-json`;
 - API-backed human status/TUI detail for interface, public IP, handshake,
   autostart, monitor and fallback, while VPN endpoints remain hidden;
+- localized local-API client errors and lifecycle feedback in all six CLI/TUI
+  languages;
 - byte-bounded API request reads, terminal-safe profile names and immutable
   commit verification for the AmneziaWG source fallback;
 - no direct `sudo` fallback after a request may have been sent;

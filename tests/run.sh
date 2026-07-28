@@ -1042,6 +1042,25 @@ if FAKE_SOCAT_OVERSIZED=1 VPNCTL_API_CLIENT_FORCE=1 \
     fail "CLI local API client accepted an oversized response"
 fi
 
+for api_locale_check in \
+    "ru|Профиль 'Missing' не найден" \
+    "en|Profile 'Missing' was not found" \
+    "de|Profil 'Missing' wurde" \
+    "zh|找不到配置 'Missing'（OpenVPN）" \
+    "ja|プロファイル 'Missing' が OpenVPN に見つかりません" \
+    "ko|'Missing' 프로필을 OpenVPN에서 찾을 수 없습니다"; do
+    api_locale="${api_locale_check%%|*}"
+    api_locale_marker="${api_locale_check#*|}"
+    if api_locale_output="$(
+        VPNCTL_LANG="$api_locale" VPNCTL_API_CLIENT_FORCE=1 \
+            "$CLI" connect openvpn Missing 2>&1
+    )"; then
+        fail "localized local API client accepted a missing profile: $api_locale"
+    fi
+    grep -Fq "$api_locale_marker" <<<"$api_locale_output" ||
+        fail "local API client error is not localized for $api_locale"
+done
+
 : >"$FAKE_SYSTEMCTL_LOG"
 api_client_connect="$(
     VPNCTL_API_CLIENT_FORCE=1 "$CLI" connect openvpn "Test Server"
