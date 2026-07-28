@@ -21,6 +21,9 @@ authoritative backlog; this page records the verified resumption point.
 - Android and iOS clients are planned and have no release artifacts.
 - PR #22 and API contract PR #25 are merged. Protected API PR #26 is open as a
   Draft PR; stacked CLI/TUI API client PR #27 is also open as a Draft.
+- The uncompromising code, security, packaging and cross-platform review is in
+  [`AUDIT_2026-07-28.ru.md`](AUDIT_2026-07-28.ru.md). Its production blockers
+  remain authoritative until replaced by newer evidence.
 
 Release links:
 
@@ -91,6 +94,10 @@ The active stacked `agent/cli-tui-api-client` branch adds the next client slice:
   reading root-only profile files;
 - bounded `socat` transport, response identity validation and one automatic
   retry with the same action ID after a lost response;
+- stable schema-v1 `status --json`/`profiles --json`, with raw API envelopes
+  available only through explicit `--api-json`;
+- byte-bounded API request reads, terminal-safe profile names and immutable
+  commit verification for the AmneziaWG source fallback;
 - no direct `sudo` fallback after a request may have been sent;
 - automatic `socat` installation on Debian/Ubuntu, Fedora/RHEL, Arch and
   openSUSE.
