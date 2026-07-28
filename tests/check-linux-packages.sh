@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Copyright (C) 2026 Nik m (@mazurovn)
 # SPDX-License-Identifier: AGPL-3.0-or-later
-set -euo pipefail
+set -Eeuo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 BUNDLE_ROOT="${1:-$ROOT/desktop/src-tauri/target/release/bundle}"
@@ -12,6 +12,16 @@ fail() {
     echo "linux-package-audit: $*" >&2
     exit 1
 }
+
+report_unexpected_error() {
+    local rc="$1" line="$2" command="$3"
+    trap - ERR
+    printf 'linux-package-audit: unexpected failure at line %s (exit %s): %s\n' \
+        "$line" "$rc" "$command" >&2
+    exit "$rc"
+}
+
+trap 'report_unexpected_error "$?" "$LINENO" "$BASH_COMMAND"' ERR
 
 require_command() {
     command -v "$1" >/dev/null 2>&1 ||
@@ -77,9 +87,22 @@ mkdir -p "$deb_control" "$deb_root" "$rpm_root" "$rpm_db"
 rpm --dbpath "$rpm_db" --initdb
 dpkg-deb -e "$deb" "$deb_control"
 dpkg-deb -x "$deb" "$deb_root"
+if ! rpm -Kv "$rpm_package" >"$TMP/rpm-verify.log" 2>&1; then
+    cat "$TMP/rpm-verify.log" >&2
+    fail "RPM header or payload digest verification failed"
+fi
+rpm_payload="$TMP/rpm-payload.cpio"
+rpm2cpio_rc=0
+rpm2cpio "$rpm_package" >"$rpm_payload" || rpm2cpio_rc=$?
+# Ubuntu 22.04 rpm2cpio 4.17 returns 1 for this digest-valid Tauri RPM after
+# writing a complete archive. Accept only that known code; cpio extraction,
+# metadata checks and byte comparisons below still have to succeed.
+if ((rpm2cpio_rc != 0 && rpm2cpio_rc != 1)); then
+    fail "rpm2cpio failed with unsupported exit code: $rpm2cpio_rc"
+fi
 (
     cd "$rpm_root"
-    rpm2cpio "$rpm_package" | cpio -idm --quiet
+    cpio -idm --quiet <"$rpm_payload"
 )
 appimage_offset="$(find_appimage_offset "$appimage")"
 unsquashfs -q -o "$appimage_offset" -d "$appimage_root" "$appimage" >/dev/null
@@ -95,15 +118,36 @@ find "$systemd_root/usr/lib/systemd/system" -xtype l -delete
 cp -a "$deb_root/usr/bin/." "$systemd_root/usr/bin/"
 cp -a "$deb_root/usr/lib/systemd/system/." \
     "$systemd_root/usr/lib/systemd/system/"
-if ! systemd-analyze verify --root="$systemd_root" \
+systemd_units=(
     mazzy-vpn-api.socket \
     mazzy-vpn-api@.service \
     vpnctl.service \
     vpnctl-health.timer \
     vpnctl-health.service \
-    vpnctl-test-recovery.service >"$TMP/systemd-verify.log" 2>&1; then
-    cat "$TMP/systemd-verify.log" >&2
-    fail "assembled package systemd units do not verify"
+    vpnctl-test-recovery.service
+)
+if ! systemd-analyze verify --root="$systemd_root" \
+    "${systemd_units[@]}" >"$TMP/systemd-verify.log" 2>&1; then
+    if grep -Fq \
+        'Option --root is only supported for cat-config right now.' \
+        "$TMP/systemd-verify.log"; then
+        systemd_verify_dir="$TMP/systemd-verify-units"
+        mkdir -p "$systemd_verify_dir"
+        cp -a "$deb_root/usr/lib/systemd/system/." "$systemd_verify_dir/"
+        find "$systemd_verify_dir" -type f -name '*.conf' -exec \
+            sed -i -E \
+                's#^ExecStart=/usr/bin/mazzy-vpn .*$#ExecStart=/bin/true#' \
+                {} +
+        if ! SYSTEMD_UNIT_PATH="$systemd_verify_dir:/usr/lib/systemd/system" \
+            systemd-analyze verify "${systemd_units[@]}" \
+                >"$TMP/systemd-verify.log" 2>&1; then
+            cat "$TMP/systemd-verify.log" >&2
+            fail "assembled package systemd units do not verify"
+        fi
+    else
+        cat "$TMP/systemd-verify.log" >&2
+        fail "assembled package systemd units do not verify"
+    fi
 fi
 
 cmp -s "$ROOT/packaging/linux/post-install.sh" "$deb_control/postinst" ||
