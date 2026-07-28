@@ -10,8 +10,9 @@ authoritative backlog; this page records the verified resumption point.
 
 ## Verified release baseline
 
-- `main` resolves to `52e695f274a56b39ef4cc70226cbaa42765d5d44`
-  after merging protected API PR #26 and CLI/TUI/Desktop client PR #27.
+- `main` resolves to `993f32b56ebeb7baca934f5d60b5998f32ff4bcd`
+  after merging protected API PR #26, client PR #27 and Linux package-lifecycle
+  PR #28.
 - `v1.2.0` and `desktop-v0.2.0` remain at
   `0fe11a22b4e68f4c9106e4415ebaf5a2c281cb2c`.
 - CLI/TUI 1.2.0 is the current stable release.
@@ -19,8 +20,9 @@ authoritative backlog; this page records the verified resumption point.
 - Windows and macOS 0.2.0 artifacts are unsigned UI previews without native
   VPN backends.
 - Android and iOS clients are planned and have no release artifacts.
-- PR #22, API contract PR #25, protected API PR #26 and client PR #27 are
-  merged. Their post-merge CI is green on exact `main` SHA `52e695f`.
+- PR #22, API contract PR #25, protected API PR #26, client PR #27 and package
+  PR #28 are merged. PR #28 passed all required Ubuntu 22.04, macOS 14 and
+  Windows 2022 checks and was squash-merged as `993f32b`.
 - The uncompromising code, security, packaging and cross-platform review is in
   [`AUDIT_2026-07-28.ru.md`](AUDIT_2026-07-28.ru.md). Its production blockers
   remain authoritative until replaced by newer evidence.
@@ -117,7 +119,7 @@ Merged PR #27 added the client slice:
 - the non-functional notifications preference was removed; the disabled
   Desktop control now labels the feature as unavailable in the preview.
 
-The active `agent/linux-package-lifecycle` issue #4 slice adds:
+Merged PR #28 completed the package-owned issue #4 slice:
 
 - package-owned engine/runtime under `/usr/bin` and `/usr/lib/mazzy-vpn`;
 - package-owned systemd units/drop-ins, tmpfiles policy and completion, with no
@@ -132,10 +134,24 @@ The active `agent/linux-package-lifecycle` issue #4 slice adds:
   byte-identity, embedded source completeness and staged AppImage bootstrap,
   plus stale-bundle and previously patched executable cleanup before releases.
 
+The active `agent/location-health` issue #6 slice adds:
+
+- bounded parallel `probe all` with configurable 1–8 workers and per-step
+  DNS/ICMP/TCP timeouts;
+- per-profile `reachable`/`unknown`/`unreachable`/`invalid`, measured
+  ICMP/TCP latency and current active state without exposing endpoints;
+- API v1 `tests.probe` with whole-request deadline, opaque profile IDs,
+  structured batch summary and a global lock against concurrent amplification;
+- CLI/TUI human output plus stable `--json`, with blocked ICMP for UDP kept as
+  `unknown` instead of a false failure;
+- Desktop whole-list/protocol checks and status/latency/active indicators on
+  every profile row;
+- complete package-owned Desktop CSS corresponding source.
+
 Verified locally:
 
-- shell regression suite: 67/67 on the package-lifecycle branch;
-- Rust unit tests: 15/15;
+- shell regression suite: 68/68 on the location-health branch;
+- Rust unit tests: 17/17;
 - ShellCheck, Clippy, capability/API validators, public audit and gitleaks;
 - `npm audit --audit-level=high` reported 0 known vulnerabilities on
   2026-07-28; Cargo and system-package advisory coverage is still absent;

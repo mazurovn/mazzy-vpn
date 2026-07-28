@@ -6,7 +6,7 @@
 sudo mazzy-vpn diagnose
 sudo mazzy-vpn doctor
 mazzy-vpn validate all
-mazzy-vpn probe all --timeout 3
+mazzy-vpn probe all --timeout 3 --jobs 4
 mazzy-vpn self-test --offline
 ```
 
@@ -48,7 +48,7 @@ systemd timeout guard и boot recovery. Предыдущее managed или вн
 sudo mazzy-vpn diagnose
 sudo mazzy-vpn doctor
 mazzy-vpn validate all
-mazzy-vpn probe all --timeout 3
+mazzy-vpn probe all --timeout 3 --jobs 4
 mazzy-vpn self-test --offline
 ```
 

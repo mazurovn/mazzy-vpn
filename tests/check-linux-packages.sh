@@ -234,6 +234,12 @@ for extracted_root in "$deb_root" "$rpm_root"; do
     cmp -s "$ROOT/api/v1/manifest.json" \
         "$extracted_root/usr/lib/mazzy-vpn/api/v1/manifest.json" ||
         fail "package API manifest differs from source"
+    cmp -s "$ROOT/desktop/ui/app.css" \
+        "$extracted_root/usr/lib/mazzy-vpn/desktop/ui/app.css" ||
+        fail "package Desktop CSS differs from source"
+    cmp -s "$ROOT/desktop/ui/app.js" \
+        "$extracted_root/usr/lib/mazzy-vpn/desktop/ui/app.js" ||
+        fail "package Desktop UI logic differs from source"
     cmp -s "$ROOT/packaging/linux/systemd/vpnctl.service.d/10-package-exec.conf" \
         "$extracted_root/usr/lib/systemd/system/vpnctl.service.d/10-package-exec.conf" ||
         fail "package service override differs from source"
@@ -246,6 +252,7 @@ for relative in \
     desktop/src-tauri/src/backend.rs \
     desktop/src-tauri/src/main.rs \
     desktop/src-tauri/tauri.conf.json \
+    desktop/ui/app.css \
     desktop/ui/app.js \
     desktop/ui/index.html \
     packaging/linux/post-install.sh \
@@ -260,6 +267,10 @@ done
     fail "AppImage embedded engine mode is not exactly 0755"
 cmp -s "$ROOT/mazzy-vpn" "$appimage_engine/mazzy-vpn" ||
     fail "AppImage embedded engine differs from source"
+cmp -s "$ROOT/desktop/ui/app.css" "$appimage_engine/desktop/ui/app.css" ||
+    fail "AppImage embedded Desktop CSS differs from source"
+cmp -s "$ROOT/desktop/ui/app.js" "$appimage_engine/desktop/ui/app.js" ||
+    fail "AppImage embedded Desktop UI logic differs from source"
 cmp -s "$ROOT/desktop/src-tauri/tauri.conf.json" \
     "$appimage_engine/desktop/src-tauri/tauri.conf.json" ||
     fail "AppImage package configuration differs from source"

@@ -12,11 +12,13 @@
 [#5](https://github.com/mazurovn/mazzy-vpn/issues/5). Текущий транспорт
 `cli-json-adapter` явно имеет статус `partial`: существующие безопасные JSON
 status/profile outputs доступны, а CLI/TUI уже отправляют v1 envelopes для
-`status.get`, `profiles.list` и `lifecycle.*` через единый dispatcher. Остальные
+`status.get`, `profiles.list`, `tests.probe` и `lifecycle.*` через единый
+dispatcher. Остальные
 домены ещё используют совместимый прямой CLI-контур. Метаданные контракта
 реализованы.
 Socket-activated Linux transport имеет статус `partial`: он принимает
-`status.get`, `profiles.list` и три мутации `lifecycle.*`. Остальные операции и
+`status.get`, `profiles.list`, ограниченный query `tests.probe` и три мутации
+`lifecycle.*`. Остальные операции и
 не-Linux transports пока `planned`, поэтому полный кроссплатформенный daemon ещё
 не заявлен готовым.
 
@@ -124,8 +126,22 @@ autostart, health monitor, число сбоев и состояние внеш�
 совместимости minor-версии поля необязательны. VPN endpoint, имя/путь файла
 профиля и конфигурация остаются запрещены.
 
+`tests.probe` проверяет все профили выбранного protocol scope с отдельным
+таймаутом endpoint и ограниченной параллельностью 1–8 workers. Результат
+содержит opaque profile ID, безопасное display name, protocol, флаги
+default/active, transport, `reachability`, необязательный целочисленный
+`latency_ms`, источник ICMP/TCP и message key. Endpoint в ответ не попадает.
+`reachable` означает только ответ ICMP или настроенного TCP service и не
+доказывает VPN credentials, handshake, routes или DNS через туннель. Для UDP
+успешный DNS без ответа ICMP получает `unknown`, а не `unreachable`: рабочие
+серверы часто блокируют ping, а безопасного универсального UDP handshake нет.
+Полное доказательство остаётся за транзакционным live-test с rollback. Server
+применяет request deadline ко всей worker group и сериализует batch probes
+глобальным lock, чтобы параллельные socket clients не умножали сетевую нагрузку.
+
 Установленные CLI и TUI используют socket без `sudo` для status, списка
-профилей, connect, quick, reconnect и disconnect. Клиент передаёт только
+профилей, batch endpoint probe, connect, quick, reconnect и disconnect. Клиент
+передаёт только
 непрозрачный `profile_id`, задаёт ограниченный query refresh deadline,
 ограничивает время и byte size ответа и принимает ровно один response document
 с совпадающими `api_version`/`request_id`. При потере ответа тот же request
@@ -137,6 +153,8 @@ mutation печатается action ID для audit и recovery.
 Desktop применяет то же правило одного идентичного retry к lifecycle requests.
 Desktop также читает ответ до bounded EOF и принимает ровно один совпадающий
 JSON document.
+Проверка списка локаций в Desktop использует структурированный `tests.probe`
+и связывает очищенный результат с opaque profile ID, не разбирая raw CLI text.
 После неудачного первоначального подключения к socket разрешён typed
 compatibility adapter, потому что request ещё не отправлялся. Любая
 неопределённость после подключения возвращается пользователю и никогда не

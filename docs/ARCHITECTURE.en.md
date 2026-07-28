@@ -327,7 +327,7 @@ Security invariants:
 | Dashboard and saved default | `mazzy-vpn dashboard` |
 | Machine-readable sanitized status | `mazzy-vpn status --json` |
 | All profile formats and permissions | `mazzy-vpn validate all` |
-| Endpoint DNS and ping | `mazzy-vpn probe all --timeout 3` |
+| Bounded batch endpoint reachability and latency | `mazzy-vpn probe all --timeout 3 --jobs 4 [--json]` |
 | Installation and systemd health | `mazzy-vpn doctor` |
 | Safe automatic repairs | `sudo mazzy-vpn doctor --fix` |
 | Offline full check | `mazzy-vpn self-test --offline` |

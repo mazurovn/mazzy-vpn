@@ -35,7 +35,8 @@ backends, code signing and platform-specific integration tests.
 
 1. **Dashboard** — tunnel, Internet, IP, handshake, health, recovery and tray.
 2. **Profiles** — safe file/folder import, search, protocol and location/default
-   selection, removal and per-profile live tests.
+   selection, removal, a whole-list endpoint check with per-location
+   reachability/latency/active state, and per-profile live tests.
 3. **Diagnostics** — validation, DNS/ping probes, transactional tests,
    `test-all`, emergency recovery, complete Doctor/self-test output and bounded
    systemd logs.
@@ -74,11 +75,17 @@ private key, username, password or configuration directive.
 | Refresh Status | `mazzy-vpn _refresh-dashboard-cache` |
 | Connect profile | `mazzy-vpn connect PROTOCOL PROFILE` |
 | Import files/folder | `mazzy-vpn import-files` / `import-dir` |
-| Validate / probe | `mazzy-vpn validate` / `probe` |
+| Validate / batch location probe | `mazzy-vpn validate` / `probe all --jobs 4 --json` |
 | Transactional tests | `mazzy-vpn test` / `test-all` / `emergency` |
 | Install / repair | package engine: `mazzy-vpn doctor --fix`; AppImage/manual install: bundled `install.sh` |
 | Service settings | `mazzy-vpn autostart` / `monitor` |
 | Logs | `mazzy-vpn logs --lines N` |
+
+The location probe is deliberately distinct from a live VPN test. `reachable`
+means DNS plus ICMP or TCP endpoint reachability; `unknown` preserves the common
+case where a UDP VPN server blocks ICMP. It does not claim that credentials,
+handshake or tunnel routing work. Use the confirmed live-test workflow for that
+proof.
 
 The GUI never constructs a shell string. Its Rust backend accepts an enum and
 maps it to a fixed request or argument array. Connect, reconnect and disconnect

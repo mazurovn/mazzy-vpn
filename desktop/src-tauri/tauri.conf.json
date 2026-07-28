@@ -97,6 +97,7 @@
           "/usr/lib/mazzy-vpn/desktop/src-tauri/src/backend.rs": "src/backend.rs",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/src/main.rs": "src/main.rs",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/tauri.conf.json": "tauri.conf.json",
+          "/usr/lib/mazzy-vpn/desktop/ui/app.css": "../ui/app.css",
           "/usr/lib/mazzy-vpn/desktop/ui/app.js": "../ui/app.js",
           "/usr/lib/mazzy-vpn/desktop/ui/index.html": "../ui/index.html",
           "/usr/lib/mazzy-vpn/docs": "../../docs",
@@ -183,6 +184,7 @@
           "/usr/lib/mazzy-vpn/desktop/src-tauri/src/backend.rs": "src/backend.rs",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/src/main.rs": "src/main.rs",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/tauri.conf.json": "tauri.conf.json",
+          "/usr/lib/mazzy-vpn/desktop/ui/app.css": "../ui/app.css",
           "/usr/lib/mazzy-vpn/desktop/ui/app.js": "../ui/app.js",
           "/usr/lib/mazzy-vpn/desktop/ui/index.html": "../ui/index.html",
           "/usr/lib/mazzy-vpn/docs": "../../docs",
@@ -245,6 +247,7 @@
       "src/backend.rs": "engine/desktop/src-tauri/src/backend.rs",
       "src/main.rs": "engine/desktop/src-tauri/src/main.rs",
       "tauri.conf.json": "engine/desktop/src-tauri/tauri.conf.json",
+      "../ui/app.css": "engine/desktop/ui/app.css",
       "../ui/app.js": "engine/desktop/ui/app.js",
       "../ui/index.html": "engine/desktop/ui/index.html"
     }

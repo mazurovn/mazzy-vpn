@@ -4,7 +4,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { rmSync } from "node:fs";
+import { chmodSync, rmSync, statSync } from "node:fs";
 
 const executable = join(
   "node_modules",
@@ -21,12 +21,35 @@ rmSync(join(releaseDir, "bundle"), {
 for (const binary of ["mazzy-vpn-desktop", "mazzy-vpn-desktop.exe"]) {
   rmSync(join(releaseDir, binary), { force: true });
 }
-const result = spawnSync(executable, ["build", ...process.argv.slice(2)], {
-  cwd: process.cwd(),
-  env: { ...process.env, RUSTFLAGS: rustflags },
-  shell: process.platform === "win32",
-  stdio: "inherit",
-});
+
+const runtimeExecutables = process.platform === "win32"
+  ? []
+  : [
+    join("..", "mazzy-vpn"),
+    join("..", "vpnctl"),
+    join("..", "install.sh"),
+    join("..", "setup_amnezia_vpn.sh"),
+    join("..", "stop_amnezia_vpn.sh"),
+  ];
+const originalModes = new Map();
+let result;
+try {
+  for (const path of runtimeExecutables) {
+    const mode = statSync(path).mode & 0o7777;
+    originalModes.set(path, mode);
+    chmodSync(path, 0o755);
+  }
+  result = spawnSync(executable, ["build", ...process.argv.slice(2)], {
+    cwd: process.cwd(),
+    env: { ...process.env, RUSTFLAGS: rustflags },
+    shell: process.platform === "win32",
+    stdio: "inherit",
+  });
+} finally {
+  for (const [path, mode] of originalModes) {
+    chmodSync(path, mode);
+  }
+}
 
 if (result.error) {
   console.error(result.error.message);

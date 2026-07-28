@@ -14,7 +14,7 @@
 | `sudo mazzy-vpn disconnect` | записать `DESIRED=down` и отключить |
 | `mazzy-vpn list [PROTOCOL]` | список профилей |
 | `mazzy-vpn validate all` | проверить формат, директивы и права |
-| `mazzy-vpn probe all --timeout 3` | DNS/ping/TCP endpoint probes |
+| `mazzy-vpn probe all --timeout 3 --jobs 4 [--json]` | массовый DNS/ICMP/TCP probe с latency и active |
 | `sudo mazzy-vpn test ...` | транзакционный тест одного профиля |
 | `sudo mazzy-vpn test-all all` | тест всех профилей с rollback |
 | `sudo mazzy-vpn emergency` | найти первый реально работающий профиль |
@@ -49,7 +49,7 @@
 | `sudo mazzy-vpn disconnect` | write `DESIRED=down` and disconnect |
 | `mazzy-vpn list [PROTOCOL]` | list profiles |
 | `mazzy-vpn validate all` | validate format, directives and permissions |
-| `mazzy-vpn probe all --timeout 3` | DNS/ping/TCP endpoint probes |
+| `mazzy-vpn probe all --timeout 3 --jobs 4 [--json]` | bounded batch DNS/ICMP/TCP probe with latency and active state |
 | `sudo mazzy-vpn test ...` | transactional single-profile test |
 | `sudo mazzy-vpn test-all all` | test all profiles with rollback |
 | `sudo mazzy-vpn emergency` | find the first working profile |

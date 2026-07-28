@@ -162,6 +162,12 @@ Object.assign(translations.ru, {
   ready: "ГОТОВО", confirmLiveTest: "Живой тест временно изменит VPN-маршрут и затем выполнит rollback. Продолжить?",
   confirmRemove: "Удалить выбранный VPN-профиль?", confirmRepair: "Запустить системную установку и исправление зависимостей?",
   profilesRefreshed: "Список профилей обновлён", noSelection: "Ничего не выбрано",
+  checkAllLocations: "Проверить все локации", checkingLocations: "Проверяем локации",
+  locationReachable: "Endpoint доступен", locationUnknown: "Доступность не подтверждена",
+  locationUnreachable: "Endpoint недоступен", locationInvalid: "Некорректный endpoint",
+  locationNotChecked: "Доступность ещё не проверялась", activeTunnel: "АКТИВЕН",
+  lastChecked: "Последняя проверка",
+  endpointProbeHint: "Probe проверяет DNS/ICMP/TCP endpoint, но не подтверждает VPN-авторизацию и маршрутизацию.",
   aboutProduct: "О ПРОДУКТЕ", aboutLead: "Безопасный центр управления VPN с общим CLI/TUI/Desktop engine.",
   aboutPurpose: "НАЗНАЧЕНИЕ", aboutPurposeTitle: "Один безопасный контур управления",
   aboutPurposeText: "Mazzy VPN управляет AmneziaWG, WireGuard, OpenVPN и L2TP/IPsec, проверяет профили и восстанавливает предыдущее соединение после тестов.",
@@ -216,6 +222,12 @@ Object.assign(translations.en, {
   confirmLiveTest: "The live test temporarily changes VPN routes and then rolls back. Continue?",
   confirmRemove: "Remove the selected VPN profile?", confirmRepair: "Run system installation and dependency repair?",
   profilesRefreshed: "Profile list refreshed", noSelection: "Nothing selected",
+  checkAllLocations: "Check all locations", checkingLocations: "Checking locations",
+  locationReachable: "Endpoint reachable", locationUnknown: "Reachability unconfirmed",
+  locationUnreachable: "Endpoint unreachable", locationInvalid: "Invalid endpoint",
+  locationNotChecked: "Reachability has not been checked", activeTunnel: "ACTIVE",
+  lastChecked: "Last checked",
+  endpointProbeHint: "The probe checks DNS/ICMP/TCP reachability; it does not prove VPN authentication or routing.",
   aboutProduct: "ABOUT THE PRODUCT", aboutLead: "A safe VPN control center with one CLI/TUI/Desktop engine.",
   aboutPurpose: "PURPOSE", aboutPurposeTitle: "One validated control plane",
   aboutPurposeText: "Mazzy VPN manages AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec, validates profiles and restores the previous connection after tests.",
@@ -239,9 +251,13 @@ const state = {
   page: "dashboard",
   status: null,
   profiles: [],
+  profileHealth: new Map(),
+  probeCheckedAt: null,
+  probeRunningScope: null,
   installation: null,
   platformInfo: null,
   lastSignature: "",
+  lastActiveProfileSignature: "",
   events: [],
   busy: false,
   lastOperation: null
@@ -262,6 +278,7 @@ function applyLanguage() {
   });
   if (state.status) renderStatus(state.status);
   renderProfiles();
+  renderProbeCheckedAt();
   if (state.installation) renderInstallation(state.installation);
   renderAbout();
 }
@@ -390,6 +407,13 @@ function renderStatus(data) {
     addEvent(t("statusChanged"), data?.location || data?.service_state || "", connected ? "success" : "error");
   }
   state.lastSignature = signature;
+  const activeProfileSignature = data?.tunnel_active
+    ? `${data?.protocol || ""}|${data?.profile || ""}`
+    : "";
+  if (state.lastActiveProfileSignature !== activeProfileSignature) {
+    state.lastActiveProfileSignature = activeProfileSignature;
+    if (state.profiles.length) renderProfiles();
+  }
 }
 
 function renderProfiles() {
@@ -410,8 +434,22 @@ function renderProfiles() {
     return;
   }
   list.replaceChildren(...profiles.map((profile) => {
+    const health = state.profileHealth.get(profile.profile_id);
+    const checking = state.probeRunningScope === "all"
+      || state.probeRunningScope === profile.protocol;
+    const liveStatusAvailable = state.status?.available !== false
+      && Number(state.status?.generated_at || 0) > 0;
+    const active = liveStatusAvailable
+      ? Boolean(
+        state.status?.tunnel_active
+        && state.status?.protocol === profile.protocol
+        && state.status?.profile === (profile.name || profile.file_name)
+      )
+      : Boolean(health?.active);
     const row = document.createElement("div");
-    row.className = `profile-item${profile.selected ? " selected" : ""}`;
+    row.className = `profile-item${profile.selected ? " selected" : ""}`
+      + `${health?.reachability ? ` health-${health.reachability}` : ""}`
+      + `${active ? " active-profile" : ""}`;
     const marker = document.createElement("span");
     marker.className = "profile-marker";
     const copy = document.createElement("div");
@@ -420,7 +458,22 @@ function renderProfiles() {
     name.textContent = profile.name || profile.file_name;
     const detail = document.createElement("small");
     detail.textContent = `${profile.protocol_name || profile.protocol}${profile.selected ? ` · ${t("selectedProfile")}` : ""}`;
-    copy.append(name, detail);
+    const healthLine = document.createElement("small");
+    healthLine.className = `profile-health${health?.reachability ? ` ${health.reachability}` : ""}`;
+    const healthLabels = {
+      reachable: t("locationReachable"),
+      unknown: t("locationUnknown"),
+      unreachable: t("locationUnreachable"),
+      invalid: t("locationInvalid")
+    };
+    const latency = Number.isFinite(health?.latency_ms)
+      ? ` · ${health.latency_ms} ms ${String(health.latency_source || "").toUpperCase()}`
+      : "";
+    healthLine.textContent = `${checking
+      ? `${t("checkingLocations")}…`
+      : (healthLabels[health?.reachability] || t("locationNotChecked"))}`
+      + latency + `${active ? ` · ${t("activeTunnel")}` : ""}`;
+    copy.append(name, detail, healthLine);
     const actions = document.createElement("div");
     actions.className = "profile-actions";
     const connect = document.createElement("button");
@@ -468,6 +521,107 @@ async function refreshProfiles(manual = false) {
     state.profiles = [];
     renderProfiles();
     if (manual) showToast(String(error), true);
+  }
+}
+
+function renderProbeCheckedAt() {
+  const node = $("#location-health-meta");
+  if (!node) return;
+  if (!state.probeCheckedAt) {
+    node.textContent = t("locationNotChecked");
+    return;
+  }
+  const checked = new Date(state.probeCheckedAt);
+  node.textContent = Number.isNaN(checked.getTime())
+    ? t("lastChecked")
+    : `${t("lastChecked")}: ${checked.toLocaleTimeString([], {
+      hour: "2-digit", minute: "2-digit", second: "2-digit"
+    })}`;
+}
+
+function formatProbeOutput(result) {
+  const summary = result?.summary || {};
+  const lines = (result?.results || []).map((entry) => {
+    const labels = {
+      reachable: t("locationReachable"),
+      unknown: t("locationUnknown"),
+      unreachable: t("locationUnreachable"),
+      invalid: t("locationInvalid")
+    };
+    const latency = Number.isFinite(entry.latency_ms)
+      ? ` · ${entry.latency_ms} ms ${String(entry.latency_source || "").toUpperCase()}`
+      : "";
+    const active = entry.active ? ` · ${t("activeTunnel")}` : "";
+    return `${entry.display_name} · ${labels[entry.reachability] || entry.reachability}${latency}${active}`;
+  });
+  return [
+    `total=${summary.total || 0} reachable=${summary.reachable || 0}`
+      + ` unknown=${summary.unknown || 0} unreachable=${summary.unreachable || 0}`
+      + ` invalid=${summary.invalid || 0} active=${summary.active || 0}`,
+    t("endpointProbeHint"),
+    "",
+    ...lines
+  ].join("\n");
+}
+
+async function checkLocations(protocol = "all", title = "") {
+  if (state.busy) return null;
+  setBusy(true);
+  const operationTitle = title || t("checkAllLocations");
+  state.probeRunningScope = protocol;
+  renderProfiles();
+  $("#operation-state").textContent = t("outputRunning");
+  $("#operation-state").className = "operation-state running";
+  $("#operation-title").textContent = operationTitle;
+  $("#operation-output").textContent = `${t("checkingLocations")}…`;
+  showToast(`${t("checkingLocations")}…`);
+  try {
+    if (!invoke) throw new Error("Tauri runtime is unavailable");
+    const result = await invoke("probe_profiles", {
+      protocol,
+      timeout: Math.min(30, operationTimeout()),
+      concurrency: 4
+    });
+    if (protocol === "all") {
+      state.profileHealth.clear();
+    } else {
+      state.profiles
+        .filter((profile) => profile.protocol === protocol)
+        .forEach((profile) => state.profileHealth.delete(profile.profile_id));
+    }
+    (result?.results || []).forEach((entry) => {
+      state.profileHealth.set(entry.profile_id, entry);
+    });
+    state.probeCheckedAt = result?.checked_at || null;
+    renderProfiles();
+    renderProbeCheckedAt();
+    const hardFailures = Number(result?.summary?.unreachable || 0)
+      + Number(result?.summary?.invalid || 0);
+    const success = Number(result?.summary?.total || 0) > 0 && hardFailures === 0;
+    const operation = {
+      success,
+      action: "probe",
+      output: formatProbeOutput(result)
+    };
+    showOperationResult(operation, operationTitle);
+    addEvent(
+      success ? t("actionDone") : t("actionFailed"),
+      `reachable=${result?.summary?.reachable || 0}, unknown=${result?.summary?.unknown || 0}`,
+      success ? "success" : "error"
+    );
+    showToast(success ? t("actionDone") : t("actionFailed"), !success);
+    return result;
+  } catch (error) {
+    const message = String(error);
+    showOperationResult({ success: false, action: "probe", output: message }, operationTitle);
+    addEvent(t("actionFailed"), message, "error");
+    showToast(`${t("actionFailed")}: ${message}`, true);
+    return null;
+  } finally {
+    state.probeRunningScope = null;
+    renderProfiles();
+    setBusy(false);
+    await refreshStatus(false);
   }
 }
 
@@ -611,6 +765,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     await runOperation({ kind: "refresh" }, t("profilesRefreshed"), false);
     await refreshProfiles(true);
   });
+  $("#location-health-button").addEventListener("click", () =>
+    checkLocations("all", t("checkAllLocations")));
 
   $("#import-files-button").addEventListener("click", async () => {
     if (!invoke || state.busy) return;
@@ -640,9 +796,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("#validate-button").addEventListener("click", () => runOperation({
     kind: "validate", protocol: $("#test-protocol").value
   }, t("validateProfiles")));
-  $("#probe-button").addEventListener("click", () => runOperation({
-    kind: "probe", protocol: $("#test-protocol").value, timeout: Math.min(30, operationTimeout())
-  }, t("probeEndpoints")));
+  $("#probe-button").addEventListener("click", () =>
+    checkLocations($("#test-protocol").value, t("probeEndpoints")));
   $("#test-all-button").addEventListener("click", () => {
     if (window.confirm(t("confirmLiveTest"))) {
       runOperation({

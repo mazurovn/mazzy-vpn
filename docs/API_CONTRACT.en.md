@@ -12,11 +12,12 @@ boundary for issue
 [#5](https://github.com/mazurovn/mazzy-vpn/issues/5). The current
 `cli-json-adapter` is explicitly `partial`: existing safe JSON status/profile
 outputs remain available, and CLI/TUI now submit v1 envelopes for `status.get`,
-`profiles.list` and `lifecycle.*` through one dispatcher. Remaining domains
+`profiles.list`, `tests.probe` and `lifecycle.*` through one dispatcher. Remaining domains
 still use the compatible direct CLI control plane. Contract metadata is
 implemented. The
 socket-activated Linux transport is `partial`: it accepts `status.get`,
-`profiles.list` and the three `lifecycle.*` mutations. Other operations and
+`profiles.list`, the bounded `tests.probe` query and the three `lifecycle.*`
+mutations. Other operations and
 non-Linux transports remain `planned`, so this still does not claim that the
 complete cross-platform daemon exists.
 
@@ -123,8 +124,21 @@ monitor, failure count and external-fallback state. These fields are optional
 for minor-version compatibility. The VPN endpoint, profile filename/path and
 configuration remain forbidden.
 
+`tests.probe` checks every profile in the requested protocol scope with a
+per-endpoint timeout and bounded concurrency of 1–8 workers. It returns an
+opaque profile ID, safe display name, protocol, current active/default flags,
+transport, `reachability`, optional integer `latency_ms`, its ICMP/TCP source
+and a message key. It never returns the endpoint. `reachable` means that ICMP
+or the configured TCP service answered; it does not prove VPN credentials,
+handshake, routes or DNS through a tunnel. For UDP, DNS success without an
+ICMP response is `unknown`, not `unreachable`, because many valid servers block
+ping and UDP has no safe generic connection handshake. A full proof remains a
+transactional live test with rollback. The server applies the request deadline
+to the entire worker group and serializes batch probes with a global lock so
+concurrent socket clients cannot multiply network load.
+
 Installed CLI and TUI clients use the socket without `sudo` for status, profile
-listing, connect, quick, reconnect and disconnect. The client sends only an
+listing, batch endpoint probes, connect, quick, reconnect and disconnect. The client sends only an
 opaque `profile_id`, sends a bounded query refresh deadline, bounds response
 time and byte size, and accepts exactly one response document with matching
 `api_version`/`request_id`. If a response is lost, it automatically retries the
@@ -136,6 +150,9 @@ print the action ID needed for audit and recovery.
 Desktop applies the same one-identical-retry rule to lifecycle requests. A
 Desktop response is also read to bounded EOF and must contain exactly one
 matching JSON document. A
+Desktop location check consumes the structured `tests.probe` result and binds
+each sanitized result to its opaque profile ID; it does not parse raw CLI text.
+A
 failed initial socket connection may use the typed compatibility adapter
 because no request was sent; any post-connect uncertainty is returned to the
 user and never falls through to `pkexec`.
