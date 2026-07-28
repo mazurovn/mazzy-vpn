@@ -121,6 +121,16 @@ EOF
 cat >"$TMP/fakebin/ping" <<'EOF'
 #!/usr/bin/env bash
 [[ "${FAKE_PING_FAIL:-0}" == "1" ]] && exit 1
+if [[ -n "${FAKE_PING_STARTED_FILE:-}" ]]; then
+    : >"$FAKE_PING_STARTED_FILE"
+fi
+if [[ -n "${FAKE_PING_PID_FILE:-}" ]]; then
+    printf '%s\n' "$$" >"$FAKE_PING_PID_FILE"
+fi
+if [[ -n "${FAKE_PING_DELAY_SECONDS:-}" ]]; then
+    sleep "$FAKE_PING_DELAY_SECONDS"
+fi
+printf '64 bytes from 192.0.2.10: icmp_seq=1 ttl=58 time=12.4 ms\n'
 exit 0
 EOF
 
@@ -339,9 +349,69 @@ grep -q 'profiles=1 passed=1 failed=0' <<<"$validate_output" ||
 ok "validate checks every selected profile"
 
 probe_output="$("$CLI" probe openvpn --timeout 1)"
-grep -q 'endpoints=1 ping_ok=1' <<<"$probe_output" ||
+grep -q 'endpoints=1 reachable=1 unknown=0 unreachable=0 invalid=0' \
+    <<<"$probe_output" ||
     fail "endpoint DNS/ping probe did not pass"
-ok "endpoint probe"
+grep -q '12 ms (ICMP)' <<<"$probe_output" ||
+    fail "endpoint probe did not report measured ICMP latency"
+probe_json="$("$CLI" probe openvpn --timeout 1 --jobs 2 --json)"
+jq -e '
+    .schema_version == 1
+    and .concurrency == 2
+    and .summary == {
+        total: 1,
+        reachable: 1,
+        unknown: 0,
+        unreachable: 0,
+        invalid: 0,
+        active: 0
+    }
+    and .results[0].display_name == "Test Server"
+    and .results[0].reachability == "reachable"
+    and .results[0].latency_ms == 12
+    and .results[0].latency_source == "icmp"
+' <<<"$probe_json" >/dev/null ||
+    fail "structured endpoint probe omitted reachability or latency"
+if grep -Eq '192\.0\.2\.10|remote|endpoint' <<<"$probe_json"; then
+    fail "structured endpoint probe leaked the VPN endpoint"
+fi
+probe_unknown="$(
+    FAKE_PING_FAIL=1 "$CLI" probe openvpn --timeout 1 --json
+)"
+jq -e '
+    .summary.unknown == 1
+    and .summary.unreachable == 0
+    and .results[0].reachability == "unknown"
+    and .results[0].latency_ms == null
+' <<<"$probe_unknown" >/dev/null ||
+    fail "blocked ICMP incorrectly marked a UDP VPN endpoint unavailable"
+if probe_dns_failure="$(
+    FAKE_GETENT_FAIL=1 "$CLI" probe openvpn --timeout 1 --json
+)"; then
+    fail "DNS failure did not fail the endpoint probe"
+fi
+jq -e '
+    .summary.unreachable == 1
+    and .results[0].message_key == "probe.unreachable.dns"
+' <<<"$probe_dns_failure" >/dev/null ||
+    fail "DNS failure did not produce a structured unreachable result"
+cp "$TMP/config/openvpn/Test Server.ovpn" \
+    "$TMP/config/openvpn/Test Server Parallel.ovpn"
+sed -i 's/192\.0\.2\.10/192.0.2.11/' \
+    "$TMP/config/openvpn/Test Server Parallel.ovpn"
+parallel_probe_json="$(
+    FAKE_PING_DELAY_SECONDS=2 \
+        "$CLI" probe openvpn --timeout 3 --jobs 2 --json
+)"
+jq -e '
+    .summary.total == 2
+    and .summary.reachable == 2
+    and .concurrency == 2
+    and .duration_ms < 3500
+' <<<"$parallel_probe_json" >/dev/null ||
+    fail "two-worker endpoint probe ran sequentially or lost a location"
+rm -f -- "$TMP/config/openvpn/Test Server Parallel.ovpn"
+ok "bounded endpoint probe reports per-location reachability and latency"
 
 cat >"$TMP/config/openvpn/Unsafe Include.ovpn" <<'EOF'
 client
@@ -687,7 +757,108 @@ jq -e --arg profile_id "$profile_id" '
     )
 ' <<<"$api_profiles_response" >/dev/null ||
     fail "local API profiles.list response is invalid"
-ok "local API query envelopes expose only sanitized status and profiles"
+
+api_probe_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-probe-0001",
+        operation: "tests.probe",
+        deadline_ms: 5000,
+        payload: {
+            protocol: "openvpn",
+            timeout_seconds: 1,
+            concurrency: 2
+        }
+    }'
+)"
+api_probe_response="$(printf '%s\n' "$api_probe_request" | "$CLI" _api-dispatch)"
+jq -e --arg profile_id "$profile_id" '
+    .api_version == "1.0"
+    and .request_id == "request-probe-0001"
+    and .status == "ok"
+    and .result.summary.total == 1
+    and .result.summary.reachable == 1
+    and .result.results[0].profile_id == $profile_id
+    and .result.results[0].display_name == "Test Server"
+    and .result.results[0].latency_ms == 12
+    and .result.results[0].active == true
+' <<<"$api_probe_response" >/dev/null ||
+    fail "local API tests.probe response is invalid"
+if grep -Eq '192\.0\.2\.10|file_name|PrivateKey|PublicKey' \
+    <<<"$api_probe_response"; then
+    fail "local API tests.probe leaked engine-only profile data"
+fi
+api_probe_bad_payload="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-probe-invalid-0001",
+        operation: "tests.probe",
+        deadline_ms: 5000,
+        payload: {timeout_seconds: 1, concurrency: 99}
+    }' |
+        "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "invalid-request"
+    and .error.message_key == "api.tests.probe.payload-invalid"
+' <<<"$api_probe_bad_payload" >/dev/null ||
+    fail "local API tests.probe accepted unsafe concurrency"
+api_probe_slow_request="$(
+    jq -c '.request_id = "request-probe-slow-0001"' <<<"$api_probe_request"
+)"
+FAKE_PING_STARTED_FILE="$TMP/probe.started" \
+FAKE_PING_DELAY_SECONDS=2 \
+    "$CLI" _api-dispatch <<<"$api_probe_slow_request" \
+    >"$TMP/probe-slow-response.json" &
+api_probe_slow_pid=$!
+for _ in {1..100}; do
+    [[ -e "$TMP/probe.started" ]] && break
+    sleep 0.02
+done
+[[ -e "$TMP/probe.started" ]] ||
+    fail "slow API probe did not reach the bounded worker"
+api_probe_busy_request="$(
+    jq -c '.request_id = "request-probe-busy-0001"' <<<"$api_probe_request"
+)"
+api_probe_busy_response="$(
+    "$CLI" _api-dispatch <<<"$api_probe_busy_request"
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "busy"
+    and .error.message_key == "api.tests.probe.busy"
+    and .error.retryable == true
+' <<<"$api_probe_busy_response" >/dev/null ||
+    fail "local API allowed concurrent batch probes to multiply network load"
+wait "$api_probe_slow_pid"
+jq -e '.status == "ok"' "$TMP/probe-slow-response.json" >/dev/null ||
+    fail "serialized batch probe did not finish normally"
+api_probe_deadline_request="$(
+    jq -c '
+        .request_id = "request-probe-deadline-0001"
+        | .deadline_ms = 1500
+    ' <<<"$api_probe_request"
+)"
+api_probe_deadline_response="$(
+    FAKE_PING_DELAY_SECONDS=10 \
+    FAKE_PING_PID_FILE="$TMP/probe-ping.pid" \
+        "$CLI" _api-dispatch <<<"$api_probe_deadline_request"
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "deadline-exceeded"
+    and .error.message_key == "api.tests.probe.deadline"
+' <<<"$api_probe_deadline_response" >/dev/null ||
+    fail "local API batch probe ignored the whole-request deadline"
+[[ -s "$TMP/probe-ping.pid" ]] ||
+    fail "deadline probe did not start its fake ping worker"
+probe_ping_pid="$(<"$TMP/probe-ping.pid")"
+sleep 0.2
+if kill -0 "$probe_ping_pid" 2>/dev/null; then
+    fail "timed-out API probe left a ping worker running"
+fi
+ok "local API query envelopes expose sanitized status, profiles and probes"
 
 api_oversized_request="$(printf 'я%.0s' {1..40})"
 api_oversized_response="$(
@@ -1280,6 +1451,21 @@ if grep -Eq 'file_name|192\.0\.2\.10|PrivateKey|PublicKey' \
     <<<"$api_client_profiles"; then
     fail "CLI local API profile response leaked engine-only profile data"
 fi
+api_client_probe="$(
+    VPNCTL_API_CLIENT_FORCE=1 "$CLI" probe openvpn --timeout 1 --jobs 2 --json
+)"
+jq -e '
+    .schema_version == 1
+    and .summary.total == 1
+    and .summary.reachable == 1
+    and .results[0].display_name == "Test Server"
+    and .results[0].latency_ms == 12
+' <<<"$api_client_probe" >/dev/null ||
+    fail "CLI did not route the structured endpoint probe through the local API"
+if grep -Eq '192\.0\.2\.10|file_name|PrivateKey|PublicKey' \
+    <<<"$api_client_probe"; then
+    fail "CLI local API probe response leaked engine-only profile data"
+fi
 
 api_client_legacy_status="$(
     VPNCTL_API_CLIENT_FORCE=1 "$CLI" status --json
@@ -1791,6 +1977,7 @@ for destination in (
     "/usr/bin/vpnctl",
     "/usr/lib/mazzy-vpn/api",
     "/usr/lib/mazzy-vpn/desktop/src-tauri/tauri.conf.json",
+    "/usr/lib/mazzy-vpn/desktop/ui/app.css",
     "/usr/lib/mazzy-vpn/desktop/ui/app.js",
     "/usr/lib/mazzy-vpn/packaging",
     "/usr/lib/mazzy-vpn/wiki",
@@ -1837,6 +2024,12 @@ for package_dropin in \
             fail "package local API documentation path is not package-managed"
     fi
 done
+grep -q 'chmodSync(path, 0o755)' \
+    "$ROOT/desktop/scripts/build-release.mjs" ||
+    fail "release builder does not normalize package executable modes"
+grep -q 'chmodSync(path, mode)' \
+    "$ROOT/desktop/scripts/build-release.mjs" ||
+    fail "release builder does not restore checkout modes after packaging"
 ok "dependency bootstrap and package-owned lifecycle are declared safely"
 
 if "$ROOT/install.sh" --destdir "$TMP/invalid-language-stage" --no-deps \
@@ -1880,6 +2073,11 @@ COMP_CWORD=2
 _mazzy_vpn
 printf '%s\n' "${COMPREPLY[@]}" | grep -qx -- '--json' ||
     fail "Mazzy VPN completion does not include api-info --json"
+COMP_WORDS=(mazzy-vpn probe all --j)
+COMP_CWORD=3
+_mazzy_vpn
+printf '%s\n' "${COMPREPLY[@]}" | grep -qx -- '--jobs' ||
+    fail "Mazzy VPN completion does not include probe --jobs"
 COMP_WORDS=(mazzy-vpn language j)
 COMP_CWORD=2
 _mazzy_vpn
@@ -1932,6 +2130,19 @@ grep -q 'report?.package_managed' "$ROOT/desktop/ui/app.js" ||
 grep -q 'ensure_runtime_reader_access' "$ROOT/mazzy-vpn" ||
     fail "package repair cannot enroll the invoking user into the local API group"
 ok "Desktop package state and unavailable notifications are represented honestly"
+
+grep -q 'id="location-health-button"' "$ROOT/desktop/ui/index.html" ||
+    fail "Desktop profile list has no batch location check"
+grep -q 'invoke("probe_profiles"' "$ROOT/desktop/ui/app.js" ||
+    fail "Desktop batch location check does not use the typed backend"
+grep -q 'state.profileHealth.set(entry.profile_id, entry)' \
+    "$ROOT/desktop/ui/app.js" ||
+    fail "Desktop does not attach probe results to individual profile rows"
+grep -q 'backend::probe_profiles' "$ROOT/desktop/src-tauri/src/main.rs" ||
+    fail "Desktop does not expose the typed probe command"
+[[ "$(grep -c 'desktop/ui/app.css' "$ROOT/desktop/src-tauri/tauri.conf.json")" -eq 3 ]] ||
+    fail "Desktop CSS corresponding source is incomplete in package payloads"
+ok "Desktop shows sanitized per-location reachability, active state and latency"
 
 python3 "$ROOT/tests/check-capabilities.py" >/dev/null ||
     fail "cross-surface capability registry is inconsistent"

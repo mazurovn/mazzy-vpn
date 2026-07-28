@@ -113,7 +113,8 @@ mazzy-vpn status --api-json        # raw local API v1 envelope
 mazzy-vpn profiles --api-json      # opaque IDs; no engine filenames
 mazzy-vpn diagnose
 mazzy-vpn validate all
-mazzy-vpn probe all --timeout 3
+mazzy-vpn probe all --timeout 3 --jobs 4
+mazzy-vpn probe all --timeout 3 --jobs 4 --json
 mazzy-vpn self-test
 mazzy-vpn self-test --offline
 sudo mazzy-vpn test amneziawg 1 --timeout 45
@@ -206,8 +207,11 @@ batch run instead of producing a long chain of misleading timeouts.
 
 - `validate all` checks format, required fields, endpoint values, permissions
   and unsafe directives for every installed profile.
-- `probe all` checks endpoint DNS and ICMP; TCP OpenVPN ports are checked when
-  `nc` is installed.
+- `probe all` checks the full location list with bounded parallel DNS,
+  ICMP-latency and TCP-service probes. It reports `reachable`, `unknown`,
+  `unreachable` or `invalid`, current active state and sanitized JSON. A UDP
+  endpoint with blocked ICMP is `unknown`, not a false failure; only a
+  transactional live test proves VPN authentication and routing.
 - `diagnose` checks the default route, DNS, service, tunnel interface,
   WireGuard/AmneziaWG handshake and public Internet access through the tunnel.
 - `doctor` checks dependencies, AmneziaWG backend, L2TP/IPsec stack, fallback

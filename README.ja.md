@@ -70,7 +70,7 @@ sudo mazzy-vpn connect amneziawg 1
 sudo mazzy-vpn disconnect
 mazzy-vpn diagnose
 mazzy-vpn validate all
-mazzy-vpn probe all --timeout 3
+mazzy-vpn probe all --timeout 3 --jobs 4
 sudo mazzy-vpn test openvpn 1 --timeout 60
 sudo mazzy-vpn test-all all --timeout 30
 sudo mazzy-vpn emergency --timeout 20
@@ -102,8 +102,9 @@ hook、ネストした OpenVPN 設定、不完全なプロファイルは拒否�
 
 ## テスト、診断、ロールバック
 
-`validate all` は接続せず全設定を検証します。`probe all` は DNS、Ping、
-利用可能な TCP endpoint を確認します。`diagnose` はルート、DNS、サービス、
+`validate all` は接続せず全設定を検証します。`probe all` はロケーション一覧を
+制限付き並列で確認し、到達性、遅延、現在のアクティブトンネルを表示します。
+UDP で ICMP が遮断された場合は障害ではなく不明と表示します。`diagnose` はルート、DNS、サービス、
 インターフェース、ハンドシェイク、VPN 経由のインターネットを確認します。
 
 `test` と `test-all` は元の接続を保存して実際のトンネルを検証し、成功、失敗、

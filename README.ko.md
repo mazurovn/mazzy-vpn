@@ -70,7 +70,7 @@ sudo mazzy-vpn connect amneziawg 1
 sudo mazzy-vpn disconnect
 mazzy-vpn diagnose
 mazzy-vpn validate all
-mazzy-vpn probe all --timeout 3
+mazzy-vpn probe all --timeout 3 --jobs 4
 sudo mazzy-vpn test openvpn 1 --timeout 60
 sudo mazzy-vpn test-all all --timeout 30
 sudo mazzy-vpn emergency --timeout 20
@@ -102,8 +102,9 @@ hook, 중첩 OpenVPN 설정, 필수 항목이 없는 프로필은 거부합니�
 
 ## 테스트, 진단 및 롤백
 
-`validate all`은 연결 없이 모든 설정을 검사합니다. `probe all`은 DNS, Ping,
-사용 가능한 TCP endpoint를 검사합니다. `diagnose`는 경로, DNS, 서비스,
+`validate all`은 연결 없이 모든 설정을 검사합니다. `probe all`은 전체 위치 목록을
+제한된 병렬 처리로 검사하고 도달 가능성, 지연 시간, 현재 활성 터널을 표시합니다.
+UDP에서 ICMP가 차단되면 장애가 아니라 알 수 없음으로 표시합니다. `diagnose`는 경로, DNS, 서비스,
 인터페이스, 핸드셰이크 및 VPN을 통한 인터넷 연결을 확인합니다.
 
 `test`와 `test-all`은 이전 연결을 저장하고 실제 터널을 검사한 뒤 성공, 실패,

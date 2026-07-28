@@ -35,7 +35,8 @@ service/Wintun backends, подпись кода и platform-specific тесты
 
 1. **Обзор** — туннель, интернет, IP, handshake, health, recovery и tray.
 2. **Профили** — безопасный импорт файлов/папок, поиск, протоколы, выбор
-   локации/default-профиля, удаление и точечный live-test.
+   локации/default-профиля, удаление, массовая проверка endpoint с отдельными
+   reachability/latency/active и точечный live-test.
 3. **Диагностика** — validate, DNS/ping probe, транзакционные тесты, `test-all`,
    emergency recovery, полный результат Doctor/self-test и ограниченный журнал
    systemd.
@@ -75,11 +76,17 @@ service/Wintun backends, подпись кода и platform-specific тесты
 | Refresh Status | `mazzy-vpn _refresh-dashboard-cache` |
 | Connect profile | `mazzy-vpn connect PROTOCOL PROFILE` |
 | Import files/folder | `mazzy-vpn import-files` / `import-dir` |
-| Validate / probe | `mazzy-vpn validate` / `probe` |
+| Validate / массовый probe локаций | `mazzy-vpn validate` / `probe all --jobs 4 --json` |
 | Transactional tests | `mazzy-vpn test` / `test-all` / `emergency` |
 | Install / repair | пакетный engine: `mazzy-vpn doctor --fix`; AppImage/manual: bundled `install.sh` |
 | Service settings | `mazzy-vpn autostart` / `monitor` |
 | Logs | `mazzy-vpn logs --lines N` |
+
+Probe локаций намеренно отделён от живого VPN-теста. `reachable` подтверждает
+DNS и доступность ICMP или TCP endpoint; `unknown` сохраняет частый случай,
+когда UDP VPN-сервер блокирует ICMP. Это не заявление о работе credentials,
+handshake или маршрутизации туннеля — для такого доказательства нужен
+подтверждённый live-test.
 
 GUI не строит shell-строку. Rust backend принимает enum и сопоставляет его
 фиксированному request или массиву аргументов. Connect, reconnect и disconnect

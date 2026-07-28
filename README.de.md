@@ -73,7 +73,7 @@ sudo mazzy-vpn connect amneziawg 1
 sudo mazzy-vpn disconnect
 mazzy-vpn diagnose
 mazzy-vpn validate all
-mazzy-vpn probe all --timeout 3
+mazzy-vpn probe all --timeout 3 --jobs 4
 sudo mazzy-vpn test openvpn 1 --timeout 60
 sudo mazzy-vpn test-all all --timeout 30
 sudo mazzy-vpn emergency --timeout 20
@@ -107,8 +107,10 @@ und unvollständige Profile werden abgelehnt.
 
 ## Tests, Diagnose und Rollback
 
-`validate all` prüft alle Dateien ohne Verbindung. `probe all` prüft DNS, Ping
-und verfügbare TCP-Endpunkte. `diagnose` prüft Route, DNS, Dienst,
+`validate all` prüft alle Dateien ohne Verbindung. `probe all` prüft die ganze
+Standortliste begrenzt parallel und meldet Erreichbarkeit, Latenz und den
+aktiven Tunnel. Blockiertes ICMP bei UDP wird als unbekannt statt als Ausfall
+gemeldet. `diagnose` prüft Route, DNS, Dienst,
 Schnittstelle, Handshake und Internetzugriff über den VPN-Tunnel.
 
 `test` und `test-all` speichern den vorherigen Zustand, testen einen echten

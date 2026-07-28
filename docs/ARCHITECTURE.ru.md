@@ -327,7 +327,7 @@ sequenceDiagram
 | Dashboard и сохранённый default | `mazzy-vpn dashboard` |
 | Машиночитаемый очищенный статус | `mazzy-vpn status --json` |
 | Формат и права всех профилей | `mazzy-vpn validate all` |
-| DNS и ping endpoint | `mazzy-vpn probe all --timeout 3` |
+| Массовые reachability и latency endpoint | `mazzy-vpn probe all --timeout 3 --jobs 4 [--json]` |
 | Установка и systemd | `mazzy-vpn doctor` |
 | Безопасное автоматическое исправление | `sudo mazzy-vpn doctor --fix` |
 | Полная offline-проверка | `mazzy-vpn self-test --offline` |

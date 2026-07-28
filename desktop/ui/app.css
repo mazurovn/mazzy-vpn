@@ -528,12 +528,30 @@ input:focus, select:focus { border-color: rgba(104,233,255,.45); box-shadow: 0 0
   background: rgba(7,9,21,.2);
 }
 .profile-item.selected { border-color: rgba(88,235,180,.25); background: rgba(88,235,180,.045); }
+.profile-item.health-unreachable, .profile-item.health-invalid {
+  border-color: rgba(255,113,141,.25);
+}
+.profile-item.active-profile {
+  box-shadow: inset 3px 0 0 rgba(88,235,180,.7);
+}
 .profile-marker { width: 8px; height: 8px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 10px rgba(104,146,255,.55); }
 .profile-item.selected .profile-marker { background: var(--green); box-shadow: 0 0 10px var(--green); }
+.profile-item.health-unknown .profile-marker { background: var(--yellow); box-shadow: 0 0 10px rgba(255,201,101,.42); }
+.profile-item.health-unreachable .profile-marker,
+.profile-item.health-invalid .profile-marker { background: var(--red); box-shadow: 0 0 10px rgba(255,113,141,.5); }
 .profile-copy { min-width: 0; }
 .profile-copy strong, .profile-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile-copy strong { font-size: 11px; }
 .profile-copy small { margin-top: 4px; color: var(--muted); font-size: 9px; }
+.profile-copy .profile-health.reachable { color: var(--green); }
+.profile-copy .profile-health.unknown { color: var(--yellow); }
+.profile-copy .profile-health.unreachable,
+.profile-copy .profile-health.invalid { color: var(--red); }
+.location-health-meta {
+  color: var(--muted);
+  font-size: 9px;
+  white-space: nowrap;
+}
 .profile-actions { display: flex; gap: 5px; }
 .profile-actions button {
   padding: 6px 8px;

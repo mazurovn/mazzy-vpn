@@ -68,7 +68,7 @@ sudo mazzy-vpn connect amneziawg 1
 sudo mazzy-vpn disconnect
 mazzy-vpn diagnose
 mazzy-vpn validate all
-mazzy-vpn probe all --timeout 3
+mazzy-vpn probe all --timeout 3 --jobs 4
 sudo mazzy-vpn test openvpn 1 --timeout 60
 sudo mazzy-vpn test-all all --timeout 30
 sudo mazzy-vpn emergency --timeout 20
@@ -98,8 +98,9 @@ hook、嵌套 OpenVPN 配置或缺少必要字段的文件会被拒绝。
 
 ## 测试、诊断与回滚
 
-`validate all` 在不连接的情况下验证全部配置；`probe all` 检查 DNS、Ping
-和可用的 TCP 端点；`diagnose` 检查路由、DNS、服务、接口、握手以及通过 VPN
+`validate all` 在不连接的情况下验证全部配置；`probe all` 以有限并发检查完整位置
+列表并报告可达性、延迟和当前活动隧道。UDP 的 ICMP 被阻止时会标记为未知，而不是
+错误地标记为故障；`diagnose` 检查路由、DNS、服务、接口、握手以及通过 VPN
 访问互联网的能力。
 
 `test` 和 `test-all` 会保存原连接，实测新隧道，并在成功、失败、超时或收到

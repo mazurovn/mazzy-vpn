@@ -13,8 +13,9 @@ the shared Mazzy VPN engine.
 - **Current status:** 0.2 Linux preview. It bundles the compatible engine
   installer, checks versions and dependencies, and no longer requires the user
   to install the CLI first.
-- Linux: dashboard, profile/file/folder import, location selection,
-  connect/disconnect, active-connection diagnostics, validate/probe/live-test
+- Linux: dashboard, profile/file/folder import, location selection and
+  whole-list reachability/latency/active checks, connect/disconnect,
+  active-connection diagnostics, validate/probe/live-test
   with rollback, full Doctor output, bounded logs, service settings, dependency
   repair and tray.
 - macOS and Windows: UI preview builds only. They do **not** provide a working
@@ -56,8 +57,9 @@ Mazzy VPN Desktop — Linux Control Center и системный tray на Tauri
 
 - **Текущий статус:** Linux preview 0.2. В пакет включён совместимый installer
   движка; предварительно устанавливать CLI пользователю больше не нужно.
-- Linux: Dashboard, импорт файлов/папок, выбор локации, подключение,
-  диагностика активного соединения, validate/probe/live-test с rollback, полный
+- Linux: Dashboard, импорт файлов/папок, выбор локации, массовая проверка
+  reachability/latency/active, подключение, диагностика активного соединения,
+  validate/probe/live-test с rollback, полный
   вывод Doctor, журнал, службы, проверка зависимостей и автоматическое
   исправление, а также экран «О программе» с версиями, автором, лицензией,
   приватностью и правилами.

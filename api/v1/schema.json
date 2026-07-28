@@ -124,6 +124,11 @@
         "protocol": {
           "$ref": "#/$defs/Protocol"
         },
+        "concurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
         "timeout_seconds": {
           "type": "integer",
           "minimum": 1,
@@ -498,6 +503,165 @@
         }
       }
     },
+    "ProbeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "display_name",
+        "protocol",
+        "selected",
+        "active",
+        "transport",
+        "reachability",
+        "latency_ms",
+        "latency_source",
+        "message_key"
+      ],
+      "properties": {
+        "profile_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "protocol": {
+          "$ref": "#/$defs/Protocol"
+        },
+        "selected": {
+          "type": "boolean"
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "transport": {
+          "enum": [
+            "tcp",
+            "udp"
+          ]
+        },
+        "reachability": {
+          "enum": [
+            "reachable",
+            "unknown",
+            "unreachable",
+            "invalid"
+          ]
+        },
+        "latency_ms": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "latency_source": {
+          "enum": [
+            "icmp",
+            "tcp",
+            "none"
+          ]
+        },
+        "message_key": {
+          "$ref": "#/$defs/Identifier"
+        }
+      }
+    },
+    "ProbeSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total",
+        "reachable",
+        "unknown",
+        "unreachable",
+        "invalid",
+        "active"
+      ],
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reachable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unknown": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unreachable": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "invalid": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "active": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "ProbeCollection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "checked_at",
+        "scope",
+        "timeout_seconds",
+        "concurrency",
+        "duration_ms",
+        "summary",
+        "results"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "checked_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "scope": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Protocol"
+            },
+            {
+              "const": "all"
+            }
+          ]
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30
+        },
+        "concurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "summary": {
+          "$ref": "#/$defs/ProbeSummary"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProbeResult"
+          }
+        }
+      }
+    },
     "ServiceState": {
       "type": "object",
       "additionalProperties": false,
@@ -747,6 +911,9 @@
         },
         {
           "$ref": "#/$defs/TestResult"
+        },
+        {
+          "$ref": "#/$defs/ProbeCollection"
         },
         {
           "$ref": "#/$defs/ServiceCollection"

@@ -78,7 +78,8 @@ mazzy-vpn status --api-json        # сырой envelope local API v1
 mazzy-vpn profiles --api-json      # opaque ID без имён файлов движка
 mazzy-vpn diagnose
 mazzy-vpn validate all
-mazzy-vpn probe all --timeout 3
+mazzy-vpn probe all --timeout 3 --jobs 4
+mazzy-vpn probe all --timeout 3 --jobs 4 --json
 sudo mazzy-vpn test openvpn 2 --timeout 60
 sudo mazzy-vpn test-all openvpn --timeout 30
 sudo mazzy-vpn emergency --timeout 20
@@ -299,10 +300,13 @@ WireGuard/AmneziaWG handshake и доступ в интернет именно �
 исполняемые или вложенные директивы, проверяет обязательные поля, endpoint,
 права файлов и передаёт OpenVPN-профили встроенному parser.
 
-`mazzy-vpn probe all` проверяет DNS и ICMP ping каждого endpoint. Для TCP OpenVPN
-также проверяется порт, если установлен `nc`. Отсутствие ответа ICMP выводится
-как предупреждение: сервер может блокировать ping, поэтому окончательное
-доказательство работоспособности даёт только `mazzy-vpn test`/`test-all`.
+`mazzy-vpn probe all` ограниченно-параллельно проверяет весь список локаций:
+DNS, ICMP latency и TCP service. Для каждого профиля выводятся
+`reachable`/`unknown`/`unreachable`/`invalid`, ping и текущий флаг `active`;
+`--json` возвращает те же очищенные данные без endpoint. UDP с работающим DNS,
+но заблокированным ICMP получает `unknown`, а не ложный отказ. Окончательное
+доказательство VPN-авторизации и маршрутизации даёт только
+`mazzy-vpn test`/`test-all`.
 
 `mazzy-vpn doctor` проверяет пакеты, модуль AmneziaWG, systemd units, доступность
 legacy/AdGuard fallback, форматы и права всех профилей. `doctor --fix`:

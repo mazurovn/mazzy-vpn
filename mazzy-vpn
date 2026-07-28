@@ -774,7 +774,7 @@ Usage:
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
   mazzy-vpn list [PROTOCOL] | profiles [--json|--api-json]
   mazzy-vpn validate [PROTOCOL|all]
-  mazzy-vpn probe [PROTOCOL|all] [--timeout SEC]
+  mazzy-vpn probe [PROTOCOL|all] [--timeout SEC] [--jobs N] [--json]
   mazzy-vpn test [PROTOCOL] [PROFILE] [--timeout SEC] [--keep]
   mazzy-vpn test-all [PROTOCOL|all] [--timeout SEC]
   mazzy-vpn emergency [--timeout SEC] [--protocol PROTOCOL]
@@ -807,7 +807,7 @@ Verwendung:
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
   mazzy-vpn list [PROTOKOLL] | profiles [--json|--api-json]
   mazzy-vpn validate [PROTOKOLL|all]
-  mazzy-vpn probe [PROTOKOLL|all] [--timeout SEK]
+  mazzy-vpn probe [PROTOKOLL|all] [--timeout SEK] [--jobs N] [--json]
   mazzy-vpn test [PROTOKOLL] [PROFIL] [--timeout SEK] [--keep]
   mazzy-vpn test-all [PROTOKOLL|all] [--timeout SEK]
   mazzy-vpn emergency [--timeout SEK] [--protocol PROTOKOLL]
@@ -840,7 +840,7 @@ Mazzy VPN — 安全便捷的 Linux VPN 管理工具
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
   mazzy-vpn list [协议] | profiles [--json|--api-json]
   mazzy-vpn validate [协议|all]
-  mazzy-vpn probe [协议|all] [--timeout 秒]
+  mazzy-vpn probe [协议|all] [--timeout 秒] [--jobs N] [--json]
   mazzy-vpn test [协议] [配置] [--timeout 秒] [--keep]
   mazzy-vpn test-all [协议|all] [--timeout 秒]
   mazzy-vpn emergency [--timeout 秒] [--protocol 协议]
@@ -873,7 +873,7 @@ Mazzy VPN — Linux 向けの安全で使いやすい VPN 管理ツール
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
   mazzy-vpn list [プロトコル] | profiles [--json|--api-json]
   mazzy-vpn validate [プロトコル|all]
-  mazzy-vpn probe [プロトコル|all] [--timeout 秒]
+  mazzy-vpn probe [プロトコル|all] [--timeout 秒] [--jobs N] [--json]
   mazzy-vpn test [プロトコル] [プロファイル] [--timeout 秒] [--keep]
   mazzy-vpn test-all [プロトコル|all] [--timeout 秒]
   mazzy-vpn emergency [--timeout 秒] [--protocol プロトコル]
@@ -906,7 +906,7 @@ Mazzy VPN — Linux용 안전하고 편리한 VPN 관리 도구
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
   mazzy-vpn list [프로토콜] | profiles [--json|--api-json]
   mazzy-vpn validate [프로토콜|all]
-  mazzy-vpn probe [프로토콜|all] [--timeout 초]
+  mazzy-vpn probe [프로토콜|all] [--timeout 초] [--jobs N] [--json]
   mazzy-vpn test [프로토콜] [프로필] [--timeout 초] [--keep]
   mazzy-vpn test-all [프로토콜|all] [--timeout 초]
   mazzy-vpn emergency [--timeout 초] [--protocol 프로토콜]
@@ -945,7 +945,7 @@ Mazzy VPN - быстрое и безопасное управление VPN в L
                                     краткое состояние или JSON
   mazzy-vpn diagnose                диагностика активного соединения
   mazzy-vpn validate [ПРОТОКОЛ|all] проверить формат всех профилей
-  mazzy-vpn probe [ПРОТОКОЛ|all] [--timeout СЕК]
+  mazzy-vpn probe [ПРОТОКОЛ|all] [--timeout СЕК] [--jobs N] [--json]
                                     DNS и ping всех VPN-серверов
   mazzy-vpn test [ПРОТОКОЛ] [ПРОФИЛЬ] [--timeout СЕК] [--keep]
   mazzy-vpn test-all [ПРОТОКОЛ|all] [--timeout СЕК]
@@ -1364,23 +1364,33 @@ api_client_send() {
     return 70
 }
 
-api_client_query() {
-    local operation="$1" request_id request deadline_ms=5000
+api_client_query_payload() {
+    local operation="$1" payload="$2" deadline_ms="${3:-5000}"
+    local request_id request
+    [[ "$deadline_ms" =~ ^[0-9]+$ ]] &&
+        ((deadline_ms >= 100 && deadline_ms <= 900000)) ||
+        return 1
+    jq -e 'type == "object"' <<<"$payload" >/dev/null 2>&1 || return 1
     request_id="$(api_client_identifier request)"
     request="$(
         jq -cn \
             --arg request_id "$request_id" \
             --arg operation "$operation" \
             --argjson deadline_ms "$deadline_ms" \
+            --argjson payload "$payload" \
             '{
                 api_version: "1.0",
                 request_id: $request_id,
                 operation: $operation,
                 deadline_ms: $deadline_ms,
-                payload: {}
+                payload: $payload
             }'
     )"
     api_client_send "$request"
+}
+
+api_client_query() {
+    api_client_query_payload "$1" '{}' 5000
 }
 
 api_client_fetch_profiles() {
@@ -1942,40 +1952,349 @@ profile_transport() {
     esac
 }
 
-ping_host() {
-    local host="$1" timeout="$2"
-    command -v ping >/dev/null 2>&1 || return 2
-    if [[ "$host" == *:* ]]; then
-        ping -6 -n -c 1 -W "$timeout" -- "$host" >/dev/null 2>&1
-    else
-        ping -4 -n -c 1 -W "$timeout" -- "$host" >/dev/null 2>&1
+probe_clock_ms() {
+    local uptime seconds fraction
+    if IFS=' ' read -r uptime _ </proc/uptime 2>/dev/null &&
+       [[ "$uptime" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
+        seconds="${BASH_REMATCH[1]}"
+        fraction="${BASH_REMATCH[2]}000"
+        fraction="${fraction:0:3}"
+        printf '%s\n' "$((10#$seconds * 1000 + 10#$fraction))"
+        return
     fi
+    date +%s%3N
 }
 
-probe_profile() {
-    local protocol="$1" file="$2" timeout="$3"
-    local endpoint host port transport ping_rc=0
+probe_ping_latency_ms() {
+    LC_ALL=C awk '
+        match($0, /time[=<][0-9.]+[[:space:]]*ms/) {
+            value = substr($0, RSTART, RLENGTH)
+            if (value ~ /^time</) {
+                print 0
+                exit
+            }
+            sub(/^time=/, "", value)
+            sub(/[[:space:]]*ms$/, "", value)
+            printf "%.0f\n", value
+            exit
+        }
+    '
+}
+
+ping_host() {
+    local host="$1" timeout="$2" output=""
+    PROBE_PING_LATENCY_MS=""
+    command -v ping >/dev/null 2>&1 || return 2
+    if [[ "$host" == *:* ]]; then
+        output="$(
+            LC_ALL=C timeout --foreground --kill-after=1s "$((timeout + 1))s" \
+                ping -6 -n -c 1 -W "$timeout" -- "$host" 2>/dev/null
+        )" || return 1
+    else
+        output="$(
+            LC_ALL=C timeout --foreground --kill-after=1s "$((timeout + 1))s" \
+                ping -4 -n -c 1 -W "$timeout" -- "$host" 2>/dev/null
+        )" || return 1
+    fi
+    PROBE_PING_LATENCY_MS="$(probe_ping_latency_ms <<<"$output")"
+}
+
+probe_tcp_port() {
+    local host="$1" port="$2" timeout="$3" started finished
+    PROBE_TCP_LATENCY_MS=""
+    command -v nc >/dev/null 2>&1 || return 2
+    started="$(probe_clock_ms)" || return 1
+    timeout --foreground --kill-after=1s "$((timeout + 1))s" \
+        nc -z -w "$timeout" "$host" "$port" >/dev/null 2>&1 ||
+        return 1
+    finished="$(probe_clock_ms)" || return 1
+    PROBE_TCP_LATENCY_MS="$((finished - started))"
+    ((PROBE_TCP_LATENCY_MS >= 0)) || PROBE_TCP_LATENCY_MS=0
+}
+
+probe_result_record() {
+    local protocol="$1" file="$2" transport="$3" selected="$4" active="$5"
+    local reachability="$6" latency_ms="$7" latency_source="$8" message_key="$9"
+    local opaque_id display_name
+    opaque_id="$(profile_opaque_id "$protocol" "$file")"
+    display_name="$(profile_name "$file")"
+    if [[ ! "$latency_ms" =~ ^[0-9]+$ ]]; then
+        latency_ms=null
+        latency_source=none
+    fi
+    jq -cn \
+        --arg profile_id "$opaque_id" \
+        --arg display_name "$display_name" \
+        --arg protocol "$protocol" \
+        --arg transport "$transport" \
+        --arg reachability "$reachability" \
+        --argjson latency_ms "$latency_ms" \
+        --arg latency_source "$latency_source" \
+        --arg message_key "$message_key" \
+        --argjson selected "$selected" \
+        --argjson active "$active" \
+        '{
+            profile_id: $profile_id,
+            display_name: $display_name,
+            protocol: $protocol,
+            selected: $selected,
+            active: $active,
+            transport: $transport,
+            reachability: $reachability,
+            latency_ms: $latency_ms,
+            latency_source: $latency_source,
+            message_key: $message_key
+        }'
+}
+
+probe_profile_record() {
+    local protocol="$1" file="$2" timeout="$3" selected="$4" active="$5"
+    local endpoint host port transport ping_rc=0 tcp_rc=0 latency=""
     endpoint="$(profile_endpoint "$protocol" "$file")"
     host="$(endpoint_host "$endpoint")"
     port="$(endpoint_port "$endpoint")"
     transport="$(profile_transport "$protocol" "$file")"
 
-    validate_endpoint "$protocol" "$file" || return 3
-    if ! getent ahosts "$host" >/dev/null 2>&1; then
-        return 4
+    if ! validate_endpoint "$protocol" "$file"; then
+        probe_result_record "$protocol" "$file" "$transport" "$selected" "$active" \
+            invalid "" none probe.invalid.endpoint
+        return
     fi
+    if ! timeout --foreground --kill-after=1s "$((timeout + 1))s" \
+        getent ahosts "$host" >/dev/null 2>&1; then
+        probe_result_record "$protocol" "$file" "$transport" "$selected" "$active" \
+            unreachable "" none probe.unreachable.dns
+        return
+    fi
+
     ping_host "$host" "$timeout" || ping_rc=$?
-    if [[ "$transport" == "tcp" && -n "$port" && -x "$(command -v nc 2>/dev/null)" ]]; then
-        nc -z -w "$timeout" "$host" "$port" >/dev/null 2>&1 || return 5
+    if [[ "$transport" == tcp ]]; then
+        probe_tcp_port "$host" "$port" "$timeout" || tcp_rc=$?
+        case "$tcp_rc" in
+            0)
+                if [[ "$ping_rc" -eq 0 &&
+                      "$PROBE_PING_LATENCY_MS" =~ ^[0-9]+$ ]]; then
+                    latency="$PROBE_PING_LATENCY_MS"
+                    probe_result_record "$protocol" "$file" "$transport" \
+                        "$selected" "$active" reachable "$latency" icmp \
+                        probe.reachable.tcp-icmp
+                else
+                    latency="$PROBE_TCP_LATENCY_MS"
+                    probe_result_record "$protocol" "$file" "$transport" \
+                        "$selected" "$active" reachable "$latency" tcp \
+                        probe.reachable.tcp
+                fi
+                ;;
+            1)
+                probe_result_record "$protocol" "$file" "$transport" \
+                    "$selected" "$active" unreachable "" none \
+                    probe.unreachable.tcp
+                ;;
+            2)
+                if [[ "$ping_rc" -eq 0 ]]; then
+                    probe_result_record "$protocol" "$file" "$transport" \
+                        "$selected" "$active" reachable \
+                        "$PROBE_PING_LATENCY_MS" icmp \
+                        probe.reachable.icmp-only
+                else
+                    probe_result_record "$protocol" "$file" "$transport" \
+                        "$selected" "$active" unknown "" none \
+                        probe.unknown.tcp-unchecked
+                fi
+                ;;
+        esac
+        return
     fi
-    return "$ping_rc"
+
+    case "$ping_rc" in
+        0)
+            probe_result_record "$protocol" "$file" "$transport" \
+                "$selected" "$active" reachable "$PROBE_PING_LATENCY_MS" icmp \
+                probe.reachable.icmp
+            ;;
+        1)
+            probe_result_record "$protocol" "$file" "$transport" \
+                "$selected" "$active" unknown "" none \
+                probe.unknown.icmp-no-response
+            ;;
+        2)
+            probe_result_record "$protocol" "$file" "$transport" \
+                "$selected" "$active" unknown "" none \
+                probe.unknown.ping-unavailable
+            ;;
+    esac
+}
+
+probe_locations_json() (
+    local requested="$1" timeout="$2" concurrency="$3"
+    local requested_profile_id="${4:-}" protocol file opaque_id
+    local selected_protocol="" selected_file="" selected=false active=false
+    local index=0 started finished tmp result_file pid wait_rc=0
+    local -a protocols=() pids=()
+
+    mapfile -t protocols < <(requested_protocols "$requested") || return 2
+    tmp="$(mktemp -d "${TMPDIR:-/tmp}/mazzy-vpn-probe.XXXXXX")" || return 1
+    umask 077
+    trap '
+        for pid in "${pids[@]:-}"; do
+            kill "$pid" 2>/dev/null || true
+        done
+        wait 2>/dev/null || true
+        rm -rf -- "$tmp"
+    ' EXIT
+    trap 'exit 130' HUP INT TERM
+
+    if selected_from_state; then
+        selected_protocol="$SELECTED_PROTOCOL"
+        selected_file="$SELECTED_PROFILE"
+        if service_active && connection_local_ok "$selected_protocol"; then
+            active=true
+        fi
+    fi
+    started="$(probe_clock_ms)" || started=0
+
+    for protocol in "${protocols[@]}"; do
+        load_profiles "$protocol"
+        for file in "${PROFILES[@]}"; do
+            opaque_id="$(profile_opaque_id "$protocol" "$file")"
+            if [[ -n "$requested_profile_id" &&
+                  "$opaque_id" != "$requested_profile_id" ]]; then
+                continue
+            fi
+            selected=false
+            if [[ "$protocol" == "$selected_protocol" &&
+                  "$file" == "$selected_file" ]]; then
+                selected=true
+            fi
+            index=$((index + 1))
+            printf -v result_file '%s/%06d.json' "$tmp" "$index"
+            probe_profile_record "$protocol" "$file" "$timeout" \
+                "$selected" "$([[ "$selected" == true && "$active" == true ]] &&
+                    printf true || printf false)" >"$result_file" &
+            pids+=("$!")
+            if ((${#pids[@]} >= concurrency)); then
+                wait "${pids[0]}" || wait_rc=1
+                pids=("${pids[@]:1}")
+            fi
+        done
+    done
+    for pid in "${pids[@]}"; do
+        wait "$pid" || wait_rc=1
+    done
+    pids=()
+    ((wait_rc == 0)) || return 1
+
+    finished="$(probe_clock_ms)" || finished="$started"
+    ((finished >= started)) || finished="$started"
+    if ((index == 0)); then
+        jq -cn \
+            --arg checked_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg scope "$requested" \
+            --argjson timeout_seconds "$timeout" \
+            --argjson concurrency "$concurrency" \
+            --argjson duration_ms "$((finished - started))" \
+            '{
+                schema_version: 1,
+                checked_at: $checked_at,
+                scope: $scope,
+                timeout_seconds: $timeout_seconds,
+                concurrency: $concurrency,
+                duration_ms: $duration_ms,
+                summary: {
+                    total: 0, reachable: 0, unknown: 0,
+                    unreachable: 0, invalid: 0, active: 0
+                },
+                results: []
+            }'
+        return
+    fi
+
+    jq -cs \
+        --arg checked_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --arg scope "$requested" \
+        --argjson timeout_seconds "$timeout" \
+        --argjson concurrency "$concurrency" \
+        --argjson duration_ms "$((finished - started))" \
+        '{
+            schema_version: 1,
+            checked_at: $checked_at,
+            scope: $scope,
+            timeout_seconds: $timeout_seconds,
+            concurrency: $concurrency,
+            duration_ms: $duration_ms,
+            summary: {
+                total: length,
+                reachable: map(select(.reachability == "reachable")) | length,
+                unknown: map(select(.reachability == "unknown")) | length,
+                unreachable: map(select(.reachability == "unreachable")) | length,
+                invalid: map(select(.reachability == "invalid")) | length,
+                active: map(select(.active == true)) | length
+            },
+            results: .
+        }' "$tmp"/*.json
+)
+
+probe_result_ok() {
+    jq -e '
+        .summary.total > 0
+        and .summary.unreachable == 0
+        and .summary.invalid == 0
+    ' <<<"$1" >/dev/null 2>&1
+}
+
+render_probe_result() {
+    local result="$1" status protocol name active latency source message
+    say "Проверка endpoint: DNS + latency; TCP-порты проверяются дополнительно"
+    while IFS=$'\t' read -r status protocol name active latency source message; do
+        local label="" latency_label="" active_label=""
+        case "$status" in
+            reachable) label='[ OK ]' ;;
+            unknown) label='[WARN]' ;;
+            unreachable|invalid) label='[FAIL]' ;;
+        esac
+        [[ "$latency" == null || -z "$latency" ]] ||
+            latency_label=" · ${latency} ms (${source^^})"
+        [[ "$active" != true ]] || active_label=' · ACTIVE'
+        printf '%s %-11s %-36s %s%s%s\n' \
+            "$label" "$(protocol_title "$protocol")" "$name" \
+            "$message" "$latency_label" "$active_label"
+    done < <(
+        jq -r '
+            .results[] |
+            [
+                .reachability, .protocol, .display_name, .active,
+                (.latency_ms // "null"), .latency_source,
+                (
+                    if .message_key == "probe.reachable.icmp" then "endpoint доступен"
+                    elif .message_key == "probe.reachable.tcp-icmp" then "TCP endpoint доступен"
+                    elif .message_key == "probe.reachable.tcp" then "TCP endpoint доступен; ICMP без ответа"
+                    elif .message_key == "probe.reachable.icmp-only" then "host доступен; TCP probe не установлен"
+                    elif .message_key == "probe.unknown.icmp-no-response" then "DNS OK; ICMP без ответа, UDP не подтверждён"
+                    elif .message_key == "probe.unknown.ping-unavailable" then "DNS OK; ping не установлен"
+                    elif .message_key == "probe.unknown.tcp-unchecked" then "DNS OK; ICMP/TCP не подтверждены"
+                    elif .message_key == "probe.unreachable.dns" then "DNS не разрешается"
+                    elif .message_key == "probe.unreachable.tcp" then "TCP-порт недоступен"
+                    else "неверный endpoint"
+                    end
+                )
+            ] | @tsv
+        ' <<<"$result"
+    )
+    printf '\nИтог: endpoints=%s reachable=%s unknown=%s unreachable=%s invalid=%s active=%s duration_ms=%s\n' \
+        "$(jq -r '.summary.total' <<<"$result")" \
+        "$(jq -r '.summary.reachable' <<<"$result")" \
+        "$(jq -r '.summary.unknown' <<<"$result")" \
+        "$(jq -r '.summary.unreachable' <<<"$result")" \
+        "$(jq -r '.summary.invalid' <<<"$result")" \
+        "$(jq -r '.summary.active' <<<"$result")" \
+        "$(jq -r '.duration_ms' <<<"$result")"
+    say "Доступность endpoint не подтверждает VPN-авторизацию и маршрутизацию; для этого используйте live test."
 }
 
 cmd_probe() {
-    local requested="all" timeout="$DEFAULT_PROBE_TIMEOUT" protocol file rc
-    local total=0 dns_fail=0 tcp_fail=0 ping_ok=0 ping_blocked=0 no_ping=0
-    local -a protocols=()
-    require_profile_access probe "$@"
+    local requested="all" timeout="$DEFAULT_PROBE_TIMEOUT" concurrency=4
+    local json_output=false payload response result
+    local -a original_args=("$@")
     while (($#)); do
         case "$1" in
             --timeout)
@@ -1983,8 +2302,16 @@ cmd_probe() {
                 [[ $# -gt 0 ]] || die "--timeout требует число секунд"
                 timeout="$1"
                 ;;
+            --jobs)
+                shift
+                [[ $# -gt 0 ]] || die "--jobs требует число параллельных проверок"
+                concurrency="$1"
+                ;;
+            --json)
+                json_output=true
+                ;;
             --help|-h)
-                say "Использование: $CLI_COMMAND probe [ПРОТОКОЛ|all] [--timeout 3]"
+                say "Использование: $CLI_COMMAND probe [ПРОТОКОЛ|all] [--timeout 3] [--jobs 4] [--json]"
                 return 0
                 ;;
             -*)
@@ -2001,53 +2328,45 @@ cmd_probe() {
        ! ((timeout >= 1 && timeout <= 30)); then
         die "Таймаут probe должен быть от 1 до 30 секунд"
     fi
-    mapfile -t protocols < <(requested_protocols "$requested") ||
+    if ! [[ "$concurrency" =~ ^[0-9]+$ ]] ||
+       ! ((concurrency >= 1 && concurrency <= 8)); then
+        die "Число параллельных probe должно быть от 1 до 8"
+    fi
+    requested_protocols "$requested" >/dev/null ||
         die "Неизвестный протокол: $requested"
 
-    say "Проверка endpoint: DNS + ICMP ping; TCP-порты проверяются дополнительно"
-    for protocol in "${protocols[@]}"; do
-        load_profiles "$protocol"
-        for file in "${PROFILES[@]}"; do
-            total=$((total + 1))
-            rc=0
-            probe_profile "$protocol" "$file" "$timeout" || rc=$?
-            case "$rc" in
-                0)
-                    ping_ok=$((ping_ok + 1))
-                    printf '[ OK ] %-11s %-36s ping OK\n' \
-                        "$(protocol_title "$protocol")" "$(profile_name "$file")"
-                    ;;
-                2)
-                    no_ping=$((no_ping + 1))
-                    printf '[WARN] %-11s %-36s ping не установлен\n' \
-                        "$(protocol_title "$protocol")" "$(profile_name "$file")"
-                    ;;
-                1)
-                    ping_blocked=$((ping_blocked + 1))
-                    printf '[WARN] %-11s %-36s DNS OK, ICMP без ответа\n' \
-                        "$(protocol_title "$protocol")" "$(profile_name "$file")"
-                    ;;
-                3)
-                    dns_fail=$((dns_fail + 1))
-                    printf '[FAIL] %-11s %-36s неверный endpoint\n' \
-                        "$(protocol_title "$protocol")" "$(profile_name "$file")"
-                    ;;
-                4)
-                    dns_fail=$((dns_fail + 1))
-                    printf '[FAIL] %-11s %-36s DNS не разрешается\n' \
-                        "$(protocol_title "$protocol")" "$(profile_name "$file")"
-                    ;;
-                5)
-                    tcp_fail=$((tcp_fail + 1))
-                    printf '[FAIL] %-11s %-36s TCP-порт недоступен\n' \
-                        "$(protocol_title "$protocol")" "$(profile_name "$file")"
-                    ;;
-            esac
-        done
-    done
-    printf '\nИтог: endpoints=%d ping_ok=%d icmp_blocked=%d no_ping=%d hard_fail=%d\n' \
-        "$total" "$ping_ok" "$ping_blocked" "$no_ping" "$((dns_fail + tcp_fail))"
-    ((total > 0 && dns_fail == 0 && tcp_fail == 0))
+    if api_client_ready; then
+        payload="$(
+            jq -cn \
+                --arg protocol "$requested" \
+                --argjson timeout_seconds "$timeout" \
+                --argjson concurrency "$concurrency" \
+                '{
+                    timeout_seconds: $timeout_seconds,
+                    concurrency: $concurrency
+                } + if $protocol == "all" then {} else {protocol: $protocol} end'
+        )"
+        response="$(api_client_query_payload tests.probe "$payload" 900000)" || {
+            error "Local API endpoint probe is unavailable"
+            return 70
+        }
+        if [[ "$(jq -r '.status' <<<"$response")" != ok ]]; then
+            error "Local API: $(jq -r '.error.code + ": " + .error.message_key' <<<"$response")"
+            return 1
+        fi
+        result="$(jq -c '.result' <<<"$response")"
+    else
+        require_profile_access probe "${original_args[@]}"
+        result="$(probe_locations_json "$requested" "$timeout" "$concurrency")" ||
+            die "Не удалось завершить проверку endpoint"
+    fi
+
+    if [[ "$json_output" == true ]]; then
+        jq . <<<"$result"
+    else
+        render_probe_result "$result"
+    fi
+    probe_result_ok "$result"
 }
 
 fix_profile_permissions() {
@@ -3919,6 +4238,64 @@ api_profiles_result() {
     }' "$PROFILES_FILE"
 }
 
+api_probe_result() {
+    local request="$1" deadline_ms="$2"
+    local timeout_seconds concurrency protocol profile_id duration result rc=0
+    mkdir -p -- "$API_ACTION_DIR" || return 1
+    chmod 700 -- "$API_ACTION_DIR" || return 1
+    exec 8>"$API_ACTION_DIR/.probe.lock" || return 1
+    flock -n 8 || return 75
+    timeout_seconds="$(jq -r '.payload.timeout_seconds' <<<"$request")"
+    concurrency="$(jq -r '.payload.concurrency // 4' <<<"$request")"
+    protocol="$(jq -r '.payload.protocol // "all"' <<<"$request")"
+    profile_id="$(jq -r '.payload.profile_id // ""' <<<"$request")"
+    duration="$(api_timeout_seconds_from_ms "$deadline_ms")" || return 1
+
+    result="$(
+        VPNCTL_API_CLIENT_DISABLE=1 \
+            timeout --kill-after=2s "${duration}s" \
+                "$SELF" _probe-locations-json \
+                "$protocol" "$timeout_seconds" "$concurrency" "$profile_id"
+    )" || rc=$?
+    case "$rc" in
+        0) ;;
+        124|137) return 124 ;;
+        *) return 1 ;;
+    esac
+    jq -e '
+        .schema_version == 1
+        and (.checked_at | type == "string")
+        and (.summary.total | type == "number")
+        and (.results | type == "array")
+        and all(
+            .results[];
+            (.profile_id | type == "string")
+            and (.display_name | type == "string")
+            and (.protocol | type == "string")
+            and (.active | type == "boolean")
+            and (
+                .reachability == "reachable"
+                or .reachability == "unknown"
+                or .reachability == "unreachable"
+                or .reachability == "invalid"
+            )
+            and (
+                .latency_ms == null
+                or (
+                    (.latency_ms | type == "number")
+                    and .latency_ms >= 0
+                    and (.latency_ms | floor) == .latency_ms
+                )
+            )
+        )
+    ' <<<"$result" >/dev/null 2>&1 || return 1
+    if [[ -n "$profile_id" ]] &&
+       [[ "$(jq -r '.summary.total' <<<"$result")" -eq 0 ]]; then
+        return 3
+    fi
+    printf '%s\n' "$result"
+}
+
 api_write_record() {
     local target="$1" content="$2" tmp
     mkdir -p -- "$API_ACTION_DIR" || return 1
@@ -4514,7 +4891,7 @@ api_run_lifecycle_action() {
 
 api_dispatch() {
     local request="" request_id operation result action_id authorization deadline_ms
-    local deadline_started_ms allowed_keys
+    local deadline_started_ms allowed_keys rc=0
     local LC_ALL=C
     ((EUID == 0)) || [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]] || {
         api_error_response "$(api_server_request_id)" permission-denied \
@@ -4624,6 +5001,90 @@ api_dispatch() {
                 }
             fi
             api_ok_response "$request_id" "$result"
+            ;;
+        tests.probe)
+            if jq -e 'has("action_id") or has("authorization")' \
+                <<<"$request" >/dev/null 2>&1; then
+                api_error_response "$request_id" invalid-request \
+                    api.query.mutation-fields false false
+                return
+            fi
+            if ! jq -e '
+                has("deadline_ms")
+                and (.deadline_ms | type == "number")
+                and ((.deadline_ms | floor) == .deadline_ms)
+                and .deadline_ms >= 100
+                and .deadline_ms <= 900000
+                and ((.payload | keys) - [
+                    "concurrency", "profile_id", "protocol", "timeout_seconds"
+                ] | length) == 0
+                and (.payload.timeout_seconds | type == "number")
+                and (
+                    (.payload.timeout_seconds | floor)
+                    == .payload.timeout_seconds
+                )
+                and .payload.timeout_seconds >= 1
+                and .payload.timeout_seconds <= 30
+                and (
+                    (.payload | has("concurrency") | not)
+                    or (
+                        (.payload.concurrency | type == "number")
+                        and (
+                            (.payload.concurrency | floor)
+                            == .payload.concurrency
+                        )
+                        and .payload.concurrency >= 1
+                        and .payload.concurrency <= 8
+                    )
+                )
+                and (
+                    (.payload | has("protocol") | not)
+                    or (
+                        .payload.protocol == "amneziawg"
+                        or .payload.protocol == "wireguard"
+                        or .payload.protocol == "openvpn"
+                        or .payload.protocol == "l2tp"
+                    )
+                )
+                and (
+                    (.payload | has("profile_id") | not)
+                    or (
+                        (.payload.profile_id | type == "string")
+                        and (
+                            .payload.profile_id
+                            | test("^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$")
+                        )
+                    )
+                )
+            ' <<<"$request" >/dev/null 2>&1; then
+                api_error_response "$request_id" invalid-request \
+                    api.tests.probe.payload-invalid false false
+                return
+            fi
+            deadline_ms="$(jq -r '.deadline_ms' <<<"$request")"
+            result="$(api_probe_result "$request" "$deadline_ms")"
+            rc=$?
+            case "$rc" in
+                0)
+                    api_ok_response "$request_id" "$result"
+                    ;;
+                3)
+                    api_error_response "$request_id" not-found \
+                        api.tests.probe.profile-not-found false false
+                    ;;
+                124)
+                    api_error_response "$request_id" deadline-exceeded \
+                        api.tests.probe.deadline true false
+                    ;;
+                75)
+                    api_error_response "$request_id" busy \
+                        api.tests.probe.busy true false
+                    ;;
+                *)
+                    api_error_response "$request_id" backend-unavailable \
+                        api.tests.probe.unavailable true false
+                    ;;
+            esac
             ;;
         lifecycle.connect|lifecycle.reconnect|lifecycle.disconnect)
             if ! jq -e '
@@ -6212,6 +6673,23 @@ main() {
             ;;
         _api-dispatch) api_dispatch ;;
         _api-clear-recovery) cmd_api_clear_recovery "$@" ;;
+        _probe-locations-json)
+            [[ $# -eq 4 ]] ||
+                die "Internal probe requires protocol, timeout, concurrency and profile ID"
+            if [[ ! "$2" =~ ^[0-9]+$ ]] ||
+               ((10#$2 < 1 || 10#$2 > 30)); then
+                die "Internal probe timeout is invalid"
+            fi
+            if [[ ! "$3" =~ ^[0-9]+$ ]] ||
+               ((10#$3 < 1 || 10#$3 > 8)); then
+                die "Internal probe concurrency is invalid"
+            fi
+            requested_protocols "$1" >/dev/null ||
+                die "Internal probe protocol is invalid"
+            [[ -z "$4" ]] || api_valid_identifier "$4" ||
+                die "Internal probe profile ID is invalid"
+            probe_locations_json "$1" "$2" "$3" "$4"
+            ;;
         _test-timeout) test_timeout_handler "${1:-}" ;;
         _recover-stale-test) recover_stale_test_state ;;
         _dedupe-quick-policy)

@@ -16,8 +16,12 @@ _mazzy_vpn()
         mapfile -t COMPREPLY < <(compgen -W "--json" -- "$cur")
     elif [[ "$prev" == "status" || "$prev" == "profiles" ]]; then
         mapfile -t COMPREPLY < <(compgen -W "--json --api-json" -- "$cur")
+    elif [[ "${COMP_WORDS[1]:-}" == "probe" || "${COMP_WORDS[1]:-}" == "ping" ]]; then
+        mapfile -t COMPREPLY < <(
+            compgen -W "$protocols all --timeout --jobs --json" -- "$cur"
+        )
     elif [[ "$prev" == "list" || "$prev" == "connect" || "$prev" == "test" ||
-            "$prev" == "test-all" || "$prev" == "validate" || "$prev" == "probe" ||
+            "$prev" == "test-all" || "$prev" == "validate" ||
             "$prev" == "import" || "$prev" == "remove" ]]; then
         mapfile -t COMPREPLY < <(compgen -W "$protocols all" -- "$cur")
     elif [[ "$prev" == "autostart" || "$prev" == "monitor" ]]; then

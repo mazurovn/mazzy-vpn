@@ -198,6 +198,36 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
     ):
         fail("ConnectionSummary is missing optional runtime detail fields")
 
+    test_request = defs.get("TestRequest", {}).get("properties", {})
+    concurrency = test_request.get("concurrency", {})
+    if concurrency.get("minimum") != 1 or concurrency.get("maximum") != 8:
+        fail("TestRequest must bound endpoint probe concurrency to 1..8")
+    probe_result = defs.get("ProbeResult", {})
+    probe_required = set(probe_result.get("required", []))
+    if not {
+        "profile_id",
+        "display_name",
+        "protocol",
+        "active",
+        "reachability",
+        "latency_ms",
+        "latency_source",
+        "message_key",
+    }.issubset(probe_required):
+        fail("ProbeResult is missing per-location health fields")
+    reachability = (
+        probe_result.get("properties", {}).get("reachability", {}).get("enum")
+    )
+    if reachability != ["reachable", "unknown", "unreachable", "invalid"]:
+        fail("ProbeResult must preserve unknown separately from unreachable")
+    response_refs = {
+        item.get("$ref")
+        for item in defs.get("ResponseResult", {}).get("oneOf", [])
+        if isinstance(item, dict)
+    }
+    if "#/$defs/ProbeCollection" not in response_refs:
+        fail("ResponseResult does not expose the structured probe collection")
+
     security = manifest.get("security")
     if not isinstance(security, dict):
         fail("manifest security policy is missing")

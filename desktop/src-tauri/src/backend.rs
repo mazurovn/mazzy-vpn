@@ -113,6 +113,45 @@ pub struct OperationResult {
     pub code: Option<i32>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct LocationProbeSummary {
+    total: u64,
+    reachable: u64,
+    unknown: u64,
+    unreachable: u64,
+    invalid: u64,
+    active: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct LocationProbeEntry {
+    profile_id: String,
+    display_name: String,
+    protocol: String,
+    selected: bool,
+    active: bool,
+    transport: String,
+    reachability: String,
+    latency_ms: Option<u64>,
+    latency_source: String,
+    message_key: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct LocationProbeCollection {
+    schema_version: u8,
+    checked_at: String,
+    scope: String,
+    timeout_seconds: u16,
+    concurrency: u8,
+    duration_ms: u64,
+    summary: LocationProbeSummary,
+    results: Vec<LocationProbeEntry>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct DependencyState {
     pub id: &'static str,
@@ -524,6 +563,14 @@ fn api_identifier(kind: &str) -> String {
     format!("{kind}-{timestamp}-{}-{sequence}", std::process::id())
 }
 
+fn valid_api_identifier(identifier: &str) -> bool {
+    (8..=128).contains(&identifier.len())
+        && identifier.chars().enumerate().all(|(index, character)| {
+            character.is_ascii_alphanumeric()
+                || (index > 0 && matches!(character, '.' | '_' | ':' | '-'))
+        })
+}
+
 fn profile_id(catalog: &Value, protocol: &str, file_name: &str) -> Result<String, String> {
     catalog
         .get("profiles")
@@ -536,13 +583,7 @@ fn profile_id(catalog: &Value, protocol: &str, file_name: &str) -> Result<String
         })
         .and_then(|profile| profile.get("profile_id"))
         .and_then(Value::as_str)
-        .filter(|identifier| {
-            (8..=128).contains(&identifier.len())
-                && identifier.chars().enumerate().all(|(index, character)| {
-                    character.is_ascii_alphanumeric()
-                        || (index > 0 && matches!(character, '.' | '_' | ':' | '-'))
-                })
-        })
+        .filter(|identifier| valid_api_identifier(identifier))
         .map(str::to_owned)
         .ok_or_else(|| "The profile cache does not contain a safe API profile ID".to_owned())
 }
@@ -583,6 +624,218 @@ fn local_api_request(
             "payload": payload
         }),
     )))
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn probe_deadline_ms(profile_count: usize, timeout_seconds: u16, concurrency: u8) -> u64 {
+    let workers = usize::from(concurrency.max(1));
+    let rounds = profile_count.max(1).div_ceil(workers);
+    let per_round_ms = u64::from(timeout_seconds.saturating_add(1)) * 3_000;
+    u64::try_from(rounds)
+        .unwrap_or(u64::MAX)
+        .saturating_mul(per_round_ms)
+        .saturating_add(5_000)
+        .clamp(5_000, 900_000)
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn cached_profile_count(protocol_filter: &str) -> usize {
+    fs::read_to_string(PROFILES_FILE)
+        .ok()
+        .and_then(|contents| serde_json::from_str::<Value>(&contents).ok())
+        .and_then(|catalog| catalog.get("profiles").and_then(Value::as_array).cloned())
+        .map(|profiles| {
+            profiles
+                .iter()
+                .filter(|profile| {
+                    protocol_filter == "all"
+                        || profile.get("protocol").and_then(Value::as_str) == Some(protocol_filter)
+                })
+                .count()
+        })
+        .unwrap_or(1)
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn probe_api_request(
+    selected_protocol: &str,
+    timeout_seconds: u16,
+    concurrency: u8,
+    profile_count: usize,
+) -> Value {
+    let mut payload = json!({
+        "timeout_seconds": timeout_seconds,
+        "concurrency": concurrency
+    });
+    if selected_protocol != "all" {
+        payload["protocol"] = Value::String(selected_protocol.to_owned());
+    }
+    json!({
+        "api_version": "1.0",
+        "request_id": api_identifier("request"),
+        "operation": "tests.probe",
+        "deadline_ms": probe_deadline_ms(profile_count, timeout_seconds, concurrency),
+        "payload": payload
+    })
+}
+
+fn sanitize_probe_collection(result: Value) -> Result<Value, String> {
+    let collection: LocationProbeCollection = serde_json::from_value(result)
+        .map_err(|_| "The endpoint probe returned a malformed result".to_owned())?;
+    let protocol_valid =
+        |value: &str| matches!(value, "amneziawg" | "wireguard" | "openvpn" | "l2tp");
+    if collection.schema_version != 1
+        || !(1..=30).contains(&collection.timeout_seconds)
+        || !(1..=8).contains(&collection.concurrency)
+        || !(collection.scope == "all" || protocol_valid(&collection.scope))
+        || collection.checked_at.is_empty()
+        || collection.checked_at.len() > 64
+        || collection.checked_at.chars().any(char::is_control)
+        || collection.results.len() > 1_024
+    {
+        return Err("The endpoint probe returned an invalid result".to_owned());
+    }
+
+    let total = u64::try_from(collection.results.len())
+        .map_err(|_| "The endpoint probe result is too large".to_owned())?;
+    let reachable = collection
+        .results
+        .iter()
+        .filter(|entry| entry.reachability == "reachable")
+        .count() as u64;
+    let unknown = collection
+        .results
+        .iter()
+        .filter(|entry| entry.reachability == "unknown")
+        .count() as u64;
+    let unreachable = collection
+        .results
+        .iter()
+        .filter(|entry| entry.reachability == "unreachable")
+        .count() as u64;
+    let invalid = collection
+        .results
+        .iter()
+        .filter(|entry| entry.reachability == "invalid")
+        .count() as u64;
+    let active = collection
+        .results
+        .iter()
+        .filter(|entry| entry.active)
+        .count() as u64;
+    let selected = collection
+        .results
+        .iter()
+        .filter(|entry| entry.selected)
+        .count();
+    if collection.summary.total != total
+        || collection.summary.reachable != reachable
+        || collection.summary.unknown != unknown
+        || collection.summary.unreachable != unreachable
+        || collection.summary.invalid != invalid
+        || collection.summary.active != active
+        || selected > 1
+        || active > 1
+    {
+        return Err("The endpoint probe summary is inconsistent".to_owned());
+    }
+    for entry in &collection.results {
+        let latency_valid = match entry.latency_ms {
+            Some(_) => matches!(entry.latency_source.as_str(), "icmp" | "tcp"),
+            None => entry.latency_source == "none",
+        };
+        if !valid_api_identifier(&entry.profile_id)
+            || !valid_api_identifier(&entry.message_key)
+            || entry.display_name.is_empty()
+            || entry.display_name.chars().count() > 255
+            || entry.display_name.chars().any(char::is_control)
+            || !protocol_valid(&entry.protocol)
+            || !matches!(entry.transport.as_str(), "tcp" | "udp")
+            || !matches!(
+                entry.reachability.as_str(),
+                "reachable" | "unknown" | "unreachable" | "invalid"
+            )
+            || !latency_valid
+            || (entry.active && !entry.selected)
+        {
+            return Err("The endpoint probe contains an invalid profile result".to_owned());
+        }
+    }
+    serde_json::to_value(collection)
+        .map_err(|_| "The endpoint probe result could not be sanitized".to_owned())
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn probe_result_from_response(response: Value) -> Result<Value, String> {
+    if response.get("status").and_then(Value::as_str) != Some("ok") {
+        let code = response
+            .pointer("/error/code")
+            .and_then(Value::as_str)
+            .unwrap_or("internal-error");
+        let message = response
+            .pointer("/error/message_key")
+            .and_then(Value::as_str)
+            .unwrap_or("api.response.malformed");
+        return Err(format!("{code}: {message}"));
+    }
+    let result = response
+        .get("result")
+        .cloned()
+        .ok_or_else(|| "The endpoint probe returned a malformed result".to_owned())?;
+    sanitize_probe_collection(result)
+}
+
+fn probe_profiles_sync(
+    selected_protocol: String,
+    timeout_seconds: u16,
+    concurrency: u8,
+) -> Result<Value, String> {
+    let selected_protocol = protocol(&selected_protocol, true)?;
+    timeout(timeout_seconds, 1, 30)?;
+    if !(1..=8).contains(&concurrency) {
+        return Err("Probe concurrency must be between 1 and 8".to_owned());
+    }
+
+    #[cfg(target_os = "linux")]
+    if Path::new(API_SOCKET).exists() {
+        let request = probe_api_request(
+            &selected_protocol,
+            timeout_seconds,
+            concurrency,
+            cached_profile_count(&selected_protocol),
+        );
+        match send_local_api_with_retry(&request) {
+            Ok(response) => return probe_result_from_response(response),
+            Err(LocalApiError::Unavailable) => {}
+            Err(LocalApiError::Indeterminate(error)) => {
+                return Err(format!(
+                    "The local API probe outcome is unknown; the request was not repeated \
+                     through another privilege path: {error}"
+                ));
+            }
+        }
+    }
+
+    let cli_path = installed_cli_path().ok_or_else(|| {
+        "Mazzy VPN engine is not installed. Open Settings and run Install / Repair.".to_owned()
+    })?;
+    let mut command = Command::new("pkexec");
+    command
+        .arg(cli_path)
+        .arg("probe")
+        .arg(&selected_protocol)
+        .arg("--timeout")
+        .arg(timeout_seconds.to_string())
+        .arg("--jobs")
+        .arg(concurrency.to_string())
+        .arg("--json");
+    let output = bounded_output(&mut command).map_err(|error| error.to_string())?;
+    if let Ok(result) = serde_json::from_slice::<Value>(&output.stdout) {
+        if let Ok(sanitized) = sanitize_probe_collection(result) {
+            return Ok(sanitized);
+        }
+    }
+    Err(clean_output(&output))
 }
 
 fn api_operation_result(action: String, action_id: &str, response: Value) -> OperationResult {
@@ -1037,6 +1290,19 @@ pub fn get_profiles() -> Value {
 }
 
 #[tauri::command]
+pub async fn probe_profiles(
+    protocol: String,
+    timeout: u16,
+    concurrency: u8,
+) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        probe_profiles_sync(protocol, timeout, concurrency)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 pub fn get_installation_report(app: AppHandle) -> InstallationReport {
     let root = engine_root(&app);
     let cli_path = installed_cli_path();
@@ -1237,6 +1503,61 @@ mod tests {
         let encoded = serde_json::to_string(&request).expect("JSON");
         assert!(!encoded.contains("Server.ovpn"));
         assert_eq!(request["authorization"], "system-mutate");
+    }
+
+    #[test]
+    fn batch_probe_request_is_bounded_and_contains_no_endpoint() {
+        let request = probe_api_request("openvpn", 3, 4, 25);
+        assert_eq!(request["operation"], "tests.probe");
+        assert_eq!(request["payload"]["protocol"], "openvpn");
+        assert_eq!(request["payload"]["timeout_seconds"], 3);
+        assert_eq!(request["payload"]["concurrency"], 4);
+        assert_eq!(request["deadline_ms"], 89_000);
+        let encoded = serde_json::to_string(&request).expect("JSON");
+        assert!(!encoded.contains("endpoint"));
+        assert!(!encoded.contains("file_name"));
+    }
+
+    #[test]
+    fn probe_response_keeps_reachability_latency_and_active_state() {
+        let response = json!({
+            "status": "ok",
+            "result": {
+                "schema_version": 1,
+                "checked_at": "2026-07-28T12:00:00Z",
+                "scope": "openvpn",
+                "timeout_seconds": 3,
+                "concurrency": 4,
+                "duration_ms": 20,
+                "summary": {
+                    "total": 1,
+                    "reachable": 1,
+                    "unknown": 0,
+                    "unreachable": 0,
+                    "invalid": 0,
+                    "active": 1
+                },
+                "results": [{
+                    "profile_id": "profile-01234567",
+                    "display_name": "Test Server",
+                    "protocol": "openvpn",
+                    "selected": true,
+                    "active": true,
+                    "transport": "udp",
+                    "reachability": "reachable",
+                    "latency_ms": 14,
+                    "latency_source": "icmp",
+                    "message_key": "probe.reachable.icmp"
+                }]
+            }
+        });
+        let result = probe_result_from_response(response.clone()).expect("probe result");
+        assert_eq!(result["results"][0]["latency_ms"], 14);
+        assert_eq!(result["results"][0]["active"], true);
+
+        let mut unsafe_response = response;
+        unsafe_response["result"]["results"][0]["endpoint"] = json!("vpn.invalid:1194");
+        assert!(probe_result_from_response(unsafe_response).is_err());
     }
 
     #[test]

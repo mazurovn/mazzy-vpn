@@ -4,6 +4,18 @@ All notable changes to Mazzy VPN are documented here.
 
 ## Unreleased
 
+- Added bounded parallel whole-location endpoint checks to CLI/TUI and Desktop,
+  with structured local API `tests.probe` results, per-profile active state,
+  ICMP/TCP latency and sanitized JSON that never exposes an endpoint.
+- Distinguished `unknown` from `unreachable`, so a UDP VPN server that resolves
+  in DNS but blocks ICMP is not falsely reported as broken; full VPN
+  authentication/routing still requires the transactional live test.
+- Serialized API batch probes with a global lock, bounded each worker and the
+  entire request deadline, and added the Desktop stylesheet to package-owned
+  corresponding source payloads.
+- Made Linux package executable modes independent of the builder umask:
+  release packaging now normalizes runtime scripts to `0755` while assembling
+  artifacts and restores the checkout modes afterwards.
 - Published the language-neutral local API contract `1.0` with frontend-safe
   request, response and event envelopes, stable operation/error codes and
   explicit authorization, audit, deadline and rollback metadata.

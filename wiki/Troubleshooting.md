@@ -13,7 +13,7 @@ mazzy-vpn logs
 
 ```bash
 mazzy-vpn validate all
-mazzy-vpn probe all --timeout 3
+mazzy-vpn probe all --timeout 3 --jobs 4
 ```
 
 ## OpenVPN: Too many connections
@@ -56,7 +56,7 @@ sudo mazzy-vpn doctor
 systemctl status vpnctl.service
 mazzy-vpn logs
 mazzy-vpn validate all
-mazzy-vpn probe all --timeout 3
+mazzy-vpn probe all --timeout 3 --jobs 4
 ```
 
 `Too many connections` is a provider/account rejection. Stop extra sessions,

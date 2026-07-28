@@ -247,6 +247,7 @@ fn main() {
             get_api_info,
             run_action,
             backend::get_profiles,
+            backend::probe_profiles,
             backend::get_installation_report,
             backend::run_operation,
             backend::pick_profile_files,
