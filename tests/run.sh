@@ -48,6 +48,9 @@ chmod 600 "$TMP/config/wireguard/Unsafe.conf"
 cat >"$TMP/fakebin/systemctl" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"${FAKE_SYSTEMCTL_LOG:?}"
+if [[ "${FAKE_SYSTEMCTL_DELAY_SECONDS:-0}" != "0" ]]; then
+    sleep "$FAKE_SYSTEMCTL_DELAY_SECONDS"
+fi
 case "$*" in
     reset-failed*vpnctl.service*)
         rm -f "${FAKE_SYSTEMCTL_COUNTER:?}"
@@ -74,6 +77,9 @@ case "$*" in
                 >"${VPNCTL_RUN_DIR:?}/test.failure"
         fi
         ;;
+    "stop vpnctl.service")
+        [[ "${FAKE_SYSTEMCTL_STOP_FAIL:-0}" == "1" ]] && exit 1
+        ;;
     "is-active vpnctl.service")
         [[ "${FAKE_SYSTEMCTL_INACTIVE:-0}" == "1" ]] && exit 3
         exit 0
@@ -82,6 +88,12 @@ case "$*" in
     *cat*) exit 0 ;;
 esac
 exit 0
+EOF
+
+cat >"$TMP/fakebin/timeout" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"${FAKE_TIMEOUT_LOG:?}"
+exec /usr/bin/timeout "$@"
 EOF
 
 cat >"$TMP/fakebin/systemd-run" <<'EOF'
@@ -230,6 +242,7 @@ chmod +x "$TMP/fallback-start" "$TMP/fallback-stop"
 export PATH="$TMP/fakebin:$PATH"
 export FAKE_SYSTEMCTL_LOG="$TMP/systemctl.log"
 export FAKE_SYSTEMCTL_COUNTER="$TMP/systemctl.counter"
+export FAKE_TIMEOUT_LOG="$TMP/timeout.log"
 export FAKE_SYSTEMD_RUN_LOG="$TMP/systemd-run.log"
 export FAKE_OPENVPN_LOG="$TMP/openvpn.log"
 export FAKE_RESOLVECTL_LOG="$TMP/resolvectl.log"
@@ -927,6 +940,72 @@ jq -e '
 "$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
 [[ ! -e "$api_recovery_marker" ]] ||
     fail "explicit administrator acknowledgement did not clear recovery-only mode"
+
+api_deadline_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-deadline-0001",
+        operation: "lifecycle.reconnect",
+        action_id: "action-deadline-0001",
+        authorization: "system-mutate",
+        deadline_ms: 500,
+        payload: {}
+    }'
+)"
+: >"$FAKE_TIMEOUT_LOG"
+api_deadline_response="$(
+    printf '%s\n' "$api_deadline_request" |
+        FAKE_SYSTEMCTL_DELAY_SECONDS=1 \
+        VPNCTL_API_CACHE_REFRESH_TIMEOUT_SECONDS=2 \
+        "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "ok"
+    and .result.action_id == "action-deadline-0001"
+    and .result.state == "timed-out"
+    and .result.rollback.state == "completed"
+' <<<"$api_deadline_response" >/dev/null ||
+    fail "local API did not time out and roll back a sub-second mutation"
+grep -Eq -- \
+    '--foreground --kill-after=5s 0\.[0-9]{3}s .*/mazzy-vpn reconnect' \
+    "$FAKE_TIMEOUT_LOG" ||
+    fail "local API rounded a millisecond deadline up to a full second"
+ok "local API accounts preflight time and preserves millisecond deadlines"
+
+sed -i 's/^DESIRED=up$/DESIRED=down/' "$VPNCTL_STATE_DIR/active"
+api_stop_rollback_request="$(
+    jq -cn --arg profile_id "$profile_id" '{
+        api_version: "1.0",
+        request_id: "request-stop-rollback-0001",
+        operation: "lifecycle.connect",
+        action_id: "action-stop-rollback-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {profile_id: $profile_id}
+    }'
+)"
+: >"$FAKE_TIMEOUT_LOG"
+api_stop_rollback_response="$(
+    printf '%s\n' "$api_stop_rollback_request" |
+        FAKE_SYSTEMCTL_START_FAIL=1 FAKE_SYSTEMCTL_STOP_FAIL=1 \
+        VPNCTL_API_ROLLBACK_TIMEOUT_SECONDS=120 \
+        "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "ok"
+    and .result.state == "rollback-failed"
+    and .result.rollback.state == "failed"
+' <<<"$api_stop_rollback_response" >/dev/null ||
+    fail "local API reported a failed stop rollback as successful"
+[[ -s "$api_recovery_marker" ]] ||
+    fail "failed stop rollback did not enter recovery-only mode"
+grep -Fq -- \
+    '--foreground --kill-after=5s 30s systemctl stop vpnctl.service' \
+    "$FAKE_TIMEOUT_LOG" ||
+    fail "rollback timeout exceeded the client completion grace contract"
+"$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
+sed -i 's/^DESIRED=down$/DESIRED=up/' "$VPNCTL_STATE_DIR/active"
+ok "local API fails closed when rollback cannot stop the service"
 
 api_retention_request="$(
     jq -cn '{

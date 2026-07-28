@@ -21,6 +21,8 @@ API_RECOVERY_MARKER="$STATE_DIR/api-recovery-required.json"
 API_MAX_REQUEST_BYTES="${VPNCTL_API_MAX_REQUEST_BYTES:-65536}"
 API_ACTION_MAX_RECORDS="${VPNCTL_API_ACTION_MAX_RECORDS:-512}"
 API_AUDIT_MAX_BYTES="${VPNCTL_API_AUDIT_MAX_BYTES:-2097152}"
+API_ROLLBACK_TIMEOUT_SECONDS="${VPNCTL_API_ROLLBACK_TIMEOUT_SECONDS:-30}"
+API_CACHE_REFRESH_TIMEOUT_SECONDS="${VPNCTL_API_CACHE_REFRESH_TIMEOUT_SECONDS:-10}"
 RUN_DIR="${VPNCTL_RUN_DIR:-/run/vpnctl}"
 SERVICE_NAME="${VPNCTL_SERVICE_NAME:-vpnctl.service}"
 HEALTH_TIMER="${VPNCTL_HEALTH_TIMER:-vpnctl-health.timer}"
@@ -3661,6 +3663,49 @@ api_ok_response() {
         }'
 }
 
+api_monotonic_ms() {
+    local uptime seconds fraction
+    IFS=' ' read -r uptime _ </proc/uptime || return 1
+    [[ "$uptime" =~ ^([0-9]+)\.([0-9]+)$ ]] || return 1
+    seconds="${BASH_REMATCH[1]}"
+    fraction="${BASH_REMATCH[2]}000"
+    fraction="${fraction:0:3}"
+    printf '%s\n' "$((10#$seconds * 1000 + 10#$fraction))"
+}
+
+api_deadline_remaining_ms() {
+    local deadline_end_ms="$1" now_ms
+    now_ms="$(api_monotonic_ms)" || return 1
+    printf '%s\n' "$((deadline_end_ms - now_ms))"
+}
+
+api_timeout_seconds_from_ms() {
+    local milliseconds="$1"
+    ((milliseconds > 0)) || return 1
+    printf '%d.%03d\n' "$((milliseconds / 1000))" "$((milliseconds % 1000))"
+}
+
+api_rollback_timeout_seconds() {
+    local seconds="$API_ROLLBACK_TIMEOUT_SECONDS"
+    [[ "$seconds" =~ ^[0-9]+$ ]] &&
+        ((seconds >= 5 && seconds <= 30)) || seconds=30
+    printf '%s\n' "$seconds"
+}
+
+api_cache_refresh_timeout_seconds() {
+    local seconds="$API_CACHE_REFRESH_TIMEOUT_SECONDS"
+    [[ "$seconds" =~ ^[0-9]+$ ]] &&
+        ((seconds >= 2 && seconds <= 10)) || seconds=10
+    printf '%s\n' "$seconds"
+}
+
+api_refresh_dashboard_bounded() {
+    local seconds
+    seconds="$(api_cache_refresh_timeout_seconds)"
+    timeout --foreground --kill-after=2s "${seconds}s" \
+        "$SELF" _refresh-dashboard-cache >/dev/null 2>&1
+}
+
 api_status_result() {
     write_dashboard_cache >/dev/null 2>&1 || true
     [[ -r "$DASHBOARD_FILE" && -r "$PROFILES_FILE" ]] || return 1
@@ -3959,7 +4004,6 @@ api_action_outcome() {
 
 api_find_profile() {
     local profile_id="$1" field="$2"
-    write_profiles_cache >/dev/null 2>&1 || true
     [[ -r "$PROFILES_FILE" ]] || return 1
     jq -er --arg profile_id "$profile_id" --arg field "$field" '
         (.profiles // [])
@@ -3971,7 +4015,7 @@ api_find_profile() {
 }
 
 api_restore_state() {
-    local snapshot="$1" existed="$2" previous_desired="" tmp
+    local snapshot="$1" existed="$2" previous_desired="" tmp rollback_timeout
     if [[ "$existed" == true ]]; then
         mkdir -p -- "$STATE_DIR" || return 1
         chmod 700 -- "$STATE_DIR" || return 1
@@ -3987,13 +4031,17 @@ api_restore_state() {
     fi
 
     health_reset
-    systemctl_quiet reset-failed "$SERVICE_NAME" || true
+    rollback_timeout="$(api_rollback_timeout_seconds)"
+    timeout --foreground --kill-after=5s "${rollback_timeout}s" \
+        systemctl reset-failed "$SERVICE_NAME" >/dev/null 2>&1 || true
     if [[ "$previous_desired" == "up" ]]; then
-        systemctl start "$SERVICE_NAME" || return 1
+        timeout --foreground --kill-after=5s "${rollback_timeout}s" \
+            systemctl start "$SERVICE_NAME" || return 1
     else
-        systemctl_quiet stop "$SERVICE_NAME" || true
+        timeout --foreground --kill-after=5s "${rollback_timeout}s" \
+            systemctl stop "$SERVICE_NAME" || return 1
     fi
-    write_dashboard_cache >/dev/null 2>&1 || true
+    api_refresh_dashboard_bounded || true
 }
 
 api_store_completed_action() {
@@ -4013,6 +4061,22 @@ api_store_completed_action() {
             }'
     )" || return 1
     api_write_record "$record_file" "$record"
+}
+
+api_complete_unstarted_timeout() {
+    local request_id="$1" action_id="$2" operation="$3"
+    local record_file="$4" fingerprint="$5" outcome
+    outcome="$(api_action_outcome \
+        "$action_id" timed-out false false not-needed \
+        api.action.deadline-exceeded)"
+    api_store_completed_action \
+        "$record_file" "$fingerprint" "$operation" "$outcome" || {
+        api_error_response "$request_id" internal-error \
+            api.journal.unavailable true true
+        return 1
+    }
+    api_audit_event "$action_id" "$operation" approved timed-out || true
+    api_ok_response "$request_id" "$outcome"
 }
 
 api_recover_interrupted_actions() {
@@ -4098,10 +4162,12 @@ api_recover_interrupted_actions() {
 
 api_run_lifecycle_action() {
     local request="$1" request_id="$2" operation="$3" action_id="$4"
-    local deadline_ms="$5" fingerprint record_file stored_fingerprint stored_state
+    local deadline_ms="$5" deadline_started_ms="$6" deadline_end_ms remaining_ms
+    local fingerprint record_file stored_fingerprint stored_state
     local outcome profile_id protocol profile snapshot snapshot_existed=false
     local duration output_file rc rollback_state audit_outcome running_record
 
+    deadline_end_ms=$((deadline_started_ms + deadline_ms))
     mkdir -p -- "$API_ACTION_DIR" || {
         api_error_response "$request_id" internal-error api.journal.unavailable true true
         return
@@ -4164,6 +4230,7 @@ api_run_lifecycle_action() {
                 api_error_response "$request_id" invalid-request api.profile.id-invalid false true
                 return
             }
+            write_profiles_cache >/dev/null 2>&1 || true
             protocol="$(api_find_profile "$profile_id" protocol 2>/dev/null)" || {
                 api_error_response "$request_id" not-found api.profile.not-found false true
                 return
@@ -4190,6 +4257,17 @@ api_run_lifecycle_action() {
             return
             ;;
     esac
+
+    remaining_ms="$(api_deadline_remaining_ms "$deadline_end_ms")" || {
+        api_error_response "$request_id" backend-unavailable \
+            api.runtime.clock-unavailable false true
+        return
+    }
+    if ((remaining_ms <= 0)); then
+        api_complete_unstarted_timeout \
+            "$request_id" "$action_id" "$operation" "$record_file" "$fingerprint"
+        return
+    fi
 
     snapshot="$API_ACTION_DIR/.snapshot.$action_id"
     if [[ -r "$STATE_FILE" ]]; then
@@ -4227,9 +4305,25 @@ api_run_lifecycle_action() {
     }
     api_audit_event "$action_id" "$operation" approved started || true
 
+    remaining_ms="$(api_deadline_remaining_ms "$deadline_end_ms")" || {
+        api_error_response "$request_id" backend-unavailable \
+            api.runtime.clock-unavailable false true
+        return
+    }
+    if ((remaining_ms <= 0)); then
+        if api_complete_unstarted_timeout \
+            "$request_id" "$action_id" "$operation" "$record_file" "$fingerprint"; then
+            rm -f -- "$snapshot"
+        fi
+        return
+    fi
+
     output_file="$API_ACTION_DIR/.output.$action_id.$$"
-    duration=$(((deadline_ms + 999) / 1000))
-    ((duration > 0)) || duration=1
+    duration="$(api_timeout_seconds_from_ms "$remaining_ms")" || {
+        api_error_response "$request_id" internal-error \
+            api.action.deadline-invalid false true
+        return
+    }
 
     case "$operation" in
         lifecycle.connect)
@@ -4251,7 +4345,7 @@ api_run_lifecycle_action() {
     rm -f -- "$output_file"
 
     if ((rc == 0)); then
-        write_dashboard_cache >/dev/null 2>&1 || true
+        api_refresh_dashboard_bounded || true
         outcome="$(api_action_outcome \
             "$action_id" succeeded true false not-needed api.action.succeeded)"
         audit_outcome=succeeded
@@ -4293,7 +4387,7 @@ api_run_lifecycle_action() {
 
 api_dispatch() {
     local request="" request_id operation result action_id authorization deadline_ms
-    local allowed_keys
+    local deadline_started_ms allowed_keys
     local LC_ALL=C
     ((EUID == 0)) || [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]] || {
         api_error_response "$(api_server_request_id)" permission-denied \
@@ -4417,8 +4511,14 @@ api_dispatch() {
                     api.mutation.requirements false true
                 return
             fi
+            deadline_started_ms="$(api_monotonic_ms)" || {
+                api_error_response "$request_id" backend-unavailable \
+                    api.runtime.clock-unavailable false true
+                return
+            }
             api_run_lifecycle_action \
-                "$request" "$request_id" "$operation" "$action_id" "$deadline_ms"
+                "$request" "$request_id" "$operation" "$action_id" \
+                "$deadline_ms" "$deadline_started_ms"
             ;;
         *)
             api_error_response "$request_id" unsupported-operation \

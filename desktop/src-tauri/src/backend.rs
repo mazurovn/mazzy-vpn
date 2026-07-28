@@ -26,6 +26,8 @@ const MAX_OUTPUT_STREAM_BYTES: usize = MAX_OUTPUT_BYTES / 2;
 const TRUNCATED_OUTPUT_MARKER: &[u8] = b"\n[output truncated]\n";
 #[cfg(target_os = "linux")]
 const MAX_API_RESPONSE_BYTES: usize = 64 * 1024;
+#[cfg(target_os = "linux")]
+const LOCAL_API_COMPLETION_GRACE_MS: u64 = 60_000;
 static API_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[cfg(target_os = "linux")]
@@ -594,10 +596,25 @@ fn api_operation_result(action: String, response: Value) -> OperationResult {
 }
 
 #[cfg(target_os = "linux")]
+fn local_api_response_timeout(request: &Value) -> std::time::Duration {
+    let deadline_ms = request
+        .get("deadline_ms")
+        .and_then(Value::as_u64)
+        .unwrap_or(5_000)
+        .clamp(100, 900_000);
+    let grace_ms = if request.get("action_id").is_some() {
+        LOCAL_API_COMPLETION_GRACE_MS
+    } else {
+        5_000
+    };
+    std::time::Duration::from_millis(deadline_ms + grace_ms)
+}
+
+#[cfg(target_os = "linux")]
 fn send_local_api(request: &Value) -> Result<Value, LocalApiError> {
     let mut stream = UnixStream::connect(API_SOCKET).map_err(|_| LocalApiError::Unavailable)?;
     stream
-        .set_read_timeout(Some(std::time::Duration::from_secs(65)))
+        .set_read_timeout(Some(local_api_response_timeout(request)))
         .map_err(|error| LocalApiError::Indeterminate(error.to_string()))?;
     stream
         .set_write_timeout(Some(std::time::Duration::from_secs(5)))
@@ -1177,5 +1194,22 @@ mod tests {
         });
         assert!(matches!(unavailable, Err(LocalApiError::Unavailable)));
         assert_eq!(attempts, 1);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn mutation_transport_reserves_time_for_bounded_rollback() {
+        let request = json!({
+            "deadline_ms": 30_000,
+            "action_id": "action-01234567"
+        });
+        assert_eq!(
+            local_api_response_timeout(&request),
+            std::time::Duration::from_secs(90)
+        );
+        assert_eq!(
+            local_api_response_timeout(&json!({"deadline_ms": 5_000})),
+            std::time::Duration::from_secs(10)
+        );
     }
 }
