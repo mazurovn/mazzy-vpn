@@ -1424,13 +1424,13 @@ fn verify_result_from_response(response: Value) -> Result<Value, String> {
     sanitize_egress_verification(result)
 }
 
+#[cfg(target_os = "linux")]
 pub(crate) fn verify_connection_sync(
     timeout_seconds: u16,
     include_speed: bool,
 ) -> Result<Value, String> {
     timeout(timeout_seconds, 3, 30)?;
 
-    #[cfg(target_os = "linux")]
     if Path::new(API_SOCKET).exists() {
         let request = verify_api_request(timeout_seconds, include_speed);
         match send_local_api_with_retry(&request) {
@@ -1467,6 +1467,16 @@ pub(crate) fn verify_connection_sync(
     Err(clean_output(&output))
 }
 
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn verify_connection_sync(
+    timeout_seconds: u16,
+    _include_speed: bool,
+) -> Result<Value, String> {
+    timeout(timeout_seconds, 3, 30)?;
+    Err("Preview build: actual VPN egress verification is available on Linux only.".to_owned())
+}
+
+#[cfg(target_os = "linux")]
 pub(crate) fn probe_profiles_sync(
     selected_protocol: String,
     timeout_seconds: u16,
@@ -1478,7 +1488,6 @@ pub(crate) fn probe_profiles_sync(
         return Err("Probe concurrency must be between 1 and 8".to_owned());
     }
 
-    #[cfg(target_os = "linux")]
     if Path::new(API_SOCKET).exists() {
         let request = probe_api_request(
             &selected_protocol,
@@ -1527,6 +1536,20 @@ pub(crate) fn probe_profiles_sync(
         }
     }
     Err(clean_output(&output))
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn probe_profiles_sync(
+    selected_protocol: String,
+    timeout_seconds: u16,
+    concurrency: u8,
+) -> Result<Value, String> {
+    protocol(&selected_protocol, true)?;
+    timeout(timeout_seconds, 1, 30)?;
+    if !(1..=8).contains(&concurrency) {
+        return Err("Probe concurrency must be between 1 and 8".to_owned());
+    }
+    Err("Preview build: VPN profile reachability checks are available on Linux only.".to_owned())
 }
 
 fn api_operation_result(action: String, action_id: &str, response: Value) -> OperationResult {

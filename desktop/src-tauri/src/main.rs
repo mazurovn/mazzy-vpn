@@ -6,14 +6,16 @@ mod backend;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::fs;
-use std::process::{Command, Output};
+use std::process::Output;
+#[cfg(target_os = "linux")]
+use std::{fs, process::Command};
 use tauri::{
     AppHandle, Emitter, Manager,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 
+#[cfg(target_os = "linux")]
 const STATUS_FILE: &str = "/run/mazzy-vpn/status.json";
 const API_MANIFEST: &str = include_str!("../../../api/v1/manifest.json");
 

@@ -60,6 +60,10 @@ All notable changes to Mazzy VPN are documented here.
 - Bounded all Desktop compatibility processes and use absolute system paths for
   the privilege/timeout helpers. A timed-out mutation is reported as
   indeterminate and still remains a migration gate for the native service.
+- Kept Linux-only egress/probe adapters out of macOS and Windows builds; preview
+  bundles now return an explicit unsupported-platform error instead of trying
+  Linux paths. The cross-platform UI validator also decodes Node output as
+  UTF-8 rather than the Windows system code page.
 - Updated AI-ready positioning, architecture, privacy, installation,
   cross-platform dependency strategy, Wiki and bilingual release documentation.
 - Added bounded parallel whole-location endpoint checks to CLI/TUI and Desktop,
