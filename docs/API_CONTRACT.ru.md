@@ -36,10 +36,19 @@ Socket-activated Linux transport имеет статус `partial`: он при�
 - очищенное audit event;
 - объявленную rollback-семантику и итог rollback.
 
-Повторная доставка того же action ID не должна выполнять изменение дважды.
-Linux lifecycle dispatcher уже контролирует это правило через постоянный
-root-readable action journal. Остальные mutation domains должны принять то же
-правило при переносе за service boundary.
+Повторная доставка того же action ID в пределах опубликованного окна хранения
+не должна выполнять изменение дважды. Linux lifecycle dispatcher контролирует
+это правило через постоянный root-readable action journal и по умолчанию
+хранит 512 последних завершённых outcomes. Клиент не должен повторно
+использовать вытесненный action ID как новую операцию. Остальные mutation
+domains должны принять то же правило и опубликовать свою retention policy при
+переносе за service boundary.
+
+Dispatcher сохраняет rollback snapshot до перевода action в состояние
+`running`. После аварии service следующая mutation под глобальной блокировкой
+согласует все оставшиеся running records: восстанавливает snapshot и сохраняет
+терминальный outcome `rolled-back` или `rollback-failed`, не оставляя action
+навсегда busy и не выполняя его повторно.
 
 ## Безопасность frontend
 
@@ -63,4 +72,6 @@ Tauri-команду. CI проверяет синхронность CLI, manife
 завершённый переводом строки, и возвращает один response. Мутации
 сериализованы, ограничены deadline и сохраняются по action ID в root-only
 state. Audit содержит только operation ID и результат — без payload и raw
-backend output.
+backend output. По умолчанию журнал ограничен 512 завершёнными outcomes, а
+audit-файл ротируется при 2 МиБ с одним root-only архивом. На системах с
+ограниченным диском лимиты можно уменьшить, но нельзя отключать.

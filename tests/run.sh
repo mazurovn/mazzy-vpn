@@ -724,7 +724,92 @@ jq -e '
     and .error.user_action_required == true
 ' <<<"$api_conflict_response" >/dev/null ||
     fail "local API accepted one action ID for two different mutations"
-ok "local API lifecycle failures restore state and emit sanitized audit events"
+
+api_interrupted_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-interrupted-0001",
+        operation: "lifecycle.disconnect",
+        action_id: "action-interrupted-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {}
+    }'
+)"
+api_interrupted_fingerprint="$(
+    jq -cS 'del(.request_id)' <<<"$api_interrupted_request" |
+        sha256sum |
+        awk '{ print $1 }'
+)"
+cp "$VPNCTL_STATE_DIR/active" \
+    "$VPNCTL_API_ACTION_DIR/.snapshot.action-interrupted-0001"
+sed -i 's/^DESIRED=up$/DESIRED=down/' "$VPNCTL_STATE_DIR/active"
+jq -cn \
+    --arg fingerprint "$api_interrupted_fingerprint" \
+    '{
+        fingerprint: $fingerprint,
+        state: "running",
+        operation: "lifecycle.disconnect",
+        started_at: "2026-01-01T00:00:00Z",
+        snapshot_existed: true
+    }' >"$VPNCTL_API_ACTION_DIR/action-interrupted-0001.json"
+api_stop_count="$(grep -c '^stop vpnctl.service$' "$FAKE_SYSTEMCTL_LOG" || true)"
+api_interrupted_response="$(
+    printf '%s\n' "$api_interrupted_request" | "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "ok"
+    and .result.action_id == "action-interrupted-0001"
+    and .result.state == "rolled-back"
+    and .result.rollback.state == "completed"
+    and .result.message_key == "api.action.interrupted-rolled-back"
+' <<<"$api_interrupted_response" >/dev/null ||
+    fail "local API did not reconcile an interrupted action"
+grep -q '^DESIRED=up$' "$VPNCTL_STATE_DIR/active" ||
+    fail "interrupted local API action did not restore its state snapshot"
+[[ ! -e "$VPNCTL_API_ACTION_DIR/.snapshot.action-interrupted-0001" ]] ||
+    fail "interrupted local API action left its snapshot behind"
+[[ "$(grep -c '^stop vpnctl.service$' "$FAKE_SYSTEMCTL_LOG" || true)" == \
+   "$api_stop_count" ]] ||
+    fail "interrupted local API action was executed again after recovery"
+
+api_retention_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-retention-0001",
+        operation: "lifecycle.reconnect",
+        action_id: "action-retention-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {}
+    }'
+)"
+api_retention_response="$(
+    printf '%s\n' "$api_retention_request" |
+        VPNCTL_API_ACTION_MAX_RECORDS=3 VPNCTL_API_AUDIT_MAX_BYTES=1 \
+            "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "ok"
+    and .result.action_id == "action-retention-0001"
+    and .result.state == "succeeded"
+' <<<"$api_retention_response" >/dev/null ||
+    fail "local API retention test mutation failed"
+[[ "$(find "$VPNCTL_API_ACTION_DIR" -maxdepth 1 -type f -name '*.json' |
+    wc -l)" -le 3 ]] ||
+    fail "local API completed action journal exceeded its configured bound"
+[[ -r "$VPNCTL_API_ACTION_DIR/action-retention-0001.json" ]] ||
+    fail "local API pruned the current action outcome"
+[[ -s "$VPNCTL_API_AUDIT_FILE" && -s "$VPNCTL_API_AUDIT_FILE.1" ]] ||
+    fail "local API audit log did not rotate at its configured bound"
+[[ "$(stat -c %a "$VPNCTL_API_AUDIT_FILE")" == "600" &&
+   "$(stat -c %a "$VPNCTL_API_AUDIT_FILE.1")" == "600" ]] ||
+    fail "rotated local API audit files are not root-only"
+if grep -Eq 'Test Server|192\.0\.2\.10|PrivateKey|PublicKey' \
+    "$VPNCTL_API_AUDIT_FILE" "$VPNCTL_API_AUDIT_FILE.1"; then
+    fail "rotated local API audit log leaked profile or endpoint data"
+fi
+ok "local API recovers interrupted actions and bounds persistent journals"
 
 dashboard_output="$("$CLI" dashboard)"
 grep -q 'M A Z Z Y' <<<"$dashboard_output" || fail "dashboard artwork is missing"

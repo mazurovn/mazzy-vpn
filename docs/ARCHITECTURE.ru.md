@@ -281,8 +281,8 @@ sequenceDiagram
 | `/etc/vpnctl/locale` | Выбранный язык | Постоянно, не является секретом |
 | `/var/lib/vpnctl/active` | Протокол, default-профиль, `DESIRED`, метаданные теста | Постоянно, root |
 | `/var/lib/vpnctl/test.*` | Снимок транзакции и rollback | Пока может понадобиться recovery |
-| `/var/lib/vpnctl/api-actions` | Выполняющиеся/завершённые action IDs и очищенные outcomes | Постоянно, каталог `700`, records `600` |
-| `/var/lib/vpnctl/api-audit.jsonl` | Operation, решение авторизации и outcome | Постоянно, `600`; без payload/backend output |
+| `/var/lib/vpnctl/api-actions` | Action IDs, rollback snapshots и очищенные outcomes | Постоянно, каталог `700`, records `600`; по умолчанию 512 последних завершённых outcomes |
+| `/var/lib/vpnctl/api-audit.jsonl{,.1}` | Operation, решение авторизации и outcome | Постоянно, `600`; без payload/backend output; ротация 2 МиБ с одним архивом |
 | `/run/vpnctl` | Locks, health-счётчик и очищенный runtime log | Очищается при загрузке |
 | `/run/mazzy-vpn/status.json` | Очищенный статус для Desktop | Пересоздаётся root, доступен для чтения, без ключей и endpoint |
 | `/run/mazzy-vpn/api-v1.sock` | Versioned local API transport | Socket `0660 root:mazzy-vpn`, активируется systemd |
@@ -293,6 +293,8 @@ sequenceDiagram
 Инварианты безопасности:
 
 - один managed-туннель и одна изменяющая состояние операция одновременно;
+- прерванная API mutation согласуется по pre-action snapshot до запуска
+  следующей изменяющей операции;
 - тип профиля определяется по содержимому, затем проверяется до импорта;
 - приватные ключи, credentials, личные пути и рабочие профили не попадают в
   Git;

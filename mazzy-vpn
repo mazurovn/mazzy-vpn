@@ -18,6 +18,8 @@ STATE_FILE="$STATE_DIR/active"
 API_ACTION_DIR="${VPNCTL_API_ACTION_DIR:-$STATE_DIR/api-actions}"
 API_AUDIT_FILE="${VPNCTL_API_AUDIT_FILE:-$STATE_DIR/api-audit.jsonl}"
 API_MAX_REQUEST_BYTES="${VPNCTL_API_MAX_REQUEST_BYTES:-65536}"
+API_ACTION_MAX_RECORDS="${VPNCTL_API_ACTION_MAX_RECORDS:-512}"
+API_AUDIT_MAX_BYTES="${VPNCTL_API_AUDIT_MAX_BYTES:-2097152}"
 RUN_DIR="${VPNCTL_RUN_DIR:-/run/vpnctl}"
 SERVICE_NAME="${VPNCTL_SERVICE_NAME:-vpnctl.service}"
 HEALTH_TIMER="${VPNCTL_HEALTH_TIMER:-vpnctl-health.timer}"
@@ -2940,6 +2942,65 @@ api_write_record() {
     mv -f -- "$tmp" "$target"
 }
 
+api_prune_completed_actions() {
+    local preserve_action_id="${1:-}" record base action_id state completed_at
+    local max_records remove_count entry
+    local -a completed=() sorted=()
+    max_records="$API_ACTION_MAX_RECORDS"
+    [[ "$max_records" =~ ^[1-9][0-9]*$ ]] &&
+        ((max_records <= 4096)) || max_records=512
+
+    shopt -s nullglob
+    for record in "$API_ACTION_DIR"/*.json; do
+        base="$(basename -- "$record")"
+        action_id="${base%.json}"
+        api_valid_identifier "$action_id" || continue
+        [[ "$action_id" != "$preserve_action_id" ]] || continue
+        state="$(jq -r '.state // ""' "$record" 2>/dev/null || true)"
+        [[ "$state" == "completed" ]] || continue
+        completed_at="$(jq -r '.completed_at // ""' "$record" 2>/dev/null || true)"
+        [[ "$completed_at" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T ]] ||
+            completed_at="0000-00-00T00:00:00Z"
+        completed+=("$completed_at|$base")
+    done
+    shopt -u nullglob
+
+    remove_count=$((${#completed[@]} - max_records + 1))
+    ((remove_count > 0)) || return 0
+    mapfile -t sorted < <(printf '%s\n' "${completed[@]}" | sort)
+    for entry in "${sorted[@]:0:remove_count}"; do
+        base="${entry#*|}"
+        rm -f -- "$API_ACTION_DIR/$base"
+    done
+}
+
+api_cleanup_action_temps() {
+    local path
+    shopt -s nullglob
+    for path in \
+        "$API_ACTION_DIR"/.output.* \
+        "$API_ACTION_DIR"/.record.* \
+        "$API_ACTION_DIR"/.snapshot.*; do
+        rm -f -- "$path"
+    done
+    shopt -u nullglob
+}
+
+api_rotate_audit_if_needed() {
+    local max_bytes current_bytes=0 archive
+    max_bytes="$API_AUDIT_MAX_BYTES"
+    [[ "$max_bytes" =~ ^[1-9][0-9]*$ ]] &&
+        ((max_bytes <= 67108864)) || max_bytes=2097152
+    [[ -e "$API_AUDIT_FILE" ]] || return 0
+    current_bytes="$(stat -c %s -- "$API_AUDIT_FILE" 2>/dev/null || printf 0)"
+    [[ "$current_bytes" =~ ^[0-9]+$ ]] || current_bytes=0
+    ((current_bytes < max_bytes)) || {
+        archive="$API_AUDIT_FILE.1"
+        mv -f -- "$API_AUDIT_FILE" "$archive" || return 1
+        chmod 600 -- "$archive" || return 1
+    }
+}
+
 api_audit_event() {
     local action_id="$1" operation="$2" decision="$3" outcome="$4"
     local event event_id sequence generated_at
@@ -2979,6 +3040,7 @@ api_audit_event() {
             }'
     )" || return 1
     umask 077
+    api_rotate_audit_if_needed || return 1
     printf '%s\n' "$event" >>"$API_AUDIT_FILE"
     chmod 600 -- "$API_AUDIT_FILE"
 }
@@ -3063,6 +3125,72 @@ api_store_completed_action() {
     api_write_record "$record_file" "$record"
 }
 
+api_recover_interrupted_actions() {
+    local record base action_id fingerprint operation snapshot_existed snapshot
+    local legacy_snapshot outcome rollback_state audit_outcome recovery_failed=0
+    shopt -s nullglob
+    for record in "$API_ACTION_DIR"/*.json; do
+        [[ "$(jq -r '.state // ""' "$record" 2>/dev/null || true)" == "running" ]] ||
+            continue
+        base="$(basename -- "$record")"
+        action_id="${base%.json}"
+        if ! api_valid_identifier "$action_id"; then
+            recovery_failed=1
+            continue
+        fi
+        fingerprint="$(jq -r '.fingerprint // ""' "$record" 2>/dev/null || true)"
+        operation="$(jq -r '.operation // ""' "$record" 2>/dev/null || true)"
+        snapshot_existed="$(jq -r '.snapshot_existed // ""' "$record" 2>/dev/null || true)"
+        snapshot="$API_ACTION_DIR/.snapshot.$action_id"
+
+        if [[ "$snapshot_existed" != true && "$snapshot_existed" != false ]]; then
+            legacy_snapshot=""
+            for legacy_snapshot in "$API_ACTION_DIR/.snapshot.$action_id".*; do
+                break
+            done
+            if [[ -n "$legacy_snapshot" && -r "$legacy_snapshot" ]]; then
+                snapshot="$legacy_snapshot"
+                if [[ -s "$snapshot" ]]; then
+                    snapshot_existed=true
+                else
+                    snapshot_existed=false
+                fi
+            fi
+        fi
+
+        if [[ "$snapshot_existed" == false ]] ||
+           [[ "$snapshot_existed" == true && -r "$snapshot" ]]; then
+            if api_restore_state "$snapshot" "$snapshot_existed"; then
+                rollback_state=completed
+                outcome="$(api_action_outcome \
+                    "$action_id" rolled-back true true "$rollback_state" \
+                    api.action.interrupted-rolled-back)"
+                audit_outcome=rolled-back
+            else
+                outcome="$(api_action_outcome \
+                    "$action_id" rollback-failed true true failed \
+                    api.action.interrupted-rollback-failed)"
+                audit_outcome=rollback-failed
+            fi
+        else
+            outcome="$(api_action_outcome \
+                "$action_id" rollback-failed true true failed \
+                api.action.interrupted-snapshot-missing)"
+            audit_outcome=rollback-failed
+        fi
+
+        if [[ -z "$fingerprint" || -z "$operation" ]] ||
+           ! api_store_completed_action \
+               "$record" "$fingerprint" "$operation" "$outcome"; then
+            recovery_failed=1
+            continue
+        fi
+        api_audit_event "$action_id" "$operation" approved "$audit_outcome" || true
+    done
+    shopt -u nullglob
+    ((recovery_failed == 0))
+}
+
 api_run_lifecycle_action() {
     local request="$1" request_id="$2" operation="$3" action_id="$4"
     local deadline_ms="$5" fingerprint record_file stored_fingerprint stored_state
@@ -3082,6 +3210,13 @@ api_run_lifecycle_action() {
         api_error_response "$request_id" busy api.action.busy true false
         return
     fi
+    if ! api_recover_interrupted_actions; then
+        api_error_response "$request_id" internal-error \
+            api.action.recovery-required false true
+        return
+    fi
+    api_cleanup_action_temps
+    api_prune_completed_actions "$action_id"
 
     fingerprint="$(
         jq -cS 'del(.request_id)' <<<"$request" |
@@ -3104,7 +3239,7 @@ api_run_lifecycle_action() {
             api_ok_response "$request_id" "$outcome"
             return
         fi
-        api_error_response "$request_id" busy api.action.interrupted false true
+        api_error_response "$request_id" internal-error api.journal.corrupt false true
         return
     fi
 
@@ -3151,36 +3286,42 @@ api_run_lifecycle_action() {
             ;;
     esac
 
-    running_record="$(
-        jq -cn \
-            --arg fingerprint "$fingerprint" \
-            --arg operation "$operation" \
-            --arg started_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{
-                fingerprint: $fingerprint,
-                state: "running",
-                operation: $operation,
-                started_at: $started_at
-            }'
-    )"
-    api_write_record "$record_file" "$running_record" || {
-        api_error_response "$request_id" internal-error api.journal.unavailable true true
-        return
-    }
-    api_audit_event "$action_id" "$operation" approved started || true
-
-    snapshot="$API_ACTION_DIR/.snapshot.$action_id.$$"
+    snapshot="$API_ACTION_DIR/.snapshot.$action_id"
     if [[ -r "$STATE_FILE" ]]; then
         install -m 600 "$STATE_FILE" "$snapshot" || {
-            rm -f -- "$record_file"
             api_error_response "$request_id" internal-error api.snapshot.failed true true
             return
         }
         snapshot_existed=true
     else
-        : >"$snapshot"
+        : >"$snapshot" || {
+            api_error_response "$request_id" internal-error api.snapshot.failed true true
+            return
+        }
         chmod 600 -- "$snapshot"
     fi
+
+    running_record="$(
+        jq -cn \
+            --arg fingerprint "$fingerprint" \
+            --arg operation "$operation" \
+            --arg started_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --argjson snapshot_existed "$snapshot_existed" \
+            '{
+                fingerprint: $fingerprint,
+                state: "running",
+                operation: $operation,
+                started_at: $started_at,
+                snapshot_existed: $snapshot_existed
+            }'
+    )"
+    api_write_record "$record_file" "$running_record" || {
+        rm -f -- "$snapshot"
+        api_error_response "$request_id" internal-error api.journal.unavailable true true
+        return
+    }
+    api_audit_event "$action_id" "$operation" approved started || true
+
     output_file="$API_ACTION_DIR/.output.$action_id.$$"
     duration=$(((deadline_ms + 999) / 1000))
     ((duration > 0)) || duration=1
@@ -3230,12 +3371,11 @@ api_run_lifecycle_action() {
             audit_outcome=rollback-failed
         fi
     fi
-    rm -f -- "$snapshot"
-
     api_store_completed_action "$record_file" "$fingerprint" "$operation" "$outcome" || {
         api_error_response "$request_id" internal-error api.journal.unavailable true true
         return
     }
+    rm -f -- "$snapshot"
     api_audit_event "$action_id" "$operation" approved "$audit_outcome" || true
     api_ok_response "$request_id" "$outcome"
 }

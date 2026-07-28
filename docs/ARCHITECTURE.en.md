@@ -281,8 +281,8 @@ previous connection has been restored successfully.
 | `/etc/vpnctl/locale` | Installed interface language | Persistent, non-secret |
 | `/var/lib/vpnctl/active` | Selected protocol, default profile, `DESIRED`, test metadata | Persistent, root-owned |
 | `/var/lib/vpnctl/test.*` | Transaction and rollback snapshot | Exists only while recovery may be needed |
-| `/var/lib/vpnctl/api-actions` | Completed/running action IDs and sanitized outcomes | Persistent, directory `700`, records `600` |
-| `/var/lib/vpnctl/api-audit.jsonl` | Operation, authorization decision and outcome | Persistent, mode `600`; no payload/backend output |
+| `/var/lib/vpnctl/api-actions` | Completed/running action IDs, rollback snapshots and sanitized outcomes | Persistent, directory `700`, records `600`; newest 512 completed outcomes by default |
+| `/var/lib/vpnctl/api-audit.jsonl{,.1}` | Operation, authorization decision and outcome | Persistent, mode `600`; no payload/backend output; 2 MiB rotation with one archive |
 | `/run/vpnctl` | Locks, health counter and sanitized runtime log | Cleared at boot |
 | `/run/mazzy-vpn/status.json` | Sanitized Desktop status | Recreated by root, readable without keys or endpoint |
 | `/run/mazzy-vpn/api-v1.sock` | Versioned local API transport | Socket `0660 root:mazzy-vpn`, systemd activated |
@@ -293,6 +293,8 @@ previous connection has been restored successfully.
 Security invariants:
 
 - one managed tunnel and one serialized state-changing operation;
+- an interrupted API action is reconciled from its pre-action snapshot before
+  another mutation starts;
 - profile type is detected from content, then validated before import;
 - no private key, credential, personal path or operational profile belongs in
   Git;

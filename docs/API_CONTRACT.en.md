@@ -36,10 +36,18 @@ Every mutation requires:
 - a sanitized audit event;
 - declared rollback semantics and a final rollback outcome.
 
-Repeated delivery of the same action ID must never apply the mutation twice.
-The Linux lifecycle dispatcher enforces this rule with a persistent,
-root-readable action journal. Remaining mutation domains must adopt the same
-rule as they move behind the service.
+Repeated delivery of the same action ID during the documented retention window
+must never apply the mutation twice. The Linux lifecycle dispatcher enforces
+this rule with a persistent, root-readable action journal. It keeps the newest
+512 completed outcomes by default. A client must not reuse an evicted action ID
+as a new operation. Remaining mutation domains must adopt the same rule and
+publish their retention policy as they move behind the service.
+
+The dispatcher stores the rollback snapshot before marking an action
+`running`. After a service crash, the next mutation reconciles every orphaned
+running record under the global mutation lock. It restores the snapshot and
+stores a terminal `rolled-back` or `rollback-failed` outcome instead of leaving
+the action permanently busy or executing it again.
 
 ## Frontend safety
 
@@ -64,4 +72,6 @@ On Linux, `mazzy-vpn-api.socket` exposes `/run/mazzy-vpn/api-v1.sock` as
 request and receives one newline-terminated response. Mutations are serialized,
 deadline-bounded and recorded by action ID under root-only state. The audit log
 contains operation IDs and outcomes only, never request payloads or backend
-output.
+output. Completed outcomes are bounded to 512 records by default. The audit
+file rotates at 2 MiB and keeps one root-only archive; these limits can be
+reduced for constrained systems but must not be disabled.
