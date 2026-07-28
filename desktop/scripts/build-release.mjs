@@ -4,6 +4,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { rmSync } from "node:fs";
 
 const executable = join(
   "node_modules",
@@ -12,6 +13,14 @@ const executable = join(
 );
 const remapHome = `--remap-path-prefix=${homedir()}=/build/home`;
 const rustflags = [process.env.RUSTFLAGS, remapHome].filter(Boolean).join(" ");
+const releaseDir = join("src-tauri", "target", "release");
+rmSync(join(releaseDir, "bundle"), {
+  recursive: true,
+  force: true,
+});
+for (const binary of ["mazzy-vpn-desktop", "mazzy-vpn-desktop.exe"]) {
+  rmSync(join(releaseDir, binary), { force: true });
+}
 const result = spawnSync(executable, ["build", ...process.argv.slice(2)], {
   cwd: process.cwd(),
   env: { ...process.env, RUSTFLAGS: rustflags },

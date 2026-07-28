@@ -58,6 +58,20 @@ All notable changes to Mazzy VPN are documented here.
   dashboard output without reading protected profiles.
 - Localized new local-API client selection, transport, mutation and status
   messages in Russian, English, German, Chinese, Japanese and Korean.
+- Made DEB/RPM own the engine, public runtime, systemd units/drop-ins, tmpfiles
+  policy and completion under distribution-managed `/usr` paths, with base
+  runtime dependencies and recommended protocol packages declared in metadata.
+- Added idempotent package install/upgrade/remove scripts that verify the
+  engine/API contract, activate services only on a running systemd host and
+  deliberately preserve `/etc/vpnctl` profiles and `/var/lib/vpnctl` state.
+- Made Desktop prefer the package-managed `/usr/bin/mazzy-vpn`; package repair
+  now runs `doctor --fix`, including local-API group enrollment, instead of
+  copying embedded files into `/usr/local`.
+- Completed the AppImage embedded source set required by installer preflight,
+  including Desktop config/UI, package lifecycle sources and capability docs.
+- Added assembled AppImage/DEB/RPM payload, dependency, scriptlet,
+  byte-identity and staged-bootstrap audits, and clean stale bundle outputs and
+  the previously patched Tauri executable before every release build.
 
 ## 1.2.0 / Desktop 0.2.0 — 2026-07-27
 

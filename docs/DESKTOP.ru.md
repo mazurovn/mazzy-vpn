@@ -77,7 +77,7 @@ service/Wintun backends, подпись кода и platform-specific тесты
 | Import files/folder | `mazzy-vpn import-files` / `import-dir` |
 | Validate / probe | `mazzy-vpn validate` / `probe` |
 | Transactional tests | `mazzy-vpn test` / `test-all` / `emergency` |
-| Install / repair | bundled `install.sh --yes --skip-tests` |
+| Install / repair | пакетный engine: `mazzy-vpn doctor --fix`; AppImage/manual: bundled `install.sh` |
 | Service settings | `mazzy-vpn autostart` / `monitor` |
 | Logs | `mazzy-vpn logs --lines N` |
 
@@ -97,13 +97,23 @@ output. Те же lifecycle-команды CLI/TUI используют этот
 
 ## Установка Linux
 
-Установите один Desktop-пакет со страницы Releases. Затем откройте
-**Настройки → Установить / обновить / исправить**. Встроенный проверенный
-installer определит ОС, сохранит существующие профили, установит недостающие
-зависимости, включая `jq`/`socat`, systemd engine/recovery/API units и выполнит
-offline self-test.
-Пользователь, запустивший установку, добавляется в группу `mazzy-vpn`; для
-доступа Desktop к защищённому socket может понадобиться повторный вход в сеанс.
+Установите один Desktop-пакет со страницы Releases. DEB и RPM теперь являются
+package-managed установками: архив владеет engine в `/usr/bin`, публичным
+runtime в `/usr/lib/mazzy-vpn`, systemd units/drop-ins в
+`/usr/lib/systemd/system`, tmpfiles policy и Bash completion. Package manager
+устанавливает базовые runtime-зависимости, а поддерживаемые VPN-протоколы
+объявлены рекомендациями. Идемпотентный package script создаёт защищённую
+структуру state, активирует socket/recovery monitor на запущенном systemd host
+и проверяет engine/API manifest.
+
+Существующие профили `/etc/vpnctl` и state `/var/lib/vpnctl` не входят в
+package payload и намеренно сохраняются при upgrade и remove. Старый ручной
+unit в `/etc/systemd/system` сохраняет свои настройки, а package drop-in
+переключает только executable на package-owned `/usr/bin/mazzy-vpn`. Если
+установка запущена через `sudo` или `pkexec`, вызывающий пользователь
+добавляется в группу `mazzy-vpn`; для socket может понадобиться новый login.
+Package-safe действие «Исправить» повторяет это добавление, если графический
+package manager не сохранил сведения о вызвавшем пользователе.
 
 DEB:
 
@@ -117,10 +127,12 @@ RPM:
 sudo dnf install "./Mazzy VPN Desktop-0.2.0-1.x86_64.rpm"
 ```
 
-DEB и RPM объявляют package для privilege bootstrap (`pkexec`/`polkit`),
-поэтому package manager ставит его до первого запуска. Остальные VPN-
-зависимости и системный service устанавливаются только после явного действия
-**Установить / обновить / исправить**.
+Для DEB/RPM действие **Установить / обновить / исправить** запускает
+package-safe `mazzy-vpn doctor --fix`: оно исправляет поддерживаемые
+недостающие protocol dependencies и service state, но не копирует package
+files в `/usr/local`. Этот slice всё ещё preview: остаются clean-device
+install/upgrade/remove tests для всех поддерживаемых дистрибутивов,
+package rollback/fault injection, доставка AmneziaWG и подпись.
 
 AppImage:
 
@@ -132,6 +144,8 @@ chmod +x "Mazzy VPN Desktop_0.2.0_amd64.AppImage"
 AppImage не может установить собственный privilege helper. Сначала проверьте
 `command -v pkexec` и вручную установите package polkit/pkexec вашего
 дистрибутива, если команды нет; иначе встроенный engine bootstrap не запустится.
+AppImage по-прежнему использует явно разрешённый embedded installer и не
+является package-managed установкой.
 
 Имена версий в примерах замените на фактические имена загруженных файлов.
 Preview-артефакты пока не подписаны, а workflow ещё не публикует подписанные

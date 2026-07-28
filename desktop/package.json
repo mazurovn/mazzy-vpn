@@ -9,6 +9,7 @@
     "dev": "tauri dev",
     "build": "tauri build",
     "build:release": "node scripts/build-release.mjs",
+    "tauri:audited": "node scripts/tauri-audited.mjs",
     "check": "cargo check --manifest-path src-tauri/Cargo.toml",
     "test": "cargo test --manifest-path src-tauri/Cargo.toml"
   },

@@ -1756,11 +1756,88 @@ import sys
 with open(sys.argv[1], encoding="utf-8") as stream:
     config = json.load(stream)
 linux = config["bundle"]["linux"]
-assert "pkexec" in linux["deb"]["depends"]
-assert "polkit" in linux["rpm"]["depends"]
+deb = linux["deb"]
+rpm = linux["rpm"]
+for dependency in (
+    "bash", "diffutils", "findutils", "grep", "iproute2", "jq", "pkexec",
+    "procps", "sed", "socat", "systemd",
+):
+    assert dependency in deb["depends"]
+for dependency in (
+    "netcat-openbsd", "network-manager-l2tp", "openvpn", "wireguard-tools",
+):
+    assert dependency in deb["recommends"]
+for dependency in (
+    "bash", "diffutils", "findutils", "gawk", "grep", "iproute", "jq",
+    "polkit", "procps-ng", "sed", "socat", "systemd",
+):
+    assert dependency in rpm["depends"]
+for dependency in ("NetworkManager-l2tp", "nmap-ncat", "openvpn", "wireguard-tools"):
+    assert dependency in rpm["recommends"]
+
+expected_scripts = {
+    "postInstallScript": "../../packaging/linux/post-install.sh",
+    "preRemoveScript": "../../packaging/linux/pre-remove.sh",
+    "postRemoveScript": "../../packaging/linux/post-remove.sh",
+}
+for key, value in expected_scripts.items():
+    assert deb[key] == value
+    assert rpm[key] == value
+
+assert deb["files"] == rpm["files"]
+files = deb["files"]
+for destination in (
+    "/usr/bin/mazzy-vpn",
+    "/usr/bin/vpnctl",
+    "/usr/lib/mazzy-vpn/api",
+    "/usr/lib/mazzy-vpn/desktop/src-tauri/tauri.conf.json",
+    "/usr/lib/mazzy-vpn/desktop/ui/app.js",
+    "/usr/lib/mazzy-vpn/packaging",
+    "/usr/lib/mazzy-vpn/wiki",
+    "/usr/lib/systemd/system/mazzy-vpn-api.socket",
+    "/usr/lib/systemd/system/mazzy-vpn-api.socket.d",
+    "/usr/lib/systemd/system/mazzy-vpn-api@.service",
+    "/usr/lib/systemd/system/mazzy-vpn-api@.service.d",
+    "/usr/lib/systemd/system/vpnctl.service",
+    "/usr/lib/systemd/system/vpnctl.service.d",
+    "/usr/lib/tmpfiles.d/mazzy-vpn.conf",
+):
+    assert destination in files
+assert not any(path.startswith("/usr/local/") for path in files)
+assert not any(path.startswith("/etc/vpnctl") for path in files)
 PY
     fail "Desktop packages do not declare their privileged bootstrap dependency"
-ok "dependency bootstrap precedes file changes and is declared by packages"
+for package_script in \
+    "$ROOT/packaging/linux/post-install.sh" \
+    "$ROOT/packaging/linux/pre-remove.sh" \
+    "$ROOT/packaging/linux/post-remove.sh"; do
+    bash -n "$package_script" ||
+        fail "invalid package lifecycle script: $package_script"
+    if grep -Eq \
+        '(^|[[:space:]])(apt-get|dnf|pacman|zypper|curl|wget)([[:space:]]|$)' \
+        "$package_script"; then
+        fail "package lifecycle script performs network/dependency installation"
+    fi
+    if grep -Eq 'rm[[:space:]].*/etc/vpnctl' "$package_script"; then
+        fail "package lifecycle script can remove user VPN state"
+    fi
+done
+for package_dropin in \
+    "$ROOT/packaging/linux/systemd/mazzy-vpn-api.socket.d/10-package-docs.conf" \
+    "$ROOT/packaging/linux/systemd/mazzy-vpn-api@.service.d/10-package-exec.conf" \
+    "$ROOT/packaging/linux/systemd/vpnctl-health.service.d/10-package-exec.conf" \
+    "$ROOT/packaging/linux/systemd/vpnctl-test-recovery.service.d/10-package-exec.conf" \
+    "$ROOT/packaging/linux/systemd/vpnctl.service.d/10-package-exec.conf"; do
+    if [[ "$package_dropin" == *".service.d/"* ]]; then
+        grep -q '^ExecStart=/usr/bin/mazzy-vpn ' "$package_dropin" ||
+            fail "package systemd override does not use the package-managed engine"
+    fi
+    if [[ "$package_dropin" == *"mazzy-vpn-api"* ]]; then
+        grep -q '^Documentation=file:/usr/lib/mazzy-vpn/' "$package_dropin" ||
+            fail "package local API documentation path is not package-managed"
+    fi
+done
+ok "dependency bootstrap and package-owned lifecycle are declared safely"
 
 if "$ROOT/install.sh" --destdir "$TMP/invalid-language-stage" --no-deps \
     --lang invalid >/dev/null 2>&1; then
@@ -1848,7 +1925,13 @@ fi
 if grep -q 'mazzy-notifications' "$ROOT/desktop/ui/app.js"; then
     fail "Desktop persists a notifications preference that has no effect"
 fi
-ok "Desktop marks unavailable notifications honestly"
+grep -q 'id="installation-type"' "$ROOT/desktop/ui/index.html" ||
+    fail "Desktop does not expose package-managed installation state"
+grep -q 'report?.package_managed' "$ROOT/desktop/ui/app.js" ||
+    fail "Desktop ignores package-managed installation state"
+grep -q 'ensure_runtime_reader_access' "$ROOT/mazzy-vpn" ||
+    fail "package repair cannot enroll the invoking user into the local API group"
+ok "Desktop package state and unavailable notifications are represented honestly"
 
 python3 "$ROOT/tests/check-capabilities.py" >/dev/null ||
     fail "cross-surface capability registry is inconsistent"

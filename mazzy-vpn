@@ -4931,11 +4931,44 @@ doctor_profile_checks() {
     ((total > 0)) || check_fail "Не найдено ни одного VPN-профиля"
 }
 
+ensure_runtime_reader_access() {
+    local caller="" caller_uid="" entry=""
+    if ! getent group "$RUNTIME_READER_GROUP" >/dev/null 2>&1; then
+        groupadd --system "$RUNTIME_READER_GROUP" ||
+            return 1
+    fi
+
+    if [[ "${SUDO_USER:-}" =~ ^[A-Za-z_][A-Za-z0-9_.-]*$ &&
+          "${SUDO_USER:-}" != root ]]; then
+        caller="$SUDO_USER"
+    elif [[ "${SUDO_UID:-}" =~ ^[0-9]+$ && "$SUDO_UID" -ge 1000 ]]; then
+        caller_uid="$SUDO_UID"
+    elif [[ "${PKEXEC_UID:-}" =~ ^[0-9]+$ && "$PKEXEC_UID" -ge 1000 ]]; then
+        caller_uid="$PKEXEC_UID"
+    fi
+
+    if [[ -z "$caller" && -n "$caller_uid" ]]; then
+        entry="$(getent passwd "$caller_uid" 2>/dev/null || true)"
+        caller="${entry%%:*}"
+    fi
+    [[ "$caller" =~ ^[A-Za-z_][A-Za-z0-9_.-]*$ && "$caller" != root ]] ||
+        return 0
+    id "$caller" >/dev/null 2>&1 || return 0
+    if ! id -nG "$caller" | tr ' ' '\n' |
+        grep -Fxq "$RUNTIME_READER_GROUP"; then
+        usermod -a -G "$RUNTIME_READER_GROUP" "$caller" ||
+            return 1
+        info "Пользователь '$caller' добавлен в группу $RUNTIME_READER_GROUP; нужен повторный вход в сеанс"
+    fi
+}
+
 doctor_fix() {
     local protocol file installer
     info "Применение безопасных исправлений"
     mkdir -p "$STATE_DIR" "$RUN_DIR"
     chmod 700 "$STATE_DIR" "$RUN_DIR"
+    ensure_runtime_reader_access ||
+        warn "Не удалось предоставить вызывающему пользователю доступ к local API"
 
     for protocol in amneziawg wireguard openvpn l2tp; do
         load_profiles "$protocol"
@@ -4944,7 +4977,8 @@ doctor_fix() {
         done
     done
 
-    installer="/usr/local/lib/mazzy-vpn/install.sh"
+    installer="/usr/lib/mazzy-vpn/install.sh"
+    [[ -x "$installer" ]] || installer="/usr/local/lib/mazzy-vpn/install.sh"
     [[ -x "$installer" ]] || installer="/usr/local/lib/vpnctl/install.sh"
     [[ -x "$installer" ]] || installer="$SCRIPT_DIR/install.sh"
     if [[ -x "$installer" ]]; then

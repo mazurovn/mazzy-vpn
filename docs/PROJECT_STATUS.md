@@ -10,8 +10,8 @@ authoritative backlog; this page records the verified resumption point.
 
 ## Verified release baseline
 
-- `main` resolves to `8e92316cedab897d0f64488a1968456f009df25c`
-  after merging API contract PR #25.
+- `main` resolves to `52e695f274a56b39ef4cc70226cbaa42765d5d44`
+  after merging protected API PR #26 and CLI/TUI/Desktop client PR #27.
 - `v1.2.0` and `desktop-v0.2.0` remain at
   `0fe11a22b4e68f4c9106e4415ebaf5a2c281cb2c`.
 - CLI/TUI 1.2.0 is the current stable release.
@@ -19,8 +19,8 @@ authoritative backlog; this page records the verified resumption point.
 - Windows and macOS 0.2.0 artifacts are unsigned UI previews without native
   VPN backends.
 - Android and iOS clients are planned and have no release artifacts.
-- PR #22 and API contract PR #25 are merged. Protected API PR #26 is open as a
-  Draft PR; stacked CLI/TUI API client PR #27 is also open as a Draft.
+- PR #22, API contract PR #25, protected API PR #26 and client PR #27 are
+  merged. Their post-merge CI is green on exact `main` SHA `52e695f`.
 - The uncompromising code, security, packaging and cross-platform review is in
   [`AUDIT_2026-07-28.ru.md`](AUDIT_2026-07-28.ru.md). Its production blockers
   remain authoritative until replaced by newer evidence.
@@ -41,12 +41,12 @@ Release links:
 
 ## Active backlog order
 
-1. [#5 shared core and versioned local API](https://github.com/mazurovn/mazzy-vpn/issues/5)
-2. [#12 CLI/TUI parity and automation contract](https://github.com/mazurovn/mazzy-vpn/issues/12)
-3. [#6 profiles](https://github.com/mazurovn/mazzy-vpn/issues/6),
+1. [#4 Linux Desktop package lifecycle](https://github.com/mazurovn/mazzy-vpn/issues/4)
+2. [#5 shared core and versioned local API](https://github.com/mazurovn/mazzy-vpn/issues/5)
+3. [#12 CLI/TUI parity and automation contract](https://github.com/mazurovn/mazzy-vpn/issues/12)
+4. [#6 profiles](https://github.com/mazurovn/mazzy-vpn/issues/6),
    [#8 services/recovery](https://github.com/mazurovn/mazzy-vpn/issues/8) and
    [#9 connection modes](https://github.com/mazurovn/mazzy-vpn/issues/9)
-4. [#4 Linux Desktop 1.0](https://github.com/mazurovn/mazzy-vpn/issues/4)
 5. [#7 Windows](https://github.com/mazurovn/mazzy-vpn/issues/7) and
    [#10 macOS](https://github.com/mazurovn/mazzy-vpn/issues/10)
 6. [#13 Android](https://github.com/mazurovn/mazzy-vpn/issues/13) and
@@ -65,7 +65,7 @@ Merged PR #25 completed the first incremental issue #5 slice:
 - CI validates operation IDs, authorization, audit, deadlines, rollback
   semantics and the frontend forbidden-field policy.
 
-Draft PR #26 on `agent/local-api-daemon` builds the protected-service slice:
+Merged PR #26 built the protected-service slice:
 
 - systemd socket activation at `/run/mazzy-vpn/api-v1.sock`, protected by
   `0660 root:mazzy-vpn`;
@@ -90,7 +90,7 @@ Draft PR #26 on `agent/local-api-daemon` builds the protected-service slice:
   refresh and process-group termination close the ambiguity, unaudited
   execution and surviving-descendant faults found in the full audit.
 
-The active stacked `agent/cli-tui-api-client` branch adds the next client slice:
+Merged PR #27 added the client slice:
 
 - unprivileged CLI/TUI `status`, `profiles`, `list`, dashboard, quick, connect,
   reconnect and disconnect routing through the same Unix socket;
@@ -112,28 +112,49 @@ The active stacked `agent/cli-tui-api-client` branch adds the next client slice:
 - strict single-document responses, locale-independent byte limits, explicit
   query deadlines and visible action IDs for failed lifecycle outcomes;
 - Desktop dependency diagnostics include `socat`; DEB requires `pkexec` and
-  RPM requires `polkit`, while full engine installation remains a separate
-  privileged first-run step;
-- tag releases run the Rust unit suite and Clippy before attaching bundles.
+  RPM requires `polkit`;
+- tag releases run the Rust unit suite and Clippy before attaching bundles;
 - the non-functional notifications preference was removed; the disabled
   Desktop control now labels the feature as unavailable in the preview.
 
+The active `agent/linux-package-lifecycle` issue #4 slice adds:
+
+- package-owned engine/runtime under `/usr/bin` and `/usr/lib/mazzy-vpn`;
+- package-owned systemd units/drop-ins, tmpfiles policy and completion, with no
+  package payload under `/usr/local` or `/etc/vpnctl`;
+- base DEB/RPM runtime dependencies, including process-control tools, and
+  weak/recommended protocol/TCP-probe packages;
+- idempotent post-install/pre-remove/post-remove scripts that preserve profiles
+  and state, verify the API contract and skip live activation in offline chroot;
+- Desktop package-path preference and package-safe `doctor --fix` repair,
+  including invoking-user local-API group enrollment;
+- an assembled AppImage/DEB/RPM audit for payload, dependencies, scriptlets,
+  byte-identity, embedded source completeness and staged AppImage bootstrap,
+  plus stale-bundle and previously patched executable cleanup before releases.
+
 Verified locally:
 
-- shell regression suite: 67/67 on the stacked PR #27 branch;
-- Rust unit tests: 14/14;
+- shell regression suite: 67/67 on the package-lifecycle branch;
+- Rust unit tests: 15/15;
 - ShellCheck, Clippy, capability/API validators, public audit and gitleaks;
 - `npm audit --audit-level=high` reported 0 known vulnerabilities on
   2026-07-28; Cargo and system-package advisory coverage is still absent;
-- latest local release-mode build produced the binary, DEB, RPM and AppImage;
-  actual DEB
-  metadata contains `pkexec` plus the auto-detected GTK/WebKit dependencies and
-  RPM contains `polkit` plus the library requirements;
-- DEB-embedded and AppImage AppDir copies of the CLI, installer, API docs,
-  capability registry, handoff, audit and tmpfiles policy byte-match this
-  branch; clean-host install/run and reproducibility checks remain required.
+- latest clean all-target release build produced AppImage, DEB and RPM without
+  stale Tauri marker warnings; actual DEB/RPM metadata contains the declared
+  base runtime, privilege helper, process tools, recommendations and
+  auto-detected GTK/WebKit requirements;
+- assembled AppImage/DEB/RPM engine and API content byte-match source;
+  lifecycle scripts/drop-ins match audited sources, neither package owns
+  `/etc/vpnctl`, AppImage contract/capability validators pass and its embedded
+  installer completes an isolated staged install;
+- clean-host install/upgrade/remove, rollback/fault injection and reproducible
+  build checks remain required.
 
 Do not mark issue #5 complete after this slice. The remaining API domains,
 native caller identity, a full request/response deadline beyond the bounded
 rollback completion grace, long-lived idempotency semantics and real-host
 crash/concurrency tests remain separate acceptance criteria.
+
+Do not mark issue #4 complete after this slice. AppImage trust/signing,
+clean-device distro coverage, package rollback/fault/soak tests, complex legacy
+migration and the production supply chain remain separate acceptance criteria.

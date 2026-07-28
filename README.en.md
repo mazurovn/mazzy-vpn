@@ -147,13 +147,20 @@ Change the language immediately with menu item 16 or
 ![Mazzy VPN Desktop Dashboard](docs/images/dashboard-connected-preview.png)
 
 The Tauri Desktop 0.2 Linux preview provides Dashboard, Profiles, Diagnostics,
-Settings and About screens plus a system tray. It bundles the compatible engine and
-installer, checks installed versions and dependencies, and can install, update
-or repair the engine after explicit authorization. Profile file/folder import,
+Settings and About screens plus a system tray. DEB/RPM own the compatible
+engine, systemd units and base runtime dependencies through the package
+manager; AppImage retains the explicitly authorized embedded installer.
+Desktop checks installed versions and dependencies and can repair supported
+missing protocol packages after authorization. Profile file/folder import,
 search, connect, validation, probes, transactional tests, Doctor fixes,
 self-tests, bounded logs, autostart and recovery-monitor controls are available
 without first installing the CLI by hand. Packages are available as AppImage,
 DEB and RPM.
+
+DEB/RPM upgrade and removal deliberately preserve `/etc/vpnctl` profiles and
+`/var/lib/vpnctl` state. Production status still requires clean-device
+install/upgrade/remove, rollback/fault and signing gates on every supported
+distribution.
 
 About records the Desktop/engine/platform versions, author, copyright, AGPL
 license, privacy principles and safe-operation rules.

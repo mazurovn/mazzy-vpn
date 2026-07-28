@@ -148,10 +148,12 @@ Object.assign(translations.ru, {
   outputFailed: "Есть ошибки", diagnosticOutput: "Результат", clearOutput: "Очистить",
   outputPlaceholder: "Здесь появится полный вывод Doctor, тестов и журнала.",
   settingsCenter: "НАСТРОЙКИ", settingsTitle: "Установка и системные настройки",
-  settingsHint: "Desktop включает совместимый движок и может установить недостающие зависимости.",
+  settingsHint: "DEB/RPM управляют движком через package manager; AppImage использует явный bootstrap.",
   installRepair: "Установить / обновить / исправить", installation: "УСТАНОВКА",
   engineReadiness: "Готовность движка", installedVersion: "Установлено",
-  bundledVersion: "В комплекте Desktop", engineService: "Системная служба",
+  bundledVersion: "В комплекте Desktop", installationType: "Тип установки",
+  packageManaged: "PACKAGE-MANAGED", embeddedInstall: "EMBEDDED / MANUAL",
+  engineService: "Системная служба",
   recoveryMonitor: "Recovery monitor", localApi: "Защищённый local API",
   apiReady: "АКТИВЕН", services: "СЛУЖБЫ", serviceControl: "Управление службами",
   notifications: "Уведомления", notificationsHint: "Запланировано; в preview не работает",
@@ -201,9 +203,11 @@ Object.assign(translations.en, {
   diagnosticOutput: "Result", clearOutput: "Clear",
   outputPlaceholder: "Complete Doctor, test and service log output will appear here.",
   settingsCenter: "SETTINGS", settingsTitle: "Installation and system settings",
-  settingsHint: "Desktop bundles a compatible engine and can install missing dependencies.",
+  settingsHint: "DEB/RPM manage the engine as a package; AppImage uses explicit bootstrap.",
   installRepair: "Install / update / repair", installation: "INSTALLATION", engineReadiness: "Engine readiness",
-  installedVersion: "Installed", bundledVersion: "Bundled with Desktop", engineService: "System service",
+  installedVersion: "Installed", bundledVersion: "Bundled with Desktop",
+  installationType: "Installation type", packageManaged: "PACKAGE-MANAGED",
+  embeddedInstall: "EMBEDDED / MANUAL", engineService: "System service",
   recoveryMonitor: "Recovery monitor", localApi: "Protected local API", apiReady: "ACTIVE",
   services: "SERVICES", serviceControl: "Service control",
   notifications: "Notifications", notificationsHint: "Planned; unavailable in this preview",
@@ -471,6 +475,9 @@ function renderInstallation(report) {
   state.installation = report;
   $("#installed-version").textContent = report?.installed_version || t("missing");
   $("#bundled-version").textContent = report?.bundled_version || t("missing");
+  $("#installation-type").textContent = report?.package_managed
+    ? t("packageManaged")
+    : t("embeddedInstall");
   $("#service-installed").textContent = report?.service_installed ? t("installed") : t("missing");
   $("#monitor-installed").textContent = report?.monitor_installed ? t("installed") : t("missing");
   $("#api-installed").textContent = report?.api_socket_available

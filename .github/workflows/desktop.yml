@@ -36,7 +36,10 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             libssl-dev \
-            libgtk-3-dev
+            libgtk-3-dev \
+            cpio \
+            rpm \
+            squashfs-tools
 
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -65,6 +68,10 @@ jobs:
       - name: Build platform bundles
         working-directory: desktop
         run: npm run build:release
+
+      - name: Audit Linux package payload and lifecycle
+        if: matrix.platform == 'ubuntu-22.04'
+        run: ./tests/check-linux-packages.sh
 
       - name: Upload unsigned preview bundles
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -98,7 +105,10 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             libssl-dev \
-            libgtk-3-dev
+            libgtk-3-dev \
+            cpio \
+            rpm \
+            squashfs-tools
 
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -130,12 +140,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: desktop
+          tauriScript: npm run tauri:audited --
           tagName: desktop-v__VERSION__
           releaseName: "Mazzy VPN Desktop v__VERSION__ (preview)"
           releaseBody: |
             Mazzy VPN Desktop 0.2 is a bundled-bootstrap Linux control-center preview.
 
-            Linux bundles include the compatible Mazzy VPN 1.2 engine installer and public runtime resources; no prior manual CLI installation is required. Dashboard, profile import and selection, validation/probes/transactional tests, complete Doctor/self-test output, bounded logs, service/recovery settings and About/Privacy information are included.
+            Linux DEB/RPM bundles install the compatible Mazzy VPN 1.2 engine, protected systemd services and base runtime dependencies through the package manager; AppImage retains an explicitly authorized embedded bootstrap. Dashboard, profile import and selection, validation/probes/transactional tests, complete Doctor/self-test output, bounded logs, service/recovery settings and About/Privacy information are included.
 
             macOS and Windows bundles remain UI previews only. They do not provide traffic protection until their native Network Extension and Windows Service/Wintun backends pass the platform release gates.
 

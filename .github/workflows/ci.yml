@@ -21,13 +21,21 @@ jobs:
 
       - name: Bash syntax
         run: |
-          bash -n mazzy-vpn vpnctl install.sh tests/run.sh tests/audit-public.sh
+          bash -n mazzy-vpn vpnctl install.sh \
+            packaging/linux/post-install.sh \
+            packaging/linux/pre-remove.sh \
+            packaging/linux/post-remove.sh \
+            tests/run.sh tests/audit-public.sh tests/check-linux-packages.sh
           bash -n setup_amnezia_vpn.sh stop_amnezia_vpn.sh
           bash -n completions/mazzy-vpn completions/vpnctl
 
       - name: ShellCheck
         run: |
-          shellcheck mazzy-vpn vpnctl install.sh tests/run.sh tests/audit-public.sh
+          shellcheck mazzy-vpn vpnctl install.sh \
+            packaging/linux/post-install.sh \
+            packaging/linux/pre-remove.sh \
+            packaging/linux/post-remove.sh \
+            tests/run.sh tests/audit-public.sh tests/check-linux-packages.sh
           shellcheck setup_amnezia_vpn.sh stop_amnezia_vpn.sh
           shellcheck completions/mazzy-vpn completions/vpnctl
 

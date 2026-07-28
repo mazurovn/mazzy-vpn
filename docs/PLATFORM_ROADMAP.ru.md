@@ -63,7 +63,9 @@ flowchart LR
 Desktop 0.2 — функциональный preview: он включает engine/bootstrap, профили,
 тесты, Doctor, журнал и системные настройки. До Linux Desktop 1.0 остаются
 versioned service API, полный policy/localization/accessibility parity,
-подписанные обновления, package lifecycle и fault/soak tests.
+подписанные обновления, clean-device package lifecycle/rollback coverage и
+fault/soak tests. DEB/RPM теперь владеют engine/service payload и сохраняют
+user state; AppImage всё ещё использует явный host bootstrap.
 
 Релизные форматы: AppImage, DEB и RPM. Каждый артефакт получает SHA-256; статус
 production появляется только после gate `desktop-linux-1.0`.
