@@ -173,9 +173,19 @@ validate_source_tree() {
         docs/API_CONTRACT.en.md docs/API_CONTRACT.ru.md docs/PROJECT_STATUS.md \
         docs/AUDIT_2026-07-28.ru.md \
         api/v1/manifest.json api/v1/schema.json \
-        desktop/README.md \
+        desktop/README.md desktop/src-tauri/tauri.conf.json \
+        desktop/src-tauri/src/backend.rs desktop/src-tauri/src/main.rs \
+        desktop/ui/app.js desktop/ui/index.html \
+        packaging/linux/post-install.sh packaging/linux/pre-remove.sh \
+        packaging/linux/post-remove.sh \
+        packaging/linux/systemd/mazzy-vpn-api.socket.d/10-package-docs.conf \
+        packaging/linux/systemd/mazzy-vpn-api@.service.d/10-package-exec.conf \
+        packaging/linux/systemd/vpnctl-health.service.d/10-package-exec.conf \
+        packaging/linux/systemd/vpnctl-test-recovery.service.d/10-package-exec.conf \
+        packaging/linux/systemd/vpnctl.service.d/10-package-exec.conf \
         tests/run.sh tests/audit-public.sh tests/check-capabilities.py \
-        tests/check-api-contract.py \
+        tests/check-api-contract.py tests/check-linux-packages.sh \
+        wiki/Desktop-Dashboard-and-Tray.md wiki/Diagnostics-and-Recovery.md \
         completions/mazzy-vpn systemd/vpnctl.service \
         systemd/vpnctl-health.service systemd/vpnctl-health.timer \
         systemd/vpnctl-test-recovery.service \

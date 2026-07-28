@@ -128,13 +128,20 @@ ping серверов, emergency recovery, doctor, автозапуск и жу�
 ![Mazzy VPN Desktop Dashboard](docs/images/dashboard-connected-preview.png)
 
 Tauri Desktop 0.2 для Linux содержит экраны Dashboard, Profiles, Diagnostics,
-Settings и «О программе», а также системный tray. В пакет включены совместимый engine и
-installer: клиент сам проверяет версии и зависимости и после явного разрешения
-может установить, обновить или восстановить engine. Доступны импорт файлов и
+Settings и «О программе», а также системный tray. DEB/RPM устанавливают
+совместимый engine, systemd units и базовые runtime-зависимости через package
+manager; AppImage сохраняет явно разрешённый embedded installer. Клиент
+проверяет версии и зависимости и после разрешения может исправить недостающие
+поддерживаемые protocol packages. Доступны импорт файлов и
 папок, поиск и выбор профиля, подключение, validation, probe, транзакционные
 тесты, Doctor с исправлениями, self-test, ограниченный журнал, autostart и
 управление recovery monitor. Предварительно устанавливать CLI вручную не нужно.
 Linux-пакеты выпускаются как AppImage, DEB и RPM.
+
+Upgrade и remove DEB/RPM намеренно сохраняют профили `/etc/vpnctl` и state
+`/var/lib/vpnctl`. До production всё ещё нужны clean-device
+install/upgrade/remove, rollback/fault и signing gates на каждом
+поддерживаемом дистрибутиве.
 
 «О программе» показывает версии Desktop/engine/platform, автора, copyright,
 лицензию AGPL, принципы приватности и правила безопасной работы.

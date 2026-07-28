@@ -344,7 +344,7 @@
             <p class="eyebrow" data-i18n="settingsCenter">SETTINGS</p>
             <h2 data-i18n="settingsTitle">Установка и системные настройки</h2>
             <p class="muted" data-i18n="settingsHint">
-              Desktop включает совместимый движок и может установить недостающие зависимости.
+              DEB/RPM управляют движком через package manager; AppImage использует явный bootstrap.
             </p>
           </div>
           <button class="compact-action primary" id="bootstrap-button" type="button"
@@ -365,6 +365,8 @@
                 <dd id="installed-version">—</dd></div>
               <div><dt data-i18n="bundledVersion">В комплекте Desktop</dt>
                 <dd id="bundled-version">—</dd></div>
+              <div><dt data-i18n="installationType">Тип установки</dt>
+                <dd id="installation-type">—</dd></div>
               <div><dt data-i18n="engineService">Системная служба</dt>
                 <dd id="service-installed">—</dd></div>
               <div><dt data-i18n="recoveryMonitor">Recovery monitor</dt>

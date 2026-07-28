@@ -1,0 +1,242 @@
+#!/usr/bin/env bash
+# Copyright (C) 2026 Nik m (@mazurovn)
+# SPDX-License-Identifier: AGPL-3.0-or-later
+set -euo pipefail
+
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+BUNDLE_ROOT="${1:-$ROOT/desktop/src-tauri/target/release/bundle}"
+TMP="$(mktemp -d)"
+trap 'rm -rf -- "$TMP"' EXIT
+
+fail() {
+    echo "linux-package-audit: $*" >&2
+    exit 1
+}
+
+require_command() {
+    command -v "$1" >/dev/null 2>&1 ||
+        fail "required audit command is missing: $1"
+}
+
+single_package() {
+    local directory="$1" pattern="$2"
+    local -a matches=()
+    mapfile -d '' matches < <(
+        find "$directory" -maxdepth 1 -type f -name "$pattern" -print0
+    )
+    ((${#matches[@]} == 1)) ||
+        fail "expected exactly one $pattern under $directory, found ${#matches[@]}"
+    printf '%s\n' "${matches[0]}"
+}
+
+assert_line() {
+    local needle="$1" file="$2"
+    grep -Fxq "$needle" "$file" ||
+        fail "missing package entry: $needle"
+}
+
+assert_dependency() {
+    local dependency="$1" file="$2"
+    grep -Fxq "$dependency" "$file" ||
+        fail "missing package dependency: $dependency"
+}
+
+find_appimage_offset() {
+    local image="$1" offset="" marker
+    while IFS=: read -r marker _; do
+        if unsquashfs -s -o "$marker" "$image" >/dev/null 2>&1; then
+            offset="$marker"
+            break
+        fi
+    done < <(LC_ALL=C grep -abo 'hsqs' "$image")
+    [[ -n "$offset" ]] ||
+        fail "AppImage does not contain a readable SquashFS payload"
+    printf '%s\n' "$offset"
+}
+
+require_command cpio
+require_command dpkg-deb
+require_command python3
+require_command rpm
+require_command rpm2cpio
+require_command systemd-analyze
+require_command unsquashfs
+
+deb="$(single_package "$BUNDLE_ROOT/deb" '*.deb')"
+rpm_package="$(single_package "$BUNDLE_ROOT/rpm" '*.rpm')"
+appimage="$(single_package "$BUNDLE_ROOT/appimage" '*.AppImage')"
+
+deb_control="$TMP/deb-control"
+deb_root="$TMP/deb-root"
+rpm_root="$TMP/rpm-root"
+rpm_db="$TMP/rpm-db"
+appimage_root="$TMP/appimage-root"
+appimage_stage="$TMP/appimage-stage"
+systemd_root="$TMP/systemd-root"
+mkdir -p "$deb_control" "$deb_root" "$rpm_root" "$rpm_db"
+rpm --dbpath "$rpm_db" --initdb
+dpkg-deb -e "$deb" "$deb_control"
+dpkg-deb -x "$deb" "$deb_root"
+(
+    cd "$rpm_root"
+    rpm2cpio "$rpm_package" | cpio -idm --quiet
+)
+appimage_offset="$(find_appimage_offset "$appimage")"
+unsquashfs -q -o "$appimage_offset" -d "$appimage_root" "$appimage" >/dev/null
+appimage_engine="$appimage_root/usr/lib/Mazzy VPN Desktop/engine"
+
+mkdir -p \
+    "$systemd_root/usr/bin" \
+    "$systemd_root/usr/lib/systemd/system" \
+    "$systemd_root/etc"
+cp -a /usr/lib/systemd/system/. "$systemd_root/usr/lib/systemd/system/"
+cp -L /etc/os-release "$systemd_root/etc/os-release"
+find "$systemd_root/usr/lib/systemd/system" -xtype l -delete
+cp -a "$deb_root/usr/bin/." "$systemd_root/usr/bin/"
+cp -a "$deb_root/usr/lib/systemd/system/." \
+    "$systemd_root/usr/lib/systemd/system/"
+if ! systemd-analyze verify --root="$systemd_root" \
+    mazzy-vpn-api.socket \
+    mazzy-vpn-api@.service \
+    vpnctl.service \
+    vpnctl-health.timer \
+    vpnctl-health.service \
+    vpnctl-test-recovery.service >"$TMP/systemd-verify.log" 2>&1; then
+    cat "$TMP/systemd-verify.log" >&2
+    fail "assembled package systemd units do not verify"
+fi
+
+cmp -s "$ROOT/packaging/linux/post-install.sh" "$deb_control/postinst" ||
+    fail "DEB postinst differs from the audited source"
+cmp -s "$ROOT/packaging/linux/pre-remove.sh" "$deb_control/prerm" ||
+    fail "DEB prerm differs from the audited source"
+cmp -s "$ROOT/packaging/linux/post-remove.sh" "$deb_control/postrm" ||
+    fail "DEB postrm differs from the audited source"
+
+rpm --dbpath "$rpm_db" -qp --qf '%{POSTIN}' "$rpm_package" >"$TMP/rpm-post"
+rpm --dbpath "$rpm_db" -qp --qf '%{PREUN}' "$rpm_package" >"$TMP/rpm-preun"
+rpm --dbpath "$rpm_db" -qp --qf '%{POSTUN}' "$rpm_package" >"$TMP/rpm-postun"
+cmp -s "$ROOT/packaging/linux/post-install.sh" "$TMP/rpm-post" ||
+    fail "RPM post-install script differs from the audited source"
+cmp -s "$ROOT/packaging/linux/pre-remove.sh" "$TMP/rpm-preun" ||
+    fail "RPM pre-uninstall script differs from the audited source"
+cmp -s "$ROOT/packaging/linux/post-remove.sh" "$TMP/rpm-postun" ||
+    fail "RPM post-uninstall script differs from the audited source"
+
+dpkg-deb -f "$deb" Depends |
+    tr ',' '\n' |
+    sed -E 's/^[[:space:]]*//; s/[[:space:](].*$//' >"$TMP/deb-depends"
+dpkg-deb -f "$deb" Recommends |
+    tr ',' '\n' |
+    sed -E 's/^[[:space:]]*//; s/[[:space:](].*$//' >"$TMP/deb-recommends"
+rpm --dbpath "$rpm_db" -qp --requires "$rpm_package" >"$TMP/rpm-requires"
+rpm --dbpath "$rpm_db" -qp --recommends "$rpm_package" >"$TMP/rpm-recommends"
+
+for dependency in \
+    bash diffutils findutils grep iproute2 jq pkexec procps sed socat systemd \
+    util-linux; do
+    assert_dependency "$dependency" "$TMP/deb-depends"
+done
+for dependency in netcat-openbsd network-manager-l2tp openvpn wireguard-tools; do
+    assert_dependency "$dependency" "$TMP/deb-recommends"
+done
+for dependency in \
+    bash diffutils findutils gawk grep iproute jq polkit procps-ng sed socat \
+    systemd util-linux; do
+    assert_dependency "$dependency" "$TMP/rpm-requires"
+done
+for dependency in NetworkManager-l2tp nmap-ncat openvpn wireguard-tools; do
+    assert_dependency "$dependency" "$TMP/rpm-recommends"
+done
+
+find "$deb_root" -type f -o -type l |
+    sed "s#^$deb_root##" |
+    sort >"$TMP/deb-files"
+find "$rpm_root" -type f -o -type l |
+    sed "s#^$rpm_root##" |
+    sort >"$TMP/rpm-files"
+
+for listing in "$TMP/deb-files" "$TMP/rpm-files"; do
+    for path in \
+        /usr/bin/mazzy-vpn \
+        /usr/bin/mazzyvpn \
+        /usr/bin/vpnctl \
+        /usr/lib/mazzy-vpn/api/v1/manifest.json \
+        /usr/lib/systemd/system/mazzy-vpn-api.socket \
+        /usr/lib/systemd/system/mazzy-vpn-api.socket.d/10-package-docs.conf \
+        /usr/lib/systemd/system/mazzy-vpn-api@.service \
+        /usr/lib/systemd/system/mazzy-vpn-api@.service.d/10-package-exec.conf \
+        /usr/lib/systemd/system/vpnctl.service \
+        /usr/lib/systemd/system/vpnctl.service.d/10-package-exec.conf \
+        /usr/lib/tmpfiles.d/mazzy-vpn.conf \
+        /usr/share/bash-completion/completions/mazzy-vpn; do
+        assert_line "$path" "$listing"
+    done
+    if grep -q '^/usr/local/' "$listing"; then
+        fail "distribution package writes into /usr/local"
+    fi
+    if grep -q '^/etc/vpnctl/' "$listing"; then
+        fail "distribution package owns user profile/configuration state"
+    fi
+done
+
+for extracted_root in "$deb_root" "$rpm_root"; do
+    [[ "$(stat -c '%a' "$extracted_root/usr/bin/mazzy-vpn")" == 755 ]] ||
+        fail "package engine mode is not exactly 0755"
+    [[ "$(stat -c '%a' "$extracted_root/usr/bin/vpnctl")" == 755 ]] ||
+        fail "package compatibility command mode is not exactly 0755"
+    cmp -s "$ROOT/mazzy-vpn" "$extracted_root/usr/bin/mazzy-vpn" ||
+        fail "package engine differs from source"
+    cmp -s "$ROOT/api/v1/manifest.json" \
+        "$extracted_root/usr/lib/mazzy-vpn/api/v1/manifest.json" ||
+        fail "package API manifest differs from source"
+    cmp -s "$ROOT/packaging/linux/systemd/vpnctl.service.d/10-package-exec.conf" \
+        "$extracted_root/usr/lib/systemd/system/vpnctl.service.d/10-package-exec.conf" ||
+        fail "package service override differs from source"
+done
+
+for relative in \
+    mazzy-vpn \
+    install.sh \
+    api/v1/manifest.json \
+    desktop/src-tauri/src/backend.rs \
+    desktop/src-tauri/src/main.rs \
+    desktop/src-tauri/tauri.conf.json \
+    desktop/ui/app.js \
+    desktop/ui/index.html \
+    packaging/linux/post-install.sh \
+    tests/check-capabilities.py \
+    tests/check-linux-packages.sh \
+    tests/run.sh \
+    wiki/Desktop-Dashboard-and-Tray.md; do
+    [[ -f "$appimage_engine/$relative" ]] ||
+        fail "AppImage embedded source is missing: $relative"
+done
+[[ "$(stat -c '%a' "$appimage_engine/mazzy-vpn")" == 755 ]] ||
+    fail "AppImage embedded engine mode is not exactly 0755"
+cmp -s "$ROOT/mazzy-vpn" "$appimage_engine/mazzy-vpn" ||
+    fail "AppImage embedded engine differs from source"
+cmp -s "$ROOT/desktop/src-tauri/tauri.conf.json" \
+    "$appimage_engine/desktop/src-tauri/tauri.conf.json" ||
+    fail "AppImage package configuration differs from source"
+cmp -s "$ROOT/packaging/linux/post-install.sh" \
+    "$appimage_engine/packaging/linux/post-install.sh" ||
+    fail "AppImage package lifecycle source differs from source"
+cmp -s "$ROOT/tests/check-linux-packages.sh" \
+    "$appimage_engine/tests/check-linux-packages.sh" ||
+    fail "AppImage release audit differs from source"
+
+python3 "$appimage_engine/tests/check-capabilities.py" >/dev/null ||
+    fail "AppImage embedded capability registry is incomplete"
+python3 "$appimage_engine/tests/check-api-contract.py" >/dev/null ||
+    fail "AppImage embedded API contract is invalid"
+"$appimage_engine/install.sh" \
+    --destdir "$appimage_stage" \
+    --no-deps \
+    --skip-tests \
+    --skip-checks \
+    --yes \
+    --lang en >/dev/null ||
+    fail "AppImage embedded installer source validation failed"
+
+echo "linux-package-audit: AppImage/DEB/RPM payload, dependencies and lifecycle scripts verified"

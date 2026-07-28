@@ -134,7 +134,7 @@
         "mobile_android": "not-applicable",
         "mobile_ios": "not-applicable"
       },
-      "tests": ["tests/run.sh", "desktop/src-tauri/src/backend.rs", "desktop/src-tauri/tauri.conf.json"],
+      "tests": ["tests/run.sh", "tests/check-linux-packages.sh", "desktop/src-tauri/src/backend.rs", "desktop/src-tauri/tauri.conf.json"],
       "docs": ["docs/DESKTOP.en.md", "docs/DESKTOP.ru.md", "docs/DESKTOP_ROADMAP.en.md", "docs/DESKTOP_ROADMAP.ru.md"]
     },
     {
@@ -202,7 +202,7 @@
         "mobile_android": "planned",
         "mobile_ios": "planned"
       },
-      "tests": ["tests/run.sh", "desktop/src-tauri/src/backend.rs", "desktop/src-tauri/tauri.conf.json"],
+      "tests": ["tests/run.sh", "tests/check-linux-packages.sh", "desktop/src-tauri/src/backend.rs", "desktop/src-tauri/tauri.conf.json"],
       "docs": ["docs/DESKTOP.en.md", "docs/DESKTOP.ru.md", "docs/DESKTOP_ROADMAP.en.md", "docs/DESKTOP_ROADMAP.ru.md"]
     },
     {
@@ -219,7 +219,7 @@
         "mobile_android": "planned",
         "mobile_ios": "planned"
       },
-      "tests": ["tests/run.sh", "desktop/src-tauri/src/main.rs", "desktop/src-tauri/src/backend.rs", "tests/audit-public.sh"],
+      "tests": ["tests/run.sh", "tests/check-linux-packages.sh", "desktop/src-tauri/src/main.rs", "desktop/src-tauri/src/backend.rs", "tests/audit-public.sh"],
       "docs": ["SECURITY.md", "docs/DESKTOP_ROADMAP.en.md", "docs/DESKTOP_ROADMAP.ru.md"]
     },
     {

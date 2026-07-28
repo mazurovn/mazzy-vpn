@@ -18,7 +18,8 @@ use std::{
 };
 use tauri::{AppHandle, Manager};
 
-const CLI_PATH: &str = "/usr/local/bin/mazzy-vpn";
+const SYSTEM_CLI_PATH: &str = "/usr/bin/mazzy-vpn";
+const LOCAL_CLI_PATH: &str = "/usr/local/bin/mazzy-vpn";
 const PROFILES_FILE: &str = "/run/mazzy-vpn/profiles.json";
 const API_SOCKET: &str = "/run/mazzy-vpn/api-v1.sock";
 const MAX_OUTPUT_BYTES: usize = 512 * 1024;
@@ -123,6 +124,7 @@ pub struct DependencyState {
 #[derive(Clone, Debug, Serialize)]
 pub struct InstallationReport {
     pub engine_installed: bool,
+    pub package_managed: bool,
     pub installed_version: Option<String>,
     pub bundled_version: Option<String>,
     pub bundled_installer: bool,
@@ -134,6 +136,29 @@ pub struct InstallationReport {
     pub dependencies_ready: bool,
     pub missing_dependencies: usize,
     pub dependencies: Vec<DependencyState>,
+}
+
+fn select_cli_path(system_installed: bool, local_installed: bool) -> Option<&'static Path> {
+    if system_installed {
+        Some(Path::new(SYSTEM_CLI_PATH))
+    } else if local_installed {
+        Some(Path::new(LOCAL_CLI_PATH))
+    } else {
+        None
+    }
+}
+
+fn installed_cli_path() -> Option<&'static Path> {
+    select_cli_path(
+        Path::new(SYSTEM_CLI_PATH).is_file(),
+        Path::new(LOCAL_CLI_PATH).is_file(),
+    )
+}
+
+fn systemd_unit_installed(name: &str) -> bool {
+    ["/usr/lib/systemd/system", "/etc/systemd/system"]
+        .iter()
+        .any(|directory| Path::new(directory).join(name).is_file())
 }
 
 fn protocol(value: &str, allow_all: bool) -> Result<String, String> {
@@ -731,6 +756,16 @@ fn try_execute_local_api(_: &OperationRequest) -> Option<OperationResult> {
 
 pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> OperationResult {
     if matches!(request, OperationRequest::Bootstrap) {
+        if Path::new(SYSTEM_CLI_PATH).is_file() {
+            return command_result(
+                "bootstrap".into(),
+                bounded_output(
+                    Command::new("pkexec")
+                        .arg(SYSTEM_CLI_PATH)
+                        .args(["doctor", "--fix"]),
+                ),
+            );
+        }
         let installer = engine_root(app).join("install.sh");
         if !installer.is_file() {
             return OperationResult {
@@ -763,7 +798,7 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
             };
         }
     };
-    if !Path::new(CLI_PATH).is_file() {
+    let Some(cli_path) = installed_cli_path() else {
         return OperationResult {
             success: false,
             action,
@@ -771,13 +806,13 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
                 .into(),
             code: None,
         };
-    }
+    };
     if let Some(result) = try_execute_local_api(&request) {
         return result;
     }
     command_result(
         action,
-        bounded_output(Command::new("pkexec").arg(CLI_PATH).args(args)),
+        bounded_output(Command::new("pkexec").arg(cli_path).args(args)),
     )
 }
 
@@ -1004,7 +1039,9 @@ pub fn get_profiles() -> Value {
 #[tauri::command]
 pub fn get_installation_report(app: AppHandle) -> InstallationReport {
     let root = engine_root(&app);
-    let installed_version = installed_version(Path::new(CLI_PATH));
+    let cli_path = installed_cli_path();
+    let installed_version = cli_path.and_then(installed_version);
+    let package_managed = cli_path == Some(Path::new(SYSTEM_CLI_PATH));
     let bundled_version = bundled_version(&root);
     let engine_installed = installed_version.is_some();
     let dependencies = dependencies();
@@ -1013,9 +1050,9 @@ pub fn get_installation_report(app: AppHandle) -> InstallationReport {
         .filter(|dependency| !dependency.installed)
         .count();
     let dependencies_ready = missing_dependencies == 0;
-    let service_installed = Path::new("/etc/systemd/system/vpnctl.service").is_file();
-    let monitor_installed = Path::new("/etc/systemd/system/vpnctl-health.timer").is_file();
-    let api_installed = Path::new("/etc/systemd/system/mazzy-vpn-api.socket").is_file();
+    let service_installed = systemd_unit_installed("vpnctl.service");
+    let monitor_installed = systemd_unit_installed("vpnctl-health.timer");
+    let api_installed = systemd_unit_installed("mazzy-vpn-api.socket");
     let api_socket_available = Path::new(API_SOCKET).exists();
     let needs_install = !engine_installed
         || installed_version != bundled_version
@@ -1025,6 +1062,7 @@ pub fn get_installation_report(app: AppHandle) -> InstallationReport {
         || !api_installed;
     InstallationReport {
         engine_installed,
+        package_managed,
         installed_version,
         bundled_version,
         bundled_installer: root.join("install.sh").is_file(),
@@ -1158,6 +1196,19 @@ mod tests {
                 "missing dependency state: {required}"
             );
         }
+    }
+
+    #[test]
+    fn package_managed_engine_takes_precedence_over_local_installs() {
+        assert_eq!(
+            select_cli_path(true, true),
+            Some(Path::new(SYSTEM_CLI_PATH))
+        );
+        assert_eq!(
+            select_cli_path(false, true),
+            Some(Path::new(LOCAL_CLI_PATH))
+        );
+        assert_eq!(select_cli_path(false, false), None);
     }
 
     #[test]
