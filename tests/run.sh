@@ -48,6 +48,12 @@ chmod 600 "$TMP/config/wireguard/Unsafe.conf"
 cat >"$TMP/fakebin/systemctl" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"${FAKE_SYSTEMCTL_LOG:?}"
+if [[ -n "${FAKE_SYSTEMCTL_DELAY_ONCE_FILE:-}" &&
+      ! -e "$FAKE_SYSTEMCTL_DELAY_ONCE_FILE" ]]; then
+    touch "$FAKE_SYSTEMCTL_DELAY_ONCE_FILE"
+    printf '%s\n' "$$" >"${FAKE_SYSTEMCTL_DELAY_PID_FILE:?}"
+    sleep "${FAKE_SYSTEMCTL_DELAY_ONCE_SECONDS:-10}"
+fi
 if [[ "${FAKE_SYSTEMCTL_DELAY_SECONDS:-0}" != "0" ]]; then
     sleep "$FAKE_SYSTEMCTL_DELAY_SECONDS"
 fi
@@ -689,6 +695,73 @@ jq -e '
     fail "local API did not enforce its request limit in bytes"
 ok "local API bounds request memory before JSON parsing"
 
+api_duplicate_operation_response="$(
+    printf '%s\n' \
+        '{"api_version":"1.0","request_id":"request-duplicate-0001","operation":"status.get","\u006fperation":"profiles.list","payload":{}}' |
+        "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "invalid-request"
+    and .error.message_key == "api.request.duplicate-key"
+' <<<"$api_duplicate_operation_response" >/dev/null ||
+    fail "local API accepted a Unicode-escaped duplicate envelope key"
+
+api_duplicate_payload_response="$(
+    printf '%s\n' \
+        '{"api_version":"1.0","request_id":"request-duplicate-0002","operation":"status.get","payload":{},"payload":{}}' |
+        "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "invalid-request"
+    and .error.message_key == "api.request.duplicate-key"
+' <<<"$api_duplicate_payload_response" >/dev/null ||
+    fail "local API accepted duplicate payload objects"
+
+api_multiple_documents_response="$(
+    printf '%s\n' \
+        '{"api_version":"1.0","request_id":"request-multiple-0001","operation":"status.get","payload":{}} {"api_version":"1.0","request_id":"request-multiple-0001","operation":"profiles.list","payload":{}}' |
+        "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "invalid-request"
+    and .error.message_key == "api.request.invalid-json"
+' <<<"$api_multiple_documents_response" >/dev/null ||
+    fail "local API accepted multiple top-level JSON documents"
+ok "local API rejects ambiguous JSON envelopes before dispatch"
+
+api_bounded_query_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-bounded-query-0001",
+        operation: "status.get",
+        deadline_ms: 100,
+        payload: {}
+    }'
+)"
+: >"$FAKE_TIMEOUT_LOG"
+api_bounded_query_response="$(
+    printf '%s\n' "$api_bounded_query_request" |
+        FAKE_SYSTEMCTL_DELAY_SECONDS=5 "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "ok"
+    and .request_id == "request-bounded-query-0001"
+' <<<"$api_bounded_query_response" >/dev/null ||
+    fail "local API did not fall back to its existing cache after a bounded refresh"
+grep -Fq -- \
+    "--kill-after=2s 0.100s $CLI _refresh-dashboard-cache" \
+    "$FAKE_TIMEOUT_LOG" ||
+    fail "local API query ignored its refresh deadline"
+if find "$VPNCTL_DASHBOARD_DIR" -maxdepth 1 -type f \
+    \( -name '.status.*' -o -name '.profiles.*' \) |
+    grep -q .; then
+    fail "timed-out local API refresh left temporary cache files"
+fi
+ok "local API bounds query refreshes and cleans interrupted cache writes"
+
 api_busy_request="$(
     jq -cn '{
         api_version: "1.0",
@@ -716,6 +789,96 @@ jq -e '
 ' <<<"$api_busy_response" >/dev/null ||
     fail "local API did not reject a concurrent mutation as retryable busy"
 ok "local API serializes concurrent mutations"
+
+api_audit_unavailable_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-audit-unavailable-0001",
+        operation: "lifecycle.reconnect",
+        action_id: "action-audit-unavailable-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {}
+    }'
+)"
+rm -f -- "$VPNCTL_API_AUDIT_FILE" "$VPNCTL_API_AUDIT_FILE.1"
+mkdir "$VPNCTL_API_AUDIT_FILE"
+api_audit_systemctl_count="$(wc -l <"$FAKE_SYSTEMCTL_LOG")"
+api_audit_unavailable_response="$(
+    printf '%s\n' "$api_audit_unavailable_request" |
+        "$CLI" _api-dispatch 2>/dev/null
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "internal-error"
+    and .error.message_key == "api.audit.unavailable"
+    and .error.user_action_required == true
+' <<<"$api_audit_unavailable_response" >/dev/null ||
+    fail "local API did not fail closed when its audit log was unavailable"
+[[ "$(wc -l <"$FAKE_SYSTEMCTL_LOG")" == "$api_audit_systemctl_count" ]] ||
+    fail "local API executed a mutation without a durable start audit event"
+[[ ! -e "$VPNCTL_API_ACTION_DIR/action-audit-unavailable-0001.json" ]] ||
+    fail "rejected unaudited API mutation left a running action record"
+rmdir "$VPNCTL_API_AUDIT_FILE"
+ok "local API requires a durable audit event before mutation"
+
+api_terminal_audit_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-terminal-audit-0001",
+        operation: "lifecycle.reconnect",
+        action_id: "action-terminal-audit-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {}
+    }'
+)"
+rm -f -- "$VPNCTL_API_AUDIT_FILE" "$VPNCTL_API_AUDIT_FILE.1"
+api_audit_archive_blocker="$VPNCTL_API_AUDIT_FILE.1/$(basename "$VPNCTL_API_AUDIT_FILE")"
+mkdir -p "$api_audit_archive_blocker"
+api_terminal_audit_before="$(wc -l <"$FAKE_SYSTEMCTL_LOG")"
+api_terminal_audit_response="$(
+    printf '%s\n' "$api_terminal_audit_request" |
+        VPNCTL_API_AUDIT_MAX_BYTES=1 "$CLI" _api-dispatch 2>/dev/null
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "internal-error"
+    and .error.message_key == "api.audit.unavailable"
+    and .error.user_action_required == true
+' <<<"$api_terminal_audit_response" >/dev/null ||
+    fail "local API hid a missing terminal audit event"
+api_terminal_audit_after="$(wc -l <"$FAKE_SYSTEMCTL_LOG")"
+((api_terminal_audit_after > api_terminal_audit_before)) ||
+    fail "terminal audit fault was injected before mutation execution"
+jq -e '
+    .state == "recovery-required"
+    and .action_id == "action-terminal-audit-0001"
+    and .operation == "lifecycle.reconnect"
+    and .reason == "audit-unavailable"
+' "$VPNCTL_STATE_DIR/api-recovery-required.json" >/dev/null ||
+    fail "missing terminal audit event did not enter recovery-only mode"
+jq -e '
+    .state == "completed"
+    and .outcome.action_id == "action-terminal-audit-0001"
+    and .outcome.state == "succeeded"
+' "$VPNCTL_API_ACTION_DIR/action-terminal-audit-0001.json" >/dev/null ||
+    fail "terminal audit fault lost the idempotent action outcome"
+rmdir "$api_audit_archive_blocker" "$VPNCTL_API_AUDIT_FILE.1"
+"$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
+api_terminal_audit_retry="$(
+    printf '%s\n' "$api_terminal_audit_request" | "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "ok"
+    and .result.action_id == "action-terminal-audit-0001"
+    and .result.state == "succeeded"
+' <<<"$api_terminal_audit_retry" >/dev/null ||
+    fail "acknowledged terminal audit fault lost its stored action result"
+[[ "$(wc -l <"$FAKE_SYSTEMCTL_LOG")" == "$api_terminal_audit_after" ]] ||
+    fail "terminal audit retry executed the completed mutation twice"
+rm -f -- "$VPNCTL_API_AUDIT_FILE"
+ok "local API preserves idempotency when terminal audit persistence fails"
 
 api_connect_request="$(
     jq -cn --arg profile_id "$profile_id" '{
@@ -953,9 +1116,13 @@ api_deadline_request="$(
     }'
 )"
 : >"$FAKE_TIMEOUT_LOG"
+api_delayed_systemctl_marker="$TMP/api-systemctl-delay-once"
+api_delayed_systemctl_pid_file="$TMP/api-systemctl-delay.pid"
 api_deadline_response="$(
     printf '%s\n' "$api_deadline_request" |
-        FAKE_SYSTEMCTL_DELAY_SECONDS=1 \
+        FAKE_SYSTEMCTL_DELAY_ONCE_FILE="$api_delayed_systemctl_marker" \
+        FAKE_SYSTEMCTL_DELAY_PID_FILE="$api_delayed_systemctl_pid_file" \
+        FAKE_SYSTEMCTL_DELAY_ONCE_SECONDS=10 \
         VPNCTL_API_CACHE_REFRESH_TIMEOUT_SECONDS=2 \
         "$CLI" _api-dispatch
 )"
@@ -967,9 +1134,13 @@ jq -e '
 ' <<<"$api_deadline_response" >/dev/null ||
     fail "local API did not time out and roll back a sub-second mutation"
 grep -Eq -- \
-    '--foreground --kill-after=5s 0\.[0-9]{3}s .*/mazzy-vpn reconnect' \
+    '--kill-after=5s 0\.[0-9]{3}s .*/mazzy-vpn reconnect' \
     "$FAKE_TIMEOUT_LOG" ||
     fail "local API rounded a millisecond deadline up to a full second"
+api_delayed_systemctl_pid="$(cat "$api_delayed_systemctl_pid_file")"
+if kill -0 "$api_delayed_systemctl_pid" 2>/dev/null; then
+    fail "timed-out local API mutation left a systemctl descendant running"
+fi
 ok "local API accounts preflight time and preserves millisecond deadlines"
 
 sed -i 's/^DESIRED=up$/DESIRED=down/' "$VPNCTL_STATE_DIR/active"
@@ -996,11 +1167,11 @@ jq -e '
     and .result.state == "rollback-failed"
     and .result.rollback.state == "failed"
 ' <<<"$api_stop_rollback_response" >/dev/null ||
-    fail "local API reported a failed stop rollback as successful"
+    fail "local API reported a failed stop rollback as successful: $api_stop_rollback_response"
 [[ -s "$api_recovery_marker" ]] ||
     fail "failed stop rollback did not enter recovery-only mode"
 grep -Fq -- \
-    '--foreground --kill-after=5s 30s systemctl stop vpnctl.service' \
+    '--kill-after=5s 30s systemctl stop vpnctl.service' \
     "$FAKE_TIMEOUT_LOG" ||
     fail "rollback timeout exceeded the client completion grace contract"
 "$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
