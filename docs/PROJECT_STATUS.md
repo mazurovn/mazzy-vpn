@@ -82,9 +82,13 @@ Draft PR #26 on `agent/local-api-daemon` builds the protected-service slice:
 - CI uses versioned Ubuntu 22.04/24.04, macOS 14 and Windows Server 2022 runner
   labels with the declared Rust 1.85.0 toolchain rather than `latest`/`stable`;
 - status/profile caches are atomically published as `0640 root:mazzy-vpn`
-  under a group-restricted runtime directory;
+  under a `0750 root:mazzy-vpn` runtime directory created consistently by
+  systemd-tmpfiles;
 - failed or missing crash-recovery snapshots persist a root-only marker that
-  blocks later API mutations until explicit administrator acknowledgement.
+  blocks later API mutations until explicit administrator acknowledgement;
+- strict runtime JSON parsing, mandatory durable start audit, bounded query
+  refresh and process-group termination close the ambiguity, unaudited
+  execution and surviving-descendant faults found in the full audit.
 
 The active stacked `agent/cli-tui-api-client` branch adds the next client slice:
 
@@ -104,19 +108,30 @@ The active stacked `agent/cli-tui-api-client` branch adds the next client slice:
   commit verification for the AmneziaWG source fallback;
 - no direct `sudo` fallback after a request may have been sent;
 - automatic `socat` installation on Debian/Ubuntu, Fedora/RHEL, Arch and
-  openSUSE.
+  openSUSE;
+- strict single-document responses, locale-independent byte limits, explicit
+  query deadlines and visible action IDs for failed lifecycle outcomes;
+- Desktop dependency diagnostics include `socat`; DEB requires `pkexec` and
+  RPM requires `polkit`, while full engine installation remains a separate
+  privileged first-run step;
+- tag releases run the Rust unit suite and Clippy before attaching bundles.
+- the non-functional notifications preference was removed; the disabled
+  Desktop control now labels the feature as unavailable in the preview.
 
 Verified locally:
 
-- shell regression suite: 61/61 on the stacked PR #27 branch;
-- Rust unit tests: 12/12;
+- shell regression suite: 67/67 on the stacked PR #27 branch;
+- Rust unit tests: 14/14;
 - ShellCheck, Clippy, capability/API validators, public audit and gitleaks;
-- the previous npm audit reported 0 vulnerabilities, but the 2026-07-28 online
-  refresh was not authorized by the sandbox and must not be treated as current;
-- latest local release-mode build produced the binary, DEB and RPM, but the
-  AppImage step failed in `linuxdeploy`; a complete clean bundle build is still
-  required;
-- the DEB-embedded CLI, installer, API docs and handoff byte-match this branch.
+- `npm audit --audit-level=high` reported 0 known vulnerabilities on
+  2026-07-28; Cargo and system-package advisory coverage is still absent;
+- latest local release-mode build produced the binary, DEB, RPM and AppImage;
+  actual DEB
+  metadata contains `pkexec` plus the auto-detected GTK/WebKit dependencies and
+  RPM contains `polkit` plus the library requirements;
+- DEB-embedded and AppImage AppDir copies of the CLI, installer, API docs,
+  capability registry, handoff, audit and tmpfiles policy byte-match this
+  branch; clean-host install/run and reproducibility checks remain required.
 
 Do not mark issue #5 complete after this slice. The remaining API domains,
 native caller identity, a full request/response deadline beyond the bounded

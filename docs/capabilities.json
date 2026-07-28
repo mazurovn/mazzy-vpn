@@ -128,7 +128,7 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "not-applicable",
-        "desktop_linux": "implemented",
+        "desktop_linux": "partial",
         "desktop_macos": "planned",
         "desktop_windows": "planned",
         "mobile_android": "not-applicable",
@@ -196,7 +196,7 @@
       "surfaces": {
         "cli": "implemented",
         "tui": "implemented",
-        "desktop_linux": "implemented",
+        "desktop_linux": "partial",
         "desktop_macos": "planned",
         "desktop_windows": "planned",
         "mobile_android": "planned",

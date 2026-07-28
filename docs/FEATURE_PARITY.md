@@ -16,11 +16,11 @@ Status: **I** implemented · **P** partial · **R** planned · **—** not appli
 | `validation-probe-test` | I | I | I | R | R | R | R |
 | `operating-modes` | I | I | P | R | R | R | R |
 | `service-control` | I | P | I | R | R | — | — |
-| `dependency-bootstrap` | I | — | I | R | R | — | — |
+| `dependency-bootstrap` | I | — | P | R | R | — | — |
 | `dashboard-tray` | I | I | I | P | P | R | R |
 | `localization-six-languages` | I | I | P | P | P | R | R |
 | `automatic-recovery` | I | I | I | R | R | R | R |
-| `self-contained-runtime` | I | I | I | R | R | R | R |
+| `self-contained-runtime` | I | I | P | R | R | R | R |
 | `privilege-boundary` | I | I | P | R | R | R | R |
 | `versioned-local-api` | P | P | P | P | P | R | R |
 | `mobile-vpn-lifecycle` | — | — | — | — | — | R | R |
@@ -46,9 +46,11 @@ Desktop 0.2 — Linux control-center preview. Он уже включает ус�
 движка, импорт и выбор профилей, validate/probe/live-test, Doctor с полным
 выводом, журнал и управление службами. Gate Desktop 1.0 всё ещё закрыт:
 не завершены fallback-policy UI, полный перевод новых экранов на шесть языков
-и переход от typed `pkexec`-адаптера к локальному versioned daemon API.
-Контракт API `1.0`, manifest и безопасные envelopes уже опубликованы и
-машинно проверяются, но общий dispatcher и защищённый service пока не готовы.
+и переход всех typed `pkexec`-операций к локальному versioned daemon API.
+Контракт API `1.0`, manifest, безопасные envelopes и ограниченный protected
+service уже реализованы в Draft-ветках, но большинство operation domains и
+native caller identity отсутствуют. DEB/RPM только обеспечивают запуск
+bootstrap, а AppImage всё ещё зависит от уже установленного `pkexec`.
 Android и iOS пока являются только планом: UI preview или Desktop wrapper не
 считаются мобильным VPN-клиентом.
 
@@ -62,10 +64,12 @@ Desktop 0.2 is a Linux control-center preview. It bundles the shared-engine
 installer and now exposes profile import/selection, validation, probes, live
 tests, full Doctor output, logs and service controls. The Desktop 1.0 gate
 remains closed until fallback-policy UI, full six-language coverage for the new
-screens and the versioned local daemon API replace the typed `pkexec` adapter.
-The API `1.0` contract, manifest and frontend-safe envelopes are now published
-and machine-validated, but the shared dispatcher and protected service are not
-implemented yet.
+screens and the versioned local daemon API replace every typed `pkexec`
+operation. The API `1.0` contract, manifest, frontend-safe envelopes and a
+limited protected service are implemented on the Draft branches, but most
+operation domains and native caller identity are still missing. DEB/RPM only
+make the bootstrap launchable, while AppImage still requires `pkexec` to be
+present already.
 Android and iOS are currently plans only: a UI preview or wrapped Desktop
 frontend does not count as a mobile VPN client.
 
