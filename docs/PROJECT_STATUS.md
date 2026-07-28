@@ -108,8 +108,8 @@ The active stacked `agent/cli-tui-api-client` branch adds the next client slice:
 
 Verified locally:
 
-- shell regression suite: 59/59 on the stacked PR #27 branch;
-- Rust unit tests: 11/11;
+- shell regression suite: 61/61 on the stacked PR #27 branch;
+- Rust unit tests: 12/12;
 - ShellCheck, Clippy, capability/API validators, public audit and gitleaks;
 - the previous npm audit reported 0 vulnerabilities, but the 2026-07-28 online
   refresh was not authorized by the sandbox and must not be treated as current;
@@ -119,6 +119,6 @@ Verified locally:
 - the DEB-embedded CLI, installer, API docs and handoff byte-match this branch.
 
 Do not mark issue #5 complete after this slice. The remaining API domains,
-native caller identity, strict end-to-end deadlines, long-lived idempotency
-semantics and real-host crash/concurrency tests remain separate acceptance
-criteria.
+native caller identity, a full request/response deadline beyond the bounded
+rollback completion grace, long-lived idempotency semantics and real-host
+crash/concurrency tests remain separate acceptance criteria.

@@ -32,6 +32,7 @@ API_SERVICE_UNIT="${VPNCTL_API_SERVICE_UNIT:-mazzy-vpn-api@.service}"
 RUNTIME_READER_GROUP="${VPNCTL_RUNTIME_READER_GROUP:-mazzy-vpn}"
 API_SOCKET="${VPNCTL_API_SOCKET:-/run/mazzy-vpn/api-v1.sock}"
 API_CLIENT_MAX_RESPONSE_BYTES="${VPNCTL_API_CLIENT_MAX_RESPONSE_BYTES:-65536}"
+API_CLIENT_COMPLETION_GRACE_SECONDS="${VPNCTL_API_CLIENT_COMPLETION_GRACE_SECONDS:-60}"
 HEALTH_FAILURE_LIMIT="${VPNCTL_HEALTH_FAILURE_LIMIT:-2}"
 HEALTH_PROBE_TIMEOUT="${VPNCTL_HEALTH_PROBE_TIMEOUT:-4}"
 HEALTH_FALLBACK_PROBE_URL="${VPNCTL_HEALTH_FALLBACK_PROBE_URL:-https://1.1.1.1/cdn-cgi/trace}"
@@ -1321,13 +1322,20 @@ api_client_identifier() {
 }
 
 api_client_send() {
-    local request="$1" request_id deadline_ms timeout_seconds response="" rc=1 attempt
+    local request="$1" request_id deadline_ms timeout_seconds grace_seconds=5
+    local response="" rc=1 attempt
     request_id="$(jq -r '.request_id // ""' <<<"$request")"
     deadline_ms="$(jq -r '.deadline_ms // 5000' <<<"$request")"
     [[ "$deadline_ms" =~ ^[0-9]+$ ]] || deadline_ms=5000
-    timeout_seconds=$(((deadline_ms + 999) / 1000 + 5))
+    if jq -e 'has("action_id")' <<<"$request" >/dev/null 2>&1; then
+        grace_seconds="$API_CLIENT_COMPLETION_GRACE_SECONDS"
+        [[ "$grace_seconds" =~ ^[0-9]+$ ]] &&
+            ((grace_seconds >= 60 && grace_seconds <= 120)) ||
+            grace_seconds=60
+    fi
+    timeout_seconds=$(((deadline_ms + 999) / 1000 + grace_seconds))
     ((timeout_seconds >= 10)) || timeout_seconds=10
-    ((timeout_seconds <= 905)) || timeout_seconds=905
+    ((timeout_seconds <= 1020)) || timeout_seconds=1020
 
     for attempt in 1 2; do
         response="$(

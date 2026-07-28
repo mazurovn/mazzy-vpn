@@ -1150,9 +1150,11 @@ grep -q 'Подключение запущено' <<<"$api_client_connect" ||
     fail "CLI local API connect did not execute exactly once"
 
 : >"$FAKE_SYSTEMCTL_LOG"
+: >"$FAKE_TIMEOUT_LOG"
 rm -f "$TMP/socat-lost-response"
 api_client_reconnect="$(
     FAKE_SOCAT_LOST_RESPONSE_FILE="$TMP/socat-lost-response" \
+        VPNCTL_API_CLIENT_COMPLETION_GRACE_SECONDS=15 \
         VPNCTL_API_CLIENT_FORCE=1 "$CLI" reconnect
 )"
 grep -q 'Переподключение запущено' <<<"$api_client_reconnect" ||
@@ -1161,6 +1163,9 @@ grep -q 'Переподключение запущено' <<<"$api_client_reconn
     fail "CLI local API lost-response scenario was not exercised"
 [[ "$(grep -c '^start vpnctl.service$' "$FAKE_SYSTEMCTL_LOG")" == "1" ]] ||
     fail "CLI local API retry executed one reconnect action twice"
+grep -Fq -- '--foreground --kill-after=2s 90s socat -T 90' \
+    "$FAKE_TIMEOUT_LOG" ||
+    fail "CLI client did not reserve the bounded rollback completion grace"
 
 api_client_dashboard="$(
     VPNCTL_API_CLIENT_FORCE=1 "$CLI" dashboard
