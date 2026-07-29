@@ -4827,106 +4827,112 @@ api_profiles_result() {
 
 api_probe_result() {
     local request="$1" deadline_ms="$2"
-    local timeout_seconds concurrency protocol profile_id duration result rc=0
+    local timeout_seconds concurrency protocol profile_id duration result result_file rc=0
     mkdir -p -- "$API_ACTION_DIR" || return 1
     chmod 700 -- "$API_ACTION_DIR" || return 1
-    exec 8>"$API_ACTION_DIR/.probe.lock" || return 1
-    flock -n 8 || return 75
-    timeout_seconds="$(jq -r '.payload.timeout_seconds' <<<"$request")"
-    concurrency="$(jq -r '.payload.concurrency // 4' <<<"$request")"
-    protocol="$(jq -r '.payload.protocol // "all"' <<<"$request")"
-    profile_id="$(jq -r '.payload.profile_id // ""' <<<"$request")"
-    duration="$(api_timeout_seconds_from_ms "$deadline_ms")" || return 1
+    {
+        flock -n 10 || return 75
+        timeout_seconds="$(jq -r '.payload.timeout_seconds' <<<"$request")"
+        concurrency="$(jq -r '.payload.concurrency // 4' <<<"$request")"
+        protocol="$(jq -r '.payload.protocol // "all"' <<<"$request")"
+        profile_id="$(jq -r '.payload.profile_id // ""' <<<"$request")"
+        duration="$(api_timeout_seconds_from_ms "$deadline_ms")" || return 1
 
-    result="$(
+        result_file="$(mktemp "${API_ACTION_DIR}/.probe-result.XXXXXX")" || return 1
         VPNCTL_API_CLIENT_DISABLE=1 \
             timeout --kill-after=2s "${duration}s" \
                 "$SELF" _probe-locations-json \
-                "$protocol" "$timeout_seconds" "$concurrency" "$profile_id"
-    )" || rc=$?
-    case "$rc" in
-        0) ;;
-        124|137) return 124 ;;
-        *) return 1 ;;
-    esac
-    jq -e '
-        .schema_version == 1
-        and (.checked_at | type == "string")
-        and (.summary.total | type == "number")
-        and (.results | type == "array")
-        and all(
-            .results[];
-            (.profile_id | type == "string")
-            and (.display_name | type == "string")
-            and (.protocol | type == "string")
-            and (.active | type == "boolean")
-            and (
-                .reachability == "reachable"
-                or .reachability == "unknown"
-                or .reachability == "unreachable"
-                or .reachability == "invalid"
-            )
-            and (
-                .latency_ms == null
-                or (
-                    (.latency_ms | type == "number")
-                    and .latency_ms >= 0
-                    and (.latency_ms | floor) == .latency_ms
+                "$protocol" "$timeout_seconds" "$concurrency" "$profile_id" \
+                >"$result_file" || rc=$?
+        case "$rc" in
+            0) ;;
+            124|137) rm -f -- "$result_file"; return 124 ;;
+            *) rm -f -- "$result_file"; return 1 ;;
+        esac
+        result="$(<"$result_file")"
+        rm -f -- "$result_file"
+        jq -e '
+            .schema_version == 1
+            and (.checked_at | type == "string")
+            and (.summary.total | type == "number")
+            and (.results | type == "array")
+            and all(
+                .results[];
+                (.profile_id | type == "string")
+                and (.display_name | type == "string")
+                and (.protocol | type == "string")
+                and (.active | type == "boolean")
+                and (
+                    .reachability == "reachable"
+                    or .reachability == "unknown"
+                    or .reachability == "unreachable"
+                    or .reachability == "invalid"
+                )
+                and (
+                    .latency_ms == null
+                    or (
+                        (.latency_ms | type == "number")
+                        and .latency_ms >= 0
+                        and (.latency_ms | floor) == .latency_ms
+                    )
                 )
             )
-        )
-    ' <<<"$result" >/dev/null 2>&1 || return 1
-    if [[ -n "$profile_id" ]] &&
-       [[ "$(jq -r '.summary.total' <<<"$result")" -eq 0 ]]; then
-        return 3
-    fi
-    printf '%s\n' "$result"
+        ' <<<"$result" >/dev/null 2>&1 || return 1
+        if [[ -n "$profile_id" ]] &&
+           [[ "$(jq -r '.summary.total' <<<"$result")" -eq 0 ]]; then
+            return 3
+        fi
+        printf '%s\n' "$result"
+    } 10>"$API_ACTION_DIR/.probe.lock"
 }
 
 api_verify_result() {
     local request="$1" deadline_ms="$2"
-    local timeout_seconds include_speed duration result rc=0
+    local timeout_seconds include_speed duration result result_file rc=0
     mkdir -p -- "$API_ACTION_DIR" || return 1
     chmod 700 -- "$API_ACTION_DIR" || return 1
-    exec 8>"$API_ACTION_DIR/.verify.lock" || return 1
-    flock -n 8 || return 75
-    timeout_seconds="$(jq -r '.payload.timeout_seconds' <<<"$request")"
-    include_speed="$(jq -r '.payload.include_speed // false' <<<"$request")"
-    duration="$(api_timeout_seconds_from_ms "$deadline_ms")" || return 1
+    {
+        flock -n 10 || return 75
+        timeout_seconds="$(jq -r '.payload.timeout_seconds' <<<"$request")"
+        include_speed="$(jq -r '.payload.include_speed // false' <<<"$request")"
+        duration="$(api_timeout_seconds_from_ms "$deadline_ms")" || return 1
 
-    result="$(
+        result_file="$(mktemp "${API_ACTION_DIR}/.verify-result.XXXXXX")" || return 1
         VPNCTL_API_CLIENT_DISABLE=1 \
             timeout --kill-after=2s "${duration}s" \
-                "$SELF" _verify-egress-json "$timeout_seconds" "$include_speed"
-    )" || rc=$?
-    case "$rc" in
-        0) ;;
-        124|137) return 124 ;;
-        *) return 1 ;;
-    esac
-    jq -e '
-        .schema_version == 1
-        and (.checked_at | type == "string")
-        and (
-            .verdict == "verified"
-            or .verdict == "warning"
-            or .verdict == "failed"
-        )
-        and (.tunnel.active | type == "boolean")
-        and (.ipv4.same_egress | type == "boolean")
-        and (.ipv6.potential_leak | type == "boolean")
-        and (
-            .geo.country_match == "match"
-            or .geo.country_match == "mismatch"
-            or .geo.country_match == "unknown"
-        )
-        and (.geo.providers | type == "array")
-        and (.speed.requested | type == "boolean")
-        and (.speed.measured | type == "boolean")
-        and (.findings | type == "array")
-        and all(.findings[]; type == "string")
-    ' <<<"$result" >/dev/null 2>&1 || return 1
-    printf '%s\n' "$result"
+                "$SELF" _verify-egress-json "$timeout_seconds" "$include_speed" \
+                >"$result_file" || rc=$?
+        case "$rc" in
+            0) ;;
+            124|137) rm -f -- "$result_file"; return 124 ;;
+            *) rm -f -- "$result_file"; return 1 ;;
+        esac
+        result="$(<"$result_file")"
+        rm -f -- "$result_file"
+        jq -e '
+            .schema_version == 1
+            and (.checked_at | type == "string")
+            and (
+                .verdict == "verified"
+                or .verdict == "warning"
+                or .verdict == "failed"
+            )
+            and (.tunnel.active | type == "boolean")
+            and (.ipv4.same_egress | type == "boolean")
+            and (.ipv6.potential_leak | type == "boolean")
+            and (
+                .geo.country_match == "match"
+                or .geo.country_match == "mismatch"
+                or .geo.country_match == "unknown"
+            )
+            and (.geo.providers | type == "array")
+            and (.speed.requested | type == "boolean")
+            and (.speed.measured | type == "boolean")
+            and (.findings | type == "array")
+            and all(.findings[]; type == "string")
+        ' <<<"$result" >/dev/null 2>&1 || return 1
+        printf '%s\n' "$result"
+    } 10>"$API_ACTION_DIR/.verify.lock"
 }
 
 api_write_record() {

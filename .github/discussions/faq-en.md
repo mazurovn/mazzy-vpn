@@ -14,13 +14,16 @@ A version is published only when it has a tag and a page in
 
 The published release line is CLI/TUI 1.2.0 and Desktop 0.2.0 preview. The
 1.3.0/Desktop 0.3.0 source tree is a release candidate until both tags and
-their corresponding Release pages exist.
+their corresponding Release pages exist. Desktop 0.3 publication is additionally
+blocked until issue #31 removes the Tauri/GTK `glib` 0.18 RustSec advisory from
+the Linux graph.
 
 ## Does Desktop require a separate CLI install?
 
 Linux Desktop 0.3 bundles a compatible engine and installer, so no prior manual
 CLI install is required. System changes run only after standard OS
-authorization.
+authorization. Do not install Desktop 0.3 as a new preview until the issue #31
+RustSec gate is closed.
 
 ## How do I verify the VPN uses the expected route and location?
 

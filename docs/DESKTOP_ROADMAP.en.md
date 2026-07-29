@@ -42,6 +42,9 @@ control the same core while the GUI is closed.
 
 ## Delivered in the Desktop 0.3 Linux preview
 
+Publication is blocked until issue #31 removes or patches the Tauri/GTK
+`glib` 0.18 RustSec advisory in the Linux dependency graph.
+
 - bundled engine installer with version and dependency readiness checks;
 - safe single-file, multi-file and folder import with protocol detection;
 - sanitized profile library cache with search, location and selection;
@@ -63,7 +66,7 @@ control the same core while the GUI is closed.
 - security, accessibility, failure-injection and long-running soak gates.
 
 Desktop packages remain **preview** until the applicable release gates are
-complete.
+complete. Issue #31 is the first Desktop 0.3 publication gate.
 
 ## Target components
 

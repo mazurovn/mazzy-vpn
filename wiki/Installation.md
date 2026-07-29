@@ -56,7 +56,9 @@ Desktop 0.3 candidate содержит совместимые installer/engine r
 он проверяет установленную версию и зависимости и после явного системного
 разрешения устанавливает, обновляет или восстанавливает engine. Поэтому сначала
 устанавливать CLI вручную не требуется. Статус preview сохраняется до закрытия
-критериев [[Desktop Full Application Plan]].
+критериев [[Desktop Full Application Plan]]. Не публикуйте и не устанавливайте
+Desktop 0.3 как новый preview, пока не закрыт RustSec gate issue #31 для
+Tauri/GTK `glib` 0.18.
 
 ## macOS и Windows
 
@@ -122,7 +124,9 @@ The Desktop 0.3 candidate contains compatible installer/engine resources. Its Se
 checks the installed version and dependencies and, after explicit system
 authorization, installs, updates or repairs the engine. A prior manual CLI
 installation is therefore not required. The package remains a preview until
-the [[Desktop Full Application Plan]] release criteria are complete.
+the [[Desktop Full Application Plan]] release criteria are complete. Do not
+publish or install Desktop 0.3 as a new preview while the issue #31 RustSec gate
+for Tauri/GTK `glib` 0.18 remains open.
 
 ## macOS and Windows
 

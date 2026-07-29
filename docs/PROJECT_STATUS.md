@@ -2,7 +2,7 @@
 
 Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
-Last synchronized: 2026-07-28.
+Last synchronized: 2026-07-30.
 
 This file is the persistent handoff after interrupted Codex sessions. GitHub
 issues and release gates in [`capabilities.json`](capabilities.json) remain the
@@ -11,23 +11,25 @@ authoritative backlog; this page records the verified resumption point.
 ## Verified release baseline
 
 - GitHub `main` and local `origin/main` resolve to
-  `164f844fac2295020bb8a9a89c57affd01f837d0` after merging PR #29 with the
-  structured whole-list location probe.
+  `b47d0cd452264a355e4e2da48babba76a2180901` after merging PR #30 with the
+  audited AI-ready diagnostics and Desktop 0.3 candidate.
 - The published stable release is CLI/TUI `v1.2.0`. The published Desktop
   preview is `desktop-v0.2.0`.
-- CLI/TUI 1.3.0 and Linux Desktop 0.3.0 exist only on the active
-  `agent/desktop-03-diagnostics` release-candidate branch. Neither tag nor
-  GitHub Release page exists yet.
+- CLI/TUI 1.3.0 and Linux Desktop 0.3.0 candidate code is merged to `main`,
+  but neither tag nor GitHub Release page exists yet. Linux Desktop 0.3.0 must
+  not be published while issue #31 remains open.
 - Windows and macOS 0.2.0 artifacts are unsigned UI previews without native
   VPN backends. They must not be described as functional VPN clients.
 - Android and iOS clients are planned and have no application source or
   release artifacts.
-- There are no open pull requests. Open backlog issues are #4–#14; PRs
-  #25–#29 are merged incremental slices, not proof that the corresponding
+- There are no open pull requests. Open backlog issues are #4–#14 and #31; PRs
+  #25–#30 are merged incremental slices, not proof that the corresponding
   production gates are complete.
-- The uncompromising code, security, packaging and cross-platform review is in
-  [`AUDIT_2026-07-28.ru.md`](AUDIT_2026-07-28.ru.md). Its production blockers
-  remain authoritative until replaced by newer evidence.
+- The uncompromising code, security, packaging and cross-platform review started
+  in [`AUDIT_2026-07-28.ru.md`](AUDIT_2026-07-28.ru.md). The latest PR #32
+  resumption audit is [`AUDIT_2026-07-30.ru.md`](AUDIT_2026-07-30.ru.md); it
+  confirms macOS/Windows Desktop CI recovery and keeps the Linux `glib` RustSec
+  gate as the remaining Desktop release blocker.
 
 Published release links:
 
@@ -87,7 +89,7 @@ Merged PR #26 built the protected-service slice:
 - bounded, concurrently drained Desktop child-process output instead of
   accumulating an arbitrary amount of helper output in GUI memory;
 - CI uses versioned Ubuntu 22.04/24.04, macOS 14 and Windows Server 2022 runner
-  labels with the declared Rust 1.85.0 toolchain rather than `latest`/`stable`;
+  labels with the declared Rust 1.88.0 toolchain rather than `latest`/`stable`;
 - status/profile caches are atomically published as `0640 root:mazzy-vpn`
   under a `0750 root:mazzy-vpn` runtime directory created consistently by
   systemd-tmpfiles;
@@ -153,7 +155,7 @@ Merged PR #29 completed the first location-health issue #6 slice:
   every profile row;
 - complete package-owned Desktop CSS corresponding source.
 
-The active `agent/desktop-03-diagnostics` candidate adds:
+The merged 1.3.0 / Desktop 0.3.0 candidate adds:
 
 - `mazzy-vpn verify [--speed] [--json]` and API query
   `tests.verify-egress`;
@@ -175,16 +177,37 @@ The active `agent/desktop-03-diagnostics` candidate adds:
   `profile_id`/filename active-profile identity, including fail-closed handling
   of duplicate display names.
 
+The current `mazurovn/new-realise` continuation adds a local API query-deadline
+fix after an interrupted audit found `tests.probe` could hang the regression
+suite when the external deadline fired while nested probe workers still held the
+captured stdout pipe. `tests.probe` and `tests.verify-egress` now capture bounded
+worker output through root-only temporary files and clean them on timeout; the
+regression suite asserts no `.probe-result.*` or `.verify-result.*` files remain.
+
 Verified locally for the current candidate:
 
-- shell regression suite: 74/74 in one uninterrupted final run, including
-  Unicode profile-spoofing and runtime hard-code boundary checks;
+- shell regression suite: 74/74 in one uninterrupted 2026-07-29 run, including
+  API query deadline cleanup, Unicode profile-spoofing and runtime hard-code
+  boundary checks;
 - Rust unit tests: 22/22;
-- ShellCheck, Clippy, capability/API validators, public audit and gitleaks;
+- ShellCheck, Clippy, capability/API validators, public audit and runtime
+  hard-code audit;
 - `npm audit --audit-level=high` reported 0 known vulnerabilities on
-  2026-07-28; GitHub Dependabot reported no open alerts after vulnerability
-  alerts and automated security updates were enabled. A local RustSec
-  `cargo-audit` run and system-package advisory scan are still absent;
+  2026-07-29. GitHub Dependabot then opened issue #31 for the transitive
+  Tauri/GTK3 `glib` 0.18 unsound advisory
+  `RUSTSEC-2024-0429`/`GHSA-wrw7-89jp-8q8g`; Linux Desktop remains preview and
+  production release stays blocked until the final Linux graph removes or
+  patches the affected implementation. A required `cargo-deny` RustSec advisory
+  gate is now configured to fail on vulnerability, unsound and yanked
+  advisories. System-package advisory scanning is still absent;
+- crates.io checks on 2026-07-30 found no simple semver update that removes
+  `glib` 0.18: `tauri` 2.11.5 and `webkit2gtk` 2.0.2 are current, `gtk` 0.18.2
+  remains the GTK3 binding line, and `cargo update --dry-run` only offered minor
+  unrelated updates plus `tray-icon` 0.24.2;
+- PR #32 RustSec CI also found fixable `quick-xml` and `time` advisories.
+  Desktop MSRV was raised to Rust 1.88 and `Cargo.lock` now uses `plist` 1.10.0,
+  `quick-xml` 0.41.0 and `time` 0.3.54; Rust tests and Clippy pass locally with
+  `cargo +1.88.0`;
 - GitHub private vulnerability reporting is enabled. CodeQL default setup
   (`extended`, remote and local queries) passed for Actions, JavaScript/
   TypeScript, Python and Rust on baseline `main`; its high-severity release

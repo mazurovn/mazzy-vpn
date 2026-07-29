@@ -114,7 +114,7 @@ All notable changes to Mazzy VPN are documented here.
 - Bounded Desktop child-process stdout and stderr while draining both streams
   concurrently, preventing unbounded GUI memory growth from verbose helpers.
 - Replaced floating GitHub-hosted OS generations and Rust `stable` with
-  versioned runner labels and the declared Rust 1.85.0 toolchain.
+  versioned runner labels and the declared Rust 1.88.0 toolchain.
 - Restricted sanitized runtime status/profile caches to `root:mazzy-vpn`
   instead of exposing public IP and profile labels to every local account.
 - Enter persistent recovery-only mode when an interrupted API mutation cannot

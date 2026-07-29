@@ -47,8 +47,9 @@ Desktop 0.3 — Linux control-center preview. Он уже включает ус�
 движка, импорт и выбор профилей, validate/probe/live-test, Doctor с полным
 выводом, фактическую проверку egress/DNS/IPv6/локации, сортировку локаций,
 расширенный tray, журнал и управление службами. Gate Desktop 1.0 всё ещё закрыт:
-не завершены fallback-policy UI, полный перевод новых экранов на шесть языков
-и переход всех typed `pkexec`-операций к локальному versioned daemon API.
+публикация 0.3 заблокирована issue #31 для Tauri/GTK `glib` 0.18, также не
+завершены fallback-policy UI, полный перевод новых экранов на шесть языков и
+переход всех typed `pkexec`-операций к локальному versioned daemon API.
 Контракт API `1.0`, manifest, безопасные envelopes и ограниченный protected
 service уже реализованы в Draft-ветках, но большинство operation domains и
 native caller identity отсутствуют. DEB/RPM только обеспечивают запуск
@@ -66,8 +67,9 @@ Desktop 0.3 is a Linux control-center preview. It bundles the shared-engine
 installer and now exposes profile import/selection, validation, probes, live
 tests, actual egress/DNS/IPv6/location verification, location sorting,
 an expanded tray, full Doctor output, logs and service controls. The Desktop 1.0 gate
-remains closed until fallback-policy UI, full six-language coverage for the new
-screens and the versioned local daemon API replace every typed `pkexec`
+remains closed: 0.3 publication is blocked by issue #31 for Tauri/GTK `glib`
+0.18, and fallback-policy UI, full six-language coverage for the new screens and
+the versioned local daemon API still need to replace every typed `pkexec`
 operation. The API `1.0` contract, manifest, frontend-safe envelopes and a
 limited protected service are implemented on the Draft branches, but most
 operation domains and native caller identity are still missing. DEB/RPM only

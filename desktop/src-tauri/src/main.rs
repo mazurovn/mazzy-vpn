@@ -75,15 +75,7 @@ fn action_spec(action: VpnAction) -> (&'static str, &'static [&'static str]) {
 }
 
 fn output_text(output: &Output) -> String {
-    let mut text = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-    if !stderr.is_empty() {
-        if !text.is_empty() {
-            text.push('\n');
-        }
-        text.push_str(&stderr);
-    }
-    text
+    backend::clean_output(output)
 }
 
 #[cfg(target_os = "linux")]
@@ -561,6 +553,15 @@ mod tests {
         let status = fallback_status("test");
         assert_eq!(status["available"], false);
         assert_eq!(status["schema_version"], 1);
+    }
+
+    #[test]
+    fn tray_output_is_sanitized_before_frontend_events() {
+        let output = std::process::Command::new("/usr/bin/printf")
+            .args(["\\033[31mFAIL\\033[0m\\n"])
+            .output()
+            .expect("printf");
+        assert_eq!(output_text(&output), "FAIL");
     }
 
     #[test]

@@ -17,7 +17,8 @@ account and collects no telemetry.
 
 This source tree declares the 1.3.0/0.3.0 release candidate. Until both
 corresponding tags and GitHub Release pages exist, the latest published line
-remains CLI/TUI 1.2.0 and Desktop 0.2.0 preview.
+remains CLI/TUI 1.2.0 and Desktop 0.2.0 preview. Desktop 0.3 publication is
+blocked while issue #31 keeps the Tauri/GTK `glib` 0.18 RustSec gate open.
 
 The primary command is `mazzy-vpn`. The installer also creates the compatibility
 aliases `vpnctl` and `mazzyvpn`.
@@ -173,7 +174,9 @@ without first installing the CLI by hand. Packages are available as AppImage,
 DEB and RPM.
 
 DEB/RPM upgrade and removal deliberately preserve `/etc/vpnctl` profiles and
-`/var/lib/vpnctl` state. Production status still requires clean-device
+`/var/lib/vpnctl` state. The 0.3 publication is currently blocked by RustSec
+issue #31: transitive Tauri/GTK `glib` 0.18 must be patched or removed by a
+dependency-graph migration. Production status also requires clean-device
 install/upgrade/remove, rollback/fault and signing gates on every supported
 distribution.
 

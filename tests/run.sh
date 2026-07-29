@@ -1095,6 +1095,11 @@ sleep 0.2
 if kill -0 "$probe_ping_pid" 2>/dev/null; then
     fail "timed-out API probe left a ping worker running"
 fi
+if find "$VPNCTL_API_ACTION_DIR" -maxdepth 1 -type f \
+    \( -name '.probe-result.*' -o -name '.verify-result.*' \) |
+    grep -q .; then
+    fail "local API query left a temporary result file"
+fi
 
 api_verify_request="$(
     jq -cn '{

@@ -5,6 +5,9 @@ Copyright (C) 2026 Nik m
 
 > Release-candidate text. The release is published only after tags `v1.3.0`
 > and `desktop-v0.3.0`, their GitHub Release pages and required checks exist.
+> Desktop publication is additionally blocked by the Tauri/GTK `glib` 0.18
+> RustSec advisory until the final Linux graph removes or patches the affected
+> implementation.
 
 ## English
 
@@ -29,6 +32,9 @@ remains a Linux preview: it is functional, but it is not yet a signed Desktop
 - expanded tray navigation and controls, clickable retained event detail and
   clearer ON/OFF service state;
 - strict typed Desktop response validation and bounded compatibility helpers;
+- API query deadline handling no longer depends on a captured stdout pipe:
+  `tests.probe` and `tests.verify-egress` clean temporary result files after
+  timeout and the regression suite covers the cleanup path;
 - auto health policy that detects confirmed default-egress mismatch only for
   declared full-tunnel profiles; split-tunnel profiles are not forced into
   full-tunnel recovery;
@@ -59,6 +65,9 @@ risk scoring remain external.
 - most privileged Desktop domains still use the typed `pkexec` compatibility
   adapter instead of a native service with peer identity;
 - no signed SBOM/provenance/update chain or reproducible clean-builder proof;
+- Linux Desktop currently depends on Tauri/GTK bindings that pull `glib` 0.18,
+  affected by `RUSTSEC-2024-0429` / `GHSA-wrw7-89jp-8q8g`; preview publication
+  must wait for a supported upstream migration or reviewed patch/backport;
 - no complete clean-device distro, sleep/resume, network-change, loss/jitter,
   crash, upgrade/rollback and soak matrix;
 - German, Chinese, Japanese and Korean still use English fallback on parts of
@@ -89,6 +98,9 @@ Desktop 1.0 продуктом.
 - расширенный tray, прямое открытие экранов, кликабельные детали событий и
   понятное текущее ON/OFF состояние служб;
 - strict typed validation ответов Desktop и bounded compatibility helpers;
+- API query deadline больше не зависит от captured stdout pipe:
+  `tests.probe` и `tests.verify-egress` очищают временные result-файлы после
+  timeout, а regression suite покрывает этот путь;
 - auto health policy обнаруживает подтверждённый default-egress mismatch для
   профилей, объявляющих full tunnel, но не ломает split-tunnel;
 - обновлены архитектура, privacy, установка, Wiki, platform roadmap и
@@ -118,6 +130,9 @@ WebRTC, геолокация устройства и provider-side risk scoring 
   compatibility adapter вместо native service с peer identity;
 - нет signed SBOM/provenance/update chain и доказанной clean-builder
   reproducibility;
+- Linux Desktop сейчас зависит от Tauri/GTK bindings, которые тянут `glib`
+  0.18 с `RUSTSEC-2024-0429` / `GHSA-wrw7-89jp-8q8g`; preview publication
+  должен ждать supported upstream migration или reviewed patch/backport;
 - нет полной clean-device distro, sleep/resume, network-change, loss/jitter,
   crash, upgrade/rollback и soak matrix;
 - части расширенных Desktop экранов для немецкого, китайского, японского и

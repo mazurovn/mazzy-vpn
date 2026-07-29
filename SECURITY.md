@@ -42,9 +42,11 @@ not be treated as traffic-protection tools.
 Dependency updates are tracked for GitHub Actions, npm and Cargo. Release
 candidates must pass the Bash regression suite, ShellCheck, full-history
 Gitleaks, the public repository and Desktop UI contract audits, Rust tests,
-Clippy, npm audit and assembled-package inspection. Passing these gates reduces
-risk but is not a proof that the software or third-party VPN service is
-vulnerability-free.
+Clippy, npm audit, RustSec advisory checks through `cargo-deny` and
+assembled-package inspection. The RustSec policy fails on vulnerability,
+unsound and yanked advisories; unmaintained advisories are tracked separately so
+they do not hide memory-safety defects. Passing these gates reduces risk but is
+not a proof that the software or third-party VPN service is vulnerability-free.
 
 The public repository enables secret scanning with push protection,
 Dependabot vulnerability alerts and security updates, private vulnerability

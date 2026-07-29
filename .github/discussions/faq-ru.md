@@ -14,14 +14,17 @@
 
 Опубликованная release line — CLI/TUI 1.2.0 и Desktop 0.2.0 preview. Исходное
 дерево 1.3.0/Desktop 0.3.0 остаётся release candidate, пока не существуют оба
-tags и соответствующие Release pages.
+tags и соответствующие Release pages. Публикация Desktop 0.3 дополнительно
+заблокирована, пока issue #31 не уберёт Tauri/GTK `glib` 0.18 RustSec advisory
+из Linux graph.
 
 ## Desktop требует отдельной установки CLI?
 
 Linux Desktop 0.3 содержит совместимый engine и installer, поэтому
 предварительная ручная установка CLI не требуется. Системные изменения
 выполняются только
-после стандартной авторизации ОС.
+после стандартной авторизации ОС. Не устанавливайте Desktop 0.3 как новый
+preview, пока RustSec gate issue #31 не закрыт.
 
 ## Как проверить фактические маршрут и локацию VPN?
 

@@ -86,12 +86,14 @@ flowchart LR
 
 ## Linux
 
-Desktop 0.3 candidate — функциональный preview: он включает engine/bootstrap, профили,
-тесты, Doctor, журнал и системные настройки. До Linux Desktop 1.0 остаются
-versioned service API, полный policy/localization/accessibility parity,
-подписанные обновления, clean-device package lifecycle/rollback coverage и
-fault/soak tests. DEB/RPM теперь владеют engine/service payload и сохраняют
-user state; AppImage всё ещё использует явный host bootstrap.
+Desktop 0.3 candidate — функциональный preview: он включает engine/bootstrap,
+профили, тесты, Doctor, журнал и системные настройки. Публикация заблокирована,
+пока issue #31 не уберёт или не исправит Tauri/GTK `glib` 0.18 RustSec advisory
+в Linux graph. До Linux Desktop 1.0 остаются versioned service API, полный
+policy/localization/accessibility parity, подписанные обновления, clean-device
+package lifecycle/rollback coverage и fault/soak tests. DEB/RPM теперь владеют
+engine/service payload и сохраняют user state; AppImage всё ещё использует явный
+host bootstrap.
 
 Релизные форматы: AppImage, DEB и RPM. Локальный SHA-256 обнаруживает случайное
 повреждение, но production требует подписанных provenance/attestation и gate
@@ -153,7 +155,7 @@ entitlements, сертификаты и macOS runner; их нельзя заме
 
 ## Порядок продвижения релизов
 
-1. Стабилизировать CLI/TUI 1.3 и Linux Desktop 0.3.
+1. Закрыть RustSec gate #31 для Linux Desktop 0.3.
 2. Завершить общий API и Linux Desktop 1.0.
 3. Выпускать Windows и macOS preview независимо; production только по своему
    gate, без ожидания другой платформы.

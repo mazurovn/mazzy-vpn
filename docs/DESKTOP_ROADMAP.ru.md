@@ -42,6 +42,9 @@ core, даже когда GUI закрыт.
 
 ## Что готово в Desktop 0.3 Linux preview
 
+Публикация заблокирована, пока issue #31 не уберёт или не исправит Tauri/GTK
+`glib` 0.18 RustSec advisory в Linux dependency graph.
+
 - встроенный installer engine с проверкой версий и готовности зависимостей;
 - безопасный импорт одного/нескольких файлов и папки с определением протокола;
 - очищенный cache библиотеки профилей с поиском, локацией и выбором;
@@ -63,6 +66,7 @@ core, даже когда GUI закрыт.
 - security, accessibility, failure-injection и длительные soak gates.
 
 До закрытия применимых release gates пакеты Desktop имеют статус **preview**.
+Issue #31 — первый gate публикации Desktop 0.3.
 
 ## Целевые компоненты
 

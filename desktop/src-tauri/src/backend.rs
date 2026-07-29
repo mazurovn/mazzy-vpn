@@ -580,7 +580,7 @@ fn build_cli_args(request: &OperationRequest) -> Result<(String, Vec<String>), S
     Ok((action.into(), args))
 }
 
-fn clean_output(output: &Output) -> String {
+pub(crate) fn clean_output(output: &Output) -> String {
     let mut bytes = output.stdout.clone();
     if !output.stderr.is_empty() {
         if !bytes.is_empty() {
