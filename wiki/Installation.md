@@ -41,6 +41,9 @@ sudo ./install.sh --live-test
 
 Установите один пакет из Releases:
 
+Ниже указаны точные dot-normalized имена опубликованных GitHub Release assets;
+локальный Tauri build может сохранять пробелы из product name.
+
 ```bash
 sudo apt install ./Mazzy.VPN.Desktop_0.3.0_amd64.deb
 sudo dnf install ./Mazzy.VPN.Desktop-0.3.0-1.x86_64.rpm
@@ -107,6 +110,9 @@ above.
 ## Linux Desktop
 
 Install one bundle from Releases:
+
+These are the exact dot-normalized names of the published GitHub Release
+assets; a local Tauri build may retain spaces from the product name.
 
 ```bash
 sudo apt install ./Mazzy.VPN.Desktop_0.3.0_amd64.deb

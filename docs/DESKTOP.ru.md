@@ -190,6 +190,10 @@ package manager не сохранил сведения о вызвавшем п�
 
 DEB:
 
+Ниже указаны точные dot-normalized имена файлов со страницы GitHub Release
+`desktop-v0.3.0`. Локальный output `npm run build:release` может сохранять
+пробелы из Tauri product name.
+
 ```bash
 sudo apt install ./Mazzy.VPN.Desktop_0.3.0_amd64.deb
 ```

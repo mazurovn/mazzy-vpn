@@ -189,6 +189,10 @@ package manager that did not preserve the invoking-user environment.
 
 DEB:
 
+The commands below use the exact dot-normalized filenames published on the
+`desktop-v0.3.0` GitHub Release page. A local `npm run build:release` output may
+retain spaces from the Tauri product name instead.
+
 ```bash
 sudo apt install ./Mazzy.VPN.Desktop_0.3.0_amd64.deb
 ```
