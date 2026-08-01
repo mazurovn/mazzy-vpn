@@ -56,7 +56,9 @@ Desktop 0.3 candidate содержит совместимые installer/engine r
 он проверяет установленную версию и зависимости и после явного системного
 разрешения устанавливает, обновляет или восстанавливает engine. Поэтому сначала
 устанавливать CLI вручную не требуется. Статус preview сохраняется до закрытия
-критериев [[Desktop Full Application Plan]].
+критериев [[Desktop Full Application Plan]]. В candidate issue #31 исправлен
+проверенным `glib` backport; устанавливайте Desktop 0.3 только после появления
+его GitHub Release и зелёных default-branch checks.
 
 ## macOS и Windows
 
@@ -122,7 +124,9 @@ The Desktop 0.3 candidate contains compatible installer/engine resources. Its Se
 checks the installed version and dependencies and, after explicit system
 authorization, installs, updates or repairs the engine. A prior manual CLI
 installation is therefore not required. The package remains a preview until
-the [[Desktop Full Application Plan]] release criteria are complete.
+the [[Desktop Full Application Plan]] release criteria are complete. Issue #31
+is resolved in the candidate with a verified `glib` backport; install Desktop
+0.3 only after its GitHub Release and default-branch checks exist.
 
 ## macOS and Windows
 

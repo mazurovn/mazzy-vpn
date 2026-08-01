@@ -10,7 +10,7 @@ Licensed under `AGPL-3.0-or-later`.
 Mazzy VPN Desktop is a Tauri 2 Linux control center and system-tray client for
 the shared Mazzy VPN engine.
 
-- **Current status:** 0.2 Linux preview. It bundles the compatible engine
+- **Current status:** 0.3 Linux preview. It bundles the compatible engine
   installer, checks versions and dependencies, and no longer requires the user
   to install the CLI first.
 - Linux: dashboard, profile/file/folder import, location selection and
@@ -24,8 +24,10 @@ the shared Mazzy VPN engine.
 - The GUI never reads VPN keys. It reads sanitized status/profile caches.
   Privileged actions use typed requests, validated arguments and `pkexec`; no
   arbitrary shell command is accepted.
-- Desktop 1.0 remains gated on fallback-policy UI, complete six-language
-  coverage for new screens and a versioned daemon API.
+- Desktop 1.0 remains gated on native peer identity, migration of the remaining
+  privileged domains to a shared service/API, complete six-language coverage,
+  a fixed Tauri/GTK RustSec dependency graph and signed clean-device release
+  gates.
 
 Development:
 
@@ -55,7 +57,7 @@ architecture and parity gates are in
 Mazzy VPN Desktop — Linux Control Center и системный tray на Tauri 2,
 работающие с общим движком Mazzy VPN.
 
-- **Текущий статус:** Linux preview 0.2. В пакет включён совместимый installer
+- **Текущий статус:** Linux preview 0.3. В пакет включён совместимый installer
   движка; предварительно устанавливать CLI пользователю больше не нужно.
 - Linux: Dashboard, импорт файлов/папок, выбор локации, массовая проверка
   reachability/latency/active, подключение, диагностика активного соединения,
@@ -68,8 +70,10 @@ Mazzy VPN Desktop — Linux Control Center и системный tray на Tauri
 - GUI не читает VPN-ключи. Он использует очищенные cache состояния и профилей.
   Привилегированные действия принимаются как typed-запросы с проверенными
   аргументами и запускаются через `pkexec`; shell-строки не строятся.
-- Gate Desktop 1.0 остаётся закрыт до реализации fallback-policy UI, полного
-  перевода новых экранов на шесть языков и versioned daemon API.
+- Gate Desktop 1.0 остаётся закрыт до native peer identity, переноса остальных
+  privileged domains в общий service/API, полного перевода на шесть языков,
+  исправления Tauri/GTK RustSec dependency graph и подписанных clean-device
+  release gates.
 
 Разработка и сборка:
 

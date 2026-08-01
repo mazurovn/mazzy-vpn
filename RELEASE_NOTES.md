@@ -5,6 +5,9 @@ Copyright (C) 2026 Nik m
 
 > Release-candidate text. The release is published only after tags `v1.3.0`
 > and `desktop-v0.3.0`, their GitHub Release pages and required checks exist.
+> The candidate resolves issue #31 with the exact upstream `glib` backport and
+> an independent source-provenance gate; publication still waits for PR/main
+> security checks and audited artifacts.
 
 ## English
 
@@ -29,6 +32,16 @@ remains a Linux preview: it is functional, but it is not yet a signed Desktop
 - expanded tray navigation and controls, clickable retained event detail and
   clearer ON/OFF service state;
 - strict typed Desktop response validation and bounded compatibility helpers;
+- exact upstream `glib` `VariantStrIter` soundness backport for
+  `RUSTSEC-2024-0429`, verified against the crates.io archive before cargo-deny;
+- `event-listener` 5.4.2 for `RUSTSEC-2026-0221`;
+- one typed tray/backend operation path and process-group timeouts that cannot
+  hang on descendant-held stdout/stderr pipes;
+- AppImage/DEB/RPM corresponding source now includes the vendored fix and its
+  verifier; all three bundles have automated Xvfb launch-smoke checks;
+- API query deadline handling no longer depends on a captured stdout pipe:
+  `tests.probe` and `tests.verify-egress` clean temporary result files after
+  timeout and the regression suite covers the cleanup path;
 - auto health policy that detects confirmed default-egress mismatch only for
   declared full-tunnel profiles; split-tunnel profiles are not forced into
   full-tunnel recovery;
@@ -59,6 +72,8 @@ risk scoring remain external.
 - most privileged Desktop domains still use the typed `pkexec` compatibility
   adapter instead of a native service with peer identity;
 - no signed SBOM/provenance/update chain or reproducible clean-builder proof;
+- the vendored `glib` backport is temporary technical debt until Tauri moves to
+  a maintained GTK/glib line; the provenance gate must stay mandatory;
 - no complete clean-device distro, sleep/resume, network-change, loss/jitter,
   crash, upgrade/rollback and soak matrix;
 - German, Chinese, Japanese and Korean still use English fallback on parts of
@@ -89,6 +104,16 @@ Desktop 1.0 продуктом.
 - расширенный tray, прямое открытие экранов, кликабельные детали событий и
   понятное текущее ON/OFF состояние служб;
 - strict typed validation ответов Desktop и bounded compatibility helpers;
+- точный upstream backport soundness fix `glib::VariantStrIter` для
+  `RUSTSEC-2024-0429`, проверяемый по crates.io archive до cargo-deny;
+- `event-listener` 5.4.2 для `RUSTSEC-2026-0221`;
+- единый typed tray/backend operation path и process-group timeout без зависания
+  на stdout/stderr pipes, удерживаемых потомками;
+- corresponding source AppImage/DEB/RPM включает vendored fix и verifier; для
+  всех трёх bundles добавлен автоматический Xvfb launch-smoke;
+- API query deadline больше не зависит от captured stdout pipe:
+  `tests.probe` и `tests.verify-egress` очищают временные result-файлы после
+  timeout, а regression suite покрывает этот путь;
 - auto health policy обнаруживает подтверждённый default-egress mismatch для
   профилей, объявляющих full tunnel, но не ломает split-tunnel;
 - обновлены архитектура, privacy, установка, Wiki, platform roadmap и
@@ -118,6 +143,8 @@ WebRTC, геолокация устройства и provider-side risk scoring 
   compatibility adapter вместо native service с peer identity;
 - нет signed SBOM/provenance/update chain и доказанной clean-builder
   reproducibility;
+- vendored backport `glib` остаётся временным техническим долгом до миграции
+  Tauri на поддерживаемую линию GTK/glib; provenance gate обязателен;
 - нет полной clean-device distro, sleep/resume, network-change, loss/jitter,
   crash, upgrade/rollback и soak matrix;
 - части расширенных Desktop экранов для немецкого, китайского, японского и

@@ -11,7 +11,9 @@
 > Desktop 0.3 — Linux control center preview со встроенным installer engine.
 > Он сам проверяет зависимости и может установить/восстановить engine после
 > явного разрешения. Versioned service API и остальные release gates описаны в
-> [плане Desktop 1.0](Desktop-Full-Application-Plan).
+> [плане Desktop 1.0](Desktop-Full-Application-Plan). В candidate issue #31
+> исправлен проверенным `glib` backport; публикация 0.3 ждёт PR/default-branch
+> checks и GitHub Release artifacts.
 
 Интерфейс объединяет:
 
@@ -84,7 +86,9 @@ flowchart LR
 > Desktop 0.3 is a Linux control-center preview with a bundled engine installer.
 > It checks dependencies and can install or repair the engine after explicit
 > authorization. The versioned service API and remaining gates are tracked in the
-> [Desktop 1.0 plan](Desktop-Full-Application-Plan#english).
+> [Desktop 1.0 plan](Desktop-Full-Application-Plan#english). Issue #31 is
+> resolved in the candidate with a verified `glib` backport; publication waits
+> for PR/default-branch checks and GitHub Release artifacts.
 
 The control center combines:
 

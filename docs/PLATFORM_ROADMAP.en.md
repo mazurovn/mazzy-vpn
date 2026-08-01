@@ -84,12 +84,14 @@ flowchart LR
 
 ## Linux
 
-The Desktop 0.3 candidate is a functional preview with engine/bootstrap, profiles, tests,
-Doctor, logs and system settings. Linux Desktop 1.0 still requires the versioned
-service API, complete policy/localization/accessibility parity, signed updates,
-clean-device package lifecycle/rollback coverage and fault/soak tests. DEB/RPM
-now own the engine/service payload and preserve user state; AppImage still uses
-an explicit host bootstrap.
+The Desktop 0.3 candidate is a functional preview with engine/bootstrap,
+profiles, tests, Doctor, logs and system settings. The candidate resolves issue
+#31 with a provenance-verified upstream `glib` backport; publication now waits
+for PR/default-branch checks and artifacts. Linux Desktop 1.0 still requires the versioned service API,
+complete policy/localization/accessibility parity, signed updates, clean-device
+package lifecycle/rollback coverage and fault/soak tests. DEB/RPM now own the
+engine/service payload and preserve user state; AppImage still uses an explicit
+host bootstrap.
 
 Release formats are AppImage, DEB and RPM. A local SHA-256 can detect accidental
 corruption, but production requires signed provenance/attestation and the
@@ -153,7 +155,7 @@ those requirements.
 
 ## Release promotion order
 
-1. Stabilize CLI/TUI 1.3 and Linux Desktop 0.3.
+1. Confirm the resolved #31 RustSec gate on `main` and publish Linux Desktop 0.3.
 2. Complete the shared API and Linux Desktop 1.0.
 3. Ship Windows and macOS previews independently; promote each platform only
    when its own gate passes.

@@ -42,12 +42,30 @@ not be treated as traffic-protection tools.
 Dependency updates are tracked for GitHub Actions, npm and Cargo. Release
 candidates must pass the Bash regression suite, ShellCheck, full-history
 Gitleaks, the public repository and Desktop UI contract audits, Rust tests,
-Clippy, npm audit and assembled-package inspection. Passing these gates reduces
-risk but is not a proof that the software or third-party VPN service is
-vulnerability-free.
+Clippy, npm audit, RustSec advisory checks through `cargo-deny` and
+assembled-package inspection. The RustSec policy fails on vulnerability,
+unsound and yanked advisories; unmaintained advisories are tracked separately so
+they do not hide memory-safety defects. Passing these gates reduces risk but is
+not a proof that the software or third-party VPN service is vulnerability-free.
+
+Tauri 2.11.5 still uses the end-of-life GTK3 Rust bindings on Linux. For
+`RUSTSEC-2024-0429`, the repository therefore carries the crates.io `glib`
+0.18.5 source with the exact upstream `VariantStrIter` fix from gtk-rs commit
+`b5a4071e439bef2b5eea76c3aa25e5ae84839e34`. Before `cargo-deny` runs,
+`tests/check-glib-backport.py` verifies the crates.io archive checksum, compares
+all upstream files, proves that the two reviewed mutability changes are the only
+source delta and confirms the Cargo path override. The advisory ignore list
+remains empty. This temporary backport must be removed when Tauri migrates to a
+maintained GTK/glib line.
 
 The public repository enables secret scanning with push protection,
 Dependabot vulnerability alerts and security updates, private vulnerability
-reporting, and CodeQL default setup with extended remote-and-local queries.
-Repository scans complement the local gates; they do not replace review,
-clean-host testing, signing or platform-native security assessment.
+reporting, and an explicit CodeQL advanced workflow for Actions, JavaScript/
+TypeScript, Python and Rust with `security-extended` queries and local threat
+sources. CodeQL excludes only `desktop/src-tauri/vendor/**`: that directory is
+the unchanged crates.io `glib` source plus the reviewed two-line fix, and the
+independent provenance gate fails on every other byte-level delta. This keeps
+third-party GTK FFI false positives out of the owned-code merge gate without
+trusting an unverified vendor snapshot. Repository scans complement the local
+gates; they do not replace review, clean-host testing, signing or
+platform-native security assessment.

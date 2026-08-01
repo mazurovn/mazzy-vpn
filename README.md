@@ -30,7 +30,10 @@ project-hosted server is required.
 
 The source tree currently declares the 1.3.0/0.3.0 release candidate. Until
 the corresponding tags and GitHub Release pages are published, the latest
-released line remains CLI/TUI 1.2.0 and Desktop 0.2.0 preview.
+released line remains CLI/TUI 1.2.0 and Desktop 0.2.0 preview. Desktop 0.3
+now carries the reviewed issue #31 `glib` backport and passes the local RustSec
+gate without advisory suppressions; publication still waits for green PR #32
+checks, the default-branch Dependabot scan and the release pages.
 
 [Русский](README.ru.md) · [English](README.en.md) ·
 [Deutsch](README.de.md) · [中文](README.zh.md) ·

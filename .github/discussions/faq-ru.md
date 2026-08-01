@@ -14,14 +14,18 @@
 
 Опубликованная release line — CLI/TUI 1.2.0 и Desktop 0.2.0 preview. Исходное
 дерево 1.3.0/Desktop 0.3.0 остаётся release candidate, пока не существуют оба
-tags и соответствующие Release pages.
+tags и соответствующие Release pages. В candidate issue #31 исправлен
+provenance-verified backport `glib`, локальный RustSec gate проходит без
+исключений; публикация ждёт PR/default-branch checks и artifacts.
 
 ## Desktop требует отдельной установки CLI?
 
 Linux Desktop 0.3 содержит совместимый engine и installer, поэтому
 предварительная ручная установка CLI не требуется. Системные изменения
 выполняются только
-после стандартной авторизации ОС.
+после стандартной авторизации ОС. Устанавливайте Desktop 0.3 только со страницы
+GitHub Release после публикации оставшихся PR/default-branch checks и audited
+artifacts.
 
 ## Как проверить фактические маршрут и локацию VPN?
 

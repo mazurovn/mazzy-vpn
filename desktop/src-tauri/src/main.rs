@@ -55,89 +55,24 @@ struct PlatformInfo {
     license: &'static str,
 }
 
-fn action_spec(action: VpnAction) -> (&'static str, &'static [&'static str]) {
+fn action_name(action: VpnAction) -> &'static str {
     match action {
-        VpnAction::Quick => ("quick", &["quick"]),
-        VpnAction::Reconnect => ("reconnect", &["reconnect"]),
-        VpnAction::Disconnect => ("disconnect", &["disconnect"]),
-        VpnAction::Verify => ("verify", &["verify", "--timeout", "10"]),
-        VpnAction::ProbeAll => (
-            "probe-all",
-            &["probe", "all", "--timeout", "3", "--jobs", "4"],
-        ),
-        VpnAction::Doctor => ("doctor", &["doctor"]),
-        VpnAction::Refresh => ("refresh", &["_refresh-dashboard-cache"]),
-        VpnAction::AutostartOn => ("autostart-on", &["autostart", "on"]),
-        VpnAction::AutostartOff => ("autostart-off", &["autostart", "off"]),
-        VpnAction::MonitorOn => ("monitor-on", &["monitor", "on"]),
-        VpnAction::MonitorOff => ("monitor-off", &["monitor", "off"]),
+        VpnAction::Quick => "quick",
+        VpnAction::Reconnect => "reconnect",
+        VpnAction::Disconnect => "disconnect",
+        VpnAction::Verify => "verify",
+        VpnAction::ProbeAll => "probe-all",
+        VpnAction::Doctor => "doctor",
+        VpnAction::Refresh => "refresh",
+        VpnAction::AutostartOn => "autostart-on",
+        VpnAction::AutostartOff => "autostart-off",
+        VpnAction::MonitorOn => "monitor-on",
+        VpnAction::MonitorOff => "monitor-off",
     }
 }
 
 fn output_text(output: &Output) -> String {
-    let mut text = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-    if !stderr.is_empty() {
-        if !text.is_empty() {
-            text.push('\n');
-        }
-        text.push_str(&stderr);
-    }
-    text
-}
-
-#[cfg(target_os = "linux")]
-fn execute_action(action: VpnAction) -> ActionResult {
-    let (name, args) = action_spec(action);
-    let Some(cli_path) = backend::installed_cli_path() else {
-        return ActionResult {
-            success: false,
-            action: name,
-            output: "Mazzy VPN engine is not installed. Open Settings and run Install / Repair."
-                .into(),
-            code: None,
-            data: None,
-        };
-    };
-    let result = backend::bounded_output(
-        Command::new(backend::TIMEOUT_PATH)
-            .args([
-                "--foreground",
-                "--kill-after=30s",
-                "900s",
-                backend::PKEXEC_PATH,
-            ])
-            .arg(cli_path)
-            .args(args),
-    );
-    match result {
-        Ok(output) => ActionResult {
-            success: output.status.success(),
-            action: name,
-            output: output_text(&output),
-            code: output.status.code(),
-            data: None,
-        },
-        Err(error) => ActionResult {
-            success: false,
-            action: name,
-            output: format!("Unable to start pkexec: {error}"),
-            code: None,
-            data: None,
-        },
-    }
-}
-
-#[cfg(not(target_os = "linux"))]
-fn execute_action(action: VpnAction) -> ActionResult {
-    let (name, _) = action_spec(action);
-    ActionResult {
-        success: false,
-        action: name,
-        output: "Preview build: the native VPN backend is not implemented on this OS yet.".into(),
-        code: None,
-        data: None,
-    }
+    backend::clean_output(output)
 }
 
 fn fallback_status(error: impl ToString) -> Value {
@@ -170,7 +105,7 @@ fn read_status() -> Value {
             };
             let output = backend::bounded_output(
                 Command::new(backend::TIMEOUT_PATH)
-                    .args(["--foreground", "--kill-after=2s", "15s"])
+                    .args(["--kill-after=2s", "15s"])
                     .arg(cli_path)
                     .args(["status", "--json"]),
             );
@@ -326,28 +261,25 @@ fn execute_tray_action(app: &AppHandle, action: VpnAction) -> ActionResult {
         };
     }
     let operation = match action {
-        VpnAction::Quick => Some(backend::OperationRequest::Quick),
-        VpnAction::Reconnect => Some(backend::OperationRequest::Reconnect),
-        VpnAction::Disconnect => Some(backend::OperationRequest::Disconnect),
-        VpnAction::Doctor => Some(backend::OperationRequest::Doctor { fix: false }),
-        VpnAction::Refresh => Some(backend::OperationRequest::Refresh),
-        VpnAction::AutostartOn => Some(backend::OperationRequest::Autostart { enabled: true }),
-        VpnAction::AutostartOff => Some(backend::OperationRequest::Autostart { enabled: false }),
-        VpnAction::MonitorOn => Some(backend::OperationRequest::Monitor { enabled: true }),
-        VpnAction::MonitorOff => Some(backend::OperationRequest::Monitor { enabled: false }),
-        _ => None,
+        VpnAction::Quick => backend::OperationRequest::Quick,
+        VpnAction::Reconnect => backend::OperationRequest::Reconnect,
+        VpnAction::Disconnect => backend::OperationRequest::Disconnect,
+        VpnAction::Doctor => backend::OperationRequest::Doctor { fix: false },
+        VpnAction::Refresh => backend::OperationRequest::Refresh,
+        VpnAction::AutostartOn => backend::OperationRequest::Autostart { enabled: true },
+        VpnAction::AutostartOff => backend::OperationRequest::Autostart { enabled: false },
+        VpnAction::MonitorOn => backend::OperationRequest::Monitor { enabled: true },
+        VpnAction::MonitorOff => backend::OperationRequest::Monitor { enabled: false },
+        VpnAction::Verify | VpnAction::ProbeAll => unreachable!("handled above"),
     };
-    if let Some(operation) = operation {
-        let result = backend::execute_operation(app, operation);
-        return ActionResult {
-            success: result.success,
-            action: action_spec(action).0,
-            output: result.output,
-            code: result.code,
-            data: None,
-        };
+    let result = backend::execute_operation(app, operation);
+    ActionResult {
+        success: result.success,
+        action: action_name(action),
+        output: result.output,
+        code: result.code,
+        data: None,
     }
-    execute_action(action)
 }
 
 fn launch_tray_action(app: AppHandle, action: VpnAction) {
@@ -361,7 +293,7 @@ fn launch_tray_action(app: AppHandle, action: VpnAction) {
             Ok(result) => result,
             Err(error) => ActionResult {
                 success: false,
-                action: action_spec(action).0,
+                action: action_name(action),
                 output: error.to_string(),
                 code: None,
                 data: None,
@@ -548,12 +480,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn actions_map_only_to_fixed_cli_arguments() {
-        assert_eq!(action_spec(VpnAction::Quick), ("quick", &["quick"][..]));
-        assert_eq!(
-            action_spec(VpnAction::Refresh),
-            ("refresh", &["_refresh-dashboard-cache"][..])
-        );
+    fn tray_actions_have_stable_event_names() {
+        assert_eq!(action_name(VpnAction::Quick), "quick");
+        assert_eq!(action_name(VpnAction::Refresh), "refresh");
     }
 
     #[test]
@@ -561,6 +490,15 @@ mod tests {
         let status = fallback_status("test");
         assert_eq!(status["available"], false);
         assert_eq!(status["schema_version"], 1);
+    }
+
+    #[test]
+    fn tray_output_is_sanitized_before_frontend_events() {
+        let output = std::process::Command::new("/usr/bin/printf")
+            .args(["\\033[31mFAIL\\033[0m\\n"])
+            .output()
+            .expect("printf");
+        assert_eq!(output_text(&output), "FAIL");
     }
 
     #[test]

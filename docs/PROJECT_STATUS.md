@@ -2,7 +2,7 @@
 
 Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
-Last synchronized: 2026-07-28.
+Last synchronized: 2026-08-01.
 
 This file is the persistent handoff after interrupted Codex sessions. GitHub
 issues and release gates in [`capabilities.json`](capabilities.json) remain the
@@ -11,23 +11,28 @@ authoritative backlog; this page records the verified resumption point.
 ## Verified release baseline
 
 - GitHub `main` and local `origin/main` resolve to
-  `164f844fac2295020bb8a9a89c57affd01f837d0` after merging PR #29 with the
-  structured whole-list location probe.
+  `b47d0cd452264a355e4e2da48babba76a2180901` after merging PR #30 with the
+  audited AI-ready diagnostics and Desktop 0.3 candidate.
 - The published stable release is CLI/TUI `v1.2.0`. The published Desktop
   preview is `desktop-v0.2.0`.
-- CLI/TUI 1.3.0 and Linux Desktop 0.3.0 exist only on the active
-  `agent/desktop-03-diagnostics` release-candidate branch. Neither tag nor
-  GitHub Release page exists yet.
+- CLI/TUI 1.3.0 and Linux Desktop 0.3.0 remain release candidates in PR #32;
+  neither tag nor GitHub Release page exists yet. The branch now carries the
+  provenance-verified issue #31 `glib` backport and passes local RustSec checks
+  without advisory suppressions. Publication still requires green PR checks,
+  merge, the default-branch Dependabot scan and audited release artifacts.
 - Windows and macOS 0.2.0 artifacts are unsigned UI previews without native
   VPN backends. They must not be described as functional VPN clients.
 - Android and iOS clients are planned and have no application source or
   release artifacts.
-- There are no open pull requests. Open backlog issues are #4–#14; PRs
-  #25–#29 are merged incremental slices, not proof that the corresponding
-  production gates are complete.
-- The uncompromising code, security, packaging and cross-platform review is in
-  [`AUDIT_2026-07-28.ru.md`](AUDIT_2026-07-28.ru.md). Its production blockers
-  remain authoritative until replaced by newer evidence.
+- PR #32 is open as a draft. Open backlog issues are #4–#14 and #31; PRs
+  #25–#30 are merged incremental slices, not proof that the corresponding
+  production gates are complete. Issue #31 remains open until the default-
+  branch dependency graph confirms the source-level remediation.
+- The uncompromising code, security, packaging and cross-platform review started
+  in [`AUDIT_2026-07-28.ru.md`](AUDIT_2026-07-28.ru.md). The latest PR #32
+  resumption audit is [`AUDIT_2026-08-01.ru.md`](AUDIT_2026-08-01.ru.md); it
+  records the issue #31 backport, the new `event-listener` advisory update,
+  subprocess hang fix, tray-path consolidation and remaining production risks.
 
 Published release links:
 
@@ -87,7 +92,7 @@ Merged PR #26 built the protected-service slice:
 - bounded, concurrently drained Desktop child-process output instead of
   accumulating an arbitrary amount of helper output in GUI memory;
 - CI uses versioned Ubuntu 22.04/24.04, macOS 14 and Windows Server 2022 runner
-  labels with the declared Rust 1.85.0 toolchain rather than `latest`/`stable`;
+  labels with the declared Rust 1.88.0 toolchain rather than `latest`/`stable`;
 - status/profile caches are atomically published as `0640 root:mazzy-vpn`
   under a `0750 root:mazzy-vpn` runtime directory created consistently by
   systemd-tmpfiles;
@@ -153,7 +158,7 @@ Merged PR #29 completed the first location-health issue #6 slice:
   every profile row;
 - complete package-owned Desktop CSS corresponding source.
 
-The active `agent/desktop-03-diagnostics` candidate adds:
+The merged 1.3.0 / Desktop 0.3.0 candidate adds:
 
 - `mazzy-vpn verify [--speed] [--json]` and API query
   `tests.verify-egress`;
@@ -175,20 +180,45 @@ The active `agent/desktop-03-diagnostics` candidate adds:
   `profile_id`/filename active-profile identity, including fail-closed handling
   of duplicate display names.
 
-Verified locally for the current candidate:
+The current `mazurovn/new-realise` continuation adds a local API query-deadline
+fix after an interrupted audit found `tests.probe` could hang the regression
+suite when the external deadline fired while nested probe workers still held the
+captured stdout pipe. `tests.probe` and `tests.verify-egress` now capture bounded
+worker output through root-only temporary files and clean them on timeout; the
+regression suite asserts no `.probe-result.*` or `.verify-result.*` files remain.
 
-- shell regression suite: 74/74 in one uninterrupted final run, including
-  Unicode profile-spoofing and runtime hard-code boundary checks;
-- Rust unit tests: 22/22;
-- ShellCheck, Clippy, capability/API validators, public audit and gitleaks;
-- `npm audit --audit-level=high` reported 0 known vulnerabilities on
-  2026-07-28; GitHub Dependabot reported no open alerts after vulnerability
-  alerts and automated security updates were enabled. A local RustSec
-  `cargo-audit` run and system-package advisory scan are still absent;
-- GitHub private vulnerability reporting is enabled. CodeQL default setup
-  (`extended`, remote and local queries) passed for Actions, JavaScript/
-  TypeScript, Python and Rust on baseline `main`; its high-severity release
-  wrapper alert is fixed locally but must be confirmed closed by PR scanning;
+Verified locally for the current candidate on 2026-08-01:
+
+- shell regression suite: 74/74 in one uninterrupted 2026-08-01 run, including
+  API query deadline cleanup, Unicode profile-spoofing and runtime hard-code
+  boundary checks;
+- Rust unit tests: 24/24, including a descendant-pipe timeout regression;
+- all 12 documentation screenshots were already regenerated on the current PR
+  branch and were rechecked at 1680×951 with RFC 5737 preview data; the issue
+  #31, subprocess and packaging fixes have no visual UI delta;
+- ShellCheck, Clippy, capability/API validators, public audit and runtime
+  hard-code audit;
+- `npm audit --audit-level=high` reports 0 known vulnerabilities. Issue #31 is
+  remediated in candidate source by vendoring crates.io `glib` 0.18.5 and
+  applying the exact upstream soundness fix. The provenance gate verifies the
+  archive checksum and all source deltas before cargo-deny; `ignore = []`.
+  The 2026-08-01 RustSec refresh also found `RUSTSEC-2026-0221` in
+  `event-listener` 5.4.1, now updated to 5.4.2. Cargo-deny 0.20.2 reports
+  `advisories ok`. System-package advisory scanning is still absent;
+- crates.io checks on 2026-07-30 found no simple semver update that removes
+  `glib` 0.18: `tauri` 2.11.5 and `webkit2gtk` 2.0.2 are current, `gtk` 0.18.2
+  remains the GTK3 binding line, and `cargo update --dry-run` only offered minor
+  unrelated updates plus `tray-icon` 0.24.2;
+- PR #32 RustSec CI also found fixable `quick-xml` and `time` advisories.
+  Desktop MSRV was raised to Rust 1.88 and `Cargo.lock` now uses `plist` 1.10.0,
+  `quick-xml` 0.41.0 and `time` 0.3.54; Rust tests and Clippy pass locally with
+  `cargo +1.88.0`;
+- GitHub private vulnerability reporting is enabled. Explicit CodeQL advanced
+  setup runs `security-extended` analysis for Actions, JavaScript/TypeScript,
+  Python and Rust with local threat sources. It excludes only the byte-verified
+  `desktop/src-tauri/vendor/**` dependency snapshot; CI separately proves the
+  crates.io checksum and exact two-line glib backport. The high-severity release
+  wrapper alert is fixed locally and still requires confirmation by PR scan;
 - latest clean all-target release build produced AppImage, DEB and RPM without
   stale Tauri marker warnings; actual DEB/RPM metadata contains the declared
   base runtime, privilege helper, process tools, recommendations and

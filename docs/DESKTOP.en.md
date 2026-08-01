@@ -14,11 +14,14 @@ separate CLI installation is no longer a prerequisite. CLI and TUI remain
 independent clients of the same engine and state.
 
 > **0.3 status:** the Linux control center now covers the main workflow, but it
-> remains preview until the [release gates](FEATURE_PARITY.md) pass. Desktop
-> 1.0 still needs a native shared service, complete fallback-policy UI,
-> six-language coverage for every screen, signed updates, clean-device
-> integration tests and migration of the remaining typed `pkexec` operations
-> to the partial versioned local API.
+> remains preview until the [release gates](FEATURE_PARITY.md) pass. The
+> candidate resolves issue #31 with the exact upstream `glib` 0.18 soundness
+> backport, verified source provenance and an empty cargo-deny ignore list.
+> Publication still waits for green PR #32/default-branch security checks and
+> the GitHub release workflow. Desktop 1.0 still needs a native shared service,
+> complete fallback-policy UI, six-language coverage for every screen, signed
+> updates, clean-device integration tests and migration of the remaining typed
+> `pkexec` operations to the partial versioned local API.
 
 ## Visual tour
 
@@ -166,8 +169,9 @@ events depend on the desktop environment.
 
 ## Linux installation
 
-Install one Desktop bundle from the Releases page. DEB and RPM are now
-package-managed installations: the archive owns the engine under `/usr/bin`,
+After a release exists and its RustSec gate is green, install one Desktop bundle
+from the Releases page. DEB and RPM are now package-managed installations: the
+archive owns the engine under `/usr/bin`,
 its public runtime under `/usr/lib/mazzy-vpn`, systemd units/drop-ins under
 `/usr/lib/systemd/system`, the tmpfiles policy and Bash completion. The package
 manager installs the base runtime dependencies, while supported VPN protocol
@@ -198,10 +202,12 @@ sudo dnf install "./Mazzy VPN Desktop-0.3.0-1.x86_64.rpm"
 
 For DEB/RPM, **Settings → Install / update / repair** runs package-safe
 `mazzy-vpn doctor --fix`: it repairs supported missing protocol dependencies
-and service state without copying package files into `/usr/local`. This slice
-is still preview: clean-device install/upgrade/remove tests across every
-supported distribution, package rollback/fault injection, AmneziaWG
-distribution and signing remain open release gates.
+and service state without copying package files into `/usr/local`. This slice is
+still preview. The 0.3 candidate carries the verified issue #31 `glib`
+backport and a clean RustSec graph; publishing awaits PR/default-branch checks.
+Clean-device install/upgrade/remove tests across every supported distribution,
+package rollback/fault injection, AmneziaWG distribution and signing also remain
+open release gates.
 
 AppImage:
 
@@ -272,4 +278,5 @@ Linux builds place AppImage, DEB and RPM bundles under
 `desktop/src-tauri/target/release/bundle/`. npm and Cargo dependencies are
 locked. The release command remaps the builder's local home directory out of
 Rust diagnostic strings. CI builds each OS on its matching GitHub runner; the
-release workflow creates a preview release while artifacts remain unsigned.
+release workflow creates a draft preview release while artifacts remain unsigned
+and the Linux RustSec advisory gate remains authoritative.

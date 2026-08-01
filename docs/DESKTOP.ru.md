@@ -14,11 +14,14 @@ Linux-пакет 0.3 включает совместимый engine installer: �
 клиентами того же движка и состояния.
 
 > **Статус 0.3:** Linux control-center уже покрывает основной рабочий цикл, но
-> остаётся preview до закрытия [release gates](FEATURE_PARITY.md). Для Desktop
-> 1.0 ещё нужны общий native service, полный fallback-policy UI, перевод всех
-> экранов на шесть языков, подписанные обновления, clean-device integration
-> tests и перенос оставшихся typed `pkexec`-операций в частично реализованный
-> versioned local API.
+> остаётся preview до закрытия [release gates](FEATURE_PARITY.md). В candidate
+> issue #31 исправлен точным upstream backport `glib` 0.18 с проверенным source
+> provenance и пустым cargo-deny ignore list. Публикация ждёт зелёных PR #32/
+> default-branch security checks и GitHub release workflow. Для Desktop 1.0 ещё
+> нужны общий native service, полный
+> fallback-policy UI, перевод всех экранов на шесть языков, подписанные
+> обновления, clean-device integration tests и перенос оставшихся typed
+> `pkexec`-операций в частично реализованный versioned local API.
 
 ## Визуальный обзор
 
@@ -166,8 +169,9 @@ output. Те же lifecycle-команды CLI/TUI используют этот
 
 ## Установка Linux
 
-Установите один Desktop-пакет со страницы Releases. DEB и RPM теперь являются
-package-managed установками: архив владеет engine в `/usr/bin`, публичным
+После появления релиза и зелёного RustSec gate установите один Desktop-пакет со
+страницы Releases. DEB и RPM теперь являются package-managed установками: архив
+владеет engine в `/usr/bin`, публичным
 runtime в `/usr/lib/mazzy-vpn`, systemd units/drop-ins в
 `/usr/lib/systemd/system`, tmpfiles policy и Bash completion. Package manager
 устанавливает базовые runtime-зависимости, а поддерживаемые VPN-протоколы
@@ -199,9 +203,11 @@ sudo dnf install "./Mazzy VPN Desktop-0.3.0-1.x86_64.rpm"
 Для DEB/RPM действие **Установить / обновить / исправить** запускает
 package-safe `mazzy-vpn doctor --fix`: оно исправляет поддерживаемые
 недостающие protocol dependencies и service state, но не копирует package
-files в `/usr/local`. Этот slice всё ещё preview: остаются clean-device
-install/upgrade/remove tests для всех поддерживаемых дистрибутивов,
-package rollback/fault injection, доставка AmneziaWG и подпись.
+files в `/usr/local`. Этот slice всё ещё preview, а публикация 0.3
+подготовлена с проверенным issue #31 backport `glib` и чистым RustSec graph;
+публикация ждёт PR/default-branch checks. Также остаются clean-device install/upgrade/remove
+tests для всех поддерживаемых дистрибутивов, package rollback/fault injection,
+доставка AmneziaWG и подпись.
 
 AppImage:
 
@@ -273,5 +279,6 @@ Linux build создаёт AppImage, DEB и RPM в
 `desktop/src-tauri/target/release/bundle/`. Зависимости npm и Cargo
 зафиксированы lock-файлами. Release-команда удаляет локальный домашний путь
 сборщика из диагностических строк Rust. CI собирает каждую ОС на
-соответствующем GitHub runner; release workflow создаёт только preview-релиз,
-пока артефакты не подписаны.
+соответствующем GitHub runner; release workflow создаёт только draft
+preview-релиз, пока артефакты не подписаны, а Linux RustSec advisory gate
+остаётся обязательным.

@@ -1,0 +1,9 @@
+name: Mazzy VPN CodeQL configuration
+
+paths-ignore:
+  - desktop/src-tauri/vendor/**
+
+queries:
+  - uses: security-extended
+
+threat-models: local

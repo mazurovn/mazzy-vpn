@@ -17,7 +17,10 @@ account and collects no telemetry.
 
 This source tree declares the 1.3.0/0.3.0 release candidate. Until both
 corresponding tags and GitHub Release pages exist, the latest published line
-remains CLI/TUI 1.2.0 and Desktop 0.2.0 preview.
+remains CLI/TUI 1.2.0 and Desktop 0.2.0 preview. The candidate now includes the
+reviewed issue #31 `glib` backport and passes the local RustSec gate without
+advisory suppressions; publication still waits for green PR #32 checks, the
+default-branch Dependabot scan and the release pages.
 
 The primary command is `mazzy-vpn`. The installer also creates the compatibility
 aliases `vpnctl` and `mazzyvpn`.
@@ -173,9 +176,11 @@ without first installing the CLI by hand. Packages are available as AppImage,
 DEB and RPM.
 
 DEB/RPM upgrade and removal deliberately preserve `/etc/vpnctl` profiles and
-`/var/lib/vpnctl` state. Production status still requires clean-device
-install/upgrade/remove, rollback/fault and signing gates on every supported
-distribution.
+`/var/lib/vpnctl` state. The candidate resolves issue #31 with the exact
+upstream `glib` backport and verifies the crate checksum and complete source
+delta before cargo-deny; the advisory ignore list remains empty. Production
+status also requires clean-device install/upgrade/remove, rollback/fault and
+signing gates on every supported distribution.
 
 About records the Desktop/engine/platform versions, author, copyright, AGPL
 license, privacy principles and safe-operation rules.
