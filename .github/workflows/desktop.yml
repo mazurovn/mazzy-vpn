@@ -188,7 +188,7 @@ jobs:
 
             Linux DEB/RPM bundles install the compatible Mazzy VPN 1.3 engine, protected systemd services and base runtime dependencies through the package manager; AppImage retains an explicitly authorized embedded bootstrap. Dashboard, profile import and selection, sortable whole-list latency checks, actual egress/location/DNS/IPv6 verification, transactional tests, complete Doctor/self-test output, clickable events, expanded tray, service/recovery settings and About/Privacy information are included.
 
-            The Linux build vendors the crates.io glib 0.18.5 source with the exact upstream VariantStrIter fix for RUSTSEC-2024-0429 / GHSA-wrw7-89jp-8q8g. CI verifies the original crate checksum and exact two-line source delta before cargo-deny audits the remaining dependency graph with no advisory suppressions. event-listener is updated to 5.4.2 for RUSTSEC-2026-0221.
+            The Linux build vendors the crates.io glib 0.18.5 source with the exact upstream VariantStrIter fix for RUSTSEC-2024-0429 / GHSA-wrw7-89jp-8q8g. CI downloads only the pinned crates.io archive, verifies its checksum and the exact two-line source delta, then cargo-deny audits the remaining dependency graph with no advisory suppressions. event-listener is updated to 5.4.2 for RUSTSEC-2026-0221 and serde_with to 3.21.0 for GHSA-7gcf-g7xr-8hxj.
 
             macOS and Windows bundles remain UI previews only. They do not provide traffic protection until their native Network Extension and Windows Service/Wintun backends pass the platform release gates.
 

@@ -52,11 +52,12 @@ Tauri 2.11.5 still uses the end-of-life GTK3 Rust bindings on Linux. For
 `RUSTSEC-2024-0429`, the repository therefore carries the crates.io `glib`
 0.18.5 source with the exact upstream `VariantStrIter` fix from gtk-rs commit
 `b5a4071e439bef2b5eea76c3aa25e5ae84839e34`. Before `cargo-deny` runs,
-`tests/check-glib-backport.py` verifies the crates.io archive checksum, compares
-all upstream files, proves that the two reviewed mutability changes are the only
-source delta and confirms the Cargo path override. The advisory ignore list
-remains empty. This temporary backport must be removed when Tauri migrates to a
-maintained GTK/glib line.
+`tests/check-glib-backport.py` downloads only the fixed crates.io URL, verifies
+the archive checksum, compares all upstream files, proves that the two reviewed
+mutability changes are the only source delta and confirms the Cargo path
+override. It accepts no environment-controlled archive or Cargo cache path. The
+advisory ignore list remains empty. This temporary backport must be removed when
+Tauri migrates to a maintained GTK/glib line.
 
 The public repository enables secret scanning with push protection,
 Dependabot vulnerability alerts and security updates, private vulnerability

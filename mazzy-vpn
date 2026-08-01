@@ -4843,7 +4843,7 @@ api_probe_result() {
             timeout --kill-after=2s "${duration}s" \
                 "$SELF" _probe-locations-json \
                 "$protocol" "$timeout_seconds" "$concurrency" "$profile_id" \
-                >"$result_file" || rc=$?
+                >"$result_file" 10>&- || rc=$?
         case "$rc" in
             0) ;;
             124|137) rm -f -- "$result_file"; return 124 ;;
@@ -4901,7 +4901,7 @@ api_verify_result() {
         VPNCTL_API_CLIENT_DISABLE=1 \
             timeout --kill-after=2s "${duration}s" \
                 "$SELF" _verify-egress-json "$timeout_seconds" "$include_speed" \
-                >"$result_file" || rc=$?
+                >"$result_file" 10>&- || rc=$?
         case "$rc" in
             0) ;;
             124|137) rm -f -- "$result_file"; return 124 ;;

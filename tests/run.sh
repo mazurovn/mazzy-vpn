@@ -1088,6 +1088,15 @@ jq -e '
     and .error.message_key == "api.tests.probe.deadline"
 ' <<<"$api_probe_deadline_response" >/dev/null ||
     fail "local API batch probe ignored the whole-request deadline"
+api_probe_after_deadline_request="$(
+    jq -c '.request_id = "request-probe-after-deadline-0001"' \
+        <<<"$api_probe_request"
+)"
+api_probe_after_deadline_response="$(
+    "$CLI" _api-dispatch <<<"$api_probe_after_deadline_request"
+)"
+jq -e '.status == "ok"' <<<"$api_probe_after_deadline_response" >/dev/null ||
+    fail "timed-out local API probe descendants retained the serialization lock"
 [[ -s "$TMP/probe-ping.pid" ]] ||
     fail "deadline probe did not start its fake ping worker"
 probe_ping_pid="$(<"$TMP/probe-ping.pid")"
