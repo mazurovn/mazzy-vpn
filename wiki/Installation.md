@@ -45,9 +45,9 @@ sudo ./install.sh --live-test
 локальный Tauri build может сохранять пробелы из product name.
 
 ```bash
-sudo apt install ./Mazzy.VPN.Desktop_0.3.1_amd64.deb
-sudo dnf install ./Mazzy.VPN.Desktop-0.3.1-1.x86_64.rpm
-chmod +x ./Mazzy.VPN.Desktop_0.3.1_amd64.AppImage
+sudo apt install ./Mazzy.VPN.Desktop_0.3.2_amd64.deb
+sudo dnf install ./Mazzy.VPN.Desktop-0.3.2-1.x86_64.rpm
+chmod +x ./Mazzy.VPN.Desktop_0.3.2_amd64.AppImage
 ```
 
 DEB и RPM добавляют приложение в системное меню. AppImage можно запускать без
@@ -60,9 +60,9 @@ DEB и RPM добавляют приложение в системное мен�
 разрешения устанавливает, обновляет или восстанавливает engine. Поэтому сначала
 устанавливать CLI вручную не требуется. Статус preview сохраняется до закрытия
 критериев [[Desktop Full Application Plan]]. Issue #31 закрыт проверенным
-`glib` backport; сверяйте downloads с `Mazzy.VPN.Desktop_0.3.1_SHA256SUMS`.
+`glib` backport; сверяйте downloads с `Mazzy.VPN.Desktop_0.3.2_SHA256SUMS`.
 
-DEB/RPM владеют `/usr/bin/mazzy-vpn`. При обновлении 0.3.1 доверенные root-owned
+DEB/RPM владеют `/usr/bin/mazzy-vpn`. При обновлении 0.3.2 доверенные root-owned
 копии Mazzy VPN из `/usr/local/bin` сохраняются в закрытом migration-каталоге и
 заменяются ссылками на package engine, поэтому старая ручная версия больше не
 перекрывает новую. Сторонние или небезопасные файлы installer не меняет;
@@ -121,9 +121,9 @@ These are the exact dot-normalized names of the published GitHub Release
 assets; a local Tauri build may retain spaces from the product name.
 
 ```bash
-sudo apt install ./Mazzy.VPN.Desktop_0.3.1_amd64.deb
-sudo dnf install ./Mazzy.VPN.Desktop-0.3.1-1.x86_64.rpm
-chmod +x ./Mazzy.VPN.Desktop_0.3.1_amd64.AppImage
+sudo apt install ./Mazzy.VPN.Desktop_0.3.2_amd64.deb
+sudo dnf install ./Mazzy.VPN.Desktop-0.3.2-1.x86_64.rpm
+chmod +x ./Mazzy.VPN.Desktop_0.3.2_amd64.AppImage
 ```
 
 DEB and RPM add an application-menu entry. AppImage is portable. Match the
@@ -137,9 +137,9 @@ authorization, installs, updates or repairs the engine. A prior manual CLI
 installation is therefore not required. The package remains a preview until
 the [[Desktop Full Application Plan]] release criteria are complete. Issue #31
 is closed with a verified `glib` backport; verify downloads with
-`Mazzy.VPN.Desktop_0.3.1_SHA256SUMS`.
+`Mazzy.VPN.Desktop_0.3.2_SHA256SUMS`.
 
-DEB/RPM own `/usr/bin/mazzy-vpn`. During a 0.3.1 update, recognized root-owned
+DEB/RPM own `/usr/bin/mazzy-vpn`. During a 0.3.2 update, recognized root-owned
 Mazzy VPN copies under `/usr/local/bin` are moved into a private migration
 directory and replaced with links to the package engine, so an older manual
 version cannot shadow the update. Unrelated or unsafe files are unchanged;

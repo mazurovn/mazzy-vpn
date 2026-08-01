@@ -66,9 +66,20 @@ deadline, audit и rollback. Custom server не равен arbitrary config exec
 
 Первый detector не отражал URI, но Bash command substitution способен
 отбрасывать NUL. Исправление валидирует размер и исходные байты в base64
-представлении до помещения decoded value в shell variable. Newline, NUL,
-другие C0 controls и DEL отклоняются. Результат содержит только protocol ID,
-kind и readiness; host, UUID, username, password, query и fragment отсутствуют.
+представлении до помещения decoded value в shell variable. Допускается ровно
+один конечный `LF` или `CRLF`; embedded/repeated newline, NUL, другие C0 controls
+и DEL отклоняются. Результат содержит только protocol ID, kind и readiness;
+host, UUID, username, password, query и fragment отсутствуют.
+
+### 6. High: fake transport test не обнаружил закрытие API response-half
+
+После установки DEB 0.3.1 socket activation запускал worker, но клиентский
+`socat` завершался при EOF request stdin. Worker получал `broken pipe`, а
+Desktop не мог получить typed API response. Исправление использует
+`STDIO,ignoreeof`: write-half завершается после запроса, read-half остаётся до
+ответа и закрытия worker. Новый regression запускает настоящий Unix socket и
+system `socat` с задержанным responder; fake dispatcher больше не является
+единственным transport gate.
 
 ## Архитектура orchestration
 
@@ -108,13 +119,13 @@ VPN-клиентом или Android готовым приложением до �
 
 ## Проверки patch source и artifacts
 
-- `./tests/run.sh`: 78/78;
+- `./tests/run.sh`: 79/79;
 - Rust unit tests: 24/24;
 - Clippy `-D warnings`: проходит; два известных warning принадлежат
   byte-verified upstream `glib` 0.18 source;
 - `npm audit --audit-level=high`: 0 vulnerabilities;
 - cargo-deny 0.20.2 с обновлённой RustSec database: `advisories ok`;
-- Desktop contract: v0.3.1, 90 DOM IDs и 135 localized labels;
+- Desktop contract: v0.3.2, 90 DOM IDs и 135 localized labels;
 - capability registry: 17 capabilities и 6 release gates;
 - API contract: v1.0, 27 operations и 14 errors;
 - protocol registry: 13 entries и 9 однозначных share URI schemes;

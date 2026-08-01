@@ -1,14 +1,18 @@
-# Mazzy VPN 1.3.1 / Desktop 0.3.1
+# Mazzy VPN 1.3.2 / Desktop 0.3.2
 
 Copyright (C) 2026 Nik m
 ([@mazurovn](https://github.com/mazurovn)).
 
-Patch release 1.3.1 fixes the installed-system profile and mixed-install
-upgrade blockers found after 1.3.0. It preserves the issue #31 source-level
-remediation and clean security gates from the 1.3.0 release line.
+Patch release 1.3.2 supersedes 1.3.1 after the installed-DEB gate found a real
+systemd socket response-half failure that fake API transport tests had missed.
+It also includes the profile and mixed-install upgrade fixes, issue #31
+source-level remediation and clean security gates from the 1.3 release line.
 
 ## Patch highlights / Исправления patch-релиза
 
+- The local API client uses `socat STDIO,ignoreeof`, allowing the
+  socket-activated systemd worker to return a response after request stdin EOF.
+  A delayed real-socket regression now enforces this installed-system contract.
 - Desktop now reads the 24 legacy profile-cache entries produced by CLI 1.2,
   derives compatible opaque IDs and reports unavailable cache separately from
   a genuinely empty profile library.
@@ -82,8 +86,8 @@ risk scoring remain external.
 
 ### Platform status
 
-- **Linux CLI/TUI 1.3.1:** functional patch release.
-- **Linux Desktop 0.3.1:** functional unsigned preview; AppImage, DEB and RPM.
+- **Linux CLI/TUI 1.3.2:** functional patch release.
+- **Linux Desktop 0.3.2:** functional unsigned preview; AppImage, DEB and RPM.
 - **Windows/macOS:** unsigned UI previews without native VPN backends; do not
   use them for traffic protection.
 - **Android/iOS:** planned native clients; no application packages are in this
@@ -157,8 +161,8 @@ WebRTC, геолокация устройства и provider-side risk scoring 
 
 ### Статус платформ
 
-- **Linux CLI/TUI 1.3.1:** функциональный patch-релиз.
-- **Linux Desktop 0.3.1:** функциональный неподписанный preview; AppImage, DEB
+- **Linux CLI/TUI 1.3.2:** функциональный patch-релиз.
+- **Linux Desktop 0.3.2:** функциональный неподписанный preview; AppImage, DEB
   и RPM.
 - **Windows/macOS:** неподписанные UI preview без native VPN backend; не
   используйте их для защиты трафика.

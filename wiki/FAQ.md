@@ -15,7 +15,7 @@ Copyright © 2026 Nik m. Код распространяется по GNU AGPL-3
 
 ## Какие версии сейчас рабочие?
 
-- Опубликованная release line: CLI/TUI 1.3.1 и unsigned Linux Desktop 0.3.1
+- Опубликованная release line: CLI/TUI 1.3.2 и unsigned Linux Desktop 0.3.2
   preview. Issue #31 закрыт проверенным `glib` backport и чистыми release checks.
 - Windows и macOS: только UI preview, нативные VPN backend ещё не готовы.
 - Android и iOS: planned native clients; готовых мобильных пакетов пока нет.
@@ -53,7 +53,7 @@ NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS и ShadowTLS v3. Сейч�
 ## Почему Dashboard видит профили, а экран «Профили» был пустым?
 
 Desktop 0.3.0 строго ожидал новое поле `profile_id` и целиком отвергал cache от
-старого CLI 1.2, хотя Dashboard мог прочитать отдельный status cache. В 0.3.1
+старого CLI 1.2, хотя Dashboard мог прочитать отдельный status cache. В 0.3.2
 legacy ID вычисляется совместимо, а недоступный cache отличается от пустого.
 После package update проверьте `mazzy-vpn version`, перезапустите приложение и,
 если доступ к группе был добавлен впервые, выполните новый login.
@@ -145,7 +145,7 @@ and preserving authorship.
 
 ## Which versions work today?
 
-- Published release line: CLI/TUI 1.3.1 and the unsigned Linux Desktop 0.3.1
+- Published release line: CLI/TUI 1.3.2 and the unsigned Linux Desktop 0.3.2
   preview. Issue #31 is closed with a verified `glib` backport and clean release
   checks.
 - Windows and macOS: UI preview only; native VPN backends are not complete.
@@ -186,7 +186,7 @@ proxy/transport protocols and require a separate TUN adapter. See
 
 Desktop 0.3.0 strictly required the new `profile_id` field and rejected the
 entire cache produced by an older 1.2 CLI, while Dashboard could still read a
-separate status cache. Version 0.3.1 derives a compatible legacy ID and
+separate status cache. Version 0.3.2 derives a compatible legacy ID and
 distinguishes an unavailable cache from an empty one. After package update,
 check `mazzy-vpn version`, restart the app and start a new login session if
 group access was just granted.

@@ -1,18 +1,19 @@
 # Релизы и roadmap
 
-## 1.3.1 / Desktop 0.3.1 — protocol foundation и upgrade hotfix
+## 1.3.2 / Desktop 0.3.2 — protocol foundation и upgrade hotfix
 
 - исправлена совместимость Desktop с legacy cache без `profile_id` и ложная
   надпись «Профили не найдены» при 24 существующих профилях;
 - package update устраняет конфликт старого `/usr/local/bin` с новым
   `/usr/bin/mazzy-vpn`, сохраняя обратимый backup;
+- real Unix-socket gate исправляет закрытие API response-half после request EOF;
 - добавлен versioned каталог из 13 протоколов, redacted URI detection,
   runtime diagnostics и безопасная read-only операция API `protocols.list`;
 - VLESS, Hysteria 2, Mieru, NaiveProxy и ещё пять современных направлений пока
   не объявляются готовыми подключениями: остаются TUN/engine adapters и
   integration gates, перечисленные в [[Protocol Orchestration]].
 
-## 1.3.0 / Desktop 0.3.0 — опубликованная release line
+## 1.3.0 / Desktop 0.3.0 — предыдущая baseline
 
 - Linux control center с Dashboard, Profiles, Diagnostics и Settings;
 - встроенный installer/engine, проверка версий и зависимостей, install/repair;
@@ -95,14 +96,16 @@ CLI engine и не является самостоятельным Desktop VPN-�
 
 # Releases and roadmap
 
-Version 1.3.1 / Desktop 0.3.1 fixes legacy profile-cache compatibility and the
+Version 1.3.2 / Desktop 0.3.2 fixes legacy profile-cache compatibility and the
 mixed `/usr/local` versus package `/usr/bin` upgrade conflict. It adds a
 versioned 13-entry protocol catalog, credential-redacted URI detection, runtime
 diagnostics and the read-only `protocols.list` API operation. The nine modern
 proxy/transport entries remain gated adapter work rather than advertised
-connections; see [[Protocol Orchestration]].
+connections; see [[Protocol Orchestration]]. It also keeps the real local API
+response half open after request EOF and tests that path through a delayed Unix
+socket responder.
 
-Version 1.3.0 / Desktop 0.3.0 is the published release line. It expands the Linux preview
+Version 1.3.0 / Desktop 0.3.0 expanded the Linux preview
 into a Dashboard/Profiles/Diagnostics/Settings control center with bundled
 engine bootstrap, version/dependency checks, file/folder import, profile
 actions, validation/probes/transactional tests, complete Doctor/self-test/log

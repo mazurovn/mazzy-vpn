@@ -6,7 +6,7 @@ set -uo pipefail
 PRODUCT_NAME="Mazzy VPN"
 CLI_COMMAND="mazzy-vpn"
 COMPAT_COMMAND="vpnctl"
-VERSION="1.3.1"
+VERSION="1.3.2"
 
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd -- "$(dirname -- "$SELF")" && pwd)"
@@ -1661,7 +1661,8 @@ api_client_send() {
         response="$(
             printf '%s\n' "$request" |
                 timeout --kill-after=2s "${timeout_seconds}s" \
-                    socat -T "$timeout_seconds" - "UNIX-CONNECT:$API_SOCKET" \
+                    socat -T "$timeout_seconds" STDIO,ignoreeof \
+                        "UNIX-CONNECT:$API_SOCKET" \
                     2>/dev/null |
                 head -c "$((API_CLIENT_MAX_RESPONSE_BYTES + 1))"
         )"

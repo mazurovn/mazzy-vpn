@@ -15,8 +15,8 @@ It is a client and control plane rather than a hosted VPN subscription. Use
 profiles from your VPN provider or organization; Mazzy VPN requires no project
 account and collects no telemetry.
 
-The current published line is [CLI/TUI 1.3.1](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.1)
-and the unsigned [Desktop 0.3.1 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.1).
+The current published line is [CLI/TUI 1.3.2](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.2)
+and the unsigned [Desktop 0.3.2 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.2).
 Linux Desktop is a functional control center; Windows and macOS artifacts are
 UI previews without native VPN backends. Issue #31 is closed with the reviewed
 upstream `glib` backport, exact source-provenance verification and clean

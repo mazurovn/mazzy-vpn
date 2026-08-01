@@ -93,7 +93,7 @@ cache в закрытые `deny_unknown_fields` типы и проверяет �
 точному basename конфига; legacy fallback по display name разрешён только при
 единственном совпадении.
 
-Desktop 0.3.1 также принимает legacy cache schema 0.2 без `profile_id` и
+Desktop 0.3.2 также принимает legacy cache schema 0.2 без `profile_id` и
 вычисляет тот же opaque ID, что и текущий CLI. Нечитаемый или некорректный cache
 теперь показывается как недоступный, а не как пустая библиотека. Это исправляет
 наблюдавшийся случай, когда Dashboard считал 24 профиля, а экран «Профили»
@@ -209,17 +209,17 @@ package-owned `/usr/bin/mazzy-vpn`. Сторонние, пользователь
 DEB:
 
 Ниже указаны точные dot-normalized имена файлов со страницы GitHub Release
-`desktop-v0.3.1`. Локальный output `npm run build:release` может сохранять
+`desktop-v0.3.2`. Локальный output `npm run build:release` может сохранять
 пробелы из Tauri product name.
 
 ```bash
-sudo apt install ./Mazzy.VPN.Desktop_0.3.1_amd64.deb
+sudo apt install ./Mazzy.VPN.Desktop_0.3.2_amd64.deb
 ```
 
 RPM:
 
 ```bash
-sudo dnf install ./Mazzy.VPN.Desktop-0.3.1-1.x86_64.rpm
+sudo dnf install ./Mazzy.VPN.Desktop-0.3.2-1.x86_64.rpm
 ```
 
 Для DEB/RPM действие **Установить / обновить / исправить** запускает
@@ -234,9 +234,9 @@ tests для всех поддерживаемых дистрибутивов, p
 AppImage:
 
 ```bash
-sha256sum -c --ignore-missing Mazzy.VPN.Desktop_0.3.1_SHA256SUMS
-chmod +x ./Mazzy.VPN.Desktop_0.3.1_amd64.AppImage
-./Mazzy.VPN.Desktop_0.3.1_amd64.AppImage
+sha256sum -c --ignore-missing Mazzy.VPN.Desktop_0.3.2_SHA256SUMS
+chmod +x ./Mazzy.VPN.Desktop_0.3.2_amd64.AppImage
+./Mazzy.VPN.Desktop_0.3.2_amd64.AppImage
 ```
 
 AppImage не может установить собственный privilege helper. Сначала проверьте

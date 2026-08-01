@@ -6,6 +6,18 @@ All notable changes to Mazzy VPN are documented here.
 
 No changes yet.
 
+## 1.3.2 / Desktop 0.3.2 - 2026-08-01
+
+- Fixed the installed local API client closing the bidirectional `socat` STDIO
+  channel as soon as request stdin reached EOF. The client now keeps the
+  response half open with `STDIO,ignoreeof`, so socket-activated systemd workers
+  can return their typed response instead of failing with `broken pipe`.
+- Added a real Unix-socket integration regression with a delayed responder. It
+  exercises the system `socat` binary rather than the existing fake dispatcher,
+  and CI installs the dependency explicitly.
+- Supersedes CLI/TUI 1.3.1. The hidden Desktop 0.3.1 draft and tag were removed;
+  no Desktop 0.3.1 preview was published.
+
 ## 1.3.1 / Desktop 0.3.1 - 2026-08-01
 
 - Fixed Desktop profile-cache compatibility with CLI 1.2 entries that do not

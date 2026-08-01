@@ -91,7 +91,7 @@ invariants before exposing data to the WebView. The active row is matched by
 opaque `profile_id` or exact config basename; a legacy display-name fallback is
 accepted only when exactly one profile matches.
 
-Desktop 0.3.1 also accepts the legacy 0.2 cache schema, where `profile_id` was
+Desktop 0.3.2 also accepts the legacy 0.2 cache schema, where `profile_id` was
 absent, and derives the same opaque ID as the current CLI. It treats an
 unreadable or invalid cache as unavailable instead of displaying the misleading
 empty-library message. This fixes the observed state where Dashboard counted
@@ -208,17 +208,17 @@ manual 1.2 engine from shadowing the newer Desktop package.
 DEB:
 
 The commands below use the exact dot-normalized filenames published on the
-`desktop-v0.3.1` GitHub Release page. A local `npm run build:release` output may
+`desktop-v0.3.2` GitHub Release page. A local `npm run build:release` output may
 retain spaces from the Tauri product name instead.
 
 ```bash
-sudo apt install ./Mazzy.VPN.Desktop_0.3.1_amd64.deb
+sudo apt install ./Mazzy.VPN.Desktop_0.3.2_amd64.deb
 ```
 
 RPM:
 
 ```bash
-sudo dnf install ./Mazzy.VPN.Desktop-0.3.1-1.x86_64.rpm
+sudo dnf install ./Mazzy.VPN.Desktop-0.3.2-1.x86_64.rpm
 ```
 
 For DEB/RPM, **Settings → Install / update / repair** runs package-safe
@@ -233,9 +233,9 @@ open release gates.
 AppImage:
 
 ```bash
-sha256sum -c --ignore-missing Mazzy.VPN.Desktop_0.3.1_SHA256SUMS
-chmod +x ./Mazzy.VPN.Desktop_0.3.1_amd64.AppImage
-./Mazzy.VPN.Desktop_0.3.1_amd64.AppImage
+sha256sum -c --ignore-missing Mazzy.VPN.Desktop_0.3.2_SHA256SUMS
+chmod +x ./Mazzy.VPN.Desktop_0.3.2_amd64.AppImage
+./Mazzy.VPN.Desktop_0.3.2_amd64.AppImage
 ```
 
 AppImage cannot install its own privilege helper. Check `command -v pkexec`

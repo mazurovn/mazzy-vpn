@@ -358,8 +358,8 @@ export VPNCTL_LEGACY_START="$TMP/fallback-start"
 export VPNCTL_LEGACY_STOP="$TMP/fallback-stop"
 export NO_COLOR=1
 
-"$CLI" version | grep -q '^Mazzy VPN 1\.3\.1 (mazzy-vpn; alias: vpnctl)$'
-"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.3\.1 ' ||
+"$CLI" version | grep -q '^Mazzy VPN 1\.3\.2 (mazzy-vpn; alias: vpnctl)$'
+"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.3\.2 ' ||
     fail "vpnctl compatibility wrapper is broken"
 ok "Mazzy VPN branding and compatibility alias"
 
@@ -1762,6 +1762,48 @@ if grep -Eq 'Test Server|192\.0\.2\.10|PrivateKey|PublicKey' \
 fi
 ok "local API recovery fails closed and bounds persistent journals"
 
+real_socat="$(PATH=/usr/bin:/bin command -v socat)" ||
+    fail "real socat is required for the API half-close integration test"
+real_api_socket="$TMP/api-client-integration.sock"
+real_api_responder="$TMP/api-client-responder"
+cat >"$real_api_responder" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+IFS= read -r request
+request_id="$(jq -er '.request_id' <<<"$request")"
+sleep 1
+jq -cn --arg request_id "$request_id" '{
+    api_version: "1.0",
+    request_id: $request_id,
+    status: "ok",
+    result: {profiles: []}
+}'
+EOF
+chmod 700 "$real_api_responder"
+timeout 20 "$real_socat" "UNIX-LISTEN:$real_api_socket,fork" \
+    "EXEC:$real_api_responder" &
+real_api_listener_pid=$!
+for _ in {1..50}; do
+    [[ -S "$real_api_socket" ]] && break
+    sleep 0.02
+done
+[[ -S "$real_api_socket" ]] || fail "real API integration socket did not start"
+real_api_response="$(
+    PATH="/usr/bin:/bin:$PATH" \
+        VPNCTL_API_SOCKET="$real_api_socket" \
+        VPNCTL_API_CLIENT_FORCE=1 \
+        "$CLI" profiles --api-json
+)" || fail "API client closed the response half after request EOF"
+kill "$real_api_listener_pid" 2>/dev/null || true
+wait "$real_api_listener_pid" 2>/dev/null || true
+jq -e '
+    .api_version == "1.0"
+    and .status == "ok"
+    and .result.profiles == []
+' <<<"$real_api_response" >/dev/null ||
+    fail "real API socket integration returned an invalid response"
+ok "local API client preserves the response half after request EOF"
+
 api_client_status="$(
     VPNCTL_API_CLIENT_FORCE=1 "$CLI" status --api-json
 )"
@@ -1899,7 +1941,7 @@ grep -q 'Переподключение запущено' <<<"$api_client_reconn
     fail "CLI local API lost-response scenario was not exercised"
 [[ "$(grep -c '^start vpnctl.service$' "$FAKE_SYSTEMCTL_LOG")" == "1" ]] ||
     fail "CLI local API retry executed one reconnect action twice"
-grep -Fq -- '--kill-after=2s 90s socat -T 90' \
+grep -Fq -- '--kill-after=2s 90s socat -T 90 STDIO,ignoreeof' \
     "$FAKE_TIMEOUT_LOG" ||
     fail "CLI client did not reserve the bounded rollback completion grace"
 

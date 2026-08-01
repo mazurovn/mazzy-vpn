@@ -2564,7 +2564,7 @@ mod tests {
             "schema_version": 1,
             "generated_at": 1,
             "product": "Mazzy VPN",
-            "version": "1.3.1",
+            "version": "1.3.2",
             "language": "en",
             "selected": true,
             "service_state": "active",
