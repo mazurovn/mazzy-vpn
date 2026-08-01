@@ -1,6 +1,6 @@
 # Релизы и roadmap
 
-## 1.3.0 / Desktop 0.3.0 — release candidate
+## 1.3.0 / Desktop 0.3.0 — опубликованная release line
 
 - Linux control center с Dashboard, Profiles, Diagnostics и Settings;
 - встроенный installer/engine, проверка версий и зависимостей, install/repair;
@@ -18,21 +18,20 @@
 
 Desktop 0.3 не требует предварительной ручной установки CLI, но остаётся
 preview до versioned service API, полного паритета режимов/локализаций,
-подписанного update/rollback, исправленного Tauri/GTK dependency graph и
-закрытия platform release gates. Сейчас публикация Desktop 0.3 дополнительно
-ждёт PR/default-branch checks: [issue #31](https://github.com/mazurovn/mazzy-vpn/issues/31)
-исправлен в candidate точным provenance-verified backport `glib`, а локальный
-RustSec gate проходит без suppressions.
+подписанного update/rollback, перехода с временного vendored Tauri/GTK `glib`
+backport и закрытия platform release gates. Issue
+[#31](https://github.com/mazurovn/mazzy-vpn/issues/31) закрыт точным
+provenance-verified backport `glib`; RustSec, Dependabot и CodeQL release checks
+прошли без suppressions.
 
-Фактическая публикация определяется наличием tags `v1.3.0` и
-`desktop-v0.3.0` и соответствующих страниц в GitHub Releases. Пока хотя бы
-одного из них нет, release line считается кандидатом.
+Опубликованы [CLI/TUI `v1.3.0`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.0)
+и unsigned [Desktop `desktop-v0.3.0` preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.0).
+Оба tag указывают на один проверенный release source; к artifacts приложены
+SHA-256 manifests.
 
-## 1.2.0 / Desktop 0.2.0 — опубликованная release line
+## 1.2.0 / Desktop 0.2.0 — предыдущая release line
 
-Это текущие опубликованные stable CLI/TUI и Linux Desktop preview. Версия в
-source, changelog или PR не заменяет их до появления нового tag и GitHub
-Release.
+Это предыдущие stable CLI/TUI и Linux Desktop preview.
 
 ## 1.1.0
 
@@ -84,7 +83,7 @@ CLI engine и не является самостоятельным Desktop VPN-�
 
 # Releases and roadmap
 
-Version 1.3.0 / Desktop 0.3.0 is the current release candidate. It expands the Linux preview
+Version 1.3.0 / Desktop 0.3.0 is the published release line. It expands the Linux preview
 into a Dashboard/Profiles/Diagnostics/Settings control center with bundled
 engine bootstrap, version/dependency checks, file/folder import, profile
 actions, validation/probes/transactional tests, complete Doctor/self-test/log
@@ -96,19 +95,17 @@ an About screen, explicit privacy rules and Android/iOS release gates.
 
 Desktop 0.3 does not require a prior manual CLI installation, but remains a
 preview until the versioned service API, complete mode/localization parity,
-signed update/rollback, a fixed Tauri/GTK dependency graph and platform release
-gates are complete. Desktop 0.3 publication waits for the remaining PR/default-
-branch checks: [issue #31](https://github.com/mazurovn/mazzy-vpn/issues/31) is
-resolved in the candidate with the exact provenance-verified `glib` backport,
-and the local RustSec gate passes without suppressions.
+signed update/rollback, migration away from the temporary vendored Tauri/GTK
+`glib` backport and platform release gates are complete. [Issue
+#31](https://github.com/mazurovn/mazzy-vpn/issues/31) is closed with the exact
+provenance-verified backport; RustSec, Dependabot and CodeQL release checks pass
+without suppressions.
 
-Publication is determined by tags `v1.3.0` and `desktop-v0.3.0` and their
-corresponding GitHub Release pages. Treat the release line as a candidate while
-either one is missing.
+Published pages: [CLI/TUI `v1.3.0`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.0)
+and the unsigned [Desktop `desktop-v0.3.0` preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.0).
+Both tags identify the same audited source commit and include SHA-256 manifests.
 
-Version 1.2.0 / Desktop 0.2.0 remains the published release line. A source
-version, changelog entry or PR does not replace it until a new tag and GitHub
-Release exist.
+Version 1.2.0 / Desktop 0.2.0 is the previous published release line.
 
 Version 1.1.0 adds the sanitized status cache, Tauri Dashboard and tray,
 functional Linux AppImage/DEB/RPM bundles, macOS/Windows UI previews, bilingual

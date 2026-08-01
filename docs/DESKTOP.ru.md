@@ -14,10 +14,10 @@ Linux-пакет 0.3 включает совместимый engine installer: �
 клиентами того же движка и состояния.
 
 > **Статус 0.3:** Linux control-center уже покрывает основной рабочий цикл, но
-> остаётся preview до закрытия [release gates](FEATURE_PARITY.md). В candidate
-> issue #31 исправлен точным upstream backport `glib` 0.18 с проверенным source
-> provenance и пустым cargo-deny ignore list. Публикация ждёт зелёных PR #32/
-> default-branch security checks и GitHub release workflow. Для Desktop 1.0 ещё
+> опубликован как unsigned preview и остаётся preview до закрытия
+> [production gates](FEATURE_PARITY.md). Issue #31 закрыт точным upstream
+> backport `glib` 0.18 с проверенным source provenance и пустым cargo-deny
+> ignore list. Для Desktop 1.0 ещё
 > нужны общий native service, полный
 > fallback-policy UI, перевод всех экранов на шесть языков, подписанные
 > обновления, clean-device integration tests и перенос оставшихся typed
@@ -191,29 +191,30 @@ package manager не сохранил сведения о вызвавшем п�
 DEB:
 
 ```bash
-sudo apt install "./Mazzy VPN Desktop_0.3.0_amd64.deb"
+sudo apt install ./Mazzy.VPN.Desktop_0.3.0_amd64.deb
 ```
 
 RPM:
 
 ```bash
-sudo dnf install "./Mazzy VPN Desktop-0.3.0-1.x86_64.rpm"
+sudo dnf install ./Mazzy.VPN.Desktop-0.3.0-1.x86_64.rpm
 ```
 
 Для DEB/RPM действие **Установить / обновить / исправить** запускает
 package-safe `mazzy-vpn doctor --fix`: оно исправляет поддерживаемые
 недостающие protocol dependencies и service state, но не копирует package
-files в `/usr/local`. Этот slice всё ещё preview, а публикация 0.3
-подготовлена с проверенным issue #31 backport `glib` и чистым RustSec graph;
-публикация ждёт PR/default-branch checks. Также остаются clean-device install/upgrade/remove
+files в `/usr/local`. Этот slice всё ещё preview. Опубликованные artifacts 0.3
+содержат проверенный issue #31 backport `glib` и имеют чистый RustSec graph.
+Также остаются clean-device install/upgrade/remove
 tests для всех поддерживаемых дистрибутивов, package rollback/fault injection,
 доставка AmneziaWG и подпись.
 
 AppImage:
 
 ```bash
-chmod +x "Mazzy VPN Desktop_0.3.0_amd64.AppImage"
-./"Mazzy VPN Desktop_0.3.0_amd64.AppImage"
+sha256sum -c --ignore-missing Mazzy.VPN.Desktop_0.3.0_SHA256SUMS
+chmod +x ./Mazzy.VPN.Desktop_0.3.0_amd64.AppImage
+./Mazzy.VPN.Desktop_0.3.0_amd64.AppImage
 ```
 
 AppImage не может установить собственный privilege helper. Сначала проверьте
@@ -279,6 +280,6 @@ Linux build создаёт AppImage, DEB и RPM в
 `desktop/src-tauri/target/release/bundle/`. Зависимости npm и Cargo
 зафиксированы lock-файлами. Release-команда удаляет локальный домашний путь
 сборщика из диагностических строк Rust. CI собирает каждую ОС на
-соответствующем GitHub runner; release workflow создаёт только draft
-preview-релиз, пока артефакты не подписаны, а Linux RustSec advisory gate
-остаётся обязательным.
+соответствующем GitHub runner. Tagged workflow сначала создаёт draft unsigned
+preview; он публикуется только после аудита platform artifacts, checksums и
+обязательного Linux RustSec gate.

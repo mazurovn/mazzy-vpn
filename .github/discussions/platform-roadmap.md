@@ -2,8 +2,8 @@
 
 | Surface / Интерфейс | Current status / Текущий статус | Tracking |
 |---|---|---|
-| CLI/TUI | Linux 1.2 release line; service parity and versioned automation follow-up | [#12](https://github.com/mazurovn/mazzy-vpn/issues/12) |
-| Desktop Linux | 0.3 candidate; issue #31 fixed in source, PR/default-branch checks pending | [#4](https://github.com/mazurovn/mazzy-vpn/issues/4), [#31](https://github.com/mazurovn/mazzy-vpn/issues/31) |
+| CLI/TUI | Published Linux 1.3 release; service parity and versioned automation follow-up | [#12](https://github.com/mazurovn/mazzy-vpn/issues/12) |
+| Desktop Linux | Published unsigned 0.3 preview; issue #31 closed and release checks green | [#4](https://github.com/mazurovn/mazzy-vpn/issues/4) |
 | Desktop Windows | UI preview; native service/backend required | [#7](https://github.com/mazurovn/mazzy-vpn/issues/7) |
 | Desktop macOS | UI preview; Network Extension/signing required | [#10](https://github.com/mazurovn/mazzy-vpn/issues/10) |
 | Android | planned native `VpnService` client | [#13](https://github.com/mazurovn/mazzy-vpn/issues/13) |

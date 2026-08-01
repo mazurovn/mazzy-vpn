@@ -42,9 +42,9 @@ core, даже когда GUI закрыт.
 
 ## Что готово в Desktop 0.3 Linux preview
 
-В candidate issue #31 исправлен точным upstream backport `glib` 0.18 с
-проверенным source provenance и пустым cargo-deny ignore list. Публикация ждёт
-PR/default-branch security checks и release artifacts.
+В опубликованном preview issue #31 исправлен точным upstream backport `glib`
+0.18 с проверенным source provenance и пустым cargo-deny ignore list. PR,
+default-branch security checks и tagged release artifacts прошли.
 
 - встроенный installer engine с проверкой версий и готовности зависимостей;
 - безопасный импорт одного/нескольких файлов и папки с определением протокола;
@@ -66,9 +66,9 @@ PR/default-branch security checks и release artifacts.
 - native macOS/Windows backends, signing/notarization и системные installers;
 - security, accessibility, failure-injection и длительные soak gates.
 
-До закрытия применимых release gates пакеты Desktop имеют статус **preview**.
-Issue #31 исправлен в candidate source и должен быть подтверждён
-default-branch dependency scan до публикации Desktop 0.3 preview.
+До закрытия применимых production gates пакеты Desktop имеют статус **preview**.
+Issue #31 и gate публикации Desktop 0.3 закрыты; перечисленные ниже пункты всё
+ещё блокируют статус Desktop 1.0.
 
 ## Целевые компоненты
 

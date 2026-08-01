@@ -42,9 +42,9 @@ sudo ./install.sh --live-test
 Установите один пакет из Releases:
 
 ```bash
-sudo apt install "./Mazzy VPN Desktop_VERSION_amd64.deb"
-sudo dnf install "./Mazzy VPN Desktop-VERSION-1.x86_64.rpm"
-chmod +x "Mazzy VPN Desktop_VERSION_amd64.AppImage"
+sudo apt install ./Mazzy.VPN.Desktop_0.3.0_amd64.deb
+sudo dnf install ./Mazzy.VPN.Desktop-0.3.0-1.x86_64.rpm
+chmod +x ./Mazzy.VPN.Desktop_0.3.0_amd64.AppImage
 ```
 
 DEB и RPM добавляют приложение в системное меню. AppImage можно запускать без
@@ -52,13 +52,12 @@ DEB и RPM добавляют приложение в системное мен�
 Текущие preview artifacts не подписаны; неподписанный SHA-256 обнаруживает
 случайное повреждение, но сам по себе не доказывает издателя.
 
-Desktop 0.3 candidate содержит совместимые installer/engine resources. На экране Settings
+Опубликованный Desktop 0.3 preview содержит совместимые installer/engine resources. На экране Settings
 он проверяет установленную версию и зависимости и после явного системного
 разрешения устанавливает, обновляет или восстанавливает engine. Поэтому сначала
 устанавливать CLI вручную не требуется. Статус preview сохраняется до закрытия
-критериев [[Desktop Full Application Plan]]. В candidate issue #31 исправлен
-проверенным `glib` backport; устанавливайте Desktop 0.3 только после появления
-его GitHub Release и зелёных default-branch checks.
+критериев [[Desktop Full Application Plan]]. Issue #31 закрыт проверенным
+`glib` backport; сверяйте downloads с `Mazzy.VPN.Desktop_0.3.0_SHA256SUMS`.
 
 ## macOS и Windows
 
@@ -110,9 +109,9 @@ above.
 Install one bundle from Releases:
 
 ```bash
-sudo apt install "./Mazzy VPN Desktop_VERSION_amd64.deb"
-sudo dnf install "./Mazzy VPN Desktop-VERSION-1.x86_64.rpm"
-chmod +x "Mazzy VPN Desktop_VERSION_amd64.AppImage"
+sudo apt install ./Mazzy.VPN.Desktop_0.3.0_amd64.deb
+sudo dnf install ./Mazzy.VPN.Desktop-0.3.0-1.x86_64.rpm
+chmod +x ./Mazzy.VPN.Desktop_0.3.0_amd64.AppImage
 ```
 
 DEB and RPM add an application-menu entry. AppImage is portable. Match the
@@ -120,13 +119,13 @@ artifact to its release/Actions commit. Current preview artifacts are unsigned;
 an unsigned SHA-256 detects accidental corruption but does not prove the
 publisher.
 
-The Desktop 0.3 candidate contains compatible installer/engine resources. Its Settings screen
+The published Desktop 0.3 preview contains compatible installer/engine resources. Its Settings screen
 checks the installed version and dependencies and, after explicit system
 authorization, installs, updates or repairs the engine. A prior manual CLI
 installation is therefore not required. The package remains a preview until
 the [[Desktop Full Application Plan]] release criteria are complete. Issue #31
-is resolved in the candidate with a verified `glib` backport; install Desktop
-0.3 only after its GitHub Release and default-branch checks exist.
+is closed with a verified `glib` backport; verify downloads with
+`Mazzy.VPN.Desktop_0.3.0_SHA256SUMS`.
 
 ## macOS and Windows
 

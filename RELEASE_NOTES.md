@@ -3,11 +3,13 @@
 Copyright (C) 2026 Nik m
 ([@mazurovn](https://github.com/mazurovn)).
 
-> Release-candidate text. The release is published only after tags `v1.3.0`
-> and `desktop-v0.3.0`, their GitHub Release pages and required checks exist.
-> The candidate resolves issue #31 with the exact upstream `glib` backport and
-> an independent source-provenance gate; publication still waits for PR/main
-> security checks and audited artifacts.
+Published on 2026-08-01 as
+[CLI/TUI `v1.3.0`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.0)
+and the unsigned
+[Desktop `desktop-v0.3.0` preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.0).
+Issue #31 is closed with the exact upstream `glib` backport and an independent
+source-provenance gate. Required CI, CodeQL, Dependabot and audited artifact
+checks passed on the tagged source commit.
 
 ## English
 
@@ -65,7 +67,7 @@ risk scoring remain external.
 
 ### Platform status
 
-- **Linux CLI/TUI 1.3.0:** release candidate.
+- **Linux CLI/TUI 1.3.0:** published functional release.
 - **Linux Desktop 0.3.0:** functional unsigned preview; AppImage, DEB and RPM.
 - **Windows/macOS:** unsigned UI previews without native VPN backends; do not
   use them for traffic protection.
@@ -140,7 +142,7 @@ WebRTC, геолокация устройства и provider-side risk scoring 
 
 ### Статус платформ
 
-- **Linux CLI/TUI 1.3.0:** release candidate.
+- **Linux CLI/TUI 1.3.0:** опубликованный функциональный релиз.
 - **Linux Desktop 0.3.0:** функциональный неподписанный preview; AppImage, DEB
   и RPM.
 - **Windows/macOS:** неподписанные UI preview без native VPN backend; не

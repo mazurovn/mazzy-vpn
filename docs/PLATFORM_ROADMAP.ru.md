@@ -86,10 +86,10 @@ flowchart LR
 
 ## Linux
 
-Desktop 0.3 candidate — функциональный preview: он включает engine/bootstrap,
-профили, тесты, Doctor, журнал и системные настройки. В candidate issue #31
-исправлен provenance-verified upstream backport `glib`; публикация ждёт
-PR/default-branch checks и artifacts. До Linux Desktop 1.0 остаются versioned service API, полный
+Desktop 0.3 опубликован как функциональный preview: он включает
+engine/bootstrap, профили, тесты, Doctor, журнал и системные настройки. Issue
+#31 закрыт provenance-verified upstream backport `glib`, release checks чистые.
+До Linux Desktop 1.0 остаются versioned service API, полный
 policy/localization/accessibility parity, подписанные обновления, clean-device
 package lifecycle/rollback coverage и fault/soak tests. DEB/RPM теперь владеют
 engine/service payload и сохраняют user state; AppImage всё ещё использует явный
