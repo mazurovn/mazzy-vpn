@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 #[cfg(target_os = "linux")]
 use std::io::Write;
 #[cfg(target_os = "linux")]
@@ -261,6 +262,7 @@ pub struct InstallationReport {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct ProfileCacheEntry {
+    #[serde(default)]
     profile_id: String,
     protocol: String,
     protocol_name: String,
@@ -1043,8 +1045,24 @@ fn valid_country_code(value: &str) -> bool {
     value.len() == 2 && value.bytes().all(|byte| byte.is_ascii_uppercase())
 }
 
+fn compatibility_profile_id(protocol: &str, file_name: &str) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut hasher = Sha256::new();
+    hasher.update(protocol.as_bytes());
+    hasher.update([0]);
+    hasher.update(file_name.as_bytes());
+    let digest = hasher.finalize();
+    let mut identifier = String::with_capacity(40);
+    identifier.push_str("profile-");
+    for byte in digest.iter().take(16) {
+        identifier.push(HEX[usize::from(byte >> 4)] as char);
+        identifier.push(HEX[usize::from(byte & 0x0f)] as char);
+    }
+    identifier
+}
+
 fn sanitize_profile_cache(contents: &str) -> Result<Value, String> {
-    let cache: ProfileCache =
+    let mut cache: ProfileCache =
         serde_json::from_str(contents).map_err(|_| "The profile cache is malformed".to_owned())?;
     if cache.schema_version != 1 || cache.profiles.len() > 1_024 {
         return Err("The profile cache has an unsupported shape".to_owned());
@@ -1059,7 +1077,10 @@ fn sanitize_profile_cache(contents: &str) -> Result<Value, String> {
     }
     let mut profile_ids = HashSet::with_capacity(cache.profiles.len());
     let mut profile_files = HashSet::with_capacity(cache.profiles.len());
-    for profile in &cache.profiles {
+    for profile in &mut cache.profiles {
+        if profile.profile_id.is_empty() {
+            profile.profile_id = compatibility_profile_id(&profile.protocol, &profile.file_name);
+        }
         let expected_protocol_name = match profile.protocol.as_str() {
             "amneziawg" => "AmneziaWG",
             "wireguard" => "WireGuard",
@@ -2174,10 +2195,13 @@ mod tests {
     #[test]
     fn timeout_kills_descendants_that_keep_output_pipes_open() {
         let started = std::time::Instant::now();
-        let output = bounded_output(
-            Command::new(TIMEOUT_PATH)
-                .args(["--kill-after=1s", "0.1s", "/bin/sh", "-c", "sleep 30 & wait"]),
-        )
+        let output = bounded_output(Command::new(TIMEOUT_PATH).args([
+            "--kill-after=1s",
+            "0.1s",
+            "/bin/sh",
+            "-c",
+            "sleep 30 & wait",
+        ]))
         .expect("bounded timeout");
         assert_eq!(output.status.code(), Some(124));
         assert!(started.elapsed() < std::time::Duration::from_secs(5));
@@ -2438,6 +2462,28 @@ mod tests {
         let sanitized = sanitize_profile_cache(&encoded).expect("sanitized profile cache");
         assert_eq!(sanitized["profiles"][0]["location"], "Belgium — Brussels");
 
+        let legacy_cache = json!({
+            "schema_version": 1,
+            "generated_at": 1,
+            "profiles": [{
+                "protocol": "openvpn",
+                "protocol_name": "OpenVPN",
+                "file_name": "opaque-profile.ovpn",
+                "name": "AI workspace",
+                "location": "Belgium — Brussels",
+                "selected": false
+            }]
+        });
+        let sanitized_legacy = sanitize_profile_cache(
+            &serde_json::to_string(&legacy_cache).expect("legacy cache JSON"),
+        )
+        .expect("sanitized legacy profile cache");
+        assert_eq!(
+            sanitized_legacy["profiles"][0]["profile_id"],
+            "profile-8137e652e96544ff40ae4ddf305f874a"
+        );
+        assert!(sanitized_legacy["profiles"][0]["country_code"].is_null());
+
         let mut endpoint_injection = cache.clone();
         endpoint_injection["profiles"][0]["endpoint"] = json!("vpn.invalid:1194");
         assert!(
@@ -2518,7 +2564,7 @@ mod tests {
             "schema_version": 1,
             "generated_at": 1,
             "product": "Mazzy VPN",
-            "version": "1.3.0",
+            "version": "1.3.1",
             "language": "en",
             "selected": true,
             "service_state": "active",

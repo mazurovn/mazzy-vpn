@@ -28,6 +28,17 @@ sudo mazzy-vpn import-dir ~/MazzyConfigs
 plugin, script hooks и вложенные configs отклоняются. WireGuard/AmneziaWG hooks
 не исполняются. Изменённый одноимённый файл без `--force` сохраняется.
 
+URI современных протоколов можно распознать без вывода самого URI:
+
+```bash
+printf '%s' 'vless://REDACTED' | mazzy-vpn protocols detect --stdin --json
+```
+
+Это только безопасное распознавание. Импорт и подключение VLESS, Hysteria 2,
+Mieru, NaiveProxy, TUIC, Shadowsocks 2022, Trojan, AnyTLS и ShadowTLS ещё не
+реализованы. Собственные серверы будут добавляться через typed schema и
+root-only secret store, а не через произвольный JSON для запуска от root.
+
 Endpoint для ping всегда читается из самого профиля: `remote` у OpenVPN,
 `Endpoint=` у WireGuard/AmneziaWG и `gateway`/`remote` у L2TP. Списка серверов
 в коде нет.
@@ -71,6 +82,17 @@ Detection uses content, not only extensions. Required sections, endpoints,
 permissions and unsafe directives are checked. OpenVPN includes, plugins,
 script hooks and nested configs are rejected. WireGuard/AmneziaWG hooks are not
 executed. A changed same-name file is preserved unless `--force` is explicit.
+
+Modern share URIs can be identified without echoing the input:
+
+```bash
+printf '%s' 'vless://REDACTED' | mazzy-vpn protocols detect --stdin --json
+```
+
+This is detection only. Import and connection for VLESS, Hysteria 2, Mieru,
+NaiveProxy, TUIC, Shadowsocks 2022, Trojan, AnyTLS and ShadowTLS are not yet
+implemented. Custom servers will use a typed schema and root-only secret store,
+not arbitrary engine JSON executed as root.
 
 Ping endpoints always come from the profile itself: OpenVPN `remote`,
 WireGuard/AmneziaWG `Endpoint=`, or L2TP `gateway`/`remote`. There is no

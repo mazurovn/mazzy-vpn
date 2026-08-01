@@ -20,6 +20,7 @@
   "domains": [
     "status",
     "profiles",
+    "protocols",
     "lifecycle",
     "tests",
     "services",
@@ -40,6 +41,16 @@
     {
       "name": "profiles.list",
       "domain": "profiles",
+      "kind": "query",
+      "authorization": "none",
+      "action_id_required": false,
+      "deadline_required": false,
+      "audit_event": false,
+      "rollback": "not-applicable"
+    },
+    {
+      "name": "protocols.list",
+      "domain": "protocols",
       "kind": "query",
       "authorization": "none",
       "action_id_required": false,

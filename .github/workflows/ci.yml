@@ -44,7 +44,9 @@ jobs:
         run: ./tests/run.sh
 
       - name: Cross-surface release gates
-        run: python3 tests/check-capabilities.py
+        run: |
+          python3 tests/check-capabilities.py
+          python3 tests/check-protocol-registry.py
 
       - name: Versioned local API contract
         run: |
@@ -62,6 +64,7 @@ jobs:
           ./install.sh --destdir "$stage" --no-deps --yes
           test -x "$stage/usr/local/bin/mazzy-vpn"
           test -r "$stage/usr/local/lib/mazzy-vpn/api/v1/manifest.json"
+          test -r "$stage/usr/local/lib/mazzy-vpn/protocols/v1/registry.json"
           "$stage/usr/local/bin/mazzy-vpn" api-info --json |
             cmp -s - "$stage/usr/local/lib/mazzy-vpn/api/v1/manifest.json"
           sudo install -m 755 \

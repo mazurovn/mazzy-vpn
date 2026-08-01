@@ -48,6 +48,7 @@
       "enum": [
         "status.get",
         "profiles.list",
+        "protocols.list",
         "profiles.inspect-import",
         "tests.validate",
         "tests.probe",
@@ -471,6 +472,92 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/ProfileSummary"
+          }
+        }
+      }
+    },
+    "ProtocolSupportStatus": {
+      "enum": [
+        "implemented",
+        "partial",
+        "planned"
+      ]
+    },
+    "ProtocolCatalogEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "display_name",
+        "kind",
+        "family",
+        "formats",
+        "uri_schemes",
+        "engines",
+        "transports",
+        "censorship_resistance",
+        "active_probe_resistance",
+        "support"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{2,31}$"},
+        "display_name": {"type": "string", "minLength": 2, "maxLength": 64},
+        "kind": {"enum": ["vpn", "proxy", "transport"]},
+        "family": {"type": "string", "minLength": 2, "maxLength": 64},
+        "formats": {"type": "array", "uniqueItems": true, "items": {"type": "string", "maxLength": 64}},
+        "uri_schemes": {"type": "array", "uniqueItems": true, "items": {"type": "string", "maxLength": 32}},
+        "engines": {"type": "array", "uniqueItems": true, "items": {"type": "string", "maxLength": 64}},
+        "transports": {"type": "array", "uniqueItems": true, "items": {"type": "string", "maxLength": 32}},
+        "censorship_resistance": {"enum": ["low", "medium", "high"]},
+        "active_probe_resistance": {"enum": ["low", "limited", "medium", "high"]},
+        "support": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["detection", "import", "diagnostics", "linux", "windows", "android"],
+          "properties": {
+            "detection": {"$ref": "#/$defs/ProtocolSupportStatus"},
+            "import": {"$ref": "#/$defs/ProtocolSupportStatus"},
+            "diagnostics": {"$ref": "#/$defs/ProtocolSupportStatus"},
+            "linux": {"$ref": "#/$defs/ProtocolSupportStatus"},
+            "windows": {"$ref": "#/$defs/ProtocolSupportStatus"},
+            "android": {"$ref": "#/$defs/ProtocolSupportStatus"}
+          }
+        }
+      }
+    },
+    "ProtocolCatalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "catalog_version", "protocols", "orchestration"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "catalog_version": {"type": "string", "format": "date"},
+        "protocols": {
+          "type": "array",
+          "minItems": 10,
+          "maxItems": 15,
+          "items": {"$ref": "#/$defs/ProtocolCatalogEntry"}
+        },
+        "orchestration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["policy_version", "hard_constraints", "score_factors", "agent_rules"],
+          "properties": {
+            "policy_version": {"const": 1},
+            "hard_constraints": {"type": "array", "uniqueItems": true, "items": {"type": "string", "maxLength": 64}},
+            "score_factors": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "weight"],
+                "properties": {
+                  "id": {"type": "string", "maxLength": 64},
+                  "weight": {"type": "integer", "minimum": 1, "maximum": 100}
+                }
+              }
+            },
+            "agent_rules": {"type": "array", "uniqueItems": true, "items": {"type": "string", "maxLength": 96}}
           }
         }
       }
@@ -1189,6 +1276,9 @@
         },
         {
           "$ref": "#/$defs/ProfileCollection"
+        },
+        {
+          "$ref": "#/$defs/ProtocolCatalog"
         },
         {
           "$ref": "#/$defs/TestResult"

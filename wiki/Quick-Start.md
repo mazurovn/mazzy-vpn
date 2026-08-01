@@ -36,6 +36,8 @@ sudo mazzy-vpn diagnose
 mazzy-vpn verify
 mazzy-vpn probe all --timeout 3 --jobs 4
 mazzy-vpn dashboard
+mazzy-vpn protocols list --json
+mazzy-vpn protocols diagnose --json
 ```
 
 Без аргументов `mazzy-vpn` открывает TUI. В нём доступны выбор сервера, быстрый
@@ -91,6 +93,8 @@ sudo mazzy-vpn diagnose
 mazzy-vpn verify
 mazzy-vpn probe all --timeout 3 --jobs 4
 mazzy-vpn dashboard
+mazzy-vpn protocols list --json
+mazzy-vpn protocols diagnose --json
 ```
 
 Running `mazzy-vpn` without arguments opens the TUI with server selection,

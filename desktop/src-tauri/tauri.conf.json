@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Mazzy VPN Desktop",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "identifier": "com.mazurovn.mazzy-vpn",
   "build": {
     "frontendDist": "../ui"
@@ -32,7 +32,7 @@
     "targets": "all",
     "category": "Utility",
     "shortDescription": "AI-ready, self-healing multi-protocol VPN client",
-    "longDescription": "An open AI-ready VPN client and control center for resilient access to AI tools, the web, video and corporate resources. Includes AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec profiles, real egress and location verification, diagnostics, recovery, latency checks and tray controls.",
+    "longDescription": "An open AI-ready VPN client and control center for resilient access to AI tools, the web, video and corporate resources. Linux connections currently support AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec, with a versioned 13-protocol catalog and safe detection foundation for future audited adapters.",
     "copyright": "Copyright © 2026 Nik m (@mazurovn)",
     "license": "AGPL-3.0-or-later",
     "homepage": "https://github.com/mazurovn/mazzy-vpn",
@@ -116,6 +116,7 @@
           "/usr/lib/mazzy-vpn/install.sh": "../../install.sh",
           "/usr/lib/mazzy-vpn/mazzy-vpn": "../../mazzy-vpn",
           "/usr/lib/mazzy-vpn/packaging": "../../packaging",
+          "/usr/lib/mazzy-vpn/protocols": "../../protocols",
           "/usr/lib/mazzy-vpn/setup_amnezia_vpn.sh": "../../setup_amnezia_vpn.sh",
           "/usr/lib/mazzy-vpn/stop_amnezia_vpn.sh": "../../stop_amnezia_vpn.sh",
           "/usr/lib/mazzy-vpn/systemd": "../../systemd",
@@ -215,6 +216,7 @@
           "/usr/lib/mazzy-vpn/install.sh": "../../install.sh",
           "/usr/lib/mazzy-vpn/mazzy-vpn": "../../mazzy-vpn",
           "/usr/lib/mazzy-vpn/packaging": "../../packaging",
+          "/usr/lib/mazzy-vpn/protocols": "../../protocols",
           "/usr/lib/mazzy-vpn/setup_amnezia_vpn.sh": "../../setup_amnezia_vpn.sh",
           "/usr/lib/mazzy-vpn/stop_amnezia_vpn.sh": "../../stop_amnezia_vpn.sh",
           "/usr/lib/mazzy-vpn/systemd": "../../systemd",
@@ -264,6 +266,7 @@
       "../../rust-toolchain.toml": "engine/rust-toolchain.toml",
       "../../api/": "engine/api",
       "../../docs/": "engine/docs",
+      "../../protocols/": "engine/protocols",
       "../../packaging/": "engine/packaging",
       "../../tests/": "engine/tests",
       "../../systemd/": "engine/systemd",

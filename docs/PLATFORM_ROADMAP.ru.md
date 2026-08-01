@@ -41,6 +41,14 @@ service/driver; macOS поставляет разрешённый Network Extens
 встраивают native libraries в signed app. Production-клиент не должен
 скачивать и исполнять произвольный backend при первом запуске.
 
+Общий versioned registry сейчас описывает 13 протоколов и transport families,
+но наличие в каталоге не означает поддержку подключения. В Linux подключение
+реализовано только для AmneziaWG, WireGuard, OpenVPN и L2TP/IPsec. VLESS,
+Hysteria 2, Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS и
+ShadowTLS v3 остаются работой над адаптерами с отдельными platform gates.
+Большинство из них являются proxy protocols и требуют проверенного TUN adapter,
+прежде чем их можно показывать как device-wide VPN.
+
 ```mermaid
 flowchart LR
     CLI --> API["Versioned core/API"]
@@ -105,6 +113,8 @@ Windows preview не является VPN backend. Для Desktop 1.0 нужны
 
 - Windows Service с минимальным локальным API и защищённым ACL;
 - WireGuard/Wintun как первый нативный backend, затем проверенный OpenVPN;
+- подписанные и зафиксированные sing-box-compatible и Cronet/Naive adapters до
+  объявления censorship-resistant протоколов доступными;
 - Credential Manager/DPAPI для секретов и безопасное удаление временных файлов;
 - signed MSI/NSIS, uninstall/upgrade/rollback и проверка SmartScreen;
 - тесты маршрутов, DNS, sleep/resume, смены сети и восстановления после crash.
@@ -131,6 +141,8 @@ macOS preview показывает интерфейс, но ещё не подн
 
 - `VpnService` с foreground lifecycle, уведомлением и безопасным reconnect;
 - WireGuard первым, OpenVPN после аудита bundled runtime;
+- встроенные reproducible protocol libraries и integration tests с
+  `VpnService` до объявления device-wide routing для proxy protocols;
 - Android Keystore, Storage Access Framework и импорт через share sheet;
 - always-on VPN/kill switch, смена сети, Doze и reboot recovery;
 - signed AAB/APK, reproducible metadata, Data safety и privacy disclosure;
@@ -155,8 +167,8 @@ entitlements, сертификаты и macOS runner; их нельзя заме
 
 ## Порядок продвижения релизов
 
-1. Подтвердить исправленный RustSec gate #31 на `main` и выпустить Linux Desktop 0.3.
-2. Завершить общий API и Linux Desktop 1.0.
+1. Поддерживать опубликованную Linux Desktop 0.3 исправлениями и regression tests.
+2. Завершить общий API, protocol adapters и Linux Desktop 1.0.
 3. Выпускать Windows и macOS preview независимо; production только по своему
    gate, без ожидания другой платформы.
 4. Создать Android/iOS proof-of-concept на общем профильном контракте.

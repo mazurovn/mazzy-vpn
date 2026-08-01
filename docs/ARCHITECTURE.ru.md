@@ -127,6 +127,27 @@ OpenVPN использует DNS, переданный сервером/проф
 не добавляется; администратор может явно задать
 `VPNCTL_OPENVPN_FALLBACK_DNS`, только если это соответствует его политике.
 
+## Реестр протоколов и граница оркестрации
+
+[`protocols/v1/registry.json`](../protocols/v1/registry.json) раздельно хранит
+готовность catalog, detection, import, diagnostics и connection для каждой
+платформы. Каталог содержит 13 протоколов, но Linux connection adapters сейчас
+реализованы только для AmneziaWG, WireGuard, OpenVPN и L2TP/IPsec. Остальные
+девять записей не участвуют в lifecycle selection со статусом `planned`.
+
+`mazzy-vpn protocols list --json` и API `protocols.list` возвращают только
+публичные capabilities. `protocols detect --stdin --json` распознаёт
+однозначные share schemes, но не выводит host, user info, UUID, password, query
+или fragment. Proxy-протоколам нужен отдельный TUN adapter; произвольный
+пользовательский sing-box JSON никогда не является root execution format.
+Полная модель описана в
+[документе об оркестрации](PROTOCOL_ORCHESTRATION.ru.md).
+
+Будущий planner детерминирован и подчинён hard constraints: platform backend
+готов, профиль валиден, секрет доступен только backend и rollback реализован.
+LLM может предложить dry-run plan, но не создаёт shell command/backend config и
+не обходит authorization/action-ID boundaries.
+
 CLI/TUI-клиент подключается к Unix socket через автоматически установленный
 `socat`. Он ограничивает размер и время ответа, проверяет identity envelope и
 при сетевой неопределённости повторяет тот же request с тем же `action_id`.

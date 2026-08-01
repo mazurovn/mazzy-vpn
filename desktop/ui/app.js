@@ -136,6 +136,7 @@ Object.assign(translations.ru, {
   importFiles: "Загрузить файлы", scanFolder: "Проверить папку", importFolder: "Импортировать папку",
   searchProfiles: "Поиск профиля или локации", allProtocols: "Все протоколы",
   profilesLoading: "Загружаем профили…", profilesEmpty: "Профили не найдены",
+  profilesUnavailable: "Кэш профилей недоступен. Обновите движок или запустите диагностику.",
   selectedProfile: "Выбран по умолчанию", connectProfile: "Подключить", testProfile: "Проверить", removeProfile: "Удалить",
   testingTools: "ТЕСТИРОВАНИЕ", testingTitle: "Проверка конфигураций",
   testTimeout: "Лимит времени живого теста", testProtocol: "Протокол",
@@ -212,6 +213,7 @@ Object.assign(translations.en, {
   importFiles: "Import files", scanFolder: "Scan folder", importFolder: "Import folder",
   searchProfiles: "Search profile or location", allProtocols: "All protocols",
   profilesLoading: "Loading profiles…", profilesEmpty: "No profiles found",
+  profilesUnavailable: "The profile cache is unavailable. Update the engine or run diagnostics.",
   selectedProfile: "Selected as default", connectProfile: "Connect", testProfile: "Test", removeProfile: "Remove",
   testingTools: "TESTING", testingTitle: "Configuration checks", testTimeout: "Live test timeout",
   testProtocol: "Protocol", validateProfiles: "Validate format", probeEndpoints: "DNS and endpoint ping",
@@ -371,6 +373,7 @@ const state = {
   page: "dashboard",
   status: null,
   profiles: [],
+  profileCacheAvailable: true,
   profileHealth: new Map(),
   probeCheckedAt: null,
   probeRunningScope: null,
@@ -536,7 +539,7 @@ function documentationPreviewData() {
       available: true,
       generated_at: Math.floor(Date.now() / 1000),
       product: "Mazzy VPN",
-      version: "1.3.0",
+      version: "1.3.1",
       service_state: "active",
       desired: "up",
       internet: "up",
@@ -621,8 +624,8 @@ function documentationPreviewData() {
     installation: {
       engine_installed: true,
       package_managed: true,
-      installed_version: "1.3.0",
-      bundled_version: "1.3.0",
+      installed_version: "1.3.1",
+      bundled_version: "1.3.1",
       bundled_installer: true,
       needs_install: false,
       service_installed: true,
@@ -649,7 +652,7 @@ function documentationPreviewData() {
     platform: {
       functional: true,
       os: "linux",
-      desktop_version: "0.3.0",
+      desktop_version: "0.3.1",
       author: "Nik m (@mazurovn)",
       license: "AGPL-3.0-or-later"
     }
@@ -958,7 +961,7 @@ function renderProfiles() {
   if (!profiles.length) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
-    empty.textContent = t("profilesEmpty");
+    empty.textContent = state.profileCacheAvailable ? t("profilesEmpty") : t("profilesUnavailable");
     list.replaceChildren(empty);
     return;
   }
@@ -1091,10 +1094,15 @@ async function refreshProfiles(manual = false) {
     if (!invoke) throw new Error("Tauri runtime is unavailable");
     const data = await invoke("get_profiles");
     state.profiles = Array.isArray(data?.profiles) ? data.profiles : [];
+    state.profileCacheAvailable = data?.available !== false;
     renderProfiles();
-    if (manual) showToast(t("profilesRefreshed"));
+    if (manual) showToast(
+      state.profileCacheAvailable ? t("profilesRefreshed") : t("profilesUnavailable"),
+      !state.profileCacheAvailable
+    );
   } catch (error) {
     state.profiles = [];
+    state.profileCacheAvailable = false;
     renderProfiles();
     if (manual) showToast(String(error), true);
   }

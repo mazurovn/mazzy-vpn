@@ -127,6 +127,28 @@ OpenVPN uses DNS pushed by the server/profile. It never silently inserts a
 public resolver; an administrator may configure an explicit
 `VPNCTL_OPENVPN_FALLBACK_DNS` only when that policy is intentional.
 
+## Protocol registry and orchestration boundary
+
+[`protocols/v1/registry.json`](../protocols/v1/registry.json) separates
+catalog, detection, import, diagnostics and per-platform connection readiness.
+The catalog contains 13 protocols, while only AmneziaWG, WireGuard, OpenVPN and
+L2TP/IPsec currently have implemented Linux connection adapters. The remaining
+nine entries cannot enter lifecycle selection while their platform state is
+`planned`.
+
+`mazzy-vpn protocols list --json` and API `protocols.list` expose only public
+capabilities. `protocols detect --stdin --json` recognizes unambiguous share
+schemes but returns no host, user info, UUID, password, query or fragment.
+Proxy protocols require an explicit TUN adapter; arbitrary user-provided
+sing-box JSON is never a root execution format. See
+[Protocol orchestration](PROTOCOL_ORCHESTRATION.en.md) for scoring, custom
+server storage and agent constraints.
+
+The future planner is deterministic and subordinate to hard constraints:
+platform backend ready, profile valid, backend-only secret access and rollback
+available. LLM output can propose a dry-run plan but cannot construct a shell
+command, backend configuration or bypass authorization/action-ID boundaries.
+
 The CLI/TUI client reaches the Unix socket through automatically installed
 `socat`. It bounds response size and time, validates envelope identity and
 retries an indeterminate transport with the same request and `action_id`. The

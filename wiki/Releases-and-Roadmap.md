@@ -1,5 +1,17 @@
 # Релизы и roadmap
 
+## 1.3.1 / Desktop 0.3.1 — protocol foundation и upgrade hotfix
+
+- исправлена совместимость Desktop с legacy cache без `profile_id` и ложная
+  надпись «Профили не найдены» при 24 существующих профилях;
+- package update устраняет конфликт старого `/usr/local/bin` с новым
+  `/usr/bin/mazzy-vpn`, сохраняя обратимый backup;
+- добавлен versioned каталог из 13 протоколов, redacted URI detection,
+  runtime diagnostics и безопасная read-only операция API `protocols.list`;
+- VLESS, Hysteria 2, Mieru, NaiveProxy и ещё пять современных направлений пока
+  не объявляются готовыми подключениями: остаются TUN/engine adapters и
+  integration gates, перечисленные в [[Protocol Orchestration]].
+
 ## 1.3.0 / Desktop 0.3.0 — опубликованная release line
 
 - Linux control center с Dashboard, Profiles, Diagnostics и Settings;
@@ -82,6 +94,13 @@ CLI engine и не является самостоятельным Desktop VPN-�
 <a id="english"></a>
 
 # Releases and roadmap
+
+Version 1.3.1 / Desktop 0.3.1 fixes legacy profile-cache compatibility and the
+mixed `/usr/local` versus package `/usr/bin` upgrade conflict. It adds a
+versioned 13-entry protocol catalog, credential-redacted URI detection, runtime
+diagnostics and the read-only `protocols.list` API operation. The nine modern
+proxy/transport entries remain gated adapter work rather than advertised
+connections; see [[Protocol Orchestration]].
 
 Version 1.3.0 / Desktop 0.3.0 is the published release line. It expands the Linux preview
 into a Dashboard/Profiles/Diagnostics/Settings control center with bundled

@@ -1972,11 +1972,12 @@ dependencies = [
 
 [[package]]
 name = "mazzy-vpn-desktop"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "rfd",
  "serde",
  "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
 ]

@@ -358,8 +358,8 @@ export VPNCTL_LEGACY_START="$TMP/fallback-start"
 export VPNCTL_LEGACY_STOP="$TMP/fallback-stop"
 export NO_COLOR=1
 
-"$CLI" version | grep -q '^Mazzy VPN 1\.3\.0 (mazzy-vpn; alias: vpnctl)$'
-"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.3\.0 ' ||
+"$CLI" version | grep -q '^Mazzy VPN 1\.3\.1 (mazzy-vpn; alias: vpnctl)$'
+"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.3\.1 ' ||
     fail "vpnctl compatibility wrapper is broken"
 ok "Mazzy VPN branding and compatibility alias"
 
@@ -994,6 +994,36 @@ jq -e --arg profile_id "$profile_id" '
     )
 ' <<<"$api_profiles_response" >/dev/null ||
     fail "local API profiles.list response is invalid"
+
+api_protocols_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-protocols-0001",
+        operation: "protocols.list",
+        payload: {}
+    }'
+)"
+api_protocols_response="$(printf '%s\n' "$api_protocols_request" | "$CLI" _api-dispatch)"
+jq -e '
+    .status == "ok"
+    and (.result.protocols | length) == 13
+    and any(
+        .result.protocols[];
+        .id == "vless"
+        and .support.detection == "implemented"
+        and .support.linux == "planned"
+    )
+    and (.result.orchestration.agent_rules | index(
+        "credentials-never-enter-prompts-events-or-audit"
+    )) != null
+' <<<"$api_protocols_response" >/dev/null ||
+    fail "local API protocols.list response is invalid"
+if jq -e '
+    .. | objects | keys[] |
+    select(test("^(password|credentials?|secret|endpoint|file_path|private_key)$"))
+' <<<"$api_protocols_response" >/dev/null; then
+    fail "local API protocols.list leaked a frontend-forbidden field"
+fi
 
 api_probe_request="$(
     jq -cn '{
@@ -2212,16 +2242,22 @@ stage="$TMP/stage"
    -f "$stage/usr/local/lib/mazzy-vpn/docs/DESKTOP_ROADMAP.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/PLATFORM_ROADMAP.en.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/PLATFORM_ROADMAP.ru.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/PROTOCOL_ORCHESTRATION.en.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/PROTOCOL_ORCHESTRATION.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/FEATURE_PARITY.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/capabilities.json" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/API_CONTRACT.en.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/API_CONTRACT.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/PROJECT_STATUS.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/AUDIT_2026-07-28.ru.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/AUDIT_2026-08-01.ru.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/AUDIT_2026-08-01_PROTOCOLS.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.en.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/api/v1/manifest.json" &&
    -f "$stage/usr/local/lib/mazzy-vpn/api/v1/schema.json" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/protocols/v1/registry.json" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/protocols/v1/schema.json" &&
    -f "$stage/usr/local/lib/mazzy-vpn/LICENSE" &&
    -f "$stage/usr/local/lib/mazzy-vpn/AUTHORS.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/PRIVACY.md" ]] ||
@@ -2232,6 +2268,9 @@ cmp -s "$ROOT/api/v1/manifest.json" \
 cmp -s "$ROOT/api/v1/schema.json" \
     "$stage/usr/local/lib/mazzy-vpn/api/v1/schema.json" ||
     fail "staged API schema differs from the source contract"
+cmp -s "$ROOT/protocols/v1/registry.json" \
+    "$stage/usr/local/lib/mazzy-vpn/protocols/v1/registry.json" ||
+    fail "staged protocol registry differs from the source contract"
 "$stage/usr/local/bin/mazzy-vpn" api-info --json |
     cmp -s - "$ROOT/api/v1/manifest.json" ||
     fail "staged CLI does not expose the installed API manifest"
@@ -2339,6 +2378,7 @@ for destination in (
     "/usr/lib/mazzy-vpn/desktop/ui/app.css",
     "/usr/lib/mazzy-vpn/desktop/ui/app.js",
     "/usr/lib/mazzy-vpn/packaging",
+    "/usr/lib/mazzy-vpn/protocols",
     "/usr/lib/mazzy-vpn/wiki",
     "/usr/lib/systemd/system/mazzy-vpn-api.socket",
     "/usr/lib/systemd/system/mazzy-vpn-api.socket.d",
@@ -2368,6 +2408,45 @@ for package_script in \
         fail "package lifecycle script can remove user VPN state"
     fi
 done
+
+legacy_migration_root="$TMP/legacy-package-migration"
+mkdir -p "$legacy_migration_root/usr/local/bin" \
+    "$legacy_migration_root/usr/bin" \
+    "$legacy_migration_root/var/lib/vpnctl"
+install -m 755 "$ROOT/mazzy-vpn" \
+    "$legacy_migration_root/usr/bin/mazzy-vpn"
+install -m 744 "$ROOT/mazzy-vpn" \
+    "$legacy_migration_root/usr/local/bin/mazzy-vpn"
+install -m 755 "$ROOT/mazzy-vpn" \
+    "$legacy_migration_root/usr/local/bin/vpnctl"
+install -m 700 "$ROOT/mazzy-vpn" \
+    "$legacy_migration_root/usr/local/bin/mazzyvpn"
+declare -A legacy_modes=([mazzy-vpn]=744 [vpnctl]=755 [mazzyvpn]=700)
+legacy_checksum="$(sha256sum \
+    "$legacy_migration_root/usr/local/bin/mazzy-vpn" | awk '{print $1}')"
+"$ROOT/packaging/linux/post-install.sh" --test-migrate \
+    "$legacy_migration_root"
+for legacy_name in mazzy-vpn vpnctl mazzyvpn; do
+    [[ "$(readlink "$legacy_migration_root/usr/local/bin/$legacy_name")" == \
+        /usr/bin/mazzy-vpn ]] ||
+        fail "package migration did not redirect legacy $legacy_name"
+    [[ -f "$legacy_migration_root/var/lib/vpnctl/package-migration/$legacy_name.pre-package" ]] ||
+        fail "package migration did not preserve legacy $legacy_name"
+done
+"$ROOT/packaging/linux/post-remove.sh" --test-restore \
+    "$legacy_migration_root"
+for legacy_name in mazzy-vpn vpnctl mazzyvpn; do
+    [[ ! -L "$legacy_migration_root/usr/local/bin/$legacy_name" ]] ||
+        fail "package removal left a legacy $legacy_name symlink"
+    [[ "$(sha256sum "$legacy_migration_root/usr/local/bin/$legacy_name" | awk '{print $1}')" == \
+        "$legacy_checksum" ]] ||
+        fail "package removal did not restore legacy $legacy_name"
+    [[ "$(stat -c %a "$legacy_migration_root/usr/local/bin/$legacy_name")" == \
+        "${legacy_modes[$legacy_name]}" ]] ||
+        fail "package removal did not restore legacy $legacy_name permissions"
+done
+ok "package lifecycle migrates and restores trusted legacy CLI copies"
+
 for package_dropin in \
     "$ROOT/packaging/linux/systemd/mazzy-vpn-api.socket.d/10-package-docs.conf" \
     "$ROOT/packaging/linux/systemd/mazzy-vpn-api@.service.d/10-package-exec.conf" \
@@ -2533,6 +2612,90 @@ ok "CLI/TUI/Desktop capability parity and release gates"
 python3 "$ROOT/tests/check-api-contract.py" >/dev/null ||
     fail "versioned local API contract is inconsistent"
 ok "versioned local API contract"
+
+python3 "$ROOT/tests/check-protocol-registry.py" >/dev/null ||
+    fail "protocol registry and orchestration policy are inconsistent"
+ok "protocol registry and AI orchestration policy"
+
+declare -A protocol_uri_schemes=(
+    [vless]=vless
+    [hysteria2]=hysteria2
+    [hy2]=hysteria2
+    [mieru]=mieru
+    [mierus]=mieru
+    [tuic]=tuic
+    [ss]=shadowsocks2022
+    [trojan]=trojan
+    [anytls]=anytls
+)
+for protocol_scheme in "${!protocol_uri_schemes[@]}"; do
+    protocol_detection="$({
+        printf '%s://user:password@example.invalid:443?id=secret#private' \
+            "$protocol_scheme"
+    } | "$ROOT/mazzy-vpn" protocols detect --stdin --json)" ||
+        fail "protocol detector rejected $protocol_scheme"
+    jq -e --arg protocol "${protocol_uri_schemes[$protocol_scheme]}" '
+        .recognized == true
+        and .protocol == $protocol
+        and .contains_secrets == true
+    ' <<<"$protocol_detection" >/dev/null ||
+        fail "protocol detector mislabeled $protocol_scheme"
+    if jq -r '.. | strings' <<<"$protocol_detection" |
+        grep -Eq 'password|example\.invalid|secret|private'; then
+        fail "protocol detector exposed $protocol_scheme credentials"
+    fi
+done
+protocol_detection="$(
+    printf '%s\n' 'vless://user:password@example.invalid:443?id=secret#private' |
+        "$ROOT/mazzy-vpn" protocols detect --stdin --json
+)" || fail "protocol detector rejected a newline-terminated URI"
+jq -e '.recognized == true and .protocol == "vless"' \
+    <<<"$protocol_detection" >/dev/null ||
+    fail "protocol detector mislabeled a newline-terminated URI"
+protocol_detection="$(
+    printf '%s\r\n' 'vless://user:password@example.invalid:443?id=secret#private' |
+        "$ROOT/mazzy-vpn" protocols detect --stdin --json
+)" || fail "protocol detector rejected a CRLF-terminated URI"
+jq -e '.recognized == true and .protocol == "vless"' \
+    <<<"$protocol_detection" >/dev/null ||
+    fail "protocol detector mislabeled a CRLF-terminated URI"
+set +e
+protocol_detection="$(
+    printf 'unknown://user:password@example.invalid' |
+        "$ROOT/mazzy-vpn" protocols detect --stdin --json
+)"
+protocol_detection_status=$?
+set -e
+[[ "$protocol_detection_status" -eq 2 ]] ||
+    fail "protocol detector accepted an unknown scheme"
+jq -e '.recognized == false and .reason == "unsupported-scheme"' \
+    <<<"$protocol_detection" >/dev/null ||
+    fail "protocol detector returned an unsafe unknown-scheme response"
+set +e
+protocol_detection="$(
+    printf 'vless://safe\0hidden' |
+        "$ROOT/mazzy-vpn" protocols detect --stdin --json
+)"
+protocol_detection_status=$?
+set -e
+[[ "$protocol_detection_status" -eq 2 ]] ||
+    fail "protocol detector accepted a control byte"
+jq -e '.recognized == false and .reason == "invalid-input"' \
+    <<<"$protocol_detection" >/dev/null ||
+    fail "protocol detector returned an unsafe control-byte response"
+set +e
+protocol_detection="$(
+    printf 'vless://safe\n\n' |
+        "$ROOT/mazzy-vpn" protocols detect --stdin --json
+)"
+protocol_detection_status=$?
+set -e
+[[ "$protocol_detection_status" -eq 2 ]] ||
+    fail "protocol detector accepted multiple trailing line terminators"
+jq -e '.recognized == false and .reason == "invalid-input"' \
+    <<<"$protocol_detection" >/dev/null ||
+    fail "protocol detector returned an unsafe multi-line response"
+ok "protocol URI detection is bounded and credential-redacted"
 
 python3 "$ROOT/tests/audit-runtime-hardcodes.py" >/dev/null ||
     fail "runtime hard-code boundaries are inconsistent"

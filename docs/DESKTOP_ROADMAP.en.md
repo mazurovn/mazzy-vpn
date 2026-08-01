@@ -63,6 +63,10 @@ default-branch security checks and tagged release artifacts all passed.
   invocation (the 0.3 adapter is typed but still invokes the bundled engine);
 - complete six-language coverage for all new control-center screens;
 - signed updates, migration and transactional installer rollback;
+- typed custom-server import, pinned protocol adapters and an audited TUN layer
+  for the 13-entry registry without accepting arbitrary root-run engine JSON;
+- a deterministic evidence-based planner API for agents; an LLM may explain or
+  request a dry-run plan but cannot emit shell commands or receive credentials;
 - native macOS/Windows backends, signing/notarization and system installers;
 - security, accessibility, failure-injection and long-running soak gates.
 
@@ -76,6 +80,8 @@ remaining items below still block Desktop 1.0 status.
 |---|---|
 | `mazzy-vpn-core` | profile model, validation, state machine, transactions, recovery |
 | `mazzy-vpnd` | minimal privileged service and versioned local API |
+| protocol adapters | schema validation, secret store, engine translation and TUN lifecycle |
+| deterministic planner | hard safety gates, health evidence, scoring and rollback plan |
 | platform backend | Linux systemd/netlink; macOS Network Extension; Windows service/Wintun |
 | CLI client | scripting, SSH, automation and GUI-independent rescue |
 | TUI client | complete interactive terminal workflow |

@@ -9,6 +9,7 @@ mazzy-vpn validate all
 mazzy-vpn probe all --timeout 3 --jobs 4
 mazzy-vpn verify
 mazzy-vpn self-test --offline
+mazzy-vpn protocols diagnose --json
 ```
 
 `diagnose` проверяет default route, DNS, выбранный профиль, systemd service,
@@ -58,6 +59,7 @@ mazzy-vpn validate all
 mazzy-vpn probe all --timeout 3 --jobs 4
 mazzy-vpn verify
 mazzy-vpn self-test --offline
+mazzy-vpn protocols diagnose --json
 ```
 
 `diagnose` checks the default route, DNS, selected profile, systemd service,

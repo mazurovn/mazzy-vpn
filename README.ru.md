@@ -15,17 +15,25 @@ L2TP/IPsec, безопасно импортирует профили, измер
 профили своего VPN-провайдера или организации; учётная запись Mazzy VPN и
 телеметрия не требуются.
 
-Текущая опубликованная линия — [CLI/TUI 1.3.0](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.0)
-и неподписанный [Desktop 0.3.0 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.0).
+Текущая опубликованная линия — [CLI/TUI 1.3.1](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.1)
+и неподписанный [Desktop 0.3.1 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.1).
 Linux Desktop является функциональным control center; Windows и macOS artifacts
 остаются UI preview без native VPN backend. Issue #31 закрыт проверенным
 upstream backport `glib`, точной проверкой source provenance и чистыми
 default-branch результатами RustSec, Dependabot и CodeQL.
 
+Версионированный каталог расширен до 13 протоколов. Реальные Linux connect
+backends по-прежнему готовы для AmneziaWG, WireGuard, OpenVPN и L2TP/IPsec.
+VLESS/REALITY, Hysteria 2, Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022,
+Trojan, AnyTLS и ShadowTLS v3 получили проверяемый registry, очищенный API и
+безопасное распознавание однозначных share URI. Их подключение помечено
+`planned`, пока не готовы TUN/routing/rollback integration tests.
+
 Основная команда — `mazzy-vpn`. Совместимые aliases: `vpnctl` и `mazzyvpn`.
 
 [Архитектура и схемы работы](docs/ARCHITECTURE.ru.md) ·
 [контракт локального API v1](docs/API_CONTRACT.ru.md) ·
+[протоколы и AI-оркестрация](docs/PROTOCOL_ORCHESTRATION.ru.md) ·
 [Architecture in English](docs/ARCHITECTURE.en.md)
 
 ## Установка
@@ -89,6 +97,10 @@ mazzy-vpn status
 mazzy-vpn status --json
 mazzy-vpn status --api-json        # сырой envelope local API v1
 mazzy-vpn profiles --api-json      # opaque ID без имён файлов движка
+mazzy-vpn protocols list --json    # каталог и честная готовность
+mazzy-vpn protocols diagnose --json
+# share URI передаётся через stdin и не печатается обратно
+printf '%s\n' "$SHARE_URI" | mazzy-vpn protocols detect --stdin --json
 mazzy-vpn diagnose
 mazzy-vpn verify                       # реальный egress, geo, DNS и IPv6
 mazzy-vpn verify --speed               # явный ограниченный sample 5 MB

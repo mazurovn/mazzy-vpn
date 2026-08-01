@@ -8,6 +8,9 @@
 | `mazzy-vpn status --json` | очищенный структурированный статус |
 | `mazzy-vpn status --api-json` | raw response envelope local API v1 |
 | `mazzy-vpn profiles --api-json` | каталог с opaque ID без engine filenames |
+| `mazzy-vpn protocols list --json` | versioned каталог 13 протоколов и readiness |
+| `mazzy-vpn protocols diagnose --json` | candidate runtimes и готовность backend |
+| `... \| mazzy-vpn protocols detect --stdin --json` | redacted распознавание share URI |
 | `mazzy-vpn quick` | подключить сохранённый default через local API |
 | `mazzy-vpn connect PROTOCOL PROFILE` | выбрать и подключить профиль |
 | `mazzy-vpn reconnect` | безопасно перезапустить выбранный туннель |
@@ -28,7 +31,8 @@
 | `mazzy-vpn language CODE` | изменить язык |
 | `mazzy-vpn logs [-f]` | журнал сервиса |
 
-Протоколы: `amneziawg`/`awg`, `wireguard`/`wg`, `openvpn`/`ovpn`, `l2tp`.
+Подключение сейчас реализовано для `amneziawg`/`awg`, `wireguard`/`wg`,
+`openvpn`/`ovpn`, `l2tp`. Каталог 13 протоколов не означает 13 готовых backend.
 
 ---
 
@@ -44,6 +48,9 @@
 | `mazzy-vpn status --json` | sanitized structured status |
 | `mazzy-vpn status --api-json` | raw local API v1 response envelope |
 | `mazzy-vpn profiles --api-json` | opaque-ID catalog without engine filenames |
+| `mazzy-vpn protocols list --json` | versioned 13-protocol catalog and readiness |
+| `mazzy-vpn protocols diagnose --json` | candidate runtimes and backend readiness |
+| `... \| mazzy-vpn protocols detect --stdin --json` | redacted share-URI detection |
 | `mazzy-vpn quick` | connect the saved default through the local API |
 | `mazzy-vpn connect PROTOCOL PROFILE` | select and connect a profile |
 | `mazzy-vpn reconnect` | safely restart the selected tunnel |
@@ -64,4 +71,5 @@
 | `mazzy-vpn language CODE` | change language |
 | `mazzy-vpn logs [-f]` | service log |
 
-Protocols: `amneziawg`/`awg`, `wireguard`/`wg`, `openvpn`/`ovpn`, `l2tp`.
+Connection is currently implemented for `amneziawg`/`awg`, `wireguard`/`wg`,
+`openvpn`/`ovpn` and `l2tp`. A 13-entry catalog is not 13 working backends.

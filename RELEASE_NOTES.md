@@ -1,15 +1,30 @@
-# Mazzy VPN 1.3.0 / Desktop 0.3.0
+# Mazzy VPN 1.3.1 / Desktop 0.3.1
 
 Copyright (C) 2026 Nik m
 ([@mazurovn](https://github.com/mazurovn)).
 
-Published on 2026-08-01 as
-[CLI/TUI `v1.3.0`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.0)
-and the unsigned
-[Desktop `desktop-v0.3.0` preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.0).
-Issue #31 is closed with the exact upstream `glib` backport and an independent
-source-provenance gate. Required CI, CodeQL, Dependabot and audited artifact
-checks passed on the tagged source commit.
+Patch release 1.3.1 fixes the installed-system profile and mixed-install
+upgrade blockers found after 1.3.0. It preserves the issue #31 source-level
+remediation and clean security gates from the 1.3.0 release line.
+
+## Patch highlights / Исправления patch-релиза
+
+- Desktop now reads the 24 legacy profile-cache entries produced by CLI 1.2,
+  derives compatible opaque IDs and reports unavailable cache separately from
+  a genuinely empty profile library.
+- DEB/RPM update recognized old root-owned `/usr/local/bin` copies to the
+  package engine under `/usr/bin`, with private reversible backups and no
+  replacement of unrelated or unsafe files.
+- A versioned catalog describes 13 protocols. Redacted URI detection, runtime
+  diagnostics and API `protocols.list` are implemented; only AmneziaWG,
+  WireGuard, OpenVPN and L2TP/IPsec are current Linux connection backends.
+- VLESS/REALITY, Hysteria 2, Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022,
+  Trojan, AnyTLS and ShadowTLS v3 remain explicitly gated adapter/TUN work.
+- The orchestration contract is deterministic and evidence-based. LLM agents
+  receive opaque IDs and sanitized readiness only; credentials, arbitrary
+  engine JSON and generated shell commands never cross the boundary.
+- Architecture, Wiki, platform roadmap, backlog, deep audit, package docs and
+  all 12 safe documentation screenshots are synchronized.
 
 ## English
 
@@ -67,8 +82,8 @@ risk scoring remain external.
 
 ### Platform status
 
-- **Linux CLI/TUI 1.3.0:** published functional release.
-- **Linux Desktop 0.3.0:** functional unsigned preview; AppImage, DEB and RPM.
+- **Linux CLI/TUI 1.3.1:** functional patch release.
+- **Linux Desktop 0.3.1:** functional unsigned preview; AppImage, DEB and RPM.
 - **Windows/macOS:** unsigned UI previews without native VPN backends; do not
   use them for traffic protection.
 - **Android/iOS:** planned native clients; no application packages are in this
@@ -142,8 +157,8 @@ WebRTC, геолокация устройства и provider-side risk scoring 
 
 ### Статус платформ
 
-- **Linux CLI/TUI 1.3.0:** опубликованный функциональный релиз.
-- **Linux Desktop 0.3.0:** функциональный неподписанный preview; AppImage, DEB
+- **Linux CLI/TUI 1.3.1:** функциональный patch-релиз.
+- **Linux Desktop 0.3.1:** функциональный неподписанный preview; AppImage, DEB
   и RPM.
 - **Windows/macOS:** неподписанные UI preview без native VPN backend; не
   используйте их для защиты трафика.

@@ -23,6 +23,8 @@ Status: **I** implemented · **P** partial · **R** planned · **—** not appli
 | `automatic-recovery` | I | I | I | R | R | R | R |
 | `self-contained-runtime` | I | I | P | R | R | R | R |
 | `privilege-boundary` | I | I | P | R | R | R | R |
+| `protocol-catalog-detection` | I | R | R | R | R | R | R |
+| `ai-orchestration-contract` | P | R | R | R | R | R | R |
 | `versioned-local-api` | P | P | P | P | P | R | R |
 | `mobile-vpn-lifecycle` | — | — | — | — | — | R | R |
 
@@ -57,6 +59,13 @@ payload и bootstrap, а AppImage всё ещё зависит от уже ус�
 Android и iOS пока являются только планом: UI preview или Desktop wrapper не
 считаются мобильным VPN-клиентом.
 
+Каталог из 13 протоколов и redacted CLI/API detection уже реализованы, но это
+не девять новых connection backends. VLESS/REALITY, Hysteria 2, Mieru,
+NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS и ShadowTLS v3 остаются
+`planned` для Linux/Windows/Android до platform adapter, TUN/routing/DNS,
+secret storage, rollback и реальных integration tests. AI orchestration пока
+`partial`: policy и hard constraints опубликованы, исполняемый planner ещё нет.
+
 Новая функция считается завершённой не после добавления одной кнопки, а после
 обновления общего API/core, всех применимых интерфейсов, автоматических тестов,
 матрицы и документации на русском и английском.
@@ -77,6 +86,14 @@ DEB/RPM own the engine/service payload and bootstrap, while AppImage still
 requires `pkexec` to be present already.
 Android and iOS are currently plans only: a UI preview or wrapped Desktop
 frontend does not count as a mobile VPN client.
+
+The 13-protocol catalog and redacted CLI/API detection are implemented, but
+this is not a claim of nine new connection backends. VLESS/REALITY, Hysteria 2,
+Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS and ShadowTLS v3
+remain `planned` on Linux/Windows/Android until platform adapters,
+TUN/routing/DNS, secret storage, rollback and real integration tests pass. AI
+orchestration is `partial`: policy and hard constraints exist, but the
+executable planner does not.
 
 A feature is complete only after its shared API/core, every applicable
 interface, automated tests, this registry and both Russian and English
