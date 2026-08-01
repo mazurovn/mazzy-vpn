@@ -70,8 +70,8 @@ Published release links:
 
 ## Protocol-orchestration work after 1.3.0
 
-The 1.3.1 worktree fixes two upgrade blockers found on an installed 0.2/1.2
-system and adds the first protocol-orchestration contract:
+The 1.3.2 patch fixes three blockers found on an installed 0.2/1.2 system and
+adds the first protocol-orchestration contract:
 
 - Desktop accepts legacy profile-cache entries without `profile_id`, derives
   the same opaque ID as the CLI and distinguishes an unavailable cache from a
@@ -87,11 +87,14 @@ system and adds the first protocol-orchestration contract:
   and TUN integration pass their gates.
 - API v1 now has 27 operations and 14 stable error codes. `protocols.list` is
   additive and does not change the API version.
+- The real `socat` client preserves its response half after request EOF. A
+  delayed Unix-socket integration test covers the installed systemd transport,
+  which the previous fake dispatcher test did not model.
 - Remaining work is platform-specific: pinned sing-box-family, Mieru and
   Naive/Cronet adapters; custom-server secret import; deterministic planner;
   Linux TUN lifecycle; Windows service/Wintun; Android `VpnService`; and real
   integration, rollback and leak tests.
-- Local patch verification is green: 78 Bash/end-to-end tests, 24 Rust tests,
+- Local patch verification is green: 79 Bash/end-to-end tests, 24 Rust tests,
   Clippy, ShellCheck, npm audit, cargo-deny, public leak audit and the unpacked
   AppImage/DEB/RPM lifecycle/source/GUI audit. All 12 documentation screenshots
   were regenerated at 1680×951 from the localhost-only RFC 5737 fixture.

@@ -184,9 +184,9 @@ jobs:
           tagName: desktop-v__VERSION__
           releaseName: "Mazzy VPN Desktop v__VERSION__ (preview)"
           releaseBody: |
-            Mazzy VPN Desktop 0.3.1 is an AI-ready, bundled-bootstrap Linux control-center preview.
+            Mazzy VPN Desktop 0.3.2 is an AI-ready, bundled-bootstrap Linux control-center preview.
 
-            Linux DEB/RPM bundles install the compatible Mazzy VPN 1.3.1 engine, protected systemd services and base runtime dependencies through the package manager; AppImage retains an explicitly authorized embedded bootstrap. This patch fixes legacy profile-cache compatibility and mixed /usr/local versus package /usr/bin upgrades. Dashboard, profile import and selection, sortable whole-list latency checks, actual egress/location/DNS/IPv6 verification, transactional tests, complete Doctor/self-test output, clickable events, expanded tray, service/recovery settings and About/Privacy information are included.
+            Linux DEB/RPM bundles install the compatible Mazzy VPN 1.3.2 engine, protected systemd services and base runtime dependencies through the package manager; AppImage retains an explicitly authorized embedded bootstrap. This patch fixes legacy profile-cache compatibility, mixed /usr/local versus package /usr/bin upgrades and real systemd socket request/response half-close handling. Dashboard, profile import and selection, sortable whole-list latency checks, actual egress/location/DNS/IPv6 verification, transactional tests, complete Doctor/self-test output, clickable events, expanded tray, service/recovery settings and About/Privacy information are included.
 
             A versioned catalog describes 13 protocols and exposes credential-redacted URI detection, runtime diagnostics and the read-only protocols.list API operation. Linux connections remain implemented for AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec. VLESS/REALITY, Hysteria 2, Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS and ShadowTLS v3 remain explicitly planned until their audited runtime/TUN/platform integration gates pass.
 

@@ -18,7 +18,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install checks
-        run: sudo apt-get update && sudo apt-get install -y shellcheck openvpn gitleaks jq
+        run: sudo apt-get update && sudo apt-get install -y shellcheck openvpn gitleaks jq socat
 
       - name: Bash syntax
         run: |

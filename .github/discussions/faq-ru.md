@@ -12,7 +12,7 @@
 [GitHub Releases](https://github.com/mazurovn/mazzy-vpn/releases). Версия в
 `main`, changelog или draft PR ещё не является релизом.
 
-Опубликованная release line — CLI/TUI 1.3.1 и unsigned Desktop 0.3.1 preview.
+Опубликованная release line — CLI/TUI 1.3.2 и unsigned Desktop 0.3.2 preview.
 Linux Desktop функционален; Windows и macOS остаются UI preview без native VPN
 backend. Issue #31 закрыт provenance-verified backport `glib` и чистыми
 release checks RustSec, Dependabot и CodeQL.
