@@ -7,6 +7,12 @@ Mazzy VPN은 AmneziaWG, WireGuard, OpenVPN 및 NetworkManager L2TP/IPsec을
 하나로 관리하는 Linux VPN 도구입니다. 대화형 TUI, 자동화용 CLI, 안전한 설정
 가져오기, 연결 검사, 자동 롤백이 포함된 실제 터널 테스트를 제공합니다.
 
+검증된 카탈로그는 이제 13개 프로토콜을 포함합니다. 실제 Linux 연결 백엔드는
+위 네 가지에 한정됩니다. VLESS/REALITY, Hysteria 2, Mieru, NaiveProxy,
+TUIC v5, Shadowsocks 2022, Trojan, AnyTLS 및 ShadowTLS v3은 등록되었지만
+연결 상태는 명확히 `planned`입니다. 자세한 내용:
+[Protocol orchestration](docs/PROTOCOL_ORCHESTRATION.en.md).
+
 [영문 아키텍처 및 동작 다이어그램](docs/ARCHITECTURE.en.md) ·
 [러시아어 아키텍처 다이어그램](docs/ARCHITECTURE.ru.md)
 

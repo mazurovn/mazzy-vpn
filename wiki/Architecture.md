@@ -13,6 +13,7 @@ flowchart TB
     TUI["CLI / TUI"]
     Desktop["Tauri control center / tray"]
     API["Protected local API v1"]
+    Registry["13-protocol registry + safe detector"]
     Cache["Sanitized status + profiles cache"]
     Verify["Endpoint probe + actual egress verification"]
     Validate["Profile validation"]
@@ -26,6 +27,8 @@ flowchart TB
     User --> Desktop
     Desktop -->|read| Cache
     Desktop -->|typed query/lifecycle| API
+    TUI --> Registry
+    API --> Registry
     API --> TUI
     Desktop -. remaining fixed pkexec actions .-> TUI
     TUI --> Verify
@@ -99,3 +102,7 @@ uses the protected local API for lifecycle, whole-list probes and actual egress
 verification. Remaining typed operations map to fixed CLI argument arrays
 through `pkexec`. The bundle contains compatible installer/engine resources.
 Operational profiles remain root-only and never cross the Desktop boundary.
+The shared 13-entry registry and redacted detector are described in
+[[Protocol Orchestration]]. Catalog presence never bypasses platform/backend,
+profile-validation or rollback gates. LLM clients receive opaque IDs and
+evidence only; credentials and generated shell commands are outside the API.

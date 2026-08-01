@@ -6,6 +6,33 @@ All notable changes to Mazzy VPN are documented here.
 
 No changes yet.
 
+## 1.3.1 / Desktop 0.3.1 - 2026-08-01
+
+- Fixed Desktop profile-cache compatibility with CLI 1.2 entries that do not
+  contain `profile_id`; compatible opaque IDs are derived before strict
+  validation instead of dropping all profiles.
+- Distinguished an unavailable/invalid profile cache from a valid empty
+  library in the WebView, fixing “24 profiles” on Dashboard versus “Profiles
+  not found” on the Profiles screen.
+- Added reversible package migration for trusted legacy Mazzy VPN commands in
+  `/usr/local/bin`, preventing an older manual engine from shadowing the
+  package-owned `/usr/bin/mazzy-vpn` after DEB/RPM update.
+- Added a validated 13-entry protocol registry covering AmneziaWG, WireGuard,
+  OpenVPN, L2TP/IPsec, VLESS/REALITY, Hysteria 2, Mieru, NaiveProxy, TUIC v5,
+  Shadowsocks 2022, Trojan, AnyTLS and ShadowTLS v3.
+- Added credential-redacted URI detection and runtime diagnostics through
+  `mazzy-vpn protocols`; control bytes, oversized inputs and unknown schemes
+  are rejected without reflecting the input.
+- Added the read-only API v1 `protocols.list` operation and strict catalog
+  schema. The nine new proxy/transport entries remain explicitly planned for
+  connection until their TUN/runtime/platform integration gates pass.
+- Defined deterministic orchestration weights, hard safety constraints and an
+  AI-agent boundary that excludes credentials, generated shell commands and
+  direct root-run engine configurations.
+- Updated architecture, Desktop and platform roadmaps, capability parity,
+  installation instructions, Wiki, project status, deep audit and all
+  documentation screenshots.
+
 ## 1.3.0 / Desktop 0.3.0 - 2026-08-01
 
 - Remediated `RUSTSEC-2024-0429` in the Tauri/GTK3 Linux graph by vendoring the

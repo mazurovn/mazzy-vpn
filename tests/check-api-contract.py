@@ -231,6 +231,8 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
         fail("ResponseResult does not expose the structured probe collection")
     if "#/$defs/EgressVerification" not in response_refs:
         fail("ResponseResult does not expose structured egress verification")
+    if "#/$defs/ProtocolCatalog" not in response_refs:
+        fail("ResponseResult does not expose the sanitized protocol catalog")
     verification = defs.get("EgressVerification", {})
     verification_required = set(verification.get("required", []))
     if not {

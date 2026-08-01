@@ -39,6 +39,14 @@ ships the approved Network Extension; Android/iOS embed native libraries in the
 signed app. No production client should download and execute an arbitrary
 backend during first run.
 
+The shared versioned registry currently catalogs 13 protocols and transport
+families, but catalog presence is not connection support. Linux connection is
+implemented only for AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec. VLESS,
+Hysteria 2, Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS and
+ShadowTLS v3 remain adapter work tracked by platform-specific gates. Most of
+these are proxy protocols and need an audited TUN adapter before they can be
+presented as device-wide VPN connections.
+
 ```mermaid
 flowchart LR
     CLI --> API["Versioned core/API"]
@@ -103,6 +111,8 @@ The Windows preview is not a VPN backend. Desktop 1.0 requires:
 
 - a Windows Service with a least-privilege local API and protected ACL;
 - WireGuard/Wintun as the first native backend, followed by audited OpenVPN;
+- signed, pinned sing-box-compatible and Cronet/Naive runtime adapters before
+  any censorship-resistant protocol is marked available;
 - Credential Manager/DPAPI for secrets and safe temporary-file removal;
 - signed MSI/NSIS, uninstall/upgrade/rollback and SmartScreen validation;
 - route, DNS, sleep/resume, network-change and crash-recovery tests.
@@ -130,6 +140,8 @@ Android is planned as a native client, not a wrapped Desktop UI:
 
 - `VpnService` with foreground lifecycle, notification and safe reconnect;
 - WireGuard first, with OpenVPN after the bundled runtime is audited;
+- embedded, reproducibly built protocol libraries and `VpnService` integration
+  tests before proxy protocols can claim device-wide routing;
 - Android Keystore, Storage Access Framework and share-sheet import;
 - always-on VPN/kill switch, network changes, Doze and reboot recovery;
 - signed AAB/APK, reproducible metadata, Data safety and privacy disclosure;
@@ -155,8 +167,8 @@ those requirements.
 
 ## Release promotion order
 
-1. Confirm the resolved #31 RustSec gate on `main` and publish Linux Desktop 0.3.
-2. Complete the shared API and Linux Desktop 1.0.
+1. Keep the published Linux Desktop 0.3 line patched and regression-tested.
+2. Complete the shared API, protocol adapters and Linux Desktop 1.0.
 3. Ship Windows and macOS previews independently; promote each platform only
    when its own gate passes.
 4. Build Android/iOS proofs of concept on the common profile contract.

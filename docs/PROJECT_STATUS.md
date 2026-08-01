@@ -32,6 +32,8 @@ authoritative backlog; this page records the verified resumption point.
   [`AUDIT_2026-08-01.ru.md`](AUDIT_2026-08-01.ru.md); it
   records the issue #31 backport, the new `event-listener` advisory update,
   subprocess hang fix, tray-path consolidation and remaining production risks.
+- The installed-system, profile-cache and protocol review is
+  [`AUDIT_2026-08-01_PROTOCOLS.ru.md`](AUDIT_2026-08-01_PROTOCOLS.ru.md).
 
 Published release links:
 
@@ -49,17 +51,50 @@ Published release links:
 
 ## Active backlog order
 
-1. [#4 Linux Desktop package lifecycle](https://github.com/mazurovn/mazzy-vpn/issues/4)
-2. [#5 shared core and versioned local API](https://github.com/mazurovn/mazzy-vpn/issues/5)
-3. [#12 CLI/TUI parity and automation contract](https://github.com/mazurovn/mazzy-vpn/issues/12)
-4. [#6 profiles](https://github.com/mazurovn/mazzy-vpn/issues/6),
+1. [#35 profile/package hotfix](https://github.com/mazurovn/mazzy-vpn/issues/35)
+2. [#36 custom-server import](https://github.com/mazurovn/mazzy-vpn/issues/36),
+   [#37 sing-box/TUN adapters](https://github.com/mazurovn/mazzy-vpn/issues/37),
+   [#38 Mieru/Naive adapters](https://github.com/mazurovn/mazzy-vpn/issues/38)
+   and [#39 AI planner](https://github.com/mazurovn/mazzy-vpn/issues/39)
+3. [#4 Linux Desktop package lifecycle](https://github.com/mazurovn/mazzy-vpn/issues/4)
+4. [#5 shared core and versioned local API](https://github.com/mazurovn/mazzy-vpn/issues/5)
+5. [#12 CLI/TUI parity and automation contract](https://github.com/mazurovn/mazzy-vpn/issues/12)
+6. [#6 profiles](https://github.com/mazurovn/mazzy-vpn/issues/6),
    [#8 services/recovery](https://github.com/mazurovn/mazzy-vpn/issues/8) and
    [#9 connection modes](https://github.com/mazurovn/mazzy-vpn/issues/9)
-5. [#7 Windows](https://github.com/mazurovn/mazzy-vpn/issues/7) and
+7. [#7 Windows](https://github.com/mazurovn/mazzy-vpn/issues/7) and
    [#10 macOS](https://github.com/mazurovn/mazzy-vpn/issues/10)
-6. [#13 Android](https://github.com/mazurovn/mazzy-vpn/issues/13) and
+8. [#13 Android](https://github.com/mazurovn/mazzy-vpn/issues/13) and
    [#14 iOS](https://github.com/mazurovn/mazzy-vpn/issues/14)
-7. [#11 cross-platform production gates](https://github.com/mazurovn/mazzy-vpn/issues/11)
+9. [#11 cross-platform production gates](https://github.com/mazurovn/mazzy-vpn/issues/11)
+
+## Protocol-orchestration work after 1.3.0
+
+The 1.3.1 worktree fixes two upgrade blockers found on an installed 0.2/1.2
+system and adds the first protocol-orchestration contract:
+
+- Desktop accepts legacy profile-cache entries without `profile_id`, derives
+  the same opaque ID as the CLI and distinguishes an unavailable cache from a
+  genuinely empty profile list. This is the cause of the observed “24 profiles”
+  dashboard versus “Profiles not found” view.
+- DEB/RPM installation migrates recognized root-owned legacy copies in
+  `/usr/local/bin/{mazzy-vpn,vpnctl,mazzyvpn}` to package-owned symlinks and
+  preserves reversible backups. Unrelated or unsafe files are not replaced.
+- A validated registry catalogs 13 protocols, including nine modern
+  censorship-resistant proxy/transport families. The CLI and API expose only
+  redacted catalog, runtime-diagnostic and URI-detection data. Connection stays
+  truthfully limited to the four existing Linux backends until audited adapters
+  and TUN integration pass their gates.
+- API v1 now has 27 operations and 14 stable error codes. `protocols.list` is
+  additive and does not change the API version.
+- Remaining work is platform-specific: pinned sing-box-family, Mieru and
+  Naive/Cronet adapters; custom-server secret import; deterministic planner;
+  Linux TUN lifecycle; Windows service/Wintun; Android `VpnService`; and real
+  integration, rollback and leak tests.
+- Local patch verification is green: 78 Bash/end-to-end tests, 24 Rust tests,
+  Clippy, ShellCheck, npm audit, cargo-deny, public leak audit and the unpacked
+  AppImage/DEB/RPM lifecycle/source/GUI audit. All 12 documentation screenshots
+  were regenerated at 1680×951 from the localhost-only RFC 5737 fixture.
 
 ## Current implementation slice
 

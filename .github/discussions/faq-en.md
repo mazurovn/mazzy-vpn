@@ -12,7 +12,7 @@ A version is published only when it has a tag and a page in
 [GitHub Releases](https://github.com/mazurovn/mazzy-vpn/releases). A version in
 `main`, the changelog or a draft PR is not a release.
 
-The published release line is CLI/TUI 1.3.0 and the unsigned Desktop 0.3.0
+The published release line is CLI/TUI 1.3.1 and the unsigned Desktop 0.3.1
 preview. Linux Desktop is functional; Windows and macOS remain UI previews
 without native VPN backends. Issue #31 is closed with a provenance-verified
 `glib` backport and clean RustSec, Dependabot and CodeQL release checks.

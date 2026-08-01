@@ -15,7 +15,7 @@ Copyright © 2026 Nik m. Код распространяется по GNU AGPL-3
 
 ## Какие версии сейчас рабочие?
 
-- Опубликованная release line: CLI/TUI 1.3.0 и unsigned Linux Desktop 0.3.0
+- Опубликованная release line: CLI/TUI 1.3.1 и unsigned Linux Desktop 0.3.1
   preview. Issue #31 закрыт проверенным `glib` backport и чистыми release checks.
 - Windows и macOS: только UI preview, нативные VPN backend ещё не готовы.
 - Android и iOS: planned native clients; готовых мобильных пакетов пока нет.
@@ -43,6 +43,20 @@ artifacts, но ничего не публикует в Releases.
 AmneziaWG, WireGuard, OpenVPN и NetworkManager L2TP/IPsec. Поддержка зависит от
 платформы: протокол нельзя считать доступным на Windows/macOS/mobile только
 потому, что UI умеет распознать файл.
+
+Versioned каталог дополнительно описывает VLESS/REALITY, Hysteria 2, Mieru,
+NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS и ShadowTLS v3. Сейчас для
+них реализовано безопасное catalog/URI detection, но не import/connect. Многие
+из них являются proxy/transport и требуют отдельного TUN adapter. Точная
+матрица: [[Protocol Orchestration]].
+
+## Почему Dashboard видит профили, а экран «Профили» был пустым?
+
+Desktop 0.3.0 строго ожидал новое поле `profile_id` и целиком отвергал cache от
+старого CLI 1.2, хотя Dashboard мог прочитать отдельный status cache. В 0.3.1
+legacy ID вычисляется совместимо, а недоступный cache отличается от пустого.
+После package update проверьте `mazzy-vpn version`, перезапустите приложение и,
+если доступ к группе был добавлен впервые, выполните новый login.
 
 ## Где находятся профили и логи?
 
@@ -131,7 +145,7 @@ and preserving authorship.
 
 ## Which versions work today?
 
-- Published release line: CLI/TUI 1.3.0 and the unsigned Linux Desktop 0.3.0
+- Published release line: CLI/TUI 1.3.1 and the unsigned Linux Desktop 0.3.1
   preview. Issue #31 is closed with a verified `glib` backport and clean release
   checks.
 - Windows and macOS: UI preview only; native VPN backends are not complete.
@@ -161,6 +175,21 @@ temporary artifacts but publishes nothing to Releases.
 AmneziaWG, WireGuard, OpenVPN and NetworkManager L2TP/IPsec. Support is
 platform-specific: recognizing a file in the UI does not make that protocol
 functional on Windows, macOS or mobile.
+
+The versioned catalog additionally describes VLESS/REALITY, Hysteria 2, Mieru,
+NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS and ShadowTLS v3. Safe
+catalog/URI detection exists now, but import/connect does not. Many entries are
+proxy/transport protocols and require a separate TUN adapter. See
+[[Protocol Orchestration]] for the exact matrix.
+
+## Why did Dashboard see profiles while the Profiles screen was empty?
+
+Desktop 0.3.0 strictly required the new `profile_id` field and rejected the
+entire cache produced by an older 1.2 CLI, while Dashboard could still read a
+separate status cache. Version 0.3.1 derives a compatible legacy ID and
+distinguishes an unavailable cache from an empty one. After package update,
+check `mazzy-vpn version`, restart the app and start a new login session if
+group access was just granted.
 
 ## Where are profiles and logs stored?
 

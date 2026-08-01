@@ -240,6 +240,40 @@
       "docs": ["SECURITY.md", "docs/DESKTOP_ROADMAP.en.md", "docs/DESKTOP_ROADMAP.ru.md"]
     },
     {
+      "id": "protocol-catalog-detection",
+      "name_en": "Versioned protocol catalog, readiness and redacted detection",
+      "name_ru": "Версионированный каталог, готовность и очищенное распознавание протоколов",
+      "owner": "shared-core",
+      "surfaces": {
+        "cli": "implemented",
+        "tui": "planned",
+        "desktop_linux": "planned",
+        "desktop_macos": "planned",
+        "desktop_windows": "planned",
+        "mobile_android": "planned",
+        "mobile_ios": "planned"
+      },
+      "tests": ["tests/check-protocol-registry.py", "tests/check-api-contract.py", "tests/run.sh"],
+      "docs": ["docs/PROTOCOL_ORCHESTRATION.en.md", "docs/PROTOCOL_ORCHESTRATION.ru.md", "wiki/Protocol-Orchestration.md"]
+    },
+    {
+      "id": "ai-orchestration-contract",
+      "name_en": "Deterministic protocol planning and governed AI agent tools",
+      "name_ru": "Детерминированный выбор протокола и управляемые инструменты AI-агентов",
+      "owner": "shared-core",
+      "surfaces": {
+        "cli": "partial",
+        "tui": "planned",
+        "desktop_linux": "planned",
+        "desktop_macos": "planned",
+        "desktop_windows": "planned",
+        "mobile_android": "planned",
+        "mobile_ios": "planned"
+      },
+      "tests": ["tests/check-protocol-registry.py", "tests/check-api-contract.py"],
+      "docs": ["docs/PROTOCOL_ORCHESTRATION.en.md", "docs/PROTOCOL_ORCHESTRATION.ru.md", "docs/ARCHITECTURE.en.md", "docs/ARCHITECTURE.ru.md"]
+    },
+    {
       "id": "mobile-vpn-lifecycle",
       "name_en": "OS-managed mobile tunnel, background lifecycle and protected secrets",
       "name_ru": "Мобильный VPN-туннель, фоновый lifecycle и защищённые секреты",

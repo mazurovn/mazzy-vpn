@@ -3,6 +3,69 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 set -eu
 
+migrate_legacy_cli() {
+    root="$1"
+    legacy_dir="$root/usr/local/bin"
+    package_cli="$root/usr/bin/mazzy-vpn"
+    backup_dir="$root/var/lib/vpnctl/package-migration"
+    expected_owner=root:root
+    [ "$root" = / ] || expected_owner="$(id -un):$(id -gn)"
+
+    [ -x "$package_cli" ] || return 1
+    for name in mazzy-vpn vpnctl mazzyvpn; do
+        legacy="$legacy_dir/$name"
+        backup="$backup_dir/$name.pre-package"
+        if [ -L "$legacy" ] && [ "$(readlink "$legacy")" = /usr/bin/mazzy-vpn ]; then
+            continue
+        fi
+        [ -f "$legacy" ] && [ ! -L "$legacy" ] || continue
+        owner_mode="$(stat -c '%U:%G:%a' "$legacy" 2>/dev/null || true)"
+        case "$owner_mode" in
+            "$expected_owner":*[2367][0-7]|"$expected_owner":[0-7]*[2367])
+                printf '%s\n' "Mazzy VPN: unsafe legacy CLI permissions left unchanged: $legacy" >&2
+                continue
+                ;;
+            "$expected_owner":*) ;;
+            *)
+                printf '%s\n' "Mazzy VPN: unowned legacy CLI left unchanged: $legacy" >&2
+                continue
+                ;;
+        esac
+        if ! grep -Fqx '# SPDX-License-Identifier: AGPL-3.0-or-later' "$legacy" ||
+           ! grep -Fqx 'PRODUCT_NAME="Mazzy VPN"' "$legacy" ||
+           ! grep -Eq '^VERSION="[0-9]+\.[0-9]+\.[0-9]+"$' "$legacy"; then
+            printf '%s\n' "Mazzy VPN: unrelated /usr/local command left unchanged: $legacy" >&2
+            continue
+        fi
+        if [ "$root" = / ]; then
+            install -d -o root -g root -m 700 "$backup_dir"
+        else
+            install -d -m 700 "$backup_dir"
+        fi
+        if [ -e "$backup" ]; then
+            printf '%s\n' "Mazzy VPN: existing migration backup prevents replacing $legacy" >&2
+            continue
+        fi
+        mv "$legacy" "$backup"
+        if ! ln -s /usr/bin/mazzy-vpn "$legacy"; then
+            mv "$backup" "$legacy"
+            return 1
+        fi
+    done
+}
+
+if [ "${1:-}" = --test-migrate ]; then
+    [ "$(id -u)" -ne 0 ] || exit 2
+    test_root="${2:-}"
+    case "$test_root" in
+        /*/../*|*/..|/|"") exit 2 ;;
+        /*) ;;
+        *) exit 2 ;;
+    esac
+    migrate_legacy_cli "$test_root"
+    exit
+fi
+
 ensure_access_group() {
     if ! getent group mazzy-vpn >/dev/null 2>&1; then
         groupadd --system mazzy-vpn
@@ -72,10 +135,13 @@ verify_payload() {
     /usr/bin/mazzy-vpn version
     /usr/bin/mazzy-vpn api-info --json |
         cmp -s - /usr/lib/mazzy-vpn/api/v1/manifest.json
+    /usr/bin/mazzy-vpn protocols list --json |
+        cmp -s - /usr/lib/mazzy-vpn/protocols/v1/registry.json
 }
 
 ensure_access_group
 ensure_state_layout
 grant_installer_access
 verify_payload
+migrate_legacy_cli /
 activate_services

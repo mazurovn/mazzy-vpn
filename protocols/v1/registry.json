@@ -1,0 +1,222 @@
+{
+  "schema_version": 1,
+  "catalog_version": "2026-08-01",
+  "status_values": [
+    "implemented",
+    "partial",
+    "planned"
+  ],
+  "platforms": [
+    "linux",
+    "windows",
+    "android"
+  ],
+  "protocols": [
+    {
+      "id": "amneziawg",
+      "display_name": "AmneziaWG",
+      "kind": "vpn",
+      "family": "wireguard-obfuscated",
+      "formats": ["amneziawg-conf"],
+      "uri_schemes": [],
+      "engines": ["awg", "awg-quick"],
+      "transports": ["udp"],
+      "censorship_resistance": "high",
+      "active_probe_resistance": "limited",
+      "support": {"detection": "implemented", "import": "implemented", "diagnostics": "implemented", "linux": "implemented", "windows": "planned", "android": "planned"},
+      "source": "https://github.com/amnezia-vpn/amneziawg-linux-kernel-module"
+    },
+    {
+      "id": "wireguard",
+      "display_name": "WireGuard",
+      "kind": "vpn",
+      "family": "wireguard",
+      "formats": ["wireguard-conf"],
+      "uri_schemes": [],
+      "engines": ["wg", "wg-quick"],
+      "transports": ["udp"],
+      "censorship_resistance": "low",
+      "active_probe_resistance": "low",
+      "support": {"detection": "implemented", "import": "implemented", "diagnostics": "implemented", "linux": "implemented", "windows": "planned", "android": "planned"},
+      "source": "https://www.wireguard.com/protocol/"
+    },
+    {
+      "id": "openvpn",
+      "display_name": "OpenVPN",
+      "kind": "vpn",
+      "family": "tls-vpn",
+      "formats": ["openvpn-profile"],
+      "uri_schemes": [],
+      "engines": ["openvpn"],
+      "transports": ["tcp", "udp"],
+      "censorship_resistance": "medium",
+      "active_probe_resistance": "limited",
+      "support": {"detection": "implemented", "import": "implemented", "diagnostics": "implemented", "linux": "implemented", "windows": "planned", "android": "planned"},
+      "source": "https://openvpn.net/community-resources/reference-manual-for-openvpn-2-6/"
+    },
+    {
+      "id": "l2tp",
+      "display_name": "L2TP/IPsec",
+      "kind": "vpn",
+      "family": "ipsec",
+      "formats": ["networkmanager-l2tp"],
+      "uri_schemes": [],
+      "engines": ["nmcli", "strongswan", "xl2tpd"],
+      "transports": ["udp"],
+      "censorship_resistance": "low",
+      "active_probe_resistance": "low",
+      "support": {"detection": "implemented", "import": "implemented", "diagnostics": "implemented", "linux": "implemented", "windows": "planned", "android": "planned"},
+      "source": "https://www.rfc-editor.org/rfc/rfc3193"
+    },
+    {
+      "id": "vless",
+      "display_name": "VLESS / REALITY",
+      "kind": "proxy",
+      "family": "xray",
+      "formats": ["vless-uri", "sing-box-json", "xray-json"],
+      "uri_schemes": ["vless"],
+      "engines": ["sing-box", "xray"],
+      "transports": ["tcp", "udp", "quic"],
+      "censorship_resistance": "high",
+      "active_probe_resistance": "high",
+      "support": {"detection": "implemented", "import": "planned", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
+      "source": "https://xtls.github.io/en/config/outbounds/vless.html"
+    },
+    {
+      "id": "hysteria2",
+      "display_name": "Hysteria 2",
+      "kind": "proxy",
+      "family": "quic-proxy",
+      "formats": ["hysteria2-uri", "sing-box-json"],
+      "uri_schemes": ["hysteria2", "hy2"],
+      "engines": ["sing-box", "hysteria"],
+      "transports": ["quic", "udp"],
+      "censorship_resistance": "high",
+      "active_probe_resistance": "high",
+      "support": {"detection": "implemented", "import": "planned", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
+      "source": "https://v2.hysteria.network/docs/developers/Protocol/"
+    },
+    {
+      "id": "mieru",
+      "display_name": "Mieru",
+      "kind": "proxy",
+      "family": "adaptive-obfuscation",
+      "formats": ["mieru-uri", "mieru-simple-uri", "mieru-json"],
+      "uri_schemes": ["mieru", "mierus"],
+      "engines": ["mieru"],
+      "transports": ["tcp", "udp"],
+      "censorship_resistance": "high",
+      "active_probe_resistance": "high",
+      "support": {"detection": "implemented", "import": "planned", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
+      "source": "https://github.com/enfein/mieru/blob/main/docs/client-install.md"
+    },
+    {
+      "id": "naive",
+      "display_name": "NaiveProxy",
+      "kind": "proxy",
+      "family": "chromium-http",
+      "formats": ["naive-json", "sing-box-json"],
+      "uri_schemes": [],
+      "engines": ["naive", "sing-box"],
+      "transports": ["http2", "http3", "quic"],
+      "censorship_resistance": "high",
+      "active_probe_resistance": "high",
+      "support": {"detection": "planned", "import": "planned", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
+      "source": "https://github.com/klzgrad/naiveproxy"
+    },
+    {
+      "id": "tuic",
+      "display_name": "TUIC v5",
+      "kind": "proxy",
+      "family": "quic-proxy",
+      "formats": ["tuic-uri", "sing-box-json"],
+      "uri_schemes": ["tuic"],
+      "engines": ["sing-box"],
+      "transports": ["quic", "udp"],
+      "censorship_resistance": "medium",
+      "active_probe_resistance": "medium",
+      "support": {"detection": "implemented", "import": "planned", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
+      "source": "https://sing-box.sagernet.org/configuration/outbound/tuic/"
+    },
+    {
+      "id": "shadowsocks2022",
+      "display_name": "Shadowsocks 2022",
+      "kind": "proxy",
+      "family": "shadowsocks",
+      "formats": ["shadowsocks-uri", "sing-box-json"],
+      "uri_schemes": ["ss"],
+      "engines": ["sing-box"],
+      "transports": ["tcp", "udp"],
+      "censorship_resistance": "medium",
+      "active_probe_resistance": "medium",
+      "support": {"detection": "implemented", "import": "planned", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
+      "source": "https://sing-box.sagernet.org/manual/proxy-protocol/shadowsocks/"
+    },
+    {
+      "id": "trojan",
+      "display_name": "Trojan",
+      "kind": "proxy",
+      "family": "tls-proxy",
+      "formats": ["trojan-uri", "sing-box-json"],
+      "uri_schemes": ["trojan"],
+      "engines": ["sing-box"],
+      "transports": ["tcp", "udp"],
+      "censorship_resistance": "medium",
+      "active_probe_resistance": "medium",
+      "support": {"detection": "implemented", "import": "planned", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
+      "source": "https://sing-box.sagernet.org/configuration/outbound/trojan/"
+    },
+    {
+      "id": "anytls",
+      "display_name": "AnyTLS",
+      "kind": "proxy",
+      "family": "tls-proxy",
+      "formats": ["anytls-uri", "sing-box-json"],
+      "uri_schemes": ["anytls"],
+      "engines": ["sing-box"],
+      "transports": ["tcp", "tls"],
+      "censorship_resistance": "high",
+      "active_probe_resistance": "medium",
+      "support": {"detection": "implemented", "import": "planned", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
+      "source": "https://sing-box.sagernet.org/configuration/outbound/anytls/"
+    },
+    {
+      "id": "shadowtls",
+      "display_name": "ShadowTLS v3",
+      "kind": "transport",
+      "family": "tls-camouflage",
+      "formats": ["shadowtls-json", "sing-box-json"],
+      "uri_schemes": [],
+      "engines": ["sing-box", "shadow-tls"],
+      "transports": ["tcp", "tls"],
+      "censorship_resistance": "high",
+      "active_probe_resistance": "high",
+      "support": {"detection": "planned", "import": "planned", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
+      "source": "https://github.com/ihciah/shadow-tls/blob/master/docs/protocol-v3-en.md"
+    }
+  ],
+  "orchestration": {
+    "policy_version": 1,
+    "hard_constraints": [
+      "backend-ready",
+      "profile-valid",
+      "secrets-readable-only-by-backend",
+      "rollback-available",
+      "platform-supported"
+    ],
+    "score_factors": [
+      {"id": "recent-success", "weight": 30},
+      {"id": "censorship-fit", "weight": 25},
+      {"id": "reachability", "weight": 20},
+      {"id": "latency-loss", "weight": 15},
+      {"id": "workload-fit", "weight": 10}
+    ],
+    "agent_rules": [
+      "agents-receive-opaque-profile-ids-only",
+      "plans-are-dry-run-by-default",
+      "mutations-require-authorized-action-id",
+      "llm-output-never-becomes-a-shell-command",
+      "credentials-never-enter-prompts-events-or-audit"
+    ]
+  }
+}

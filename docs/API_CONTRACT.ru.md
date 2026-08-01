@@ -12,13 +12,13 @@
 [#5](https://github.com/mazurovn/mazzy-vpn/issues/5). Текущий транспорт
 `cli-json-adapter` явно имеет статус `partial`: существующие безопасные JSON
 status/profile outputs доступны, а CLI/TUI уже отправляют v1 envelopes для
-`status.get`, `profiles.list`, `tests.probe`, `tests.verify-egress` и
+`status.get`, `profiles.list`, `protocols.list`, `tests.probe`, `tests.verify-egress` и
 `lifecycle.*` через единый
 dispatcher. Остальные
 домены ещё используют совместимый прямой CLI-контур. Метаданные контракта
 реализованы.
 Socket-activated Linux transport имеет статус `partial`: он принимает
-`status.get`, `profiles.list`, ограниченные queries `tests.probe` и
+`status.get`, `profiles.list`, `protocols.list`, ограниченные queries `tests.probe` и
 `tests.verify-egress`, а также три мутации `lifecycle.*`. Остальные операции и
 не-Linux transports пока `planned`, поэтому полный кроссплатформенный daemon ещё
 не заявлен готовым.
@@ -126,6 +126,13 @@ dashboard: desired mode, interface, возраст handshake, текущий pub
 autostart, health monitor, число сбоев и состояние внешнего fallback. Для
 совместимости minor-версии поля необязательны. VPN endpoint, имя/путь файла
 профиля и конфигурация остаются запрещены.
+
+`protocols.list` возвращает очищенный каталог из 13 протоколов и policy
+оркестрации. Detection/import/diagnostics отделены от connection readiness для
+каждой платформы, поэтому запись каталога нельзя принять за готовый backend.
+В ответе есть только публичные identifiers formats, engines и transports;
+endpoint, credential, profile и backend config отсутствуют. Источник истины:
+[`../protocols/v1/registry.json`](../protocols/v1/registry.json).
 
 `tests.probe` проверяет все профили выбранного protocol scope с отдельным
 таймаутом endpoint и ограниченной параллельностью 1–8 workers. Результат

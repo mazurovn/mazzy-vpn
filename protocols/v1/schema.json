@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mazurovn/mazzy-vpn/protocols/v1/schema.json",
+  "title": "Mazzy VPN protocol registry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "catalog_version", "status_values", "platforms", "protocols", "orchestration"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "catalog_version": {"type": "string", "format": "date"},
+    "status_values": {"type": "array", "uniqueItems": true, "items": {"enum": ["implemented", "partial", "planned"]}},
+    "platforms": {"type": "array", "uniqueItems": true, "items": {"enum": ["linux", "windows", "android"]}},
+    "protocols": {
+      "type": "array",
+      "minItems": 10,
+      "maxItems": 15,
+      "items": {"$ref": "#/$defs/Protocol"}
+    },
+    "orchestration": {"$ref": "#/$defs/Orchestration"}
+  },
+  "$defs": {
+    "Status": {"enum": ["implemented", "partial", "planned"]},
+    "StringList": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "Protocol": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "display_name", "kind", "family", "formats", "uri_schemes", "engines", "transports", "censorship_resistance", "active_probe_resistance", "support", "source"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]+$"},
+        "display_name": {"type": "string", "minLength": 2},
+        "kind": {"enum": ["vpn", "proxy", "transport"]},
+        "family": {"type": "string", "minLength": 2},
+        "formats": {"$ref": "#/$defs/StringList"},
+        "uri_schemes": {"$ref": "#/$defs/StringList"},
+        "engines": {"$ref": "#/$defs/StringList"},
+        "transports": {"$ref": "#/$defs/StringList"},
+        "censorship_resistance": {"enum": ["low", "medium", "high"]},
+        "active_probe_resistance": {"enum": ["low", "limited", "medium", "high"]},
+        "support": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["detection", "import", "diagnostics", "linux", "windows", "android"],
+          "properties": {
+            "detection": {"$ref": "#/$defs/Status"},
+            "import": {"$ref": "#/$defs/Status"},
+            "diagnostics": {"$ref": "#/$defs/Status"},
+            "linux": {"$ref": "#/$defs/Status"},
+            "windows": {"$ref": "#/$defs/Status"},
+            "android": {"$ref": "#/$defs/Status"}
+          }
+        },
+        "source": {"type": "string", "format": "uri"}
+      }
+    },
+    "Orchestration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy_version", "hard_constraints", "score_factors", "agent_rules"],
+      "properties": {
+        "policy_version": {"const": 1},
+        "hard_constraints": {"$ref": "#/$defs/StringList"},
+        "score_factors": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "weight"],
+            "properties": {"id": {"type": "string"}, "weight": {"type": "integer", "minimum": 1, "maximum": 100}}
+          }
+        },
+        "agent_rules": {"$ref": "#/$defs/StringList"}
+      }
+    }
+  }
+}

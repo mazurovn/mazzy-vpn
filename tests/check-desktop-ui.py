@@ -163,6 +163,8 @@ def main() -> None:
         fail("Desktop profile status sorting is duplicated or missing")
     if javascript.count("function statusMatchesProfile(profile)") != 1:
         fail("Desktop active-profile state is not resolved through one exact identity helper")
+    if 'data?.available !== false' not in javascript or 't("profilesUnavailable")' not in javascript:
+        fail("Desktop hides an unavailable profile cache as an empty profile library")
     for identity_field in ("state.status.profile_id", "state.status.profile_file_name"):
         if identity_field not in javascript:
             fail(f"Desktop active-profile state ignores {identity_field}")

@@ -63,6 +63,10 @@ default-branch security checks и tagged release artifacts прошли.
   на каждое действие (adapter 0.3 типизирован, но вызывает встроенный engine);
 - полный перевод новых экранов центра управления на все шесть языков;
 - подписанные обновления, миграция и transactional rollback installer;
+- typed import собственных серверов, pinned protocol adapters и проверенный TUN
+  layer для реестра из 13 записей без произвольного root-run engine JSON;
+- deterministic evidence-based planner API для агентов: LLM может объяснить
+  или запросить dry-run plan, но не выдаёт shell commands и не получает secrets;
 - native macOS/Windows backends, signing/notarization и системные installers;
 - security, accessibility, failure-injection и длительные soak gates.
 
@@ -76,6 +80,8 @@ Issue #31 и gate публикации Desktop 0.3 закрыты; перечи�
 |---|---|
 | `mazzy-vpn-core` | модель профилей, проверка, state machine, транзакции, recovery |
 | `mazzy-vpnd` | минимальная привилегированная служба и локальный versioned API |
+| protocol adapters | schema validation, secret store, engine translation и TUN lifecycle |
+| deterministic planner | hard safety gates, health evidence, scoring и rollback plan |
 | platform backend | Linux systemd/netlink; macOS Network Extension; Windows service/Wintun |
 | CLI client | скрипты, SSH, automation и rescue без GUI |
 | TUI client | полный интерактивный терминальный интерфейс |

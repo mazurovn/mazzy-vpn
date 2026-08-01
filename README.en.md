@@ -15,19 +15,35 @@ It is a client and control plane rather than a hosted VPN subscription. Use
 profiles from your VPN provider or organization; Mazzy VPN requires no project
 account and collects no telemetry.
 
-The current published line is [CLI/TUI 1.3.0](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.0)
-and the unsigned [Desktop 0.3.0 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.0).
+The current published line is [CLI/TUI 1.3.1](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.1)
+and the unsigned [Desktop 0.3.1 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.1).
 Linux Desktop is a functional control center; Windows and macOS artifacts are
 UI previews without native VPN backends. Issue #31 is closed with the reviewed
 upstream `glib` backport, exact source-provenance verification and clean
 default-branch RustSec, Dependabot and CodeQL results.
+
+The versioned catalog now contains 13 protocols. Functional Linux connection
+backends remain AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec. VLESS/REALITY,
+Hysteria 2, Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS and
+ShadowTLS v3 now have a validated registry, redacted capability API and safe
+share URI detection where unambiguous. Their connection adapters remain
+explicitly `planned` until TUN/routing/rollback integration tests pass.
 
 The primary command is `mazzy-vpn`. The installer also creates the compatibility
 aliases `vpnctl` and `mazzyvpn`.
 
 [Architecture and operation diagrams](docs/ARCHITECTURE.en.md) ·
 [local API v1 contract](docs/API_CONTRACT.en.md) ·
+[protocol and AI orchestration](docs/PROTOCOL_ORCHESTRATION.en.md) ·
 [Архитектура на русском](docs/ARCHITECTURE.ru.md)
+
+Agent-safe protocol inventory and detection:
+
+```bash
+mazzy-vpn protocols list --json
+mazzy-vpn protocols diagnose --json
+printf '%s\n' "$SHARE_URI" | mazzy-vpn protocols detect --stdin --json
+```
 
 ## Install
 

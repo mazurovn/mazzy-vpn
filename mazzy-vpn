@@ -6,11 +6,12 @@ set -uo pipefail
 PRODUCT_NAME="Mazzy VPN"
 CLI_COMMAND="mazzy-vpn"
 COMPAT_COMMAND="vpnctl"
-VERSION="1.3.0"
+VERSION="1.3.1"
 
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd -- "$(dirname -- "$SELF")" && pwd)"
 API_DIR="${VPNCTL_API_DIR:-}"
+PROTOCOL_REGISTRY_DIR="${VPNCTL_PROTOCOL_REGISTRY_DIR:-}"
 DEFAULT_CONFIG_DIR="/etc/vpnctl/profiles"
 CONFIG_DIR="${VPNCTL_CONFIG_DIR:-}"
 STATE_DIR="${VPNCTL_STATE_DIR:-/var/lib/vpnctl}"
@@ -766,6 +767,152 @@ cmd_api_info() {
         die "Не удалось прочитать API contract manifest"
 }
 
+protocol_registry_path() {
+    local candidate
+    if [[ -n "$PROTOCOL_REGISTRY_DIR" ]]; then
+        candidate="$PROTOCOL_REGISTRY_DIR/registry.json"
+        [[ -r "$candidate" ]] || return 1
+        printf '%s\n' "$candidate"
+        return 0
+    fi
+    for candidate in \
+        "$SCRIPT_DIR/protocols/v1/registry.json" \
+        "$SCRIPT_DIR/../lib/mazzy-vpn/protocols/v1/registry.json"; do
+        if [[ -r "$candidate" ]]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+cmd_protocols_list() {
+    local registry
+    registry="$(protocol_registry_path)" ||
+        die "Protocol registry не найден; переустановите $PRODUCT_NAME"
+    command cat -- "$registry" || die "Не удалось прочитать protocol registry"
+}
+
+cmd_protocols_diagnose() {
+    local registry engine protocol support available_json='{}' ready_json='{}'
+    registry="$(protocol_registry_path)" ||
+        die "Protocol registry не найден; переустановите $PRODUCT_NAME"
+    while IFS= read -r engine; do
+        if command -v "$engine" >/dev/null 2>&1; then
+            available_json="$(jq -c --arg engine "$engine" \
+                '. + {($engine): true}' <<<"$available_json")" || return 1
+        else
+            available_json="$(jq -c --arg engine "$engine" \
+                '. + {($engine): false}' <<<"$available_json")" || return 1
+        fi
+    done < <(jq -r '[.protocols[].engines[]] | unique[]' "$registry")
+    while IFS=$'\t' read -r protocol support; do
+        if [[ "$support" == implemented ]] && protocol_runtime_available "$protocol"; then
+            ready_json="$(jq -c --arg protocol "$protocol" \
+                '. + {($protocol): true}' <<<"$ready_json")" || return 1
+        else
+            ready_json="$(jq -c --arg protocol "$protocol" \
+                '. + {($protocol): false}' <<<"$ready_json")" || return 1
+        fi
+    done < <(jq -r '.protocols[] | [.id, .support.linux] | @tsv' "$registry")
+    jq -c --arg generated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --argjson available "$available_json" --argjson ready "$ready_json" '
+        {
+            schema_version: 1,
+            generated_at: $generated_at,
+            engines: ([
+                .protocols[].engines[]
+            ] | unique | map({id: ., available: ($available[.] // false)})),
+            protocols: [
+                .protocols[] |
+                {
+                    id,
+                    display_name,
+                    kind,
+                    support,
+                    backend_ready: ($ready[.id] // false),
+                    candidate_engine_available: any(
+                        .engines[]; $available[.] // false
+                    )
+                }
+            ]
+        }
+    ' "$registry"
+}
+
+cmd_protocols_detect() {
+    local registry encoded input byte_count scheme protocol result
+    registry="$(protocol_registry_path)" ||
+        die "Protocol registry не найден; переустановите $PRODUCT_NAME"
+    encoded="$(LC_ALL=C head -c 65537 | base64)" || return 1
+    byte_count="$(printf '%s' "$encoded" | base64 -d | wc -c)" || return 1
+    if ((byte_count == 0 || byte_count > 65536)) ||
+       printf '%s' "$encoded" | base64 -d | od -An -v -tu1 | awk '
+           { for (i = 1; i <= NF; i++) if ($i < 32 || $i == 127) found = 1 }
+           END { exit !found }
+       '; then
+        jq -cn '{schema_version: 1, recognized: false, reason: "invalid-input"}'
+        return 2
+    fi
+    input="$(printf '%s' "$encoded" | base64 -d)" || return 1
+    [[ "$input" == *://* ]] || {
+        jq -cn '{schema_version: 1, recognized: false, reason: "unsupported-format"}'
+        return 2
+    }
+    scheme="${input%%://*}"
+    scheme="${scheme,,}"
+    [[ "$scheme" =~ ^[a-z][a-z0-9+.-]{0,31}$ ]] || {
+        jq -cn '{schema_version: 1, recognized: false, reason: "invalid-scheme"}'
+        return 2
+    }
+    protocol="$(jq -r --arg scheme "$scheme" '
+        first(.protocols[] | select(any(.uri_schemes[]; . == $scheme)) | .id) // ""
+    ' "$registry")" || return 1
+    if [[ -z "$protocol" ]]; then
+        jq -cn '{schema_version: 1, recognized: false, reason: "unsupported-scheme"}'
+        return 2
+    fi
+    result="$(jq -c --arg protocol "$protocol" '
+        .protocols[] | select(.id == $protocol) |
+        {
+            schema_version: 1,
+            recognized: true,
+            protocol: .id,
+            display_name,
+            kind,
+            input_kind: "share-uri",
+            contains_secrets: true,
+            import_support: .support.import,
+            linux_connection_support: .support.linux
+        }
+    ' "$registry")" || return 1
+    [[ -n "$result" ]] || return 1
+    printf '%s\n' "$result"
+}
+
+cmd_protocols() {
+    case "${1:-}" in
+        list)
+            [[ $# -eq 2 && "${2:-}" == --json ]] ||
+                die "Использование: $CLI_COMMAND protocols list --json"
+            cmd_protocols_list
+            ;;
+        diagnose)
+            [[ $# -eq 2 && "${2:-}" == --json ]] ||
+                die "Использование: $CLI_COMMAND protocols diagnose --json"
+            cmd_protocols_diagnose
+            ;;
+        detect)
+            [[ $# -eq 3 && "${2:-}" == --stdin && "${3:-}" == --json ]] ||
+                die "Использование: $CLI_COMMAND protocols detect --stdin --json"
+            cmd_protocols_detect
+            ;;
+        *)
+            die "Использование: $CLI_COMMAND protocols list|diagnose|detect"
+            ;;
+    esac
+}
+
 usage() {
     case "$UI_LANG" in
         en)
@@ -795,6 +942,8 @@ Usage:
   mazzy-vpn init-config-dir [FOLDER]
   mazzy-vpn language [ru|en|de|zh|ja|ko]
   mazzy-vpn api-info --json
+  mazzy-vpn protocols list|diagnose --json
+  mazzy-vpn protocols detect --stdin --json
   mazzy-vpn logs [-f] | version
 
 Protocols: amneziawg (awg), wireguard (wg), openvpn (ovpn), l2tp
@@ -829,6 +978,8 @@ Verwendung:
   mazzy-vpn init-config-dir [ORDNER]
   mazzy-vpn language [ru|en|de|zh|ja|ko]
   mazzy-vpn api-info --json
+  mazzy-vpn protocols list|diagnose --json
+  mazzy-vpn protocols detect --stdin --json
   mazzy-vpn logs [-f] | version
 
 Protokolle: amneziawg (awg), wireguard (wg), openvpn (ovpn), l2tp
@@ -863,6 +1014,8 @@ Mazzy VPN — 安全便捷的 Linux VPN 管理工具
   mazzy-vpn init-config-dir [文件夹]
   mazzy-vpn language [ru|en|de|zh|ja|ko]
   mazzy-vpn api-info --json
+  mazzy-vpn protocols list|diagnose --json
+  mazzy-vpn protocols detect --stdin --json
   mazzy-vpn logs [-f] | version
 
 协议：amneziawg (awg)、wireguard (wg)、openvpn (ovpn)、l2tp
@@ -897,6 +1050,8 @@ Mazzy VPN — Linux 向けの安全で使いやすい VPN 管理ツール
   mazzy-vpn init-config-dir [フォルダー]
   mazzy-vpn language [ru|en|de|zh|ja|ko]
   mazzy-vpn api-info --json
+  mazzy-vpn protocols list|diagnose --json
+  mazzy-vpn protocols detect --stdin --json
   mazzy-vpn logs [-f] | version
 
 プロトコル: amneziawg (awg)、wireguard (wg)、openvpn (ovpn)、l2tp
@@ -931,6 +1086,8 @@ Mazzy VPN — Linux용 안전하고 편리한 VPN 관리 도구
   mazzy-vpn init-config-dir [폴더]
   mazzy-vpn language [ru|en|de|zh|ja|ko]
   mazzy-vpn api-info --json
+  mazzy-vpn protocols list|diagnose --json
+  mazzy-vpn protocols detect --stdin --json
   mazzy-vpn logs [-f] | version
 
 프로토콜: amneziawg (awg), wireguard (wg), openvpn (ovpn), l2tp
@@ -977,6 +1134,11 @@ Mazzy VPN - быстрое и безопасное управление VPN в L
   mazzy-vpn remove ПРОТОКОЛ ПРОФИЛЬ удалить профиль
   mazzy-vpn logs [-f]               журнал сервиса
   mazzy-vpn api-info --json         manifest локального API v1
+  mazzy-vpn protocols list --json   каталог и готовность 13 протоколов
+  mazzy-vpn protocols diagnose --json
+                                    наличие runtime без раскрытия путей
+  ... | mazzy-vpn protocols detect --stdin --json
+                                    безопасно распознать URI без его вывода
   mazzy-vpn language [ru|en|de|zh|ja|ko]
                                     показать или сменить язык интерфейса
   mazzy-vpn version
@@ -4825,6 +4987,32 @@ api_profiles_result() {
     }' "$PROFILES_FILE"
 }
 
+api_protocols_result() {
+    local registry
+    registry="$(protocol_registry_path)" || return 1
+    jq -c '{
+        schema_version,
+        catalog_version,
+        protocols: [
+            .protocols[] |
+            {
+                id,
+                display_name,
+                kind,
+                family,
+                formats,
+                uri_schemes,
+                engines,
+                transports,
+                censorship_resistance,
+                active_probe_resistance,
+                support
+            }
+        ],
+        orchestration
+    }' "$registry"
+}
+
 api_probe_result() {
     local request="$1" deadline_ms="$2"
     local timeout_seconds concurrency protocol profile_id duration result result_file rc=0
@@ -5602,7 +5790,7 @@ api_dispatch() {
     fi
     operation="$(jq -r '.operation // ""' <<<"$request")"
     case "$operation" in
-        status.get|profiles.list)
+        status.get|profiles.list|protocols.list)
             if jq -e 'has("action_id") or has("authorization")' \
                 <<<"$request" >/dev/null 2>&1; then
                 api_error_response "$request_id" invalid-request \
@@ -5632,10 +5820,16 @@ api_dispatch() {
                         api.status.unavailable true false
                     return
                 }
-            else
+            elif [[ "$operation" == profiles.list ]]; then
                 result="$(api_profiles_result "$deadline_ms")" || {
                     api_error_response "$request_id" backend-unavailable \
                         api.profiles.unavailable true false
+                    return
+                }
+            else
+                result="$(api_protocols_result)" || {
+                    api_error_response "$request_id" backend-unavailable \
+                        api.protocols.unavailable true false
                     return
                 }
             fi
@@ -7397,6 +7591,7 @@ main() {
             say "$PRODUCT_NAME $VERSION ($CLI_COMMAND; alias: $COMPAT_COMMAND)"
             ;;
         api-info) cmd_api_info "$@" ;;
+        protocols) cmd_protocols "$@" ;;
         list|ls) cmd_list "$@" ;;
         profiles|profile-list)
             case "${1:-}" in

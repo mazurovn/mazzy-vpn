@@ -8,6 +8,12 @@ NetworkManager L2TP/IPsec. Er bietet eine interaktive TUI, eine skriptfähige
 CLI, sichere Profilimporte, Verbindungsprüfungen und transaktionale Live-Tests
 mit automatischem Rollback.
 
+Der geprüfte Katalog umfasst jetzt 13 Protokolle. Funktionale Linux-Backends
+gibt es weiterhin für die vier oben genannten Protokolle. VLESS/REALITY,
+Hysteria 2, Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS und
+ShadowTLS v3 sind registriert, bleiben für Verbindungen aber ausdrücklich
+`planned`. Details: [Protocol orchestration](docs/PROTOCOL_ORCHESTRATION.en.md).
+
 [Architekturdiagramme auf Englisch](docs/ARCHITECTURE.en.md) ·
 [Architektur auf Russisch](docs/ARCHITECTURE.ru.md)
 

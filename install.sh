@@ -169,10 +169,14 @@ validate_source_tree() {
         docs/ARCHITECTURE.ru.md docs/DESKTOP.en.md docs/DESKTOP.ru.md \
         docs/DESKTOP_ROADMAP.en.md docs/DESKTOP_ROADMAP.ru.md \
         docs/PLATFORM_ROADMAP.en.md docs/PLATFORM_ROADMAP.ru.md \
+        docs/PROTOCOL_ORCHESTRATION.en.md \
+        docs/PROTOCOL_ORCHESTRATION.ru.md \
         docs/FEATURE_PARITY.md docs/capabilities.json \
         docs/API_CONTRACT.en.md docs/API_CONTRACT.ru.md docs/PROJECT_STATUS.md \
-        docs/AUDIT_2026-07-28.ru.md \
+        docs/AUDIT_2026-07-28.ru.md docs/AUDIT_2026-08-01.ru.md \
+        docs/AUDIT_2026-08-01_PROTOCOLS.ru.md \
         api/v1/manifest.json api/v1/schema.json \
+        protocols/v1/registry.json protocols/v1/schema.json \
         desktop/README.md desktop/src-tauri/tauri.conf.json \
         desktop/src-tauri/src/backend.rs desktop/src-tauri/src/main.rs \
         desktop/ui/app.js desktop/ui/index.html \
@@ -184,7 +188,8 @@ validate_source_tree() {
         packaging/linux/systemd/vpnctl-test-recovery.service.d/10-package-exec.conf \
         packaging/linux/systemd/vpnctl.service.d/10-package-exec.conf \
         tests/run.sh tests/audit-public.sh tests/check-capabilities.py \
-        tests/check-api-contract.py tests/check-linux-packages.sh \
+        tests/check-api-contract.py tests/check-protocol-registry.py \
+        tests/check-linux-packages.sh \
         wiki/Desktop-Dashboard-and-Tray.md wiki/Diagnostics-and-Recovery.md \
         completions/mazzy-vpn systemd/vpnctl.service \
         systemd/vpnctl-health.service systemd/vpnctl-health.timer \
@@ -284,12 +289,18 @@ post_install_checks() {
        -r /usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.ru.md &&
        -r /usr/local/lib/mazzy-vpn/docs/PLATFORM_ROADMAP.en.md &&
        -r /usr/local/lib/mazzy-vpn/docs/PLATFORM_ROADMAP.ru.md &&
+       -r /usr/local/lib/mazzy-vpn/docs/PROTOCOL_ORCHESTRATION.en.md &&
+       -r /usr/local/lib/mazzy-vpn/docs/PROTOCOL_ORCHESTRATION.ru.md &&
        -r /usr/local/lib/mazzy-vpn/docs/API_CONTRACT.en.md &&
        -r /usr/local/lib/mazzy-vpn/docs/API_CONTRACT.ru.md &&
        -r /usr/local/lib/mazzy-vpn/docs/PROJECT_STATUS.md &&
        -r /usr/local/lib/mazzy-vpn/docs/AUDIT_2026-07-28.ru.md &&
+       -r /usr/local/lib/mazzy-vpn/docs/AUDIT_2026-08-01.ru.md &&
+       -r /usr/local/lib/mazzy-vpn/docs/AUDIT_2026-08-01_PROTOCOLS.ru.md &&
        -r /usr/local/lib/mazzy-vpn/api/v1/manifest.json &&
        -r /usr/local/lib/mazzy-vpn/api/v1/schema.json &&
+       -r /usr/local/lib/mazzy-vpn/protocols/v1/registry.json &&
+       -r /usr/local/lib/mazzy-vpn/protocols/v1/schema.json &&
        -r /usr/local/lib/mazzy-vpn/LICENSE &&
        -r /usr/local/lib/mazzy-vpn/AUTHORS.md &&
        -r /usr/local/lib/mazzy-vpn/PRIVACY.md &&
@@ -300,6 +311,11 @@ post_install_checks() {
         }
     "$bin" api-info --json | cmp -s - /usr/local/lib/mazzy-vpn/api/v1/manifest.json || {
         echo "CLI API manifest не совпадает с установленным contract." >&2
+        failed=1
+    }
+    "$bin" protocols list --json |
+        cmp -s - /usr/local/lib/mazzy-vpn/protocols/v1/registry.json || {
+        echo "CLI protocol registry не совпадает с установленным catalog." >&2
         failed=1
     }
     "$bin" status --json | grep -q '"schema_version":1' || {
@@ -552,12 +568,14 @@ install_files() {
     local lib_dir="$DESTDIR/usr/local/lib/mazzy-vpn"
     local docs_dir="$lib_dir/docs"
     local api_dir="$lib_dir/api/v1"
+    local protocol_dir="$lib_dir/protocols/v1"
     local config_dir="$DESTDIR/etc/vpnctl/profiles"
     local unit_dir="$DESTDIR/etc/systemd/system"
     local tmpfiles_dir="$DESTDIR/usr/lib/tmpfiles.d"
     local completion_dir="$DESTDIR/usr/local/share/bash-completion/completions"
 
     run install -d -m 755 "$bin_dir" "$lib_dir" "$docs_dir" "$api_dir" \
+        "$protocol_dir" \
         "$unit_dir" "$tmpfiles_dir" "$completion_dir"
     run install -d -m 700 "$DESTDIR/etc/vpnctl" "$config_dir" \
         "$config_dir/amneziawg" "$config_dir/wireguard" \
@@ -594,6 +612,10 @@ install_files() {
         "$docs_dir/PLATFORM_ROADMAP.en.md"
     run install -m 644 "$SCRIPT_DIR/docs/PLATFORM_ROADMAP.ru.md" \
         "$docs_dir/PLATFORM_ROADMAP.ru.md"
+    run install -m 644 "$SCRIPT_DIR/docs/PROTOCOL_ORCHESTRATION.en.md" \
+        "$docs_dir/PROTOCOL_ORCHESTRATION.en.md"
+    run install -m 644 "$SCRIPT_DIR/docs/PROTOCOL_ORCHESTRATION.ru.md" \
+        "$docs_dir/PROTOCOL_ORCHESTRATION.ru.md"
     run install -m 644 "$SCRIPT_DIR/docs/FEATURE_PARITY.md" \
         "$docs_dir/FEATURE_PARITY.md"
     run install -m 644 "$SCRIPT_DIR/docs/capabilities.json" \
@@ -606,10 +628,18 @@ install_files() {
         "$docs_dir/PROJECT_STATUS.md"
     run install -m 644 "$SCRIPT_DIR/docs/AUDIT_2026-07-28.ru.md" \
         "$docs_dir/AUDIT_2026-07-28.ru.md"
+    run install -m 644 "$SCRIPT_DIR/docs/AUDIT_2026-08-01.ru.md" \
+        "$docs_dir/AUDIT_2026-08-01.ru.md"
+    run install -m 644 "$SCRIPT_DIR/docs/AUDIT_2026-08-01_PROTOCOLS.ru.md" \
+        "$docs_dir/AUDIT_2026-08-01_PROTOCOLS.ru.md"
     run install -m 644 "$SCRIPT_DIR/api/v1/manifest.json" \
         "$api_dir/manifest.json"
     run install -m 644 "$SCRIPT_DIR/api/v1/schema.json" \
         "$api_dir/schema.json"
+    run install -m 644 "$SCRIPT_DIR/protocols/v1/registry.json" \
+        "$protocol_dir/registry.json"
+    run install -m 644 "$SCRIPT_DIR/protocols/v1/schema.json" \
+        "$protocol_dir/schema.json"
     run install -m 644 "$SCRIPT_DIR/LICENSE" "$lib_dir/LICENSE"
     run install -m 644 "$SCRIPT_DIR/AUTHORS.md" "$lib_dir/AUTHORS.md"
     run install -m 644 "$SCRIPT_DIR/CHANGELOG.md" "$lib_dir/CHANGELOG.md"
@@ -650,10 +680,15 @@ install_files() {
             "$docs_dir/DESKTOP_ROADMAP.ru.md" \
             "$docs_dir/PLATFORM_ROADMAP.en.md" \
             "$docs_dir/PLATFORM_ROADMAP.ru.md" \
+            "$docs_dir/PROTOCOL_ORCHESTRATION.en.md" \
+            "$docs_dir/PROTOCOL_ORCHESTRATION.ru.md" \
             "$docs_dir/FEATURE_PARITY.md" "$docs_dir/capabilities.json" \
             "$docs_dir/API_CONTRACT.en.md" "$docs_dir/API_CONTRACT.ru.md" \
             "$docs_dir/PROJECT_STATUS.md" "$docs_dir/AUDIT_2026-07-28.ru.md" \
+            "$docs_dir/AUDIT_2026-08-01.ru.md" \
+            "$docs_dir/AUDIT_2026-08-01_PROTOCOLS.ru.md" \
             "$api_dir/manifest.json" "$api_dir/schema.json" \
+            "$protocol_dir/registry.json" "$protocol_dir/schema.json" \
             "$lib_dir/LICENSE" "$lib_dir/AUTHORS.md" "$lib_dir/CHANGELOG.md" \
             "$lib_dir/SECURITY.md" "$lib_dir/PRIVACY.md" \
             "$unit_dir/vpnctl.service" \
