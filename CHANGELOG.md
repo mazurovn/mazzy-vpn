@@ -6,14 +6,22 @@ All notable changes to Mazzy VPN are documented here.
 
 - Added the read-only API v1 `planner.evaluate` operation and
   `mazzy-vpn planner evaluate --stdin --json`. The backend enforces five
-  non-overridable runtime/profile/storage/rollback/platform gates and applies
-  the versioned 100-point protocol policy with stable opaque-ID tie-breaking.
+  non-overridable runtime/profile/storage/platform gates and applies the
+  versioned 100-point protocol policy with stable opaque-ID tie-breaking. The
+  rollback-storage gate is a prerequisite for future execution, not a claim
+  that a candidate-specific rollback has already been proved.
 - Planner inputs are strict, limited to 64 KiB and 128 unique candidates, and
   reject duplicate JSON keys at every object depth. Results are dry-run only,
   credential-free and bounded to a 1 MiB CLI response cap.
-- Added deterministic, stale-evidence, unsafe-storage, unknown-profile,
-  duplicate-input and local-transport regressions. Automatic switching,
-  failover and mutation authorization remain tracked in issue #39.
+- The public schema now binds `planner.evaluate`, `PlannerRequest` and its
+  required 100–30000 ms deadline in both directions, matching backend dispatch.
+- Planner deadlines now reach the OpenVPN parser inside candidate validation;
+  expired health evidence, including recent outcome, contributes no health
+  score. The Python SDK example accepts legal JSON whitespace but rejects
+  duplicate keys, non-finite numbers and multiple documents.
+- Added deterministic, deadline, stale-evidence, unsafe-storage,
+  unknown-profile, duplicate-input and local-transport regressions. Automatic
+  switching, failover and mutation authorization remain tracked in issue #39.
 
 ## 1.3.2 / Desktop 0.3.2 - 2026-08-01
 

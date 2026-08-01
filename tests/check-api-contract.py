@@ -250,6 +250,38 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
     ):
         fail("PlannerRequest must be strict and bound candidates to 1..128")
 
+    query_request = defs.get("QueryRequest", {})
+    planner_bindings = query_request.get("allOf")
+    if not isinstance(planner_bindings, list) or len(planner_bindings) != 2:
+        fail("QueryRequest must bind planner operation, payload and deadline")
+    operation_binding, payload_binding = planner_bindings
+    operation_then = operation_binding.get("then", {})
+    operation_properties = operation_then.get("properties", {})
+    planner_deadline = operation_properties.get("deadline_ms", {})
+    if (
+        operation_binding.get("if", {})
+        .get("properties", {})
+        .get("operation", {})
+        .get("const")
+        != "planner.evaluate"
+        or operation_then.get("required") != ["deadline_ms"]
+        or planner_deadline.get("minimum") != 100
+        or planner_deadline.get("maximum") != 30000
+        or operation_properties.get("payload", {}).get("$ref")
+        != "#/$defs/PlannerRequest"
+        or payload_binding.get("if", {})
+        .get("properties", {})
+        .get("payload", {})
+        .get("$ref")
+        != "#/$defs/PlannerRequest"
+        or payload_binding.get("then", {})
+        .get("properties", {})
+        .get("operation", {})
+        .get("const")
+        != "planner.evaluate"
+    ):
+        fail("planner schema binding must be bidirectional and deadline-bounded")
+
     planner_evidence = defs.get("PlannerEvidence", {})
     required_evidence = {
         "recent_outcome",

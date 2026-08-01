@@ -40,6 +40,8 @@ flowchart TB
         StatusCache["Sanitized status without keys or endpoint<br/>/run/mazzy-vpn/status.json"]
         ProfileCache["Sanitized profile catalog without paths/endpoints<br/>/run/mazzy-vpn/profiles.json"]
         Verification["Bounded endpoint and egress verification<br/>tests.probe / tests.verify-egress"]
+        Registry["Versioned protocol registry<br/>capabilities + policy"]
+        Planner["Read-only planner<br/>backend gates + advisory score"]
     end
 
     subgraph Supervisor["systemd supervision"]
@@ -80,6 +82,11 @@ flowchart TB
     Desktop --> ApiSocket
     ApiSocket --> Entry
     ApiSocket --> ActionJournal
+    Entry --> Registry
+    Entry --> Planner
+    Planner --> Registry
+    Planner --> ProfileCache
+    Planner --> Validation
     Desktop -. remaining fixed operations through pkexec .-> Entry
     Commands --> Validation
     Validation --> Profiles
@@ -144,14 +151,29 @@ sing-box JSON is never a root execution format. See
 [Protocol orchestration](PROTOCOL_ORCHESTRATION.en.md) for scoring, custom
 server storage and agent constraints.
 
-The implemented `planner.evaluate` query is deterministic and subordinate to
-hard constraints computed by the backend: platform backend ready, profile
-valid, backend-only secret access, rollback directories available and platform
-support implemented. It returns a scored dry-run evaluation using opaque IDs
-and reason codes. LLM output cannot construct a shell command, backend
-configuration or bypass a gate. The operation does not connect or fail over;
-future execution remains behind authorization/action-ID, audit and rollback
-boundaries.
+The implemented `planner.evaluate` query is subordinate to hard constraints
+computed by the backend: platform backend ready, profile valid, backend-only
+secret access, protected rollback storage ready and platform support
+implemented. The storage gate proves that secure journal/snapshot storage is
+available; it does not prove a candidate-specific rollback. The planner returns
+a scored dry-run evaluation using opaque IDs and reason codes. LLM output cannot
+construct a shell command, backend configuration or bypass a gate. The
+operation does not connect or fail over; future execution remains behind
+authorization/action-ID, audit and rollback boundaries.
+
+The trust boundary is explicit:
+
+| Input/state | Owner | Planner use |
+|---|---|---|
+| Runtime presence, current profile parse, file permissions, rollback storage and platform support | backend | eligibility gates; the caller cannot override them |
+| Recent outcome, reachability, latency/loss and fit | caller in the current slice | score only; observed health older than 900 seconds scores zero |
+| Free-form model output | untrusted | never parsed as a shell command, profile or backend configuration |
+
+For the same local snapshot and evidence, rank and reason codes are
+deterministic; `evaluated_at` intentionally changes. One absolute monotonic
+deadline is passed through candidate validation and the OpenVPN parser. A
+parser timeout therefore becomes `deadline-exceeded` instead of silently
+running beyond the API budget.
 
 The CLI/TUI client reaches the Unix socket through automatically installed
 `socat`. It bounds response size and time, validates envelope identity and

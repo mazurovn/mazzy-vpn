@@ -40,6 +40,8 @@ flowchart TB
         StatusCache["Очищенный статус без ключей и endpoint<br/>/run/mazzy-vpn/status.json"]
         ProfileCache["Очищенный каталог профилей без путей/endpoint<br/>/run/mazzy-vpn/profiles.json"]
         Verification["Ограниченные endpoint/egress проверки<br/>tests.probe / tests.verify-egress"]
+        Registry["Версионированный реестр протоколов<br/>capabilities + policy"]
+        Planner["Read-only planner<br/>backend gates + advisory score"]
     end
 
     subgraph Supervisor["Контроль systemd"]
@@ -80,6 +82,11 @@ flowchart TB
     Desktop --> ApiSocket
     ApiSocket --> Entry
     ApiSocket --> ActionJournal
+    Entry --> Registry
+    Entry --> Planner
+    Planner --> Registry
+    Planner --> ProfileCache
+    Planner --> Validation
     Desktop -. остальные фиксированные операции через pkexec .-> Entry
     Commands --> Validation
     Validation --> Profiles
@@ -143,13 +150,29 @@ OpenVPN использует DNS, переданный сервером/проф
 Полная модель описана в
 [документе об оркестрации](PROTOCOL_ORCHESTRATION.ru.md).
 
-Реализованный query `planner.evaluate` детерминирован и подчинён вычисляемым
-backend hard constraints: platform backend готов, профиль валиден, секрет
-доступен только backend, rollback directories готовы и platform support имеет
-статус `implemented`. Он возвращает scored dry-run evaluation с opaque IDs и
-reason codes. LLM не создаёт shell command/backend config и не обходит gate.
-Operation не подключает VPN и не выполняет failover; будущее execution остаётся
-за authorization/action-ID, audit и rollback boundaries.
+Реализованный query `planner.evaluate` подчинён вычисляемым backend hard
+constraints: platform backend готов, профиль валиден, секрет доступен только
+backend, защищённый rollback storage готов и platform support имеет статус
+`implemented`. Storage gate подтверждает место для защищённого journal/snapshot,
+но не доказывает rollback конкретного кандидата. Planner возвращает scored
+dry-run evaluation с opaque IDs и reason codes. LLM не создаёт shell
+command/backend config и не обходит gate. Operation не подключает VPN и не
+выполняет failover; будущее execution остаётся за authorization/action-ID,
+audit и rollback boundaries.
+
+Граница доверия задана явно:
+
+| Вход/состояние | Владелец | Использование planner |
+|---|---|---|
+| Наличие runtime, текущий parse профиля, права файла, rollback storage и platform support | backend | eligibility gates; caller не может их изменить |
+| Recent outcome, reachability, latency/loss и fit | caller в текущем срезе | только score; наблюдаемое health evidence старше 900 секунд даёт ноль |
+| Произвольный текст модели | недоверенный | никогда не разбирается как shell command, профиль или backend config |
+
+Для одинакового локального snapshot и evidence rank/reason codes
+детерминированы; `evaluated_at` намеренно меняется. Один абсолютный monotonic
+deadline проходит через candidate validation и OpenVPN parser. Поэтому timeout
+parser возвращается как `deadline-exceeded`, а не продолжает работу после
+исчерпания API budget.
 
 CLI/TUI-клиент подключается к Unix socket через автоматически установленный
 `socat`. Он ограничивает размер и время ответа, проверяет identity envelope и

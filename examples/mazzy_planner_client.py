@@ -34,15 +34,20 @@ def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return value
 
 
+def reject_nonfinite_number(value: str) -> None:
+    raise ValueError(f"non-finite JSON number: {value}")
+
+
 def decode_one_object(raw: bytes, label: str) -> dict[str, Any]:
     try:
         text = raw.decode("utf-8")
-        decoder = json.JSONDecoder(object_pairs_hook=reject_duplicate_keys)
-        value, end = decoder.raw_decode(text)
+        value = json.loads(
+            text,
+            object_pairs_hook=reject_duplicate_keys,
+            parse_constant=reject_nonfinite_number,
+        )
     except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
         raise PlannerClientError(f"{label} is not strict UTF-8 JSON: {error}") from error
-    if text[end:].strip():
-        raise PlannerClientError(f"{label} contains multiple JSON documents")
     if not isinstance(value, dict):
         raise PlannerClientError(f"{label} must be a JSON object")
     return value

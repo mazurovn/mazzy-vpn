@@ -95,9 +95,11 @@ custom-server import is the next backend slice:
 
 The implemented read-only `planner.evaluate` query first enforces hard
 constraints from local backend state: platform backend ready, valid profile,
-backend-only secret access, rollback directories available and supported
-platform. An LLM cannot override these constraints. Input is one strict JSON
-object of at most 64 KiB with a workload and 1–128 unique opaque profile IDs.
+backend-only secret access, protected rollback storage ready and supported
+platform. The storage gate is a prerequisite for journaling future execution,
+not proof of a candidate-specific rollback. An LLM cannot override these
+constraints. Input is one strict JSON object of at most 64 KiB with a workload
+and 1–128 unique opaque profile IDs.
 
 Eligible candidates receive a deterministic 100-point score:
 
@@ -107,10 +109,11 @@ Eligible candidates receive a deterministic 100-point score:
 - 15: supplied latency and loss with bounded result freshness;
 - 10: workload fit for LLM streams, short API calls, video or split routing.
 
-Reachability and latency/loss older than 900 seconds score zero. Equal scores
-are ordered by opaque profile ID, making repeated evaluation stable. The
-result contains only gates, factor points and reason codes and is always
-`dry_run: true`:
+Observed health evidence (recent outcome, reachability and latency/loss) older
+than 900 seconds scores zero. Equal scores are ordered by opaque profile ID,
+making the decision stable for the same local snapshot and evidence;
+`evaluated_at` intentionally changes. The result contains only gates, factor
+points and reason codes and is always `dry_run: true`:
 
 ```bash
 jq -n --arg profile_id "$PROFILE_ID" '{
@@ -131,6 +134,9 @@ Fit and health evidence is caller-supplied in this slice. It can change a
 dry-run score, but it cannot make a planned backend, invalid profile or unsafe
 secret file eligible. Future switching must be transactional: snapshot,
 bounded start, actual egress/DNS/IPv6 verification, then commit or rollback.
+The evaluator passes its absolute monotonic deadline into candidate validation,
+including the external OpenVPN parser, and returns `deadline-exceeded` when the
+budget is exhausted.
 
 ## AI agent boundary
 

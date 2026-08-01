@@ -193,6 +193,9 @@ EOF
 cat >"$TMP/fakebin/openvpn" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >"${FAKE_OPENVPN_LOG:?}"
+if [[ -n "${FAKE_OPENVPN_DELAY_SECONDS:-}" ]]; then
+    sleep "$FAKE_OPENVPN_DELAY_SECONDS"
+fi
 if [[ "${FAKE_OPENVPN_TOO_MANY:-0}" == "1" ]]; then
     printf "Halt command was pushed by server ('Too many connections')\n" >&2
 fi
@@ -377,7 +380,9 @@ for language_check in \
     'ko:사용법:'; do
     language_code="${language_check%%:*}"
     language_marker="${language_check#*:}"
-    VPNCTL_LANG="$language_code" "$CLI" help | grep -q "$language_marker" ||
+    localized_help="$(VPNCTL_LANG="$language_code" "$CLI" help)" ||
+        fail "localized help failed for $language_code"
+    grep -q "$language_marker" <<<"$localized_help" ||
         fail "localized help is missing for $language_code"
 done
 "$CLI" language de >/dev/null
@@ -1133,7 +1138,10 @@ planner_stale_response="$(
 )"
 jq -e '
     .status == "ok"
-    and .result.candidates[0].score == 65
+    and .result.candidates[0].score == 35
+    and (.result.candidates[0].reason_codes | index(
+        "planner.factor.recent-stale"
+    )) != null
     and (.result.candidates[0].reason_codes | index(
         "planner.factor.reachability-stale"
     )) != null
@@ -1142,6 +1150,32 @@ jq -e '
     )) != null
 ' <<<"$planner_stale_response" >/dev/null ||
     fail "local API planner.evaluate trusted stale network evidence"
+
+: >"$FAKE_TIMEOUT_LOG"
+planner_deadline_request="$(
+    jq -c '
+        .request_id = "request-planner-deadline-0001"
+        | .deadline_ms = 500
+        | .payload.candidates = [.payload.candidates[0]]
+    ' <<<"$planner_request"
+)"
+planner_deadline_started=$SECONDS
+planner_deadline_response="$(
+    printf '%s\n' "$planner_deadline_request" |
+        FAKE_OPENVPN_DELAY_SECONDS=5 "$CLI" _api-dispatch
+)"
+planner_deadline_elapsed=$((SECONDS - planner_deadline_started))
+jq -e '
+    .status == "error"
+    and .error.code == "deadline-exceeded"
+    and .error.message_key == "api.planner.deadline-exceeded"
+' <<<"$planner_deadline_response" >/dev/null ||
+    fail "local API planner did not preserve its candidate validation deadline"
+((planner_deadline_elapsed < 3)) ||
+    fail "OpenVPN planner validation exceeded its sub-second deadline"
+if grep -Eq -- '(^| )(10|10\.000s) openvpn --config' "$FAKE_TIMEOUT_LOG"; then
+    fail "OpenVPN planner validation used the unbounded default parser timeout"
+fi
 
 chmod 644 "$TMP/config/openvpn/Test Server.ovpn"
 planner_unsafe_request="$(
@@ -2898,6 +2932,10 @@ ok "versioned local API contract"
 python3 "$ROOT/tests/check-protocol-registry.py" >/dev/null ||
     fail "protocol registry and orchestration policy are inconsistent"
 ok "protocol registry and AI orchestration policy"
+
+python3 "$ROOT/tests/check-planner-examples.py" >/dev/null ||
+    fail "planner SDK examples do not enforce strict bounded JSON"
+ok "planner SDK examples enforce strict bounded JSON"
 
 declare -A protocol_uri_schemes=(
     [vless]=vless

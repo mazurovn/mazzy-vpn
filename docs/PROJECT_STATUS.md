@@ -2,7 +2,7 @@
 
 Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
-Last synchronized: 2026-08-01.
+Last synchronized: 2026-08-02.
 
 This file is the persistent handoff after interrupted Codex sessions. GitHub
 issues and release gates in [`capabilities.json`](capabilities.json) remain the
@@ -33,6 +33,8 @@ authoritative backlog; this page records the verified resumption point.
   subprocess hang fix, tray-path consolidation and remaining production risks.
 - The installed-system, profile-cache and protocol review is
   [`AUDIT_2026-08-01_PROTOCOLS.ru.md`](AUDIT_2026-08-01_PROTOCOLS.ru.md).
+- The repeat planner, architecture, secret and release-state review is
+  [`AUDIT_2026-08-02_PLANNER.ru.md`](AUDIT_2026-08-02_PLANNER.ru.md).
 
 Published release links:
 
@@ -66,10 +68,11 @@ Published release links:
    [#14 iOS](https://github.com/mazurovn/mazzy-vpn/issues/14)
 8. [#11 cross-platform production gates](https://github.com/mazurovn/mazzy-vpn/issues/11)
 
-## Protocol-orchestration work after 1.3.0
+## Protocol-orchestration work after 1.3.2
 
 The 1.3.2 patch fixes three blockers found on an installed 0.2/1.2 system and
-adds the first protocol-orchestration contract:
+ships the protocol registry/detection foundation. Draft PR #43 adds the first
+read-only planner slice; it is not part of the published 1.3.2 packages:
 
 - Desktop accepts legacy profile-cache entries without `profile_id`, derives
   the same opaque ID as the CLI and distinguishes an unavailable cache from a
@@ -83,18 +86,20 @@ adds the first protocol-orchestration contract:
   redacted catalog, runtime-diagnostic and URI-detection data. Connection stays
   truthfully limited to the four existing Linux backends until audited adapters
   and TUN integration pass their gates.
-- API v1 now has 28 operations and 14 stable error codes. `protocols.list` and
-  the read-only `planner.evaluate` are additive and do not change API version.
+- Stable API v1 has 27 operations and 14 stable error codes. Draft PR #43 adds
+  `planner.evaluate` as operation 28 without changing the API version.
 - The real `socat` client preserves its response half after request EOF. A
   delayed Unix-socket integration test covers the installed systemd transport,
   which the previous fake dispatcher test did not model.
-- The deterministic read-only planner now applies backend-owned hard gates and
-  versioned scoring to opaque profile IDs. Remaining issue #39 work is history,
+- The draft deterministic read-only planner applies backend-owned hard gates
+  and versioned scoring to opaque profile IDs. Its OpenVPN parser shares the
+  request deadline, stale observed health is ignored, and rollback readiness is
+  explicitly limited to protected storage. Remaining issue #39 work is history,
   authorized execution/failover and non-CLI integration. Platform work still
   includes pinned sing-box-family, Mieru and Naive/Cronet adapters;
   custom-server secret import; Linux TUN lifecycle; Windows service/Wintun;
   Android `VpnService`; and real integration, rollback and leak tests.
-- Local patch verification is green: 80 Bash/end-to-end tests, 24 Rust tests,
+- Local patch verification is green: 81 Bash/end-to-end tests, 24 Rust tests,
   Clippy, ShellCheck, npm audit, cargo-deny, public leak audit and the unpacked
   AppImage/DEB/RPM lifecycle/source/GUI audit. All 12 documentation screenshots
   were regenerated at 1680×951 from the localhost-only RFC 5737 fixture.

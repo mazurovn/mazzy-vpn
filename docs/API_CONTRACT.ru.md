@@ -139,18 +139,21 @@ endpoint, credential, profile и backend config отсутствуют. Исто
 Payload содержит workload и 1–128 уникальных opaque profile IDs с полным
 ограниченным evidence object. Пять hard gates вычисляет server из текущего
 локального состояния, а не caller: backend готов, профиль валиден, файл профиля
-доступен только backend, rollback directories готовы и Linux support имеет
-статус `implemented`. Score и rank получает только кандидат, прошедший все
-gates.
+доступен только backend, защищённый rollback storage готов и Linux support имеет
+статус `implemented`. Storage gate подтверждает только готовность места для
+journal/snapshot; возможность rollback конкретного кандидата остаётся частью
+будущего execution. Score и rank получает только кандидат, прошедший все gates.
 
 Policy v1 выделяет 30 баллов recent outcome, 25 censorship fit, 20
-reachability, 15 latency/loss и 10 workload fit. Reachability и latency/loss
-старше 900 секунд дают ноль баллов. При равном score стабильным tie-breaker
+reachability, 15 latency/loss и 10 workload fit. Наблюдаемое health evidence
+(`recent_outcome`, reachability и latency/loss) старше 900 секунд даёт ноль;
+переданный caller fit остаётся advisory. При равном score стабильным tie-breaker
 является opaque profile ID. Response содержит reason codes и баллы факторов,
 но не display name, endpoint, filename, path, configuration или credential.
 Ответ всегда имеет `dry_run: true`: operation не подключает VPN и не выполняет
-failover. CLI принимает один JSON payload до 64 КиБ через stdin и ограничивает
-расширенный response 1 МиБ:
+failover. Candidate validation получает тот же абсолютный monotonic deadline,
+включая subprocess OpenVPN parser. CLI принимает один JSON payload до 64 КиБ
+через stdin и ограничивает расширенный response 1 МиБ:
 
 ```bash
 jq -n --arg profile_id "$PROFILE_ID" '{

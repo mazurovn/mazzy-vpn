@@ -2,8 +2,12 @@
 
 ## После 1.3.2 — текущая разработка
 
-- добавлен read-only `planner.evaluate` с пятью backend-owned hard gates,
-  versioned scoring и стабильным ранжированием opaque profile IDs;
+- draft [PR #43](https://github.com/mazurovn/mazzy-vpn/pull/43) добавляет
+  read-only `planner.evaluate` с пятью backend-owned hard gates, versioned
+  scoring и стабильным ранжированием opaque profile IDs;
+- повторный аудит ограничил OpenVPN parser общим monotonic deadline, исключил
+  stale recent outcome из score и уточнил, что rollback gate доказывает только
+  готовность защищённого storage;
 - evaluator всегда возвращает `dry_run: true`; history, authorized
   connect/failover и Desktop/mobile integration остаются в issue #39.
 
@@ -103,10 +107,13 @@ CLI engine и не является самостоятельным Desktop VPN-�
 
 # Releases and roadmap
 
-After 1.3.2, current development adds the read-only `planner.evaluate` query
-with five backend-owned hard gates, versioned scoring and stable opaque-ID
-ranking. It always returns `dry_run: true`; history, authorized connect/failover
-and Desktop/mobile integration remain in issue #39.
+After 1.3.2, draft [PR #43](https://github.com/mazurovn/mazzy-vpn/pull/43)
+adds the read-only `planner.evaluate` query with five backend-owned hard gates,
+versioned scoring and stable opaque-ID ranking. The repeat audit propagated the
+monotonic deadline into the OpenVPN parser, removed stale recent outcomes from
+the score and narrowed the rollback gate to protected storage readiness. It
+always returns `dry_run: true`; history, authorized connect/failover and
+Desktop/mobile integration remain in issue #39.
 
 Version 1.3.2 / Desktop 0.3.2 fixes legacy profile-cache compatibility and the
 mixed `/usr/local` versus package `/usr/bin` upgrade conflict. It adds a

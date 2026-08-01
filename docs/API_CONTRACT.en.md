@@ -138,17 +138,22 @@ backend configuration. Its source of truth is
 contains a workload and 1–128 unique opaque profile IDs, each with a complete
 bounded evidence object. The server, not the caller, computes these five hard
 gates from current local state: backend ready, profile valid, backend-only
-profile storage, rollback directories available and Linux support implemented.
-Only candidates that pass every gate receive a score and rank.
+profile storage, protected rollback storage ready and Linux support implemented.
+The storage gate proves only that a secure journal/snapshot location can be
+used; candidate-specific rollback remains an execution concern. Only candidates
+that pass every gate receive a score and rank.
 
 The policy-v1 score is 30 points for recent outcome, 25 for censorship fit, 20
-for reachability, 15 for latency/loss and 10 for workload fit. Reachability and
-latency/loss evidence older than 900 seconds scores zero. Equal scores use the
+for reachability, 15 for latency/loss and 10 for workload fit. Observed health
+evidence (`recent_outcome`, reachability and latency/loss) older than 900
+seconds scores zero; caller-supplied fit remains advisory. Equal scores use the
 opaque profile ID as the stable tie-breaker. The response includes reason codes
 and factor points, but no display name, endpoint, filename, path, configuration
 or credential. It is always `dry_run: true`; it cannot connect or fail over.
-The CLI accepts one JSON payload up to 64 KiB on stdin and bounds the expanded
-explanation response to 1 MiB:
+Candidate validation receives the same absolute monotonic deadline as the
+evaluator, including an OpenVPN parser subprocess. The CLI accepts one JSON
+payload up to 64 KiB on stdin and bounds the expanded explanation response to
+1 MiB:
 
 ```bash
 jq -n --arg profile_id "$PROFILE_ID" '{

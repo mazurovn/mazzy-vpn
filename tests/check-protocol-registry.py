@@ -21,7 +21,7 @@ HARD_CONSTRAINTS = [
     "backend-ready",
     "profile-valid",
     "secrets-readable-only-by-backend",
-    "rollback-available",
+    "rollback-storage-ready",
     "platform-supported",
 ]
 SCORE_FACTORS = [

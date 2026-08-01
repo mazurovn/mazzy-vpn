@@ -339,7 +339,45 @@
         "payload": {
           "$ref": "#/$defs/RequestPayload"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["operation"],
+            "properties": {
+              "operation": {"const": "planner.evaluate"}
+            }
+          },
+          "then": {
+            "required": ["deadline_ms"],
+            "properties": {
+              "deadline_ms": {
+                "type": "integer",
+                "minimum": 100,
+                "maximum": 30000
+              },
+              "payload": {
+                "$ref": "#/$defs/PlannerRequest"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["payload"],
+            "properties": {
+              "payload": {
+                "$ref": "#/$defs/PlannerRequest"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "operation": {"const": "planner.evaluate"}
+            }
+          }
+        }
+      ]
     },
     "MutationRequest": {
       "type": "object",
@@ -661,7 +699,7 @@
             "backend-ready",
             "profile-valid",
             "secrets-readable-only-by-backend",
-            "rollback-available",
+            "rollback-storage-ready",
             "platform-supported"
           ]
         },

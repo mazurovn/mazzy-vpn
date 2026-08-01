@@ -14,6 +14,7 @@ flowchart TB
     Desktop["Tauri control center / tray"]
     API["Protected local API v1"]
     Registry["13-protocol registry + safe detector"]
+    Planner["planner.evaluate (draft PR #43)<br/>dry-run gates + score"]
     Cache["Sanitized status + profiles cache"]
     Verify["Endpoint probe + actual egress verification"]
     Validate["Profile validation"]
@@ -29,6 +30,10 @@ flowchart TB
     Desktop -->|typed query/lifecycle| API
     TUI --> Registry
     API --> Registry
+    API -. development .-> Planner
+    Planner --> Registry
+    Planner --> Validate
+    Planner --> Cache
     API --> TUI
     Desktop -. remaining fixed pkexec actions .-> TUI
     TUI --> Verify
@@ -88,6 +93,17 @@ sequenceDiagram
     Secret--xUI: never read
 ```
 
+## Граница planner и релиза
+
+Опубликованный stable `v1.3.2` ещё не содержит `planner.evaluate`: операция
+остаётся в draft [PR #43](https://github.com/mazurovn/mazzy-vpn/pull/43).
+Реализованный срез только читает локальное состояние и возвращает
+`dry_run: true`. Eligibility вычисляет backend из runtime, profile validation,
+прав secret storage, platform support и готовности защищённого rollback storage.
+Последний gate не доказывает rollback конкретного backend. Caller evidence
+влияет только на score; данные health старше 900 секунд обнуляются. Абсолютный
+monotonic deadline передаётся внутрь OpenVPN parser.
+
 ---
 
 <a id="english"></a>
@@ -106,3 +122,11 @@ The shared 13-entry registry and redacted detector are described in
 [[Protocol Orchestration]]. Catalog presence never bypasses platform/backend,
 profile-validation or rollback gates. LLM clients receive opaque IDs and
 evidence only; credentials and generated shell commands are outside the API.
+
+Stable `v1.3.2` does not yet ship `planner.evaluate`; the read-only operation is
+still draft [PR #43](https://github.com/mazurovn/mazzy-vpn/pull/43). Backend-owned
+eligibility gates cannot be overridden by caller evidence. The rollback gate
+proves protected journal/snapshot storage only, stale observed health scores
+zero, and candidate parsing shares one absolute monotonic deadline. History,
+authorized execution/failover and Desktop/mobile integration remain in issue
+#39.

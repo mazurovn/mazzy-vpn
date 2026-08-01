@@ -1514,9 +1514,24 @@ validate_endpoint() {
 }
 
 openvpn_parser_ok() {
-    local file="$1"
+    local file="$1" deadline_end_ms="${2:-}"
+    local timeout_ms=10000 duration rc=0
     command -v openvpn >/dev/null 2>&1 || return 0
-    timeout 10 openvpn --config "$file" --verb 0 --show-tls >/dev/null 2>&1
+    if [[ -n "$deadline_end_ms" ]]; then
+        [[ "$deadline_end_ms" =~ ^[1-9][0-9]*$ ]] || return 1
+        timeout_ms="$(api_deadline_remaining_ms "$deadline_end_ms")" || return 1
+        ((timeout_ms > 0)) || return 124
+        ((timeout_ms <= 10000)) || timeout_ms=10000
+    fi
+    duration="$(api_timeout_seconds_from_ms "$timeout_ms")" || return 1
+    timeout --kill-after=0.25s "${duration}s" \
+        openvpn --config "$file" --verb 0 --show-tls >/dev/null 2>&1
+    rc=$?
+    case "$rc" in
+        0) return 0 ;;
+        124|137) return 124 ;;
+        *) return "$rc" ;;
+    esac
 }
 
 resolve_profile() {
@@ -2196,7 +2211,8 @@ has_directive() {
 }
 
 validate_profile() {
-    local protocol="$1" file="$2" quiet="${3:-0}" bad=0 unsafe
+    local protocol="$1" file="$2" quiet="${3:-0}"
+    local deadline_end_ms="${4:-}" bad=0 unsafe parser_rc=0
     [[ -f "$file" ]] || {
         ((quiet)) || check_fail "Профиль отсутствует: $file"
         return 1
@@ -2275,10 +2291,14 @@ validate_profile() {
         ((quiet)) || check_fail "$file: endpoint отсутствует или имеет неверный host/port"
         bad=1
     fi
-    if [[ "$protocol" == "openvpn" && "$bad" -eq 0 ]] &&
-       ! openvpn_parser_ok "$file"; then
-        ((quiet)) || check_fail "$file: OpenVPN отклонил конфигурацию при безопасном разборе"
-        bad=1
+    if [[ "$protocol" == "openvpn" && "$bad" -eq 0 ]]; then
+        openvpn_parser_ok "$file" "$deadline_end_ms" || parser_rc=$?
+        if ((parser_rc == 124)); then
+            return 124
+        elif ((parser_rc != 0)); then
+            ((quiet)) || check_fail "$file: OpenVPN отклонил конфигурацию при безопасном разборе"
+            bad=1
+        fi
     fi
     ((bad == 0))
 }
@@ -5109,7 +5129,7 @@ api_secure_backend_directory() {
     [[ "$owner" == "$expected_owner" ]]
 }
 
-api_rollback_ready() {
+api_rollback_storage_ready() {
     api_secure_backend_directory "$STATE_DIR" || return 1
     if [[ -d "$API_ACTION_DIR" ]]; then
         api_secure_backend_directory "$API_ACTION_DIR"
@@ -5127,7 +5147,8 @@ api_profile_runtime_path() {
 }
 
 api_planner_candidate_result() {
-    local candidate="$1" registry="$2" weights="$3" rollback_ready="$4"
+    local candidate="$1" registry="$2" weights="$3" rollback_storage_ready="$4"
+    local deadline_end_ms="$5" validation_rc=0
     local profile_id profile_record="" protocol="" file_name="" profile_path=""
     local support=""
     local backend_ready=false profile_valid=false secrets_secure=false
@@ -5165,8 +5186,13 @@ api_planner_candidate_result() {
         profile_path="$(api_profile_runtime_path "$protocol" "$file_name" || true)"
     fi
     if [[ -n "$profile_path" && -f "$profile_path" && ! -L "$profile_path" ]]; then
-        validate_profile "$protocol" "$profile_path" 1 >/dev/null 2>&1 &&
+        validate_profile "$protocol" "$profile_path" 1 "$deadline_end_ms" \
+            >/dev/null 2>&1 || validation_rc=$?
+        if ((validation_rc == 124)); then
+            return 124
+        elif ((validation_rc == 0)); then
             profile_valid=true
+        fi
         validate_permissions "$profile_path" && secrets_secure=true
     fi
 
@@ -5179,7 +5205,7 @@ api_planner_candidate_result() {
             --argjson backend_ready "$backend_ready" \
             --argjson profile_valid "$profile_valid" \
             --argjson secrets_secure "$secrets_secure" \
-            --argjson rollback_ready "$rollback_ready" \
+            --argjson rollback_storage_ready "$rollback_storage_ready" \
             --argjson platform_supported "$platform_supported" '
             def fit_points($weight; $fit):
                 if $fit == "high" then $weight
@@ -5188,17 +5214,20 @@ api_planner_candidate_result() {
                 else 0
                 end;
             def recent_points($weight; $evidence):
-                (
-                    if $evidence.recent_outcome == "success" then $weight
-                    elif $evidence.recent_outcome == "unknown"
-                    then (($weight / 3) | floor)
-                    else 0
-                    end
-                ) as $base
-                | ([
-                    $base - (($weight * $evidence.consecutive_failures / 6) | floor),
-                    0
-                ] | max);
+                if $evidence.evidence_age_seconds > 900 then 0
+                else
+                    (
+                        if $evidence.recent_outcome == "success" then $weight
+                        elif $evidence.recent_outcome == "unknown"
+                        then (($weight / 3) | floor)
+                        else 0
+                        end
+                    ) as $base
+                    | ([
+                        $base - (($weight * $evidence.consecutive_failures / 6) | floor),
+                        0
+                    ] | max)
+                end;
             def latency_loss_points($weight; $evidence):
                 if $evidence.evidence_age_seconds > 900
                     or $evidence.reachability != "reachable"
@@ -5249,11 +5278,12 @@ api_planner_candidate_result() {
                     )
                 },
                 {
-                    id: "rollback-available",
-                    passed: $rollback_ready,
+                    id: "rollback-storage-ready",
+                    passed: $rollback_storage_ready,
                     reason_code: (
-                        if $rollback_ready then "planner.gate.rollback-ready"
-                        else "planner.gate.rollback-unavailable" end
+                        if $rollback_storage_ready
+                        then "planner.gate.rollback-storage-ready"
+                        else "planner.gate.rollback-storage-unavailable" end
                     )
                 },
                 {
@@ -5271,7 +5301,10 @@ api_planner_candidate_result() {
                     points: recent_points($weights["recent-success"]; $evidence),
                     max_points: $weights["recent-success"],
                     reason_code: (
-                        "planner.factor.recent-" + $evidence.recent_outcome
+                        if $evidence.evidence_age_seconds > 900
+                        then "planner.factor.recent-stale"
+                        else "planner.factor.recent-" + $evidence.recent_outcome
+                        end
                     )
                 },
                 {
@@ -5359,8 +5392,8 @@ api_planner_candidate_result() {
 
 api_planner_result() {
     local request="$1" deadline_ms="$2" deadline_started_ms="$3"
-    local registry weights rollback_ready=false remaining_ms deadline_end_ms
-    local candidate result candidates ranked
+    local registry weights rollback_storage_ready=false remaining_ms deadline_end_ms
+    local candidate result candidates ranked rc=0
     local -a candidate_results=()
     registry="$(protocol_registry_path)" || return 1
     weights="$(jq -c '
@@ -5373,13 +5406,16 @@ api_planner_result() {
     ((remaining_ms > 0)) || return 124
     api_refresh_dashboard_bounded "$remaining_ms" || true
     [[ -r "$PROFILES_FILE" ]] || return 1
-    api_rollback_ready && rollback_ready=true
+    api_rollback_storage_ready && rollback_storage_ready=true
 
     while IFS= read -r candidate; do
         remaining_ms="$(api_deadline_remaining_ms "$deadline_end_ms")" || return 1
         ((remaining_ms > 0)) || return 124
         result="$(api_planner_candidate_result \
-            "$candidate" "$registry" "$weights" "$rollback_ready")" || return 1
+            "$candidate" "$registry" "$weights" "$rollback_storage_ready" \
+            "$deadline_end_ms")"
+        rc=$?
+        ((rc == 0)) || return "$rc"
         candidate_results+=("$result")
     done < <(jq -c '.payload.candidates[]' <<<"$request")
 

@@ -94,9 +94,11 @@ payload больше 64 КиБ после удаления конечного р
 
 Реализованный read-only query `planner.evaluate` сначала вычисляет hard
 constraints из локального состояния backend: backend готов на платформе,
-профиль валиден, секрет виден только backend, rollback directories готовы и
-платформа поддерживается. LLM не может обойти эти условия. Входом является один
-strict JSON object до 64 КиБ с workload и 1–128 уникальными opaque profile IDs.
+профиль валиден, секрет виден только backend, защищённый rollback storage готов
+и платформа поддерживается. Storage gate нужен для journal будущего execution,
+но не доказывает rollback конкретного кандидата. LLM не может обойти эти
+условия. Входом является один strict JSON object до 64 КиБ с workload и 1–128
+уникальными opaque profile IDs.
 
 Оставшиеся кандидаты получают детерминированные 100 баллов:
 
@@ -106,9 +108,11 @@ strict JSON object до 64 КиБ с workload и 1–128 уникальными 
 - 15: переданные latency и loss с ограниченным сроком жизни результатов;
 - 10: workload fit для LLM stream, коротких API calls, video или split routing.
 
-Reachability и latency/loss старше 900 секунд дают ноль баллов. При равном
-score кандидаты стабильно сортируются по opaque profile ID. Result содержит
-только gates, баллы факторов и reason codes и всегда имеет `dry_run: true`:
+Наблюдаемое health evidence (recent outcome, reachability и latency/loss)
+старше 900 секунд даёт ноль баллов. При равном score кандидаты стабильно
+сортируются по opaque profile ID: решение повторяемо для одинакового локального
+snapshot и evidence, а `evaluated_at` намеренно меняется. Result содержит только
+gates, баллы факторов и reason codes и всегда имеет `dry_run: true`:
 
 ```bash
 jq -n --arg profile_id "$PROFILE_ID" '{
@@ -130,6 +134,9 @@ score, но не сделать eligible запланированный backend,
 небезопасный файл с секретом. Будущая смена протокола должна быть
 транзакционной: snapshot, bounded start, фактическая egress/DNS/IPv6 проверка,
 затем commit или rollback.
+Evaluator передаёт абсолютный monotonic deadline внутрь candidate validation,
+включая внешний OpenVPN parser, и возвращает `deadline-exceeded` при исчерпании
+бюджета.
 
 ## Контракт AI-агентов
 
