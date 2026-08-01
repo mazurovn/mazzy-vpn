@@ -75,6 +75,10 @@ mazzy-vpn protocols list --json
 mazzy-vpn protocols diagnose --json
 ```
 
+Детектор принимает один завершающий `LF` или `CRLF` от обычного pipeline. Он
+отклоняет встроенные и повторные переводы строк, остальные control bytes и
+payload больше 64 КиБ после удаления конечного разделителя.
+
 Он не возвращает host, user info, UUID, password, query или fragment. Полный
 импорт своих серверов является следующим backend-срезом:
 

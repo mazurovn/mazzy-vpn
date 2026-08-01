@@ -2645,6 +2645,20 @@ for protocol_scheme in "${!protocol_uri_schemes[@]}"; do
         fail "protocol detector exposed $protocol_scheme credentials"
     fi
 done
+protocol_detection="$(
+    printf '%s\n' 'vless://user:password@example.invalid:443?id=secret#private' |
+        "$ROOT/mazzy-vpn" protocols detect --stdin --json
+)" || fail "protocol detector rejected a newline-terminated URI"
+jq -e '.recognized == true and .protocol == "vless"' \
+    <<<"$protocol_detection" >/dev/null ||
+    fail "protocol detector mislabeled a newline-terminated URI"
+protocol_detection="$(
+    printf '%s\r\n' 'vless://user:password@example.invalid:443?id=secret#private' |
+        "$ROOT/mazzy-vpn" protocols detect --stdin --json
+)" || fail "protocol detector rejected a CRLF-terminated URI"
+jq -e '.recognized == true and .protocol == "vless"' \
+    <<<"$protocol_detection" >/dev/null ||
+    fail "protocol detector mislabeled a CRLF-terminated URI"
 set +e
 protocol_detection="$(
     printf 'unknown://user:password@example.invalid' |
@@ -2669,6 +2683,18 @@ set -e
 jq -e '.recognized == false and .reason == "invalid-input"' \
     <<<"$protocol_detection" >/dev/null ||
     fail "protocol detector returned an unsafe control-byte response"
+set +e
+protocol_detection="$(
+    printf 'vless://safe\n\n' |
+        "$ROOT/mazzy-vpn" protocols detect --stdin --json
+)"
+protocol_detection_status=$?
+set -e
+[[ "$protocol_detection_status" -eq 2 ]] ||
+    fail "protocol detector accepted multiple trailing line terminators"
+jq -e '.recognized == false and .reason == "invalid-input"' \
+    <<<"$protocol_detection" >/dev/null ||
+    fail "protocol detector returned an unsafe multi-line response"
 ok "protocol URI detection is bounded and credential-redacted"
 
 python3 "$ROOT/tests/audit-runtime-hardcodes.py" >/dev/null ||

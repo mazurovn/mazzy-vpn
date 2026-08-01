@@ -14,6 +14,9 @@ mazzy-vpn protocols diagnose --json
 printf '%s\n' "$SHARE_URI" | mazzy-vpn protocols detect --stdin --json
 ```
 
+Один завершающий `LF` или `CRLF` допустим; встроенные/повторные переводы строк,
+остальные control bytes и payload больше 64 КиБ отклоняются.
+
 Агент получает только opaque IDs, readiness и evidence. LLM text не становится
 shell command, mutation требует `action_id`, deadline, audit и rollback.
 
@@ -29,6 +32,9 @@ The validated catalog contains 13 protocols. Linux connection backends are
 currently implemented for four. Nine censorship-oriented additions are
 cataloged and their unambiguous share URIs are detected, but connection remains
 `planned` until TUN, routing, rollback and real connection tests pass.
+
+One terminal `LF` or `CRLF` is accepted; embedded/repeated line terminators,
+other control bytes and payloads larger than 64 KiB are rejected.
 
 Agents receive opaque IDs, readiness and evidence only. Model text never
 becomes a shell command, and no `planned` backend is selected automatically.

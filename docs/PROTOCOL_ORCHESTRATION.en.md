@@ -74,6 +74,10 @@ mazzy-vpn protocols list --json
 mazzy-vpn protocols diagnose --json
 ```
 
+The detector accepts one terminal `LF` or `CRLF` from a normal pipeline. It
+rejects embedded or repeated line terminators, other control bytes and payloads
+larger than 64 KiB after removing that terminal delimiter.
+
 It never returns the host, user info, UUID, password, query or fragment. Full
 custom-server import is the next backend slice:
 

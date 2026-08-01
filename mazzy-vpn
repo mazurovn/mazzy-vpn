@@ -841,20 +841,48 @@ cmd_protocols_diagnose() {
 }
 
 cmd_protocols_detect() {
-    local registry encoded input byte_count scheme protocol result
+    local registry encoded input byte_count payload_count terminator_bytes
+    local last_byte previous_byte scheme protocol result
     registry="$(protocol_registry_path)" ||
         die "Protocol registry не найден; переустановите $PRODUCT_NAME"
-    encoded="$(LC_ALL=C head -c 65537 | base64)" || return 1
+    encoded="$(LC_ALL=C head -c 65539 | base64)" || return 1
     byte_count="$(printf '%s' "$encoded" | base64 -d | wc -c)" || return 1
-    if ((byte_count == 0 || byte_count > 65536)) ||
-       printf '%s' "$encoded" | base64 -d | od -An -v -tu1 | awk '
-           { for (i = 1; i <= NF; i++) if ($i < 32 || $i == 127) found = 1 }
+    terminator_bytes=0
+    if ((byte_count > 0)); then
+        last_byte="$(
+            printf '%s' "$encoded" | base64 -d | tail -c 1 |
+                od -An -tu1 | tr -d '[:space:]'
+        )" || return 1
+        if [[ "$last_byte" == 10 ]]; then
+            terminator_bytes=1
+            if ((byte_count > 1)); then
+                previous_byte="$(
+                    printf '%s' "$encoded" | base64 -d | tail -c 2 | head -c 1 |
+                        od -An -tu1 | tr -d '[:space:]'
+                )" || return 1
+                [[ "$previous_byte" == 13 ]] && terminator_bytes=2
+            fi
+        fi
+    fi
+    payload_count=$((byte_count - terminator_bytes))
+    if ((payload_count == 0 || payload_count > 65536 || byte_count > 65538)) ||
+       printf '%s' "$encoded" | base64 -d | od -An -v -tu1 | awk \
+           -v size="$byte_count" -v terminator="$terminator_bytes" '
+           {
+               for (i = 1; i <= NF; i++) {
+                   position++
+                   allowed_lf = terminator >= 1 && position == size && $i == 10
+                   allowed_cr = terminator == 2 && position == size - 1 && $i == 13
+                   if (($i < 32 || $i == 127) && !allowed_lf && !allowed_cr) found = 1
+               }
+           }
            END { exit !found }
        '; then
         jq -cn '{schema_version: 1, recognized: false, reason: "invalid-input"}'
         return 2
     fi
     input="$(printf '%s' "$encoded" | base64 -d)" || return 1
+    [[ "$terminator_bytes" -eq 2 ]] && input="${input%$'\r'}"
     [[ "$input" == *://* ]] || {
         jq -cn '{schema_version: 1, recognized: false, reason: "unsupported-format"}'
         return 2
