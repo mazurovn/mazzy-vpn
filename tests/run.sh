@@ -1762,7 +1762,8 @@ if grep -Eq 'Test Server|192\.0\.2\.10|PrivateKey|PublicKey' \
 fi
 ok "local API recovery fails closed and bounds persistent journals"
 
-real_socat="$(PATH=/usr/bin:/bin command -v socat)" ||
+real_path="${PATH#"$TMP/fakebin:"}"
+real_socat="$(PATH="$real_path" command -v socat)" ||
     fail "real socat is required for the API half-close integration test"
 real_api_socket="$TMP/api-client-integration.sock"
 real_api_responder="$TMP/api-client-responder"
