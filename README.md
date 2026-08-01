@@ -13,7 +13,7 @@
   <a href="LICENSE"><img alt="License: AGPL-3.0-or-later" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-8f7dff"></a>
   <a href="https://github.com/mazurovn/mazzy-vpn/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mazurovn/mazzy-vpn/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Linux" src="https://img.shields.io/badge/platform-Linux-65e7ff">
-  <img alt="1.3.0 release candidate" src="https://img.shields.io/badge/candidate-1.3.0-ef70ff">
+  <a href="https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.0"><img alt="Release 1.3.0" src="https://img.shields.io/badge/release-1.3.0-ef70ff"></a>
 </p>
 
 Mazzy VPN is an open-source AI-ready VPN client for Linux with Desktop, tray,
@@ -28,12 +28,12 @@ Mazzy VPN is a client and control plane, not a hosted VPN subscription. Bring
 profiles from a VPN provider or your organization. No account, telemetry or
 project-hosted server is required.
 
-The source tree currently declares the 1.3.0/0.3.0 release candidate. Until
-the corresponding tags and GitHub Release pages are published, the latest
-released line remains CLI/TUI 1.2.0 and Desktop 0.2.0 preview. Desktop 0.3
-now carries the reviewed issue #31 `glib` backport and passes the local RustSec
-gate without advisory suppressions; publication still waits for green PR #32
-checks, the default-branch Dependabot scan and the release pages.
+The current published line is [CLI/TUI 1.3.0](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.0)
+and [Desktop 0.3.0](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.0).
+Desktop 0.3 is an unsigned preview: Linux provides a functional control center,
+while Windows and macOS artifacts are UI previews without native VPN backends.
+Issue #31 is closed with the reviewed upstream `glib` backport, an exact
+source-provenance gate and a clean default-branch dependency/security scan.
 
 [Русский](README.ru.md) · [English](README.en.md) ·
 [Deutsch](README.de.md) · [中文](README.zh.md) ·

@@ -10,37 +10,33 @@ authoritative backlog; this page records the verified resumption point.
 
 ## Verified release baseline
 
-- GitHub `main` and local `origin/main` resolve to
-  `b47d0cd452264a355e4e2da48babba76a2180901` after merging PR #30 with the
-  audited AI-ready diagnostics and Desktop 0.3 candidate.
-- The published stable release is CLI/TUI `v1.2.0`. The published Desktop
-  preview is `desktop-v0.2.0`.
-- CLI/TUI 1.3.0 and Linux Desktop 0.3.0 remain release candidates in PR #32;
-  neither tag nor GitHub Release page exists yet. The branch now carries the
-  provenance-verified issue #31 `glib` backport and passes local RustSec checks
-  without advisory suppressions. Publication still requires green PR checks,
-  merge, the default-branch Dependabot scan and audited release artifacts.
-- Windows and macOS 0.2.0 artifacts are unsigned UI previews without native
+- Release tags `v1.3.0` and `desktop-v0.3.0` resolve to audited commit
+  `a759d723da0d9fca1e3f9fd0ea2a92ec116e2fbe`, after PR #32 and PR #33 were
+  merged with all required default-branch checks green.
+- The published stable release is CLI/TUI `v1.3.0`. The published Desktop
+  prerelease is `desktop-v0.3.0`; its Linux AppImage, DEB and RPM are also
+  attached to `v1.3.0` with a combined SHA-256 manifest.
+- Issue #31 is closed. The release carries the provenance-verified upstream
+  `glib` backport, `event-listener` 5.4.2 and `serde_with` 3.21.0; current
+  RustSec, Dependabot and CodeQL release scans have no open alerts.
+- Windows and macOS 0.3.0 artifacts are unsigned UI previews without native
   VPN backends. They must not be described as functional VPN clients.
 - Android and iOS clients are planned and have no application source or
   release artifacts.
-- PR #32 is open as a draft. Open backlog issues are #4–#14 and #31; PRs
-  #25–#30 are merged incremental slices, not proof that the corresponding
-  production gates are complete. Issue #31 remains open until the default-
-  branch dependency graph confirms the source-level remediation.
+- Open backlog issues #4–#14 remain incremental roadmap slices, not proof that
+  the corresponding production gates are complete. PR #32 and PR #33 are
+  merged; issue #31 was closed only after the default-branch dependency graph
+  and release artifacts confirmed the source-level remediation.
 - The uncompromising code, security, packaging and cross-platform review started
-  in [`AUDIT_2026-07-28.ru.md`](AUDIT_2026-07-28.ru.md). The latest PR #32
-  resumption audit is [`AUDIT_2026-08-01.ru.md`](AUDIT_2026-08-01.ru.md); it
+  in [`AUDIT_2026-07-28.ru.md`](AUDIT_2026-07-28.ru.md). The release audit is
+  [`AUDIT_2026-08-01.ru.md`](AUDIT_2026-08-01.ru.md); it
   records the issue #31 backport, the new `event-listener` advisory update,
   subprocess hang fix, tray-path consolidation and remaining production risks.
 
 Published release links:
 
-- <https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.2.0>
-- <https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.2.0>
-
-Candidate release links must not be advertised until both pages exist:
-`v1.3.0` and `desktop-v0.3.0`.
+- <https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.0>
+- <https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.0>
 
 ## Community and documentation baseline
 
@@ -158,7 +154,7 @@ Merged PR #29 completed the first location-health issue #6 slice:
   every profile row;
 - complete package-owned Desktop CSS corresponding source.
 
-The merged 1.3.0 / Desktop 0.3.0 candidate adds:
+The published 1.3.0 / Desktop 0.3.0 release line adds:
 
 - `mazzy-vpn verify [--speed] [--json]` and API query
   `tests.verify-egress`;
@@ -180,16 +176,15 @@ The merged 1.3.0 / Desktop 0.3.0 candidate adds:
   `profile_id`/filename active-profile identity, including fail-closed handling
   of duplicate display names.
 
-The current `mazurovn/new-realise` continuation adds a local API query-deadline
-fix after an interrupted audit found `tests.probe` could hang the regression
-suite when the external deadline fired while nested probe workers still held the
-captured stdout pipe. `tests.probe` and `tests.verify-egress` now capture bounded
-worker output through root-only temporary files and clean them on timeout; the
-regression suite asserts no `.probe-result.*` or `.verify-result.*` files remain.
+The final audited release source also fixes a local API query-deadline hang
+found after an interrupted run: `tests.probe` and `tests.verify-egress` capture
+bounded worker output through root-only temporary files, clean them on timeout
+and close the serialization descriptor before spawning workers. The regression
+suite asserts both cleanup and an immediately successful request after timeout.
 
-Verified locally for the current candidate on 2026-08-01:
+Verified for the published release source on 2026-08-01:
 
-- shell regression suite: 74/74 in one uninterrupted 2026-08-01 run, including
+- shell regression suite: 75/75 in one uninterrupted 2026-08-01 run, including
   API query deadline cleanup, Unicode profile-spoofing and runtime hard-code
   boundary checks;
 - Rust unit tests: 24/24, including a descendant-pipe timeout regression;
@@ -202,12 +197,12 @@ Verified locally for the current candidate on 2026-08-01:
   before execution; a regression test requires an immediate successful probe
   after a timed-out worker so descendants cannot retain the lock;
 - `npm audit --audit-level=high` reports 0 known vulnerabilities. Issue #31 is
-  remediated in candidate source by vendoring crates.io `glib` 0.18.5 and
+  remediated in release source by vendoring crates.io `glib` 0.18.5 and
   applying the exact upstream soundness fix. The provenance gate verifies the
   archive checksum and all source deltas before cargo-deny; `ignore = []`.
   The 2026-08-01 RustSec refresh also found `RUSTSEC-2026-0221` in
   `event-listener` 5.4.1, now updated to 5.4.2. The post-merge Dependabot scan
-  then found `GHSA-7gcf-g7xr-8hxj` in `serde_with` 3.17.0; PR #33 updates it to
+  then found `GHSA-7gcf-g7xr-8hxj` in `serde_with` 3.17.0; PR #33 updated it to
   3.21.0. Cargo-deny 0.20.2 reports `advisories ok`. System-package advisory
   scanning is still absent. Cargo-deny uses its documented `CARGO_HOME`-aware
   database default rather than a shell expression in TOML;
@@ -215,7 +210,7 @@ Verified locally for the current candidate on 2026-08-01:
   `glib` 0.18: `tauri` 2.11.5 and `webkit2gtk` 2.0.2 are current, `gtk` 0.18.2
   remains the GTK3 binding line, and `cargo update --dry-run` only offered minor
   unrelated updates plus `tray-icon` 0.24.2;
-- PR #32 RustSec CI also found fixable `quick-xml` and `time` advisories.
+- PR #32 RustSec CI also found and fixed `quick-xml` and `time` advisories.
   Desktop MSRV was raised to Rust 1.88 and `Cargo.lock` now uses `plist` 1.10.0,
   `quick-xml` 0.41.0 and `time` 0.3.54; Rust tests and Clippy pass locally with
   `cargo +1.88.0`;

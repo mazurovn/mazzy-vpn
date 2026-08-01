@@ -15,10 +15,8 @@ Copyright © 2026 Nik m. Код распространяется по GNU AGPL-3
 
 ## Какие версии сейчас рабочие?
 
-- Опубликованная release line: CLI/TUI 1.2.0 и Linux Desktop 0.2.0 preview.
-- Исходное дерево 1.3.0/Desktop 0.3.0 остаётся release candidate, пока не
-  появились оба tag и GitHub Release. Issue #31 исправлен в candidate
-  проверенным `glib` backport; публикация ждёт PR/default-branch checks.
+- Опубликованная release line: CLI/TUI 1.3.0 и unsigned Linux Desktop 0.3.0
+  preview. Issue #31 закрыт проверенным `glib` backport и чистыми release checks.
 - Windows и macOS: только UI preview, нативные VPN backend ещё не готовы.
 - Android и iOS: planned native clients; готовых мобильных пакетов пока нет.
 
@@ -31,7 +29,7 @@ Copyright © 2026 Nik m. Код распространяется по GNU AGPL-3
 Linux Desktop 0.3 содержит совместимый engine и installer. Предварительная
 ручная установка CLI не нужна. Для системного VPN backend и зависимостей
 приложение использует стандартное разрешение ОС и после установки повторяет
-проверку. Устанавливайте 0.3 только после появления его GitHub Release. До
+проверку. Релиз 0.3 опубликован; проверяйте приложенный SHA-256 manifest. До
 закрытия `desktop-linux-1.0` пакет остаётся preview.
 
 ## Почему `preview-release` пропущен в обычном PR?
@@ -133,10 +131,9 @@ and preserving authorship.
 
 ## Which versions work today?
 
-- Published release line: CLI/TUI 1.2.0 and Linux Desktop 0.2.0 preview.
-- The 1.3.0/Desktop 0.3.0 source tree remains a release candidate until both
-  tags and GitHub Releases exist. Issue #31 is resolved in the candidate with a
-  verified `glib` backport; publication waits for PR/default-branch checks.
+- Published release line: CLI/TUI 1.3.0 and the unsigned Linux Desktop 0.3.0
+  preview. Issue #31 is closed with a verified `glib` backport and clean release
+  checks.
 - Windows and macOS: UI preview only; native VPN backends are not complete.
 - Android and iOS: planned native clients; no working mobile packages yet.
 
@@ -150,8 +147,8 @@ changelog entry alone, to determine readiness.
 Linux Desktop 0.3 bundles a compatible engine and installer, so no prior manual
 CLI install is required. System VPN backends and dependencies use standard OS
 authorization and are checked again afterwards. The package remains preview
-until `desktop-linux-1.0` passes. Install 0.3 only after its GitHub Release
-exists.
+until `desktop-linux-1.0` passes. Release 0.3 is published; verify downloads
+with its attached SHA-256 manifest.
 
 ## Why is `preview-release` skipped on an ordinary PR?
 

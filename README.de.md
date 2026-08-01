@@ -60,11 +60,10 @@ Die Tauri-Desktop-App bietet Quick Connect, Reconnect, Disconnect, Refresh und
 Selbstdiagnose in einem modernen Fenster und im System-Tray. Unter Linux ist sie
 ein funktionsfähiger Begleiter des installierten CLI und wird als AppImage, DEB
 und RPM gebaut. macOS und Windows sind UI-Vorschauen, bis native VPN-Backends
-implementiert sind. Desktop 0.3 darf nicht als neuer Preview veröffentlicht
-werden, bevor PR #32, der Default-Branch-Dependabot-Scan und die Release-Seiten
-grün sind. Der Candidate enthält bereits den geprüften `glib`-Backport für
-issue #31 und besteht den lokalen RustSec-Gate ohne Ausnahmen. Die GUI liest
-keine Profile oder Schlüssel. Details:
+implementiert sind. Desktop 0.3 ist als unsignierte Vorschau veröffentlicht.
+Issue #31 wurde mit dem geprüften Upstream-`glib`-Backport, exakter
+Quellprovenienzprüfung und grünen RustSec-, Dependabot- und CodeQL-Prüfungen
+geschlossen. Die GUI liest keine Profile oder Schlüssel. Details:
 [Desktop guide (English)](docs/DESKTOP.en.md).
 
 ## Wichtige Befehle

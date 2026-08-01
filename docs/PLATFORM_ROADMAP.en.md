@@ -84,10 +84,10 @@ flowchart LR
 
 ## Linux
 
-The Desktop 0.3 candidate is a functional preview with engine/bootstrap,
-profiles, tests, Doctor, logs and system settings. The candidate resolves issue
-#31 with a provenance-verified upstream `glib` backport; publication now waits
-for PR/default-branch checks and artifacts. Linux Desktop 1.0 still requires the versioned service API,
+Desktop 0.3 is a published functional preview with engine/bootstrap, profiles,
+tests, Doctor, logs and system settings. Issue #31 is closed with a
+provenance-verified upstream `glib` backport and clean release checks. Linux
+Desktop 1.0 still requires the versioned service API,
 complete policy/localization/accessibility parity, signed updates, clean-device
 package lifecycle/rollback coverage and fault/soak tests. DEB/RPM now own the
 engine/service payload and preserve user state; AppImage still uses an explicit

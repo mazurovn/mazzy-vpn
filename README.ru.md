@@ -15,12 +15,12 @@ L2TP/IPsec, безопасно импортирует профили, измер
 профили своего VPN-провайдера или организации; учётная запись Mazzy VPN и
 телеметрия не требуются.
 
-В исходном дереве объявлен release candidate 1.3.0/0.3.0. Пока не опубликованы
-оба соответствующих tag и GitHub Release, последней выпущенной линией остаются
-CLI/TUI 1.2.0 и Desktop 0.2.0 preview. В candidate уже включён проверенный
-backport issue #31 для `glib`, а локальный RustSec gate проходит без
-исключений; публикация ждёт зелёных checks PR #32, default-branch Dependabot
-scan и создания release pages.
+Текущая опубликованная линия — [CLI/TUI 1.3.0](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.0)
+и неподписанный [Desktop 0.3.0 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.0).
+Linux Desktop является функциональным control center; Windows и macOS artifacts
+остаются UI preview без native VPN backend. Issue #31 закрыт проверенным
+upstream backport `glib`, точной проверкой source provenance и чистыми
+default-branch результатами RustSec, Dependabot и CodeQL.
 
 Основная команда — `mazzy-vpn`. Совместимые aliases: `vpnctl` и `mazzyvpn`.
 
@@ -157,9 +157,9 @@ manager; AppImage сохраняет явно разрешённый embedded in
 Linux-пакеты выпускаются как AppImage, DEB и RPM.
 
 Upgrade и remove DEB/RPM намеренно сохраняют профили `/etc/vpnctl` и state
-`/var/lib/vpnctl`. В candidate issue #31 исправлен точным upstream backport
-`glib` с проверкой checksum и всей source delta до cargo-deny; advisory ignore
-list остаётся пустым. До production также нужны clean-device
+`/var/lib/vpnctl`. В опубликованном preview 0.3 issue #31 исправлен точным
+upstream backport `glib` с проверкой checksum и всей source delta до cargo-deny;
+advisory ignore list остаётся пустым. До production также нужны clean-device
 install/upgrade/remove, rollback/fault и signing gates на каждом
 поддерживаемом дистрибутиве.
 

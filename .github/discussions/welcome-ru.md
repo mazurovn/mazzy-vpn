@@ -10,11 +10,10 @@ VPN-доступ и не предоставляет серверы: вы исп�
 
 ## Текущий статус
 
-- Опубликованная release line — CLI/TUI 1.2 для Linux и функциональный Linux
-  Desktop 0.2 preview. Source 1.3/Desktop 0.3 остаётся release candidate до
-  появления обоих tags и GitHub Releases. В candidate issue #31 исправлен
-  проверенным `glib` backport; публикация ждёт PR/default-branch checks и
-  audited artifacts.
+- Опубликованная release line — CLI/TUI 1.3 для Linux и unsigned Desktop 0.3
+  preview. Linux Desktop функционален; Windows и macOS остаются UI preview без
+  native VPN backend. Issue #31 закрыт проверенным `glib` backport и чистыми
+  default-branch security checks.
 - Windows/macOS — UI preview без production VPN backend.
 - Android/iOS — planned native clients; готовых мобильных пакетов пока нет.
 

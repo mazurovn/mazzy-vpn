@@ -14,11 +14,10 @@ separate CLI installation is no longer a prerequisite. CLI and TUI remain
 independent clients of the same engine and state.
 
 > **0.3 status:** the Linux control center now covers the main workflow, but it
-> remains preview until the [release gates](FEATURE_PARITY.md) pass. The
-> candidate resolves issue #31 with the exact upstream `glib` 0.18 soundness
-> backport, verified source provenance and an empty cargo-deny ignore list.
-> Publication still waits for green PR #32/default-branch security checks and
-> the GitHub release workflow. Desktop 1.0 still needs a native shared service,
+> is published as an unsigned preview and remains preview until the
+> [production gates](FEATURE_PARITY.md) pass. Issue #31 is closed with the exact
+> upstream `glib` 0.18 soundness backport, verified source provenance and an
+> empty cargo-deny ignore list. Desktop 1.0 still needs a native shared service,
 > complete fallback-policy UI, six-language coverage for every screen, signed
 > updates, clean-device integration tests and migration of the remaining typed
 > `pkexec` operations to the partial versioned local API.
@@ -190,21 +189,25 @@ package manager that did not preserve the invoking-user environment.
 
 DEB:
 
+The commands below use the exact dot-normalized filenames published on the
+`desktop-v0.3.0` GitHub Release page. A local `npm run build:release` output may
+retain spaces from the Tauri product name instead.
+
 ```bash
-sudo apt install "./Mazzy VPN Desktop_0.3.0_amd64.deb"
+sudo apt install ./Mazzy.VPN.Desktop_0.3.0_amd64.deb
 ```
 
 RPM:
 
 ```bash
-sudo dnf install "./Mazzy VPN Desktop-0.3.0-1.x86_64.rpm"
+sudo dnf install ./Mazzy.VPN.Desktop-0.3.0-1.x86_64.rpm
 ```
 
 For DEB/RPM, **Settings → Install / update / repair** runs package-safe
 `mazzy-vpn doctor --fix`: it repairs supported missing protocol dependencies
 and service state without copying package files into `/usr/local`. This slice is
-still preview. The 0.3 candidate carries the verified issue #31 `glib`
-backport and a clean RustSec graph; publishing awaits PR/default-branch checks.
+still preview. The published 0.3 artifacts carry the verified issue #31 `glib`
+backport and a clean RustSec graph.
 Clean-device install/upgrade/remove tests across every supported distribution,
 package rollback/fault injection, AmneziaWG distribution and signing also remain
 open release gates.
@@ -212,8 +215,9 @@ open release gates.
 AppImage:
 
 ```bash
-chmod +x "Mazzy VPN Desktop_0.3.0_amd64.AppImage"
-./"Mazzy VPN Desktop_0.3.0_amd64.AppImage"
+sha256sum -c --ignore-missing Mazzy.VPN.Desktop_0.3.0_SHA256SUMS
+chmod +x ./Mazzy.VPN.Desktop_0.3.0_amd64.AppImage
+./Mazzy.VPN.Desktop_0.3.0_amd64.AppImage
 ```
 
 AppImage cannot install its own privilege helper. Check `command -v pkexec`
@@ -277,6 +281,6 @@ npm run build:release
 Linux builds place AppImage, DEB and RPM bundles under
 `desktop/src-tauri/target/release/bundle/`. npm and Cargo dependencies are
 locked. The release command remaps the builder's local home directory out of
-Rust diagnostic strings. CI builds each OS on its matching GitHub runner; the
-release workflow creates a draft preview release while artifacts remain unsigned
-and the Linux RustSec advisory gate remains authoritative.
+Rust diagnostic strings. CI builds each OS on its matching GitHub runner. The
+tagged workflow first creates a draft unsigned preview; it is published only
+after platform artifacts, checksums and the Linux RustSec gate are audited.

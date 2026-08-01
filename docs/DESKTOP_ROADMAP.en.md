@@ -42,9 +42,9 @@ control the same core while the GUI is closed.
 
 ## Delivered in the Desktop 0.3 Linux preview
 
-The candidate resolves issue #31 with an exact upstream `glib` 0.18 backport,
-verified source provenance and an empty cargo-deny ignore list. Publication
-still waits for PR/default-branch security checks and release artifacts.
+The published preview resolves issue #31 with an exact upstream `glib` 0.18
+backport, verified source provenance and an empty cargo-deny ignore list. PR,
+default-branch security checks and tagged release artifacts all passed.
 
 - bundled engine installer with version and dependency readiness checks;
 - safe single-file, multi-file and folder import with protocol detection;
@@ -66,9 +66,9 @@ still waits for PR/default-branch security checks and release artifacts.
 - native macOS/Windows backends, signing/notarization and system installers;
 - security, accessibility, failure-injection and long-running soak gates.
 
-Desktop packages remain **preview** until the applicable release gates are
-complete. Issue #31 is resolved in candidate source and must be confirmed by
-the default-branch dependency scan before the Desktop 0.3 preview is published.
+Desktop packages remain **preview** until the applicable production gates are
+complete. Issue #31 and the Desktop 0.3 publication gate are complete; the
+remaining items below still block Desktop 1.0 status.
 
 ## Target components
 

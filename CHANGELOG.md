@@ -4,6 +4,10 @@ All notable changes to Mazzy VPN are documented here.
 
 ## Unreleased
 
+No changes yet.
+
+## 1.3.0 / Desktop 0.3.0 - 2026-08-01
+
 - Remediated `RUSTSEC-2024-0429` in the Tauri/GTK3 Linux graph by vendoring the
   crates.io `glib` 0.18.5 source and applying the exact reviewed upstream
   `VariantStrIter` soundness fix from gtk-rs commit
