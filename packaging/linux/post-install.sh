@@ -18,7 +18,9 @@ migrate_legacy_cli() {
         if [ -L "$legacy" ] && [ "$(readlink "$legacy")" = /usr/bin/mazzy-vpn ]; then
             continue
         fi
-        [ -f "$legacy" ] && [ ! -L "$legacy" ] || continue
+        if [ ! -f "$legacy" ] || [ -L "$legacy" ]; then
+            continue
+        fi
         owner_mode="$(stat -c '%U:%G:%a' "$legacy" 2>/dev/null || true)"
         case "$owner_mode" in
             "$expected_owner":*[2367][0-7]|"$expected_owner":[0-7]*[2367])
