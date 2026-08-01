@@ -198,13 +198,19 @@ Verified locally for the current candidate on 2026-08-01:
   #31, subprocess and packaging fixes have no visual UI delta;
 - ShellCheck, Clippy, capability/API validators, public audit and runtime
   hard-code audit;
+- local API probe/verify workers close the parent serialization descriptor
+  before execution; a regression test requires an immediate successful probe
+  after a timed-out worker so descendants cannot retain the lock;
 - `npm audit --audit-level=high` reports 0 known vulnerabilities. Issue #31 is
   remediated in candidate source by vendoring crates.io `glib` 0.18.5 and
   applying the exact upstream soundness fix. The provenance gate verifies the
   archive checksum and all source deltas before cargo-deny; `ignore = []`.
   The 2026-08-01 RustSec refresh also found `RUSTSEC-2026-0221` in
-  `event-listener` 5.4.1, now updated to 5.4.2. Cargo-deny 0.20.2 reports
-  `advisories ok`. System-package advisory scanning is still absent;
+  `event-listener` 5.4.1, now updated to 5.4.2. The post-merge Dependabot scan
+  then found `GHSA-7gcf-g7xr-8hxj` in `serde_with` 3.17.0; PR #33 updates it to
+  3.21.0. Cargo-deny 0.20.2 reports `advisories ok`. System-package advisory
+  scanning is still absent. Cargo-deny uses its documented `CARGO_HOME`-aware
+  database default rather than a shell expression in TOML;
 - crates.io checks on 2026-07-30 found no simple semver update that removes
   `glib` 0.18: `tauri` 2.11.5 and `webkit2gtk` 2.0.2 are current, `gtk` 0.18.2
   remains the GTK3 binding line, and `cargo update --dry-run` only offered minor
@@ -217,8 +223,10 @@ Verified locally for the current candidate on 2026-08-01:
   setup runs `security-extended` analysis for Actions, JavaScript/TypeScript,
   Python and Rust with local threat sources. It excludes only the byte-verified
   `desktop/src-tauri/vendor/**` dependency snapshot; CI separately proves the
-  crates.io checksum and exact two-line glib backport. The high-severity release
-  wrapper alert is fixed locally and still requires confirmation by PR scan;
+  crates.io checksum and exact two-line glib backport. The verifier downloads
+  only the fixed crates.io URL and accepts no environment-controlled filesystem
+  path, closing the two post-merge CodeQL path-injection findings without
+  dismissal;
 - latest clean all-target release build produced AppImage, DEB and RPM without
   stale Tauri marker warnings; actual DEB/RPM metadata contains the declared
   base runtime, privilege helper, process tools, recommendations and

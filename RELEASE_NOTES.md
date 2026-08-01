@@ -35,8 +35,13 @@ remains a Linux preview: it is functional, but it is not yet a signed Desktop
 - exact upstream `glib` `VariantStrIter` soundness backport for
   `RUSTSEC-2024-0429`, verified against the crates.io archive before cargo-deny;
 - `event-listener` 5.4.2 for `RUSTSEC-2026-0221`;
+- `serde_with` 3.21.0 for `GHSA-7gcf-g7xr-8hxj`;
+- a provenance verifier that accepts no filesystem path input and downloads
+  only the pinned crates.io archive before checking its SHA-256;
 - one typed tray/backend operation path and process-group timeouts that cannot
   hang on descendant-held stdout/stderr pipes;
+- local API probe/verify workers no longer inherit serialization locks, so a
+  timed-out descendant cannot leave later requests stuck in `busy`;
 - AppImage/DEB/RPM corresponding source now includes the vendored fix and its
   verifier; all three bundles have automated Xvfb launch-smoke checks;
 - API query deadline handling no longer depends on a captured stdout pipe:
@@ -107,8 +112,13 @@ Desktop 1.0 продуктом.
 - точный upstream backport soundness fix `glib::VariantStrIter` для
   `RUSTSEC-2024-0429`, проверяемый по crates.io archive до cargo-deny;
 - `event-listener` 5.4.2 для `RUSTSEC-2026-0221`;
+- `serde_with` 3.21.0 для `GHSA-7gcf-g7xr-8hxj`;
+- provenance verifier без входных filesystem paths: он скачивает только
+  зафиксированный crates.io archive и затем проверяет его SHA-256;
 - единый typed tray/backend operation path и process-group timeout без зависания
   на stdout/stderr pipes, удерживаемых потомками;
+- workers local API probe/verify больше не наследуют serialization locks,
+  поэтому потомок timed-out операции не оставляет следующие запросы в `busy`;
 - corresponding source AppImage/DEB/RPM включает vendored fix и verifier; для
   всех трёх bundles добавлен автоматический Xvfb launch-smoke;
 - API query deadline больше не зависит от captured stdout pipe:

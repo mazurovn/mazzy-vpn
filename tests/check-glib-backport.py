@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import hashlib
 import io
-import os
 from pathlib import Path, PurePosixPath
 import sys
 import tarfile
@@ -35,32 +34,17 @@ def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def find_cached_archive() -> Path | None:
-    explicit = os.environ.get("MAZZY_GLIB_UPSTREAM_CRATE")
-    if explicit:
-        path = Path(explicit).expanduser()
-        if not path.is_file():
-            fail(f"MAZZY_GLIB_UPSTREAM_CRATE is not a file: {path}")
-        return path
-
-    cargo_home = Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo"))
-    candidates = sorted((cargo_home / "registry" / "cache").glob(f"*/{ARCHIVE_NAME}"))
-    return candidates[0] if candidates else None
-
-
 def load_archive() -> bytes:
-    cached = find_cached_archive()
-    if cached is not None:
-        data = cached.read_bytes()
-        source = str(cached)
-    else:
-        with urllib.request.urlopen(ARCHIVE_URL, timeout=30) as response:
-            data = response.read()
-        source = ARCHIVE_URL
+    request = urllib.request.Request(
+        ARCHIVE_URL,
+        headers={"User-Agent": "Mazzy-VPN-glib-provenance/1"},
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        data = response.read()
 
     actual = sha256(data)
     if actual != ARCHIVE_SHA256:
-        fail(f"upstream archive checksum mismatch from {source}: {actual}")
+        fail(f"upstream archive checksum mismatch from crates.io: {actual}")
     return data
 
 

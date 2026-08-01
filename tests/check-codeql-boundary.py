@@ -63,6 +63,22 @@ def main() -> int:
     if "python3 tests/check-glib-backport.py" not in desktop_workflow:
         fail("Desktop CI no longer verifies the excluded vendor source provenance")
 
+    verifier = (ROOT / "tests/check-glib-backport.py").read_text(encoding="utf-8")
+    for forbidden in (
+        "MAZZY_GLIB_UPSTREAM_CRATE",
+        "CARGO_HOME",
+        "os.environ",
+        "Path.home()",
+    ):
+        if forbidden in verifier:
+            fail(f"glib verifier accepts an untrusted filesystem path: {forbidden}")
+    if "urllib.request.Request(\n        ARCHIVE_URL," not in verifier:
+        fail("glib verifier no longer downloads only the pinned crates.io URL")
+
+    deny_config = (ROOT / "deny.toml").read_text(encoding="utf-8")
+    if re.search(r"^\s*db-path\s*=", deny_config, re.MULTILINE):
+        fail("cargo-deny must use its portable CARGO_HOME-aware advisory DB default")
+
     print(
         "CODEQL BOUNDARY OK: owned languages use security-extended analysis; "
         "only the byte-verified glib vendor tree is excluded."

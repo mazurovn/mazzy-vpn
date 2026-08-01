@@ -20,6 +20,16 @@ All notable changes to Mazzy VPN are documented here.
   blocks both pull requests and tagged Desktop preview releases.
 - Updated `event-listener` from 5.4.1 to 5.4.2 after the 2026-08-01 RustSec
   refresh found `RUSTSEC-2026-0221` through the `rfd`/`ashpd` dependency chain.
+- Updated `serde_with` from 3.17.0 to 3.21.0 after the post-merge Dependabot
+  scan found `GHSA-7gcf-g7xr-8hxj`; the fixed version bounds collection
+  allocation before serializing attacker-controlled empty `KeyValueMap` items.
+- Removed `CARGO_HOME`, `HOME` and arbitrary archive-path inputs from the glib
+  provenance verifier. It now downloads only the pinned crates.io URL and
+  validates the fixed SHA-256 before parsing, closing two CodeQL path-injection
+  alerts without suppressing them.
+- Removed an invalid shell-style fallback from `advisories.db-path`; cargo-deny
+  now uses its documented portable, `CARGO_HOME`-aware database location instead
+  of creating a literal `~/` directory inside the checkout.
 - Removed the duplicate direct tray-to-`pkexec` command table. Tray lifecycle,
   service and recovery actions now use the same typed backend/local-API adapter
   as the main Desktop UI.
@@ -27,6 +37,9 @@ All notable changes to Mazzy VPN are documented here.
   command's descendants cannot retain captured pipes and hang the GUI. A Linux
   regression test covers a child that leaves a background process holding
   stdout/stderr open.
+- Closed the local API probe/verify serialization descriptor before executing
+  bounded workers. Timed-out descendants can no longer inherit `.probe.lock`
+  or `.verify.lock` and cause a later request to fail spuriously as `busy`.
 - Added the repeat architecture, security, code and release audit dated
   2026-08-01 and synchronized release/security documentation for issue #31.
 - Added `mazzy-vpn verify [--speed] [--json]` and the protected read-only API
