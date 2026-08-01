@@ -2529,4 +2529,8 @@ python3 "$ROOT/tests/audit-runtime-hardcodes.py" >/dev/null ||
     fail "runtime hard-code boundaries are inconsistent"
 ok "runtime hard-code boundaries"
 
+python3 "$ROOT/tests/check-codeql-boundary.py" >/dev/null ||
+    fail "CodeQL ownership and vendor provenance boundaries are inconsistent"
+ok "CodeQL scans owned code and the excluded vendor tree remains byte-verified"
+
 printf '1..%d\n' "$pass"

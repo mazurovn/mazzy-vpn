@@ -60,6 +60,12 @@ maintained GTK/glib line.
 
 The public repository enables secret scanning with push protection,
 Dependabot vulnerability alerts and security updates, private vulnerability
-reporting, and CodeQL default setup with extended remote-and-local queries.
-Repository scans complement the local gates; they do not replace review,
-clean-host testing, signing or platform-native security assessment.
+reporting, and an explicit CodeQL advanced workflow for Actions, JavaScript/
+TypeScript, Python and Rust with `security-extended` queries and local threat
+sources. CodeQL excludes only `desktop/src-tauri/vendor/**`: that directory is
+the unchanged crates.io `glib` source plus the reviewed two-line fix, and the
+independent provenance gate fails on every other byte-level delta. This keeps
+third-party GTK FFI false positives out of the owned-code merge gate without
+trusting an unverified vendor snapshot. Repository scans complement the local
+gates; they do not replace review, clean-host testing, signing or
+platform-native security assessment.

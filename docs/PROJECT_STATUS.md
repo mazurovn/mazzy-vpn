@@ -213,10 +213,12 @@ Verified locally for the current candidate on 2026-08-01:
   Desktop MSRV was raised to Rust 1.88 and `Cargo.lock` now uses `plist` 1.10.0,
   `quick-xml` 0.41.0 and `time` 0.3.54; Rust tests and Clippy pass locally with
   `cargo +1.88.0`;
-- GitHub private vulnerability reporting is enabled. CodeQL default setup
-  (`extended`, remote and local queries) passed for Actions, JavaScript/
-  TypeScript, Python and Rust on baseline `main`; its high-severity release
-  wrapper alert is fixed locally but must be confirmed closed by PR scanning;
+- GitHub private vulnerability reporting is enabled. Explicit CodeQL advanced
+  setup runs `security-extended` analysis for Actions, JavaScript/TypeScript,
+  Python and Rust with local threat sources. It excludes only the byte-verified
+  `desktop/src-tauri/vendor/**` dependency snapshot; CI separately proves the
+  crates.io checksum and exact two-line glib backport. The high-severity release
+  wrapper alert is fixed locally and still requires confirmation by PR scan;
 - latest clean all-target release build produced AppImage, DEB and RPM without
   stale Tauri marker warnings; actual DEB/RPM metadata contains the declared
   base runtime, privilege helper, process tools, recommendations and
