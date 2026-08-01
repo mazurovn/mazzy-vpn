@@ -13,6 +13,9 @@ states and transactional rules. The partially implemented versioned local API
 already separates CLI/TUI/Desktop lifecycle operations from the system Linux
 VPN backend. Private keys and complete
 configurations never enter the status cache, telemetry or public logs.
+The read-only planner can now rank opaque profile IDs using backend-owned hard
+gates and policy-v1 evidence scoring. It does not yet store history, connect or
+fail over.
 
 ## AI-ready reliability contract
 

@@ -17,6 +17,20 @@ PLATFORMS = {"linux", "windows", "android"}
 CURRENT = {"amneziawg", "wireguard", "openvpn", "l2tp"}
 REQUESTED = {"vless", "hysteria2", "mieru", "naive"}
 ANTI_CENSORSHIP = {"tuic", "shadowsocks2022", "trojan", "anytls", "shadowtls"}
+HARD_CONSTRAINTS = [
+    "backend-ready",
+    "profile-valid",
+    "secrets-readable-only-by-backend",
+    "rollback-available",
+    "platform-supported",
+]
+SCORE_FACTORS = [
+    ("recent-success", 30),
+    ("censorship-fit", 25),
+    ("reachability", 20),
+    ("latency-loss", 15),
+    ("workload-fit", 10),
+]
 
 
 def fail(message: str) -> None:
@@ -77,15 +91,23 @@ def main() -> None:
             fail(f"{protocol_id}: primary source URL is missing")
 
     policy = registry.get("orchestration", {})
+    if policy.get("policy_version") != 1:
+        fail("unsupported orchestration policy version")
     weights = policy.get("score_factors", [])
-    if sum(item.get("weight", 0) for item in weights) != 100:
-        fail("orchestration score weights must total 100")
-    constraints = set(policy.get("hard_constraints", []))
-    if not {"backend-ready", "profile-valid", "rollback-available"}.issubset(constraints):
-        fail("orchestration can select a backend before safety gates")
+    factor_pairs = [
+        (item.get("id"), item.get("weight"))
+        for item in weights
+        if isinstance(item, dict)
+    ]
+    if factor_pairs != SCORE_FACTORS:
+        fail("orchestration score factors drifted without a policy version change")
+    if policy.get("hard_constraints") != HARD_CONSTRAINTS:
+        fail("orchestration hard gates drifted without a policy version change")
     agent_rules = set(policy.get("agent_rules", []))
     if not {
         "agents-receive-opaque-profile-ids-only",
+        "plans-are-dry-run-by-default",
+        "mutations-require-authorized-action-id",
         "llm-output-never-becomes-a-shell-command",
         "credentials-never-enter-prompts-events-or-audit",
     }.issubset(agent_rules):

@@ -92,37 +92,63 @@ payload больше 64 КиБ после удаления конечного р
 
 ## Умный выбор и диагностика
 
-Planner сначала проверяет hard constraints: backend готов на платформе,
-профиль валиден, секрет виден только backend, rollback реализован и платформа
-поддерживается. LLM не может обойти эти условия.
+Реализованный read-only query `planner.evaluate` сначала вычисляет hard
+constraints из локального состояния backend: backend готов на платформе,
+профиль валиден, секрет виден только backend, rollback directories готовы и
+платформа поддерживается. LLM не может обойти эти условия. Входом является один
+strict JSON object до 64 КиБ с workload и 1–128 уникальными opaque profile IDs.
 
 Оставшиеся кандидаты получают детерминированные 100 баллов:
 
 - 30: недавний успешный tunnel/egress и штраф за повторные failures;
-- 25: соответствие блокировке и доступности UDP/TCP/TLS/QUIC;
-- 20: DNS/ICMP/TCP/QUIC reachability без подмены VPN test обычным ping;
-- 15: latency, loss и jitter с ограниченным сроком жизни результатов;
+- 25: переданное caller соответствие блокировке и доступности transport;
+- 20: переданная reachability без подмены VPN test обычным ping;
+- 15: переданные latency и loss с ограниченным сроком жизни результатов;
 - 10: workload fit для LLM stream, коротких API calls, video или split routing.
 
-Смена протокола всегда транзакционна: snapshot, bounded start, фактическая
-egress/DNS/IPv6 проверка, затем commit или rollback.
+Reachability и latency/loss старше 900 секунд дают ноль баллов. При равном
+score кандидаты стабильно сортируются по opaque profile ID. Result содержит
+только gates, баллы факторов и reason codes и всегда имеет `dry_run: true`:
+
+```bash
+jq -n --arg profile_id "$PROFILE_ID" '{
+  workload: "api-calls",
+  candidates: [{
+    profile_id: $profile_id,
+    evidence: {
+      recent_outcome: "unknown", consecutive_failures: 0,
+      censorship_fit: "medium", reachability: "reachable",
+      latency_ms: 150, loss_percent: 1, workload_fit: "high",
+      evidence_age_seconds: 30
+    }
+  }]
+}' | mazzy-vpn planner evaluate --stdin --json
+```
+
+В этом срезе fit и health evidence передаёт caller. Он может изменить dry-run
+score, но не сделать eligible запланированный backend, невалидный профиль или
+небезопасный файл с секретом. Будущая смена протокола должна быть
+транзакционной: snapshot, bounded start, фактическая egress/DNS/IPv6 проверка,
+затем commit или rollback.
 
 ## Контракт AI-агентов
 
-- агент читает `protocols.list`, `profiles.list`, `status.get` и diagnostics
-  только через schema;
+- агент читает `protocols.list`, `profiles.list`, `status.get`,
+  `planner.evaluate` и diagnostics только через schema;
 - агент видит opaque ID и evidence, но не endpoint или credential;
 - план по умолчанию dry-run;
 - mutation требует authorized `action_id`, deadline, audit и rollback;
 - LLM text никогда не становится shell command или backend config;
 - повтор mutation с тем же `action_id` идемпотентен.
 
-До реализации policy planner автоматически можно выбирать только backend со
-статусом `implemented`; `planned` запрещён hard constraint.
+Evaluator ранжирует только platform backends со статусом `implemented`:
+`planned` запрещён hard constraint. Mutation не выполняется. History storage,
+authorized connect/failover и Desktop/mobile agent integration остаются в
+issue #39.
 
 ## Задачи реализации
 
 - [#36 typed import своих серверов и secret storage](https://github.com/mazurovn/mazzy-vpn/issues/36)
 - [#37 sing-box-family Linux TUN adapters](https://github.com/mazurovn/mazzy-vpn/issues/37)
 - [#38 Mieru и NaiveProxy/Cronet adapters](https://github.com/mazurovn/mazzy-vpn/issues/38)
-- [#39 deterministic agent-safe planner](https://github.com/mazurovn/mazzy-vpn/issues/39)
+- [#39 history, execution/failover и cross-surface integration planner](https://github.com/mazurovn/mazzy-vpn/issues/39)

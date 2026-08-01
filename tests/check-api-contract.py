@@ -233,6 +233,83 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
         fail("ResponseResult does not expose structured egress verification")
     if "#/$defs/ProtocolCatalog" not in response_refs:
         fail("ResponseResult does not expose the sanitized protocol catalog")
+    if "#/$defs/PlannerEvaluation" not in response_refs:
+        fail("ResponseResult does not expose deterministic planner evaluation")
+
+    planner_request = defs.get("PlannerRequest", {})
+    planner_request_properties = planner_request.get("properties", {})
+    planner_candidates = planner_request_properties.get("candidates", {})
+    if set(planner_request.get("required", [])) != {"workload", "candidates"}:
+        fail("PlannerRequest must require workload and candidates only")
+    if (
+        planner_request.get("additionalProperties") is not False
+        or planner_candidates.get("minItems") != 1
+        or planner_candidates.get("maxItems") != 128
+        or planner_candidates.get("items", {}).get("$ref")
+        != "#/$defs/PlannerCandidateInput"
+    ):
+        fail("PlannerRequest must be strict and bound candidates to 1..128")
+
+    planner_evidence = defs.get("PlannerEvidence", {})
+    required_evidence = {
+        "recent_outcome",
+        "consecutive_failures",
+        "censorship_fit",
+        "reachability",
+        "latency_ms",
+        "loss_percent",
+        "workload_fit",
+        "evidence_age_seconds",
+    }
+    if (
+        planner_evidence.get("additionalProperties") is not False
+        or set(planner_evidence.get("required", [])) != required_evidence
+        or set(planner_evidence.get("properties", {})) != required_evidence
+    ):
+        fail("PlannerEvidence must require the complete bounded evidence set")
+
+    planner_evaluation = defs.get("PlannerEvaluation", {})
+    planner_evaluation_properties = planner_evaluation.get("properties", {})
+    planner_evaluation_required = {
+        "schema_version",
+        "policy_version",
+        "catalog_version",
+        "evaluated_at",
+        "dry_run",
+        "workload",
+        "ordered_profile_ids",
+        "candidates",
+    }
+    if (
+        planner_evaluation.get("additionalProperties") is not False
+        or set(planner_evaluation.get("required", []))
+        != planner_evaluation_required
+        or planner_evaluation_properties.get("dry_run", {}).get("const") is not True
+        or planner_evaluation_properties.get("policy_version", {}).get("const") != 1
+    ):
+        fail("PlannerEvaluation must remain versioned, strict and dry-run only")
+
+    planner_candidate = defs.get("PlannerCandidate", {})
+    planner_candidate_properties = planner_candidate.get("properties", {})
+    if (
+        planner_candidate.get("additionalProperties") is not False
+        or "display_name" in planner_candidate_properties
+        or not {
+            "profile_id",
+            "eligible",
+            "rank",
+            "score",
+            "hard_gates",
+            "factors",
+            "reason_codes",
+        }.issubset(set(planner_candidate.get("required", [])))
+        or planner_candidate_properties.get("hard_gates", {}).get("minItems") != 5
+        or planner_candidate_properties.get("hard_gates", {}).get("maxItems") != 5
+        or planner_candidate_properties.get("factors", {}).get("minItems") != 5
+        or planner_candidate_properties.get("factors", {}).get("maxItems") != 5
+    ):
+        fail("PlannerCandidate must expose opaque IDs and exactly five gates/factors")
+
     verification = defs.get("EgressVerification", {})
     verification_required = set(verification.get("required", []))
     if not {

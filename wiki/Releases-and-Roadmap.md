@@ -1,5 +1,12 @@
 # Релизы и roadmap
 
+## После 1.3.2 — текущая разработка
+
+- добавлен read-only `planner.evaluate` с пятью backend-owned hard gates,
+  versioned scoring и стабильным ранжированием opaque profile IDs;
+- evaluator всегда возвращает `dry_run: true`; history, authorized
+  connect/failover и Desktop/mobile integration остаются в issue #39.
+
 ## 1.3.2 / Desktop 0.3.2 — protocol foundation и upgrade hotfix
 
 - исправлена совместимость Desktop с legacy cache без `profile_id` и ложная
@@ -37,8 +44,8 @@ backport и закрытия platform release gates. Issue
 provenance-verified backport `glib`; RustSec, Dependabot и CodeQL release checks
 прошли без suppressions.
 
-Опубликованы [CLI/TUI `v1.3.0`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.0)
-и unsigned [Desktop `desktop-v0.3.0` preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.0).
+Опубликованы [CLI/TUI `v1.3.2`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.2)
+и unsigned [Desktop `desktop-v0.3.2` preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.2).
 Оба tag указывают на один проверенный release source; к artifacts приложены
 SHA-256 manifests.
 
@@ -96,6 +103,11 @@ CLI engine и не является самостоятельным Desktop VPN-�
 
 # Releases and roadmap
 
+After 1.3.2, current development adds the read-only `planner.evaluate` query
+with five backend-owned hard gates, versioned scoring and stable opaque-ID
+ranking. It always returns `dry_run: true`; history, authorized connect/failover
+and Desktop/mobile integration remain in issue #39.
+
 Version 1.3.2 / Desktop 0.3.2 fixes legacy profile-cache compatibility and the
 mixed `/usr/local` versus package `/usr/bin` upgrade conflict. It adds a
 versioned 13-entry protocol catalog, credential-redacted URI detection, runtime
@@ -123,8 +135,8 @@ signed update/rollback, migration away from the temporary vendored Tauri/GTK
 provenance-verified backport; RustSec, Dependabot and CodeQL release checks pass
 without suppressions.
 
-Published pages: [CLI/TUI `v1.3.0`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.0)
-and the unsigned [Desktop `desktop-v0.3.0` preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.0).
+Published pages: [CLI/TUI `v1.3.2`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.2)
+and the unsigned [Desktop `desktop-v0.3.2` preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.2).
 Both tags identify the same audited source commit and include SHA-256 manifests.
 
 Version 1.2.0 / Desktop 0.2.0 is the previous published release line.

@@ -12,14 +12,15 @@
 [#5](https://github.com/mazurovn/mazzy-vpn/issues/5). Текущий транспорт
 `cli-json-adapter` явно имеет статус `partial`: существующие безопасные JSON
 status/profile outputs доступны, а CLI/TUI уже отправляют v1 envelopes для
-`status.get`, `profiles.list`, `protocols.list`, `tests.probe`, `tests.verify-egress` и
-`lifecycle.*` через единый
+`status.get`, `profiles.list`, `protocols.list`, `planner.evaluate`,
+`tests.probe`, `tests.verify-egress` и `lifecycle.*` через единый
 dispatcher. Остальные
 домены ещё используют совместимый прямой CLI-контур. Метаданные контракта
 реализованы.
 Socket-activated Linux transport имеет статус `partial`: он принимает
 `status.get`, `profiles.list`, `protocols.list`, ограниченные queries `tests.probe` и
-`tests.verify-egress`, а также три мутации `lifecycle.*`. Остальные операции и
+`tests.verify-egress`, read-only `planner.evaluate`, а также три мутации
+`lifecycle.*`. Остальные операции и
 не-Linux transports пока `planned`, поэтому полный кроссплатформенный daemon ещё
 не заявлен готовым.
 
@@ -93,8 +94,8 @@ Tauri-команду. CI проверяет синхронность CLI, manife
 завершённый переводом строки, и возвращает один response. Service прекращает
 чтение на настроенном byte limit ещё до JSON parsing, в том числе если клиент
 не завершает слишком длинную строку. До dispatch принимается ровно один
-top-level JSON object; повторные envelope/payload keys, включая записанные
-через JSON Unicode escapes, отклоняются. Обновление query cache ограничено
+top-level JSON object; повторные object keys на любой глубине, включая
+записанные через JSON Unicode escapes, отклоняются. Обновление query cache ограничено
 меньшим из необязательного query deadline и server refresh cap; при timeout
 может быть возвращён уже существующий restricted cache. Прерванное обновление
 удаляет свои временные файлы. Мутации
@@ -133,6 +134,42 @@ autostart, health monitor, число сбоев и состояние внеш�
 В ответе есть только публичные identifiers formats, engines и transports;
 endpoint, credential, profile и backend config отсутствуют. Источник истины:
 [`../protocols/v1/registry.json`](../protocols/v1/registry.json).
+
+`planner.evaluate` — read-only оценка с обязательным ограниченным deadline.
+Payload содержит workload и 1–128 уникальных opaque profile IDs с полным
+ограниченным evidence object. Пять hard gates вычисляет server из текущего
+локального состояния, а не caller: backend готов, профиль валиден, файл профиля
+доступен только backend, rollback directories готовы и Linux support имеет
+статус `implemented`. Score и rank получает только кандидат, прошедший все
+gates.
+
+Policy v1 выделяет 30 баллов recent outcome, 25 censorship fit, 20
+reachability, 15 latency/loss и 10 workload fit. Reachability и latency/loss
+старше 900 секунд дают ноль баллов. При равном score стабильным tie-breaker
+является opaque profile ID. Response содержит reason codes и баллы факторов,
+но не display name, endpoint, filename, path, configuration или credential.
+Ответ всегда имеет `dry_run: true`: operation не подключает VPN и не выполняет
+failover. CLI принимает один JSON payload до 64 КиБ через stdin и ограничивает
+расширенный response 1 МиБ:
+
+```bash
+jq -n --arg profile_id "$PROFILE_ID" '{
+  workload: "llm-streaming",
+  candidates: [{
+    profile_id: $profile_id,
+    evidence: {
+      recent_outcome: "success", consecutive_failures: 0,
+      censorship_fit: "high", reachability: "reachable",
+      latency_ms: 80, loss_percent: 0, workload_fit: "high",
+      evidence_age_seconds: 30
+    }
+  }]
+}' | mazzy-vpn planner evaluate --stdin --json
+```
+
+Переданный caller fit влияет на dry-run rank, но не может обойти backend-owned
+gate. Сбор history, authorized execution и автоматический failover остаются за
+границами этой operation.
 
 `tests.probe` проверяет все профили выбранного protocol scope с отдельным
 таймаутом endpoint и ограниченной параллельностью 1–8 workers. Результат

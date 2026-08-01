@@ -144,10 +144,14 @@ sing-box JSON is never a root execution format. See
 [Protocol orchestration](PROTOCOL_ORCHESTRATION.en.md) for scoring, custom
 server storage and agent constraints.
 
-The future planner is deterministic and subordinate to hard constraints:
-platform backend ready, profile valid, backend-only secret access and rollback
-available. LLM output can propose a dry-run plan but cannot construct a shell
-command, backend configuration or bypass authorization/action-ID boundaries.
+The implemented `planner.evaluate` query is deterministic and subordinate to
+hard constraints computed by the backend: platform backend ready, profile
+valid, backend-only secret access, rollback directories available and platform
+support implemented. It returns a scored dry-run evaluation using opaque IDs
+and reason codes. LLM output cannot construct a shell command, backend
+configuration or bypass a gate. The operation does not connect or fail over;
+future execution remains behind authorization/action-ID, audit and rollback
+boundaries.
 
 The CLI/TUI client reaches the Unix socket through automatically installed
 `socat`. It bounds response size and time, validates envelope identity and

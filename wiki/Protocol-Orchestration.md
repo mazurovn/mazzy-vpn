@@ -12,13 +12,18 @@ registry и roadmap. Однозначные share URI распознаются �
 mazzy-vpn protocols list --json
 mazzy-vpn protocols diagnose --json
 printf '%s\n' "$SHARE_URI" | mazzy-vpn protocols detect --stdin --json
+printf '%s\n' "$PLANNER_JSON" | mazzy-vpn planner evaluate --stdin --json
 ```
 
 Один завершающий `LF` или `CRLF` допустим; встроенные/повторные переводы строк,
 остальные control bytes и payload больше 64 КиБ отклоняются.
 
-Агент получает только opaque IDs, readiness и evidence. LLM text не становится
-shell command, mutation требует `action_id`, deadline, audit и rollback.
+Read-only planner принимает до 128 уникальных opaque profile IDs, применяет
+пять backend-owned hard gates и детерминированную policy v1 на 100 баллов.
+Результат всегда `dry_run: true`; он не подключает VPN и не выполняет failover.
+Агент получает только opaque IDs, readiness, factors и reason codes. LLM text
+не становится shell command, mutation требует `action_id`, deadline, audit и
+rollback. History и authorized execution остаются в issue #39.
 
 ---
 
@@ -36,8 +41,12 @@ cataloged and their unambiguous share URIs are detected, but connection remains
 One terminal `LF` or `CRLF` is accepted; embedded/repeated line terminators,
 other control bytes and payloads larger than 64 KiB are rejected.
 
-Agents receive opaque IDs, readiness and evidence only. Model text never
-becomes a shell command, and no `planned` backend is selected automatically.
+The read-only planner accepts up to 128 unique opaque profile IDs, applies five
+backend-owned hard gates and the deterministic 100-point policy v1. Results are
+always `dry_run: true`; no connection or failover is performed. Agents receive
+opaque IDs, factors and reason codes only. Model text never becomes a shell
+command, and no `planned` backend is selected. History and authorized execution
+remain in issue #39.
 
 Implementation is tracked in [#36](https://github.com/mazurovn/mazzy-vpn/issues/36),
 [#37](https://github.com/mazurovn/mazzy-vpn/issues/37),

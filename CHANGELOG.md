@@ -4,7 +4,16 @@ All notable changes to Mazzy VPN are documented here.
 
 ## Unreleased
 
-No changes yet.
+- Added the read-only API v1 `planner.evaluate` operation and
+  `mazzy-vpn planner evaluate --stdin --json`. The backend enforces five
+  non-overridable runtime/profile/storage/rollback/platform gates and applies
+  the versioned 100-point protocol policy with stable opaque-ID tie-breaking.
+- Planner inputs are strict, limited to 64 KiB and 128 unique candidates, and
+  reject duplicate JSON keys at every object depth. Results are dry-run only,
+  credential-free and bounded to a 1 MiB CLI response cap.
+- Added deterministic, stale-evidence, unsafe-storage, unknown-profile,
+  duplicate-input and local-transport regressions. Automatic switching,
+  failover and mutation authorization remain tracked in issue #39.
 
 ## 1.3.2 / Desktop 0.3.2 - 2026-08-01
 

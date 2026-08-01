@@ -93,37 +93,63 @@ custom-server import is the next backend slice:
 
 ## Selection and diagnostics
 
-The planner first enforces hard constraints: platform backend ready, valid
-profile, backend-only secret access, rollback available and supported platform.
-An LLM cannot override these constraints.
+The implemented read-only `planner.evaluate` query first enforces hard
+constraints from local backend state: platform backend ready, valid profile,
+backend-only secret access, rollback directories available and supported
+platform. An LLM cannot override these constraints. Input is one strict JSON
+object of at most 64 KiB with a workload and 1–128 unique opaque profile IDs.
 
 Eligible candidates receive a deterministic 100-point score:
 
 - 30: recent tunnel/egress success, with repeated-failure penalties;
-- 25: fit for observed blocking and TCP/UDP/TLS/QUIC availability;
-- 20: DNS/ICMP/TCP/QUIC reachability without treating ping as a VPN test;
-- 15: latency, loss and jitter with bounded result freshness;
+- 25: caller-supplied fit for observed blocking and transport availability;
+- 20: supplied reachability without treating it as a VPN test;
+- 15: supplied latency and loss with bounded result freshness;
 - 10: workload fit for LLM streams, short API calls, video or split routing.
 
-A switch is always transactional: snapshot, bounded start, actual
-egress/DNS/IPv6 verification, then commit or rollback.
+Reachability and latency/loss older than 900 seconds score zero. Equal scores
+are ordered by opaque profile ID, making repeated evaluation stable. The
+result contains only gates, factor points and reason codes and is always
+`dry_run: true`:
+
+```bash
+jq -n --arg profile_id "$PROFILE_ID" '{
+  workload: "api-calls",
+  candidates: [{
+    profile_id: $profile_id,
+    evidence: {
+      recent_outcome: "unknown", consecutive_failures: 0,
+      censorship_fit: "medium", reachability: "reachable",
+      latency_ms: 150, loss_percent: 1, workload_fit: "high",
+      evidence_age_seconds: 30
+    }
+  }]
+}' | mazzy-vpn planner evaluate --stdin --json
+```
+
+Fit and health evidence is caller-supplied in this slice. It can change a
+dry-run score, but it cannot make a planned backend, invalid profile or unsafe
+secret file eligible. Future switching must be transactional: snapshot,
+bounded start, actual egress/DNS/IPv6 verification, then commit or rollback.
 
 ## AI agent boundary
 
-- agents read `protocols.list`, `profiles.list`, `status.get` and diagnostics
-  through schemas;
+- agents read `protocols.list`, `profiles.list`, `status.get`,
+  `planner.evaluate` and diagnostics through schemas;
 - agents receive opaque IDs and evidence, never endpoints or credentials;
 - plans default to dry-run;
 - mutations require authorized action IDs, deadlines, audit and rollback;
 - LLM text never becomes a shell command or backend configuration;
 - retrying the same mutation action ID is idempotent.
 
-Until the policy planner is implemented, automation may select only platform
-backends marked `implemented`; `planned` is excluded by a hard constraint.
+The evaluator can rank only platform backends marked `implemented`; `planned`
+is excluded by a hard constraint. It performs no mutation. History storage,
+authorized connect/failover execution and Desktop/mobile agent integration are
+still tracked by issue #39.
 
 ## Tracked implementation slices
 
 - [#36 typed custom-server import and secret storage](https://github.com/mazurovn/mazzy-vpn/issues/36)
 - [#37 sing-box-family Linux TUN adapters](https://github.com/mazurovn/mazzy-vpn/issues/37)
 - [#38 Mieru and NaiveProxy/Cronet adapters](https://github.com/mazurovn/mazzy-vpn/issues/38)
-- [#39 deterministic agent-safe planner](https://github.com/mazurovn/mazzy-vpn/issues/39)
+- [#39 planner history, execution/failover and cross-surface integration](https://github.com/mazurovn/mazzy-vpn/issues/39)

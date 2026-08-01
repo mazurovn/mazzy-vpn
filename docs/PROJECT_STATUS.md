@@ -10,23 +10,22 @@ authoritative backlog; this page records the verified resumption point.
 
 ## Verified release baseline
 
-- Release tags `v1.3.0` and `desktop-v0.3.0` resolve to audited commit
-  `a759d723da0d9fca1e3f9fd0ea2a92ec116e2fbe`, after PR #32 and PR #33 were
+- Release tags `v1.3.2` and `desktop-v0.3.2` resolve to audited commit
+  `80fe281f7a8791b83d9f7d13cb58c84a6e06f2a5`, after PR #40 and PR #42 were
   merged with all required default-branch checks green.
-- The published stable release is CLI/TUI `v1.3.0`. The published Desktop
-  prerelease is `desktop-v0.3.0`; its Linux AppImage, DEB and RPM are also
-  attached to `v1.3.0` with a combined SHA-256 manifest.
+- The published stable release is CLI/TUI `v1.3.2`. The published Desktop
+  prerelease is `desktop-v0.3.2`; its Linux AppImage, DEB and RPM plus macOS
+  and Windows previews are covered by the published SHA-256 manifest.
 - Issue #31 is closed. The release carries the provenance-verified upstream
   `glib` backport, `event-listener` 5.4.2 and `serde_with` 3.21.0; current
   RustSec, Dependabot and CodeQL release scans have no open alerts.
-- Windows and macOS 0.3.0 artifacts are unsigned UI previews without native
+- Windows and macOS 0.3.2 artifacts are unsigned UI previews without native
   VPN backends. They must not be described as functional VPN clients.
 - Android and iOS clients are planned and have no application source or
   release artifacts.
-- Open backlog issues #4–#14 remain incremental roadmap slices, not proof that
-  the corresponding production gates are complete. PR #32 and PR #33 are
-  merged; issue #31 was closed only after the default-branch dependency graph
-  and release artifacts confirmed the source-level remediation.
+- Open backlog issues #4–#14 and #36–#39 remain incremental roadmap slices,
+  not proof that the corresponding production gates are complete. Issues #31,
+  #35 and #41 are closed after default-branch and release verification.
 - The uncompromising code, security, packaging and cross-platform review started
   in [`AUDIT_2026-07-28.ru.md`](AUDIT_2026-07-28.ru.md). The release audit is
   [`AUDIT_2026-08-01.ru.md`](AUDIT_2026-08-01.ru.md); it
@@ -37,8 +36,8 @@ authoritative backlog; this page records the verified resumption point.
 
 Published release links:
 
-- <https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.0>
-- <https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.0>
+- <https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.2>
+- <https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.2>
 
 ## Community and documentation baseline
 
@@ -51,22 +50,21 @@ Published release links:
 
 ## Active backlog order
 
-1. [#35 profile/package hotfix](https://github.com/mazurovn/mazzy-vpn/issues/35)
-2. [#36 custom-server import](https://github.com/mazurovn/mazzy-vpn/issues/36),
+1. [#36 custom-server import](https://github.com/mazurovn/mazzy-vpn/issues/36),
    [#37 sing-box/TUN adapters](https://github.com/mazurovn/mazzy-vpn/issues/37),
    [#38 Mieru/Naive adapters](https://github.com/mazurovn/mazzy-vpn/issues/38)
    and [#39 AI planner](https://github.com/mazurovn/mazzy-vpn/issues/39)
-3. [#4 Linux Desktop package lifecycle](https://github.com/mazurovn/mazzy-vpn/issues/4)
-4. [#5 shared core and versioned local API](https://github.com/mazurovn/mazzy-vpn/issues/5)
-5. [#12 CLI/TUI parity and automation contract](https://github.com/mazurovn/mazzy-vpn/issues/12)
-6. [#6 profiles](https://github.com/mazurovn/mazzy-vpn/issues/6),
+2. [#4 Linux Desktop package lifecycle](https://github.com/mazurovn/mazzy-vpn/issues/4)
+3. [#5 shared core and versioned local API](https://github.com/mazurovn/mazzy-vpn/issues/5)
+4. [#12 CLI/TUI parity and automation contract](https://github.com/mazurovn/mazzy-vpn/issues/12)
+5. [#6 profiles](https://github.com/mazurovn/mazzy-vpn/issues/6),
    [#8 services/recovery](https://github.com/mazurovn/mazzy-vpn/issues/8) and
    [#9 connection modes](https://github.com/mazurovn/mazzy-vpn/issues/9)
-7. [#7 Windows](https://github.com/mazurovn/mazzy-vpn/issues/7) and
+6. [#7 Windows](https://github.com/mazurovn/mazzy-vpn/issues/7) and
    [#10 macOS](https://github.com/mazurovn/mazzy-vpn/issues/10)
-8. [#13 Android](https://github.com/mazurovn/mazzy-vpn/issues/13) and
+7. [#13 Android](https://github.com/mazurovn/mazzy-vpn/issues/13) and
    [#14 iOS](https://github.com/mazurovn/mazzy-vpn/issues/14)
-9. [#11 cross-platform production gates](https://github.com/mazurovn/mazzy-vpn/issues/11)
+8. [#11 cross-platform production gates](https://github.com/mazurovn/mazzy-vpn/issues/11)
 
 ## Protocol-orchestration work after 1.3.0
 
@@ -85,16 +83,18 @@ adds the first protocol-orchestration contract:
   redacted catalog, runtime-diagnostic and URI-detection data. Connection stays
   truthfully limited to the four existing Linux backends until audited adapters
   and TUN integration pass their gates.
-- API v1 now has 27 operations and 14 stable error codes. `protocols.list` is
-  additive and does not change the API version.
+- API v1 now has 28 operations and 14 stable error codes. `protocols.list` and
+  the read-only `planner.evaluate` are additive and do not change API version.
 - The real `socat` client preserves its response half after request EOF. A
   delayed Unix-socket integration test covers the installed systemd transport,
   which the previous fake dispatcher test did not model.
-- Remaining work is platform-specific: pinned sing-box-family, Mieru and
-  Naive/Cronet adapters; custom-server secret import; deterministic planner;
-  Linux TUN lifecycle; Windows service/Wintun; Android `VpnService`; and real
-  integration, rollback and leak tests.
-- Local patch verification is green: 79 Bash/end-to-end tests, 24 Rust tests,
+- The deterministic read-only planner now applies backend-owned hard gates and
+  versioned scoring to opaque profile IDs. Remaining issue #39 work is history,
+  authorized execution/failover and non-CLI integration. Platform work still
+  includes pinned sing-box-family, Mieru and Naive/Cronet adapters;
+  custom-server secret import; Linux TUN lifecycle; Windows service/Wintun;
+  Android `VpnService`; and real integration, rollback and leak tests.
+- Local patch verification is green: 80 Bash/end-to-end tests, 24 Rust tests,
   Clippy, ShellCheck, npm audit, cargo-deny, public leak audit and the unpacked
   AppImage/DEB/RPM lifecycle/source/GUI audit. All 12 documentation screenshots
   were regenerated at 1680×951 from the localhost-only RFC 5737 fixture.

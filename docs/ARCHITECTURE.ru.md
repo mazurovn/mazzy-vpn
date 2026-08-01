@@ -143,10 +143,13 @@ OpenVPN использует DNS, переданный сервером/проф
 Полная модель описана в
 [документе об оркестрации](PROTOCOL_ORCHESTRATION.ru.md).
 
-Будущий planner детерминирован и подчинён hard constraints: platform backend
-готов, профиль валиден, секрет доступен только backend и rollback реализован.
-LLM может предложить dry-run plan, но не создаёт shell command/backend config и
-не обходит authorization/action-ID boundaries.
+Реализованный query `planner.evaluate` детерминирован и подчинён вычисляемым
+backend hard constraints: platform backend готов, профиль валиден, секрет
+доступен только backend, rollback directories готовы и platform support имеет
+статус `implemented`. Он возвращает scored dry-run evaluation с opaque IDs и
+reason codes. LLM не создаёт shell command/backend config и не обходит gate.
+Operation не подключает VPN и не выполняет failover; будущее execution остаётся
+за authorization/action-ID, audit и rollback boundaries.
 
 CLI/TUI-клиент подключается к Unix socket через автоматически установленный
 `socat`. Он ограничивает размер и время ответа, проверяет identity envelope и

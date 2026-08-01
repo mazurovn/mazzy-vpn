@@ -14,6 +14,9 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 versioned local API уже отделяет lifecycle CLI/TUI/Desktop от системного Linux
 VPN backend. Приватные ключи и
 полные конфигурации не попадают в status cache, телеметрию или публичные логи.
+Read-only planner уже ранжирует opaque profile IDs через backend-owned hard
+gates и policy-v1 scoring. Он пока не хранит history, не подключает VPN и не
+выполняет failover.
 
 ## Контракт AI-ready надёжности
 

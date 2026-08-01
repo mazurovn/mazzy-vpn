@@ -11,6 +11,7 @@
 | `mazzy-vpn protocols list --json` | versioned каталог 13 протоколов и readiness |
 | `mazzy-vpn protocols diagnose --json` | candidate runtimes и готовность backend |
 | `... \| mazzy-vpn protocols detect --stdin --json` | redacted распознавание share URI |
+| `... \| mazzy-vpn planner evaluate --stdin --json` | deterministic dry-run rank по opaque IDs и evidence |
 | `mazzy-vpn quick` | подключить сохранённый default через local API |
 | `mazzy-vpn connect PROTOCOL PROFILE` | выбрать и подключить профиль |
 | `mazzy-vpn reconnect` | безопасно перезапустить выбранный туннель |
@@ -51,6 +52,7 @@
 | `mazzy-vpn protocols list --json` | versioned 13-protocol catalog and readiness |
 | `mazzy-vpn protocols diagnose --json` | candidate runtimes and backend readiness |
 | `... \| mazzy-vpn protocols detect --stdin --json` | redacted share-URI detection |
+| `... \| mazzy-vpn planner evaluate --stdin --json` | deterministic dry-run rank from opaque IDs and evidence |
 | `mazzy-vpn quick` | connect the saved default through the local API |
 | `mazzy-vpn connect PROTOCOL PROFILE` | select and connect a profile |
 | `mazzy-vpn reconnect` | safely restart the selected tunnel |

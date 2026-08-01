@@ -270,7 +270,7 @@
         "mobile_android": "planned",
         "mobile_ios": "planned"
       },
-      "tests": ["tests/check-protocol-registry.py", "tests/check-api-contract.py"],
+      "tests": ["tests/check-protocol-registry.py", "tests/check-api-contract.py", "tests/run.sh"],
       "docs": ["docs/PROTOCOL_ORCHESTRATION.en.md", "docs/PROTOCOL_ORCHESTRATION.ru.md", "docs/ARCHITECTURE.en.md", "docs/ARCHITECTURE.ru.md"]
     },
     {

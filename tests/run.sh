@@ -1025,6 +1025,240 @@ if jq -e '
     fail "local API protocols.list leaked a frontend-forbidden field"
 fi
 
+chmod 700 "$VPNCTL_STATE_DIR"
+[[ ! -e "$VPNCTL_API_ACTION_DIR" ]] ||
+    fail "planner fresh-state test unexpectedly has an action directory"
+unknown_profile_id="profile-ffffffffffffffffffffffffffffffff"
+planner_payload="$(
+    jq -cn \
+        --arg profile_id "$profile_id" \
+        --arg unknown_profile_id "$unknown_profile_id" '{
+        workload: "llm-streaming",
+        candidates: [
+            {
+                profile_id: $profile_id,
+                evidence: {
+                    recent_outcome: "success",
+                    consecutive_failures: 0,
+                    censorship_fit: "high",
+                    reachability: "reachable",
+                    latency_ms: 50,
+                    loss_percent: 0,
+                    workload_fit: "high",
+                    evidence_age_seconds: 30
+                }
+            },
+            {
+                profile_id: $unknown_profile_id,
+                evidence: {
+                    recent_outcome: "unknown",
+                    consecutive_failures: 0,
+                    censorship_fit: "unknown",
+                    reachability: "unknown",
+                    latency_ms: null,
+                    loss_percent: 0,
+                    workload_fit: "unknown",
+                    evidence_age_seconds: 30
+                }
+            }
+        ]
+    }'
+)"
+planner_request="$(
+    jq -cn --argjson payload "$planner_payload" '{
+        api_version: "1.0",
+        request_id: "request-planner-0001",
+        operation: "planner.evaluate",
+        deadline_ms: 5000,
+        payload: $payload
+    }'
+)"
+planner_response="$(printf '%s\n' "$planner_request" | "$CLI" _api-dispatch)"
+jq -e \
+    --arg profile_id "$profile_id" \
+    --arg unknown_profile_id "$unknown_profile_id" '
+    .api_version == "1.0"
+    and .request_id == "request-planner-0001"
+    and .status == "ok"
+    and .result.schema_version == 1
+    and .result.policy_version == 1
+    and .result.dry_run == true
+    and .result.workload == "llm-streaming"
+    and .result.ordered_profile_ids == [$profile_id]
+    and (.result.candidates | length) == 2
+    and .result.candidates[0].profile_id == $profile_id
+    and .result.candidates[0].protocol == "openvpn"
+    and .result.candidates[0].eligible == true
+    and .result.candidates[0].rank == 1
+    and .result.candidates[0].score == 100
+    and (.result.candidates[0].hard_gates | length) == 5
+    and all(.result.candidates[0].hard_gates[]; .passed == true)
+    and (.result.candidates[0].factors | map(.points) | add) == 100
+    and .result.candidates[1].profile_id == $unknown_profile_id
+    and .result.candidates[1].eligible == false
+    and .result.candidates[1].rank == null
+    and .result.candidates[1].score == null
+    and (.result.candidates[1] | has("protocol") | not)
+' <<<"$planner_response" >/dev/null ||
+    fail "local API planner.evaluate did not apply hard gates and scoring"
+if jq -e '
+    .. | objects | keys[] |
+    select(test("^(display_name|password|credentials?|secret|endpoint|file_name|file_path|private_key)$"))
+' <<<"$planner_response" >/dev/null; then
+    fail "local API planner.evaluate leaked frontend-forbidden profile data"
+fi
+
+planner_repeat_request="$(
+    jq -c '.request_id = "request-planner-0002"' <<<"$planner_request"
+)"
+planner_repeat_response="$(
+    printf '%s\n' "$planner_repeat_request" | "$CLI" _api-dispatch
+)"
+jq -S '.result | del(.evaluated_at)' <<<"$planner_response" \
+    >"$TMP/planner-first.json"
+jq -S '.result | del(.evaluated_at)' <<<"$planner_repeat_response" \
+    >"$TMP/planner-second.json"
+cmp -s "$TMP/planner-first.json" "$TMP/planner-second.json" ||
+    fail "local API planner.evaluate is not deterministic for equal evidence"
+
+planner_stale_request="$(
+    jq -c '
+        .request_id = "request-planner-stale-0001"
+        | .payload.candidates = [.payload.candidates[0]]
+        | .payload.candidates[0].evidence.evidence_age_seconds = 901
+    ' <<<"$planner_request"
+)"
+planner_stale_response="$(
+    printf '%s\n' "$planner_stale_request" | "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "ok"
+    and .result.candidates[0].score == 65
+    and (.result.candidates[0].reason_codes | index(
+        "planner.factor.reachability-stale"
+    )) != null
+    and (.result.candidates[0].reason_codes | index(
+        "planner.factor.latency-loss-stale"
+    )) != null
+' <<<"$planner_stale_response" >/dev/null ||
+    fail "local API planner.evaluate trusted stale network evidence"
+
+chmod 644 "$TMP/config/openvpn/Test Server.ovpn"
+planner_unsafe_request="$(
+    jq -c '
+        .request_id = "request-planner-unsafe-0001"
+        | .payload.candidates = [.payload.candidates[0]]
+    ' <<<"$planner_request"
+)"
+planner_unsafe_response="$(
+    printf '%s\n' "$planner_unsafe_request" | "$CLI" _api-dispatch
+)"
+chmod 600 "$TMP/config/openvpn/Test Server.ovpn"
+jq -e '
+    .status == "ok"
+    and .result.ordered_profile_ids == []
+    and .result.candidates[0].eligible == false
+    and .result.candidates[0].score == null
+    and any(
+        .result.candidates[0].hard_gates[];
+        .id == "secrets-readable-only-by-backend" and .passed == false
+    )
+' <<<"$planner_unsafe_response" >/dev/null ||
+    fail "local API planner.evaluate ignored unsafe profile storage"
+
+planner_duplicate_candidate_request="$(
+    jq -c '
+        .request_id = "request-planner-duplicate-0001"
+        | .payload.candidates = [
+            .payload.candidates[0], .payload.candidates[0]
+        ]
+    ' <<<"$planner_request"
+)"
+planner_duplicate_candidate_response="$(
+    printf '%s\n' "$planner_duplicate_candidate_request" |
+        "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "invalid-request"
+    and .error.message_key == "api.planner.payload-invalid"
+' <<<"$planner_duplicate_candidate_response" >/dev/null ||
+    fail "local API planner.evaluate accepted duplicate candidate IDs"
+
+planner_nested_duplicate_response="$(
+    printf '%s\n' \
+        "{\"api_version\":\"1.0\",\"request_id\":\"request-planner-duplicate-0002\",\"operation\":\"planner.evaluate\",\"deadline_ms\":5000,\"payload\":{\"workload\":\"general\",\"candidates\":[{\"profile_id\":\"$profile_id\",\"evidence\":{},\"evidence\":{\"recent_outcome\":\"success\"}}]}}" |
+        "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "invalid-request"
+    and .error.message_key == "api.request.duplicate-key"
+' <<<"$planner_nested_duplicate_response" >/dev/null ||
+    fail "local API accepted a nested duplicate planner key"
+
+planner_cli_response="$(
+    printf '%s\n' "$planner_payload" |
+        VPNCTL_API_CLIENT_FORCE=1 \
+        "$CLI" planner evaluate --stdin --json
+)"
+jq -e \
+    --arg profile_id "$profile_id" '
+    .dry_run == true
+    and .ordered_profile_ids == [$profile_id]
+    and .candidates[0].score == 100
+' <<<"$planner_cli_response" >/dev/null ||
+    fail "planner CLI did not use the typed local API query"
+
+planner_max_payload="$(
+    jq -cn '
+        def evidence: {
+            recent_outcome: "unknown",
+            consecutive_failures: 0,
+            censorship_fit: "unknown",
+            reachability: "unknown",
+            latency_ms: null,
+            loss_percent: 0,
+            workload_fit: "unknown",
+            evidence_age_seconds: 30
+        };
+        {
+            workload: "general",
+            candidates: [
+                range(0; 128) as $index
+                | {
+                    profile_id: (
+                        "profile-" + (
+                            "00000000000000000000000000000000"
+                            + ($index | tostring)
+                        )[-32:]
+                    ),
+                    evidence: evidence
+                }
+            ]
+        }
+    '
+)"
+[[ "$(printf '%s' "$planner_max_payload" | wc -c)" -le 65536 ]] ||
+    fail "maximum planner fixture exceeds the documented request cap"
+planner_max_response="$(
+    printf '%s\n' "$planner_max_payload" |
+        VPNCTL_API_CLIENT_FORCE=1 \
+        "$CLI" planner evaluate --stdin --json
+)"
+[[ "$(printf '%s' "$planner_max_response" | wc -c)" -le 1048576 ]] ||
+    fail "maximum planner response exceeds its bounded CLI cap"
+jq -e '
+    (.candidates | length) == 128
+    and .ordered_profile_ids == []
+    and all(
+        .candidates[];
+        .eligible == false and .rank == null and .score == null
+    )
+' <<<"$planner_max_response" >/dev/null ||
+    fail "planner CLI did not handle the documented 128-candidate bound"
+ok "deterministic agent-safe protocol planner"
+
 api_probe_request="$(
     jq -cn '{
         api_version: "1.0",
@@ -2572,6 +2806,11 @@ COMP_CWORD=2
 _mazzy_vpn
 printf '%s\n' "${COMPREPLY[@]}" | grep -qx -- '--speed' ||
     fail "Mazzy VPN completion does not include verify --speed"
+COMP_WORDS=(mazzy-vpn planner e)
+COMP_CWORD=2
+_mazzy_vpn
+printf '%s\n' "${COMPREPLY[@]}" | grep -qx 'evaluate' ||
+    fail "Mazzy VPN completion does not include planner evaluate"
 COMP_WORDS=(mazzy-vpn language j)
 COMP_CWORD=2
 _mazzy_vpn

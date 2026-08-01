@@ -12,13 +12,13 @@ boundary for issue
 [#5](https://github.com/mazurovn/mazzy-vpn/issues/5). The current
 `cli-json-adapter` is explicitly `partial`: existing safe JSON status/profile
 outputs remain available, and CLI/TUI now submit v1 envelopes for `status.get`,
-`profiles.list`, `protocols.list`, `tests.probe`, `tests.verify-egress` and `lifecycle.*` through
-one dispatcher. Remaining domains
+`profiles.list`, `protocols.list`, `planner.evaluate`, `tests.probe`,
+`tests.verify-egress` and `lifecycle.*` through one dispatcher. Remaining domains
 still use the compatible direct CLI control plane. Contract metadata is
 implemented. The
 socket-activated Linux transport is `partial`: it accepts `status.get`,
-`profiles.list`, `protocols.list`, the bounded `tests.probe`/`tests.verify-egress` queries and
-the three `lifecycle.*`
+`profiles.list`, `protocols.list`, `planner.evaluate`, the bounded
+`tests.probe`/`tests.verify-egress` queries and the three `lifecycle.*`
 mutations. Other operations and
 non-Linux transports remain `planned`, so this still does not claim that the
 complete cross-platform daemon exists.
@@ -93,7 +93,7 @@ On Linux, `mazzy-vpn-api.socket` exposes `/run/mazzy-vpn/api-v1.sock` as
 request and receives one newline-terminated response. The service stops reading
 at the configured byte limit before JSON parsing, including for a client that
 never terminates an oversized line. It accepts exactly one top-level JSON
-object and rejects duplicate envelope or payload keys, including keys encoded
+object and rejects duplicate object keys at every depth, including keys encoded
 with JSON Unicode escapes, before dispatch. Query cache refreshes are bounded
 by the smaller of the optional query deadline and the server refresh cap; an
 existing restricted cache may be returned when live refresh times out.
@@ -133,6 +133,41 @@ an implemented backend. The response contains public format, engine and
 transport identifiers only; it contains no endpoint, credential, profile or
 backend configuration. Its source of truth is
 [`../protocols/v1/registry.json`](../protocols/v1/registry.json).
+
+`planner.evaluate` is a read-only, deadline-bounded evaluation. The payload
+contains a workload and 1–128 unique opaque profile IDs, each with a complete
+bounded evidence object. The server, not the caller, computes these five hard
+gates from current local state: backend ready, profile valid, backend-only
+profile storage, rollback directories available and Linux support implemented.
+Only candidates that pass every gate receive a score and rank.
+
+The policy-v1 score is 30 points for recent outcome, 25 for censorship fit, 20
+for reachability, 15 for latency/loss and 10 for workload fit. Reachability and
+latency/loss evidence older than 900 seconds scores zero. Equal scores use the
+opaque profile ID as the stable tie-breaker. The response includes reason codes
+and factor points, but no display name, endpoint, filename, path, configuration
+or credential. It is always `dry_run: true`; it cannot connect or fail over.
+The CLI accepts one JSON payload up to 64 KiB on stdin and bounds the expanded
+explanation response to 1 MiB:
+
+```bash
+jq -n --arg profile_id "$PROFILE_ID" '{
+  workload: "llm-streaming",
+  candidates: [{
+    profile_id: $profile_id,
+    evidence: {
+      recent_outcome: "success", consecutive_failures: 0,
+      censorship_fit: "high", reachability: "reachable",
+      latency_ms: 80, loss_percent: 0, workload_fit: "high",
+      evidence_age_seconds: 30
+    }
+  }]
+}' | mazzy-vpn planner evaluate --stdin --json
+```
+
+Caller-supplied fit evidence can influence a dry-run rank but cannot bypass a
+backend-owned gate. History collection, authorized execution and automatic
+failover remain outside this operation.
 
 `tests.probe` checks every profile in the requested protocol scope with a
 per-endpoint timeout and bounded concurrency of 1–8 workers. It returns an

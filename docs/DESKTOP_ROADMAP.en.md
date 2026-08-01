@@ -65,8 +65,10 @@ default-branch security checks and tagged release artifacts all passed.
 - signed updates, migration and transactional installer rollback;
 - typed custom-server import, pinned protocol adapters and an audited TUN layer
   for the 13-entry registry without accepting arbitrary root-run engine JSON;
-- a deterministic evidence-based planner API for agents; an LLM may explain or
-  request a dry-run plan but cannot emit shell commands or receive credentials;
+- Desktop integration for the existing read-only deterministic planner, plus
+  governed history and authorized execution/failover; an LLM may explain or
+  request a dry-run evaluation but cannot emit shell commands or receive
+  credentials;
 - native macOS/Windows backends, signing/notarization and system installers;
 - security, accessibility, failure-injection and long-running soak gates.
 

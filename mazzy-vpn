@@ -941,6 +941,56 @@ cmd_protocols() {
     esac
 }
 
+cmd_planner_evaluate() {
+    local encoded byte_count payload response
+    local API_CLIENT_MAX_RESPONSE_BYTES=1048576
+    [[ $# -eq 2 && "${1:-}" == --stdin && "${2:-}" == --json ]] ||
+        die "Использование: $CLI_COMMAND planner evaluate --stdin --json"
+    encoded="$(LC_ALL=C head -c 65537 | base64)" || return 1
+    byte_count="$(printf '%s' "$encoded" | base64 -d | wc -c)" || return 1
+    if ((byte_count == 0 || byte_count > 65536)) ||
+       ! printf '%s' "$encoded" | base64 -d | jq -s -e '
+            length == 1 and (.[0] | type == "object")
+        ' >/dev/null 2>&1; then
+        error "Planner payload должен быть одним JSON object размером до 64 КиБ"
+        return 2
+    fi
+    payload="$(printf '%s' "$encoded" | base64 -d)" || return 1
+    command -v awk >/dev/null 2>&1 || {
+        error "Planner payload parser: awk не найден"
+        return 70
+    }
+    api_request_has_unique_schema_keys "$payload" || {
+        error "Planner payload содержит повторяющийся JSON key"
+        return 2
+    }
+    api_client_ready || {
+        error "Local API planner недоступен"
+        return 70
+    }
+    response="$(api_client_query_payload planner.evaluate "$payload" 30000)" || {
+        error "Local API planner недоступен"
+        return 70
+    }
+    if [[ "$(jq -r '.status' <<<"$response")" != ok ]]; then
+        jq . <<<"$response" >&2
+        return 1
+    fi
+    jq .result <<<"$response"
+}
+
+cmd_planner() {
+    case "${1:-}" in
+        evaluate)
+            shift
+            cmd_planner_evaluate "$@"
+            ;;
+        *)
+            die "Использование: $CLI_COMMAND planner evaluate --stdin --json"
+            ;;
+    esac
+}
+
 usage() {
     case "$UI_LANG" in
         en)
@@ -972,6 +1022,7 @@ Usage:
   mazzy-vpn api-info --json
   mazzy-vpn protocols list|diagnose --json
   mazzy-vpn protocols detect --stdin --json
+  mazzy-vpn planner evaluate --stdin --json
   mazzy-vpn logs [-f] | version
 
 Protocols: amneziawg (awg), wireguard (wg), openvpn (ovpn), l2tp
@@ -1008,6 +1059,7 @@ Verwendung:
   mazzy-vpn api-info --json
   mazzy-vpn protocols list|diagnose --json
   mazzy-vpn protocols detect --stdin --json
+  mazzy-vpn planner evaluate --stdin --json
   mazzy-vpn logs [-f] | version
 
 Protokolle: amneziawg (awg), wireguard (wg), openvpn (ovpn), l2tp
@@ -1044,6 +1096,7 @@ Mazzy VPN — 安全便捷的 Linux VPN 管理工具
   mazzy-vpn api-info --json
   mazzy-vpn protocols list|diagnose --json
   mazzy-vpn protocols detect --stdin --json
+  mazzy-vpn planner evaluate --stdin --json
   mazzy-vpn logs [-f] | version
 
 协议：amneziawg (awg)、wireguard (wg)、openvpn (ovpn)、l2tp
@@ -1080,6 +1133,7 @@ Mazzy VPN — Linux 向けの安全で使いやすい VPN 管理ツール
   mazzy-vpn api-info --json
   mazzy-vpn protocols list|diagnose --json
   mazzy-vpn protocols detect --stdin --json
+  mazzy-vpn planner evaluate --stdin --json
   mazzy-vpn logs [-f] | version
 
 プロトコル: amneziawg (awg)、wireguard (wg)、openvpn (ovpn)、l2tp
@@ -1116,6 +1170,7 @@ Mazzy VPN — Linux용 안전하고 편리한 VPN 관리 도구
   mazzy-vpn api-info --json
   mazzy-vpn protocols list|diagnose --json
   mazzy-vpn protocols detect --stdin --json
+  mazzy-vpn planner evaluate --stdin --json
   mazzy-vpn logs [-f] | version
 
 프로토콜: amneziawg (awg), wireguard (wg), openvpn (ovpn), l2tp
@@ -1167,6 +1222,8 @@ Mazzy VPN - быстрое и безопасное управление VPN в L
                                     наличие runtime без раскрытия путей
   ... | mazzy-vpn protocols detect --stdin --json
                                     безопасно распознать URI без его вывода
+  ... | mazzy-vpn planner evaluate --stdin --json
+                                    детерминированно оценить кандидатов без подключения
   mazzy-vpn language [ru|en|de|zh|ja|ko]
                                     показать или сменить язык интерфейса
   mazzy-vpn version
@@ -1237,6 +1294,7 @@ protocol_dir() {
 safe_profile_basename() {
     local name="$1"
     [[ -n "$name" && "$name" != "." && "$name" != ".." ]] || return 1
+    [[ "$name" != */* ]] || return 1
     [[ "$name" != *[[:cntrl:]]* ]] && ! profile_text_has_unsafe_unicode "$name"
 }
 
@@ -4711,67 +4769,59 @@ api_valid_identifier() {
 
 api_request_has_unique_schema_keys() {
     local request="$1"
-    jq --stream -s -e '
-        reduce .[] as $event (
+    printf '%s' "$request" |
+        awk '
+            BEGIN {
+                depth = 0
+                object_sequence = 0
+            }
             {
-                seen: {},
-                payload_seen: false,
-                payload_closed: false,
-                duplicate: false
-            };
-            if .duplicate then
-                .
-            else
-                ($event[0] // []) as $path
-                | if (($path | length) == 0) then
-                    .
-                elif $path[0] == "payload" then
-                    if (($event | length) == 2) then
-                        if .payload_closed then
-                            .duplicate = true
-                        elif (($path | length) == 1) then
-                            if .payload_seen then
-                                .duplicate = true
-                            else
-                                .payload_seen = true
-                                | .payload_closed = true
-                            end
-                        elif (($path | length) == 2) then
-                            ("payload:" + ($path[1] | tojson)) as $key
-                            | if (.seen[$key] // false) then
-                                .duplicate = true
-                            else
-                                .seen[$key] = true
-                                | .payload_seen = true
-                            end
-                        else
-                            .
-                        end
-                    elif (
-                        ($event | length) == 1
-                        and ($path | length) == 2
-                    ) then
-                        .payload_closed = true
-                    else
-                        .
-                    end
-                elif (
-                    ($event | length) == 2
-                    and ($path | length) == 1
-                ) then
-                    ("top:" + ($path[0] | tojson)) as $key
-                    | if (.seen[$key] // false) then
-                        .duplicate = true
-                    else
-                        .seen[$key] = true
-                    end
-                else
-                    .
-                end
-            end
-        )
-        | (.duplicate | not)
-    ' <<<"$request" >/dev/null 2>&1
+                text = $0
+                for (position = 1; position <= length(text); position++) {
+                    character = substr(text, position, 1)
+                    if (character == "\"") {
+                        literal = "\""
+                        escaped = 0
+                        while (++position <= length(text)) {
+                            character = substr(text, position, 1)
+                            literal = literal character
+                            if (escaped) {
+                                escaped = 0
+                            } else if (character == "\\") {
+                                escaped = 1
+                            } else if (character == "\"") {
+                                break
+                            }
+                        }
+                        if (container[depth] == "object" && expects_key[depth]) {
+                            printf "{\"object\":%d,\"key\":%s}\n", \
+                                object_id[depth], literal
+                            expects_key[depth] = 0
+                        }
+                    } else if (character == "{") {
+                        depth++
+                        container[depth] = "object"
+                        object_id[depth] = ++object_sequence
+                        expects_key[depth] = 1
+                    } else if (character == "[") {
+                        depth++
+                        container[depth] = "array"
+                        expects_key[depth] = 0
+                    } else if (character == "}" || character == "]") {
+                        delete container[depth]
+                        delete object_id[depth]
+                        delete expects_key[depth]
+                        depth--
+                    } else if (character == "," && container[depth] == "object") {
+                        expects_key[depth] = 1
+                    }
+                }
+            }
+        ' |
+        jq -s -e '
+            group_by([.object, .key])
+            | all(length == 1)
+        ' >/dev/null 2>&1
 }
 
 api_server_request_id() {
@@ -4802,15 +4852,17 @@ api_error_response() {
 
 api_ok_response() {
     local request_id="$1" result="$2"
-    jq -cn \
-        --arg request_id "$request_id" \
-        --argjson result "$result" \
-        '{
+    jq -cs \
+        --arg request_id "$request_id" '
+        if length != 1 then error("result must be one JSON document")
+        else .[0] as $result | {
             api_version: "1.0",
             request_id: $request_id,
             status: "ok",
             result: $result
-        }'
+        }
+        end
+    ' <<<"$result"
 }
 
 api_monotonic_ms() {
@@ -5040,6 +5092,344 @@ api_protocols_result() {
         ],
         orchestration
     }' "$registry"
+}
+
+api_secure_backend_directory() {
+    local directory="$1" mode owner expected_owner
+    [[ -d "$directory" && ! -L "$directory" ]] || return 1
+    mode="$(stat -c '%a' "$directory" 2>/dev/null)" || return 1
+    owner="$(stat -c '%u' "$directory" 2>/dev/null)" || return 1
+    [[ "$mode" =~ ^[0-7]{3,4}$ ]] || return 1
+    (((8#$mode & 8#022) == 0)) || return 1
+    if ((EUID == 0)); then
+        expected_owner=0
+    else
+        expected_owner="$(id -u)"
+    fi
+    [[ "$owner" == "$expected_owner" ]]
+}
+
+api_rollback_ready() {
+    api_secure_backend_directory "$STATE_DIR" || return 1
+    if [[ -d "$API_ACTION_DIR" ]]; then
+        api_secure_backend_directory "$API_ACTION_DIR"
+    else
+        [[ ! -e "$API_ACTION_DIR" && ! -L "$API_ACTION_DIR" && -w "$STATE_DIR" ]]
+    fi
+}
+
+api_profile_runtime_path() {
+    local protocol="$1" file_name="$2" directory
+    safe_profile_basename "$file_name" >/dev/null || return 1
+    directory="$(protocol_dir "$protocol")" || return 1
+    [[ -n "$directory" ]] || return 1
+    printf '%s/%s\n' "$directory" "$file_name"
+}
+
+api_planner_candidate_result() {
+    local candidate="$1" registry="$2" weights="$3" rollback_ready="$4"
+    local profile_id profile_record="" protocol="" file_name="" profile_path=""
+    local support=""
+    local backend_ready=false profile_valid=false secrets_secure=false
+    local platform_supported=false result
+
+    profile_id="$(jq -r '.profile_id' <<<"$candidate")" || return 1
+    profile_record="$(
+        jq -er --arg profile_id "$profile_id" '
+            (.profiles // [])
+            | map(select(.profile_id == $profile_id))
+            | select(length == 1)
+            | .[0]
+            | select(
+                (.protocol | type == "string" and length > 0)
+                and (.file_name | type == "string" and length > 0)
+            )
+            | [.protocol, .file_name]
+            | @tsv
+        ' "$PROFILES_FILE" 2>/dev/null || true
+    )"
+    if [[ -n "$profile_record" ]]; then
+        IFS=$'\t' read -r protocol file_name <<<"$profile_record"
+    fi
+    if [[ -n "$protocol" ]]; then
+        support="$(jq -r --arg protocol "$protocol" '
+            first(.protocols[] | select(.id == $protocol) | .support.linux) // ""
+        ' "$registry")" || return 1
+        [[ "$support" == implemented ]] && platform_supported=true
+        if [[ "$platform_supported" == true ]] &&
+           protocol_runtime_available "$protocol"; then
+            backend_ready=true
+        fi
+    fi
+    if [[ -n "$protocol" && -n "$file_name" ]]; then
+        profile_path="$(api_profile_runtime_path "$protocol" "$file_name" || true)"
+    fi
+    if [[ -n "$profile_path" && -f "$profile_path" && ! -L "$profile_path" ]]; then
+        validate_profile "$protocol" "$profile_path" 1 >/dev/null 2>&1 &&
+            profile_valid=true
+        validate_permissions "$profile_path" && secrets_secure=true
+    fi
+
+    result="$(
+        jq -cn \
+            --arg profile_id "$profile_id" \
+            --arg protocol "$protocol" \
+            --argjson evidence "$(jq -c '.evidence' <<<"$candidate")" \
+            --argjson weights "$weights" \
+            --argjson backend_ready "$backend_ready" \
+            --argjson profile_valid "$profile_valid" \
+            --argjson secrets_secure "$secrets_secure" \
+            --argjson rollback_ready "$rollback_ready" \
+            --argjson platform_supported "$platform_supported" '
+            def fit_points($weight; $fit):
+                if $fit == "high" then $weight
+                elif $fit == "medium" then (($weight * 68 / 100) | floor)
+                elif $fit == "low" then (($weight * 32 / 100) | floor)
+                else 0
+                end;
+            def recent_points($weight; $evidence):
+                (
+                    if $evidence.recent_outcome == "success" then $weight
+                    elif $evidence.recent_outcome == "unknown"
+                    then (($weight / 3) | floor)
+                    else 0
+                    end
+                ) as $base
+                | ([
+                    $base - (($weight * $evidence.consecutive_failures / 6) | floor),
+                    0
+                ] | max);
+            def latency_loss_points($weight; $evidence):
+                if $evidence.evidence_age_seconds > 900
+                    or $evidence.reachability != "reachable"
+                    or $evidence.latency_ms == null
+                then 0
+                else
+                    (
+                        if $evidence.latency_ms <= 100 then 10
+                        elif $evidence.latency_ms <= 250 then 8
+                        elif $evidence.latency_ms <= 500 then 5
+                        elif $evidence.latency_ms <= 1000 then 2
+                        else 0
+                        end
+                    ) as $latency
+                    | (
+                        if $evidence.loss_percent == 0 then 5
+                        elif $evidence.loss_percent <= 1 then 4
+                        elif $evidence.loss_percent <= 5 then 3
+                        elif $evidence.loss_percent <= 10 then 1
+                        else 0
+                        end
+                    ) as $loss
+                    | (($weight * ($latency + $loss) / 15) | floor)
+                end;
+            [
+                {
+                    id: "backend-ready",
+                    passed: $backend_ready,
+                    reason_code: (
+                        if $backend_ready then "planner.gate.backend-ready"
+                        else "planner.gate.backend-unavailable" end
+                    )
+                },
+                {
+                    id: "profile-valid",
+                    passed: $profile_valid,
+                    reason_code: (
+                        if $profile_valid then "planner.gate.profile-valid"
+                        else "planner.gate.profile-invalid" end
+                    )
+                },
+                {
+                    id: "secrets-readable-only-by-backend",
+                    passed: $secrets_secure,
+                    reason_code: (
+                        if $secrets_secure then "planner.gate.backend-only-storage"
+                        else "planner.gate.storage-unsafe" end
+                    )
+                },
+                {
+                    id: "rollback-available",
+                    passed: $rollback_ready,
+                    reason_code: (
+                        if $rollback_ready then "planner.gate.rollback-ready"
+                        else "planner.gate.rollback-unavailable" end
+                    )
+                },
+                {
+                    id: "platform-supported",
+                    passed: $platform_supported,
+                    reason_code: (
+                        if $platform_supported then "planner.gate.platform-supported"
+                        else "planner.gate.platform-unsupported" end
+                    )
+                }
+            ] as $gates
+            | [
+                {
+                    id: "recent-success",
+                    points: recent_points($weights["recent-success"]; $evidence),
+                    max_points: $weights["recent-success"],
+                    reason_code: (
+                        "planner.factor.recent-" + $evidence.recent_outcome
+                    )
+                },
+                {
+                    id: "censorship-fit",
+                    points: fit_points(
+                        $weights["censorship-fit"];
+                        $evidence.censorship_fit
+                    ),
+                    max_points: $weights["censorship-fit"],
+                    reason_code: (
+                        "planner.factor.censorship-" + $evidence.censorship_fit
+                    )
+                },
+                {
+                    id: "reachability",
+                    points: (
+                        if $evidence.evidence_age_seconds > 900 then 0
+                        elif $evidence.reachability == "reachable"
+                        then $weights.reachability
+                        elif $evidence.reachability == "unknown"
+                        then (($weights.reachability / 4) | floor)
+                        else 0
+                        end
+                    ),
+                    max_points: $weights.reachability,
+                    reason_code: (
+                        if $evidence.evidence_age_seconds > 900
+                        then "planner.factor.reachability-stale"
+                        else "planner.factor.reachability-" + $evidence.reachability
+                        end
+                    )
+                },
+                {
+                    id: "latency-loss",
+                    points: latency_loss_points(
+                        $weights["latency-loss"];
+                        $evidence
+                    ),
+                    max_points: $weights["latency-loss"],
+                    reason_code: (
+                        if $evidence.evidence_age_seconds > 900
+                        then "planner.factor.latency-loss-stale"
+                        elif $evidence.reachability != "reachable"
+                            or $evidence.latency_ms == null
+                        then "planner.factor.latency-loss-unavailable"
+                        else "planner.factor.latency-loss-measured"
+                        end
+                    )
+                },
+                {
+                    id: "workload-fit",
+                    points: fit_points(
+                        $weights["workload-fit"];
+                        $evidence.workload_fit
+                    ),
+                    max_points: $weights["workload-fit"],
+                    reason_code: (
+                        "planner.factor.workload-" + $evidence.workload_fit
+                    )
+                }
+            ] as $factors
+            | ($gates | all(.passed)) as $eligible
+            | {
+                profile_id: $profile_id,
+                eligible: $eligible,
+                score: (
+                    if $eligible then ($factors | map(.points) | add)
+                    else null
+                    end
+                ),
+                hard_gates: $gates,
+                factors: $factors,
+                reason_codes: (
+                    (
+                        [$gates[] | select(.passed | not) | .reason_code]
+                        + [$factors[].reason_code]
+                    ) | unique
+                )
+            }
+            + if $protocol == "" then {} else {protocol: $protocol} end
+        '
+    )" || return 1
+    printf '%s\n' "$result"
+}
+
+api_planner_result() {
+    local request="$1" deadline_ms="$2" deadline_started_ms="$3"
+    local registry weights rollback_ready=false remaining_ms deadline_end_ms
+    local candidate result candidates ranked
+    local -a candidate_results=()
+    registry="$(protocol_registry_path)" || return 1
+    weights="$(jq -c '
+        .orchestration.score_factors
+        | map({key: .id, value: .weight})
+        | from_entries
+    ' "$registry")" || return 1
+    deadline_end_ms=$((deadline_started_ms + deadline_ms))
+    remaining_ms="$(api_deadline_remaining_ms "$deadline_end_ms")" || return 1
+    ((remaining_ms > 0)) || return 124
+    api_refresh_dashboard_bounded "$remaining_ms" || true
+    [[ -r "$PROFILES_FILE" ]] || return 1
+    api_rollback_ready && rollback_ready=true
+
+    while IFS= read -r candidate; do
+        remaining_ms="$(api_deadline_remaining_ms "$deadline_end_ms")" || return 1
+        ((remaining_ms > 0)) || return 124
+        result="$(api_planner_candidate_result \
+            "$candidate" "$registry" "$weights" "$rollback_ready")" || return 1
+        candidate_results+=("$result")
+    done < <(jq -c '.payload.candidates[]' <<<"$request")
+
+    remaining_ms="$(api_deadline_remaining_ms "$deadline_end_ms")" || return 1
+    ((remaining_ms > 0)) || return 124
+
+    candidates="$(printf '%s\n' "${candidate_results[@]}" | jq -sc '.')" ||
+        return 1
+
+    ranked="$(jq -c '
+        sort_by(
+            if .eligible
+            then [0, -(.score), .profile_id]
+            else [1, 0, .profile_id]
+            end
+        )
+        | reduce .[] as $candidate (
+            {next_rank: 1, candidates: []};
+            if $candidate.eligible then
+                .next_rank as $rank
+                | .candidates += [$candidate + {rank: $rank}]
+                | .next_rank += 1
+            else
+                .candidates += [$candidate + {rank: null}]
+            end
+        )
+        | .candidates
+    ' <<<"$candidates")" || return 1
+    remaining_ms="$(api_deadline_remaining_ms "$deadline_end_ms")" || return 1
+    ((remaining_ms > 0)) || return 124
+    jq -c \
+        --arg catalog_version "$(jq -r '.catalog_version' "$registry")" \
+        --argjson policy_version "$(jq '.orchestration.policy_version' "$registry")" \
+        --arg evaluated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --arg workload "$(jq -r '.payload.workload' <<<"$request")" '
+        . as $candidates
+        |
+        {
+            schema_version: 1,
+            policy_version: $policy_version,
+            catalog_version: $catalog_version,
+            evaluated_at: $evaluated_at,
+            dry_run: true,
+            workload: $workload,
+            ordered_profile_ids: [
+                $candidates[] | select(.eligible) | .profile_id
+            ],
+            candidates: $candidates
+        }
+    ' <<<"$ranked"
 }
 
 api_probe_result() {
@@ -5755,7 +6145,7 @@ api_dispatch() {
         return
     }
     export VPNCTL_API_SERVER_CONTEXT=1
-    for command in jq sha256sum flock timeout install; do
+    for command in awk jq sha256sum flock timeout install; do
         command -v "$command" >/dev/null 2>&1 || {
             api_error_response "$(api_server_request_id)" backend-unavailable \
                 api.runtime.missing-dependency false true
@@ -5861,6 +6251,125 @@ api_dispatch() {
                         api.protocols.unavailable true false
                     return
                 }
+            fi
+            api_ok_response "$request_id" "$result"
+            ;;
+        planner.evaluate)
+            if jq -e 'has("action_id") or has("authorization")' \
+                <<<"$request" >/dev/null 2>&1; then
+                api_error_response "$request_id" invalid-request \
+                    api.query.mutation-fields false false
+                return
+            fi
+            if ! jq -e '
+                has("deadline_ms")
+                and (.deadline_ms | type == "number")
+                and ((.deadline_ms | floor) == .deadline_ms)
+                and .deadline_ms >= 100
+                and .deadline_ms <= 30000
+                and ((.payload | keys) - ["candidates", "workload"] | length) == 0
+                and (.payload | length) == 2
+                and (.payload.workload | type == "string")
+                and (
+                    .payload.workload == "general"
+                    or .payload.workload == "llm-streaming"
+                    or .payload.workload == "api-calls"
+                    or .payload.workload == "video"
+                    or .payload.workload == "split-routing"
+                )
+                and (.payload.candidates | type == "array")
+                and (.payload.candidates | length) >= 1
+                and (.payload.candidates | length) <= 128
+                and all(
+                    .payload.candidates[];
+                    (type == "object")
+                    and ((keys - ["evidence", "profile_id"] | length) == 0)
+                    and (length == 2)
+                    and (.profile_id | type == "string")
+                    and (.profile_id | test(
+                        "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
+                    ))
+                    and (.evidence | type == "object")
+                    and ((.evidence | keys) - [
+                        "censorship_fit", "consecutive_failures",
+                        "evidence_age_seconds", "latency_ms", "loss_percent",
+                        "reachability", "recent_outcome", "workload_fit"
+                    ] | length) == 0
+                    and (.evidence | length) == 8
+                    and (
+                        .evidence.recent_outcome == "success"
+                        or .evidence.recent_outcome == "unknown"
+                        or .evidence.recent_outcome == "failure"
+                    )
+                    and (.evidence.consecutive_failures | type == "number")
+                    and ((.evidence.consecutive_failures | floor)
+                        == .evidence.consecutive_failures)
+                    and .evidence.consecutive_failures >= 0
+                    and .evidence.consecutive_failures <= 10
+                    and (
+                        .evidence.censorship_fit == "high"
+                        or .evidence.censorship_fit == "medium"
+                        or .evidence.censorship_fit == "low"
+                        or .evidence.censorship_fit == "unknown"
+                    )
+                    and (
+                        .evidence.reachability == "reachable"
+                        or .evidence.reachability == "unknown"
+                        or .evidence.reachability == "unreachable"
+                    )
+                    and (
+                        (.evidence.latency_ms == null)
+                        or (
+                            (.evidence.latency_ms | type == "number")
+                            and ((.evidence.latency_ms | floor)
+                                == .evidence.latency_ms)
+                            and .evidence.latency_ms >= 0
+                            and .evidence.latency_ms <= 60000
+                        )
+                    )
+                    and (.evidence.loss_percent | type == "number")
+                    and ((.evidence.loss_percent | floor)
+                        == .evidence.loss_percent)
+                    and .evidence.loss_percent >= 0
+                    and .evidence.loss_percent <= 100
+                    and (
+                        .evidence.workload_fit == "high"
+                        or .evidence.workload_fit == "medium"
+                        or .evidence.workload_fit == "low"
+                        or .evidence.workload_fit == "unknown"
+                    )
+                    and (.evidence.evidence_age_seconds | type == "number")
+                    and ((.evidence.evidence_age_seconds | floor)
+                        == .evidence.evidence_age_seconds)
+                    and .evidence.evidence_age_seconds >= 0
+                    and .evidence.evidence_age_seconds <= 86400
+                )
+                and (
+                    (.payload.candidates | map(.profile_id) | unique | length)
+                    == (.payload.candidates | length)
+                )
+            ' <<<"$request" >/dev/null 2>&1; then
+                api_error_response "$request_id" invalid-request \
+                    api.planner.payload-invalid false false
+                return
+            fi
+            deadline_ms="$(jq -r '.deadline_ms' <<<"$request")"
+            deadline_started_ms="$(api_monotonic_ms)" || {
+                api_error_response "$request_id" backend-unavailable \
+                    api.runtime.clock-unavailable false false
+                return
+            }
+            result="$(api_planner_result \
+                "$request" "$deadline_ms" "$deadline_started_ms")"
+            rc=$?
+            if ((rc == 124)); then
+                api_error_response "$request_id" deadline-exceeded \
+                    api.planner.deadline-exceeded true false
+                return
+            elif ((rc != 0)); then
+                api_error_response "$request_id" backend-unavailable \
+                    api.planner.unavailable true false
+                return
             fi
             api_ok_response "$request_id" "$result"
             ;;
@@ -7621,6 +8130,7 @@ main() {
             ;;
         api-info) cmd_api_info "$@" ;;
         protocols) cmd_protocols "$@" ;;
+        planner) cmd_planner "$@" ;;
         list|ls) cmd_list "$@" ;;
         profiles|profile-list)
             case "${1:-}" in

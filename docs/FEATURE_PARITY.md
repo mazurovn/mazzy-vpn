@@ -64,7 +64,9 @@ Android и iOS пока являются только планом: UI preview �
 NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS и ShadowTLS v3 остаются
 `planned` для Linux/Windows/Android до platform adapter, TUN/routing/DNS,
 secret storage, rollback и реальных integration tests. AI orchestration пока
-`partial`: policy и hard constraints опубликованы, исполняемый planner ещё нет.
+`partial`: CLI/API уже исполняют детерминированную read-only оценку с hard
+gates, но history store, authorized execution/failover и Desktop/mobile
+integration ещё не реализованы.
 
 Новая функция считается завершённой не после добавления одной кнопки, а после
 обновления общего API/core, всех применимых интерфейсов, автоматических тестов,
@@ -92,8 +94,9 @@ this is not a claim of nine new connection backends. VLESS/REALITY, Hysteria 2,
 Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS and ShadowTLS v3
 remain `planned` on Linux/Windows/Android until platform adapters,
 TUN/routing/DNS, secret storage, rollback and real integration tests pass. AI
-orchestration is `partial`: policy and hard constraints exist, but the
-executable planner does not.
+orchestration is `partial`: CLI/API now execute deterministic read-only
+evaluation with hard gates, but history storage, authorized execution/failover
+and Desktop/mobile integration are not implemented.
 
 A feature is complete only after its shared API/core, every applicable
 interface, automated tests, this registry and both Russian and English
