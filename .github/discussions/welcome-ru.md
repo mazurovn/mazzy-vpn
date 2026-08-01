@@ -12,8 +12,9 @@ VPN-доступ и не предоставляет серверы: вы исп�
 
 - Опубликованная release line — CLI/TUI 1.2 для Linux и функциональный Linux
   Desktop 0.2 preview. Source 1.3/Desktop 0.3 остаётся release candidate до
-  появления обоих tags и GitHub Releases. Публикация Desktop 0.3 заблокирована,
-  пока issue #31 держит открытым RustSec gate для Tauri/GTK `glib` 0.18.
+  появления обоих tags и GitHub Releases. В candidate issue #31 исправлен
+  проверенным `glib` backport; публикация ждёт PR/default-branch checks и
+  audited artifacts.
 - Windows/macOS — UI preview без production VPN backend.
 - Android/iOS — planned native clients; готовых мобильных пакетов пока нет.
 

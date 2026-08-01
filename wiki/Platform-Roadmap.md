@@ -7,7 +7,7 @@
 | Поверхность | Сейчас | Следующий production gate |
 |---|---|---|
 | CLI/TUI | Linux 1.2 | стабильные schema/error codes, полный TUI service parity — [#12](https://github.com/mazurovn/mazzy-vpn/issues/12) |
-| Desktop Linux | 0.3 candidate, публикация заблокирована RustSec issue #31 | versioned service API, fixed Tauri/GTK dependency graph, policy/localization/accessibility, signed lifecycle — [#4](https://github.com/mazurovn/mazzy-vpn/issues/4), [#31](https://github.com/mazurovn/mazzy-vpn/issues/31) |
+| Desktop Linux | 0.3 candidate, issue #31 исправлен в source; PR/main checks pending | versioned service API, policy/localization/accessibility, signed lifecycle — [#4](https://github.com/mazurovn/mazzy-vpn/issues/4), [#31](https://github.com/mazurovn/mazzy-vpn/issues/31) |
 | Desktop Windows | UI preview | Windows Service, WireGuard/Wintun, signed installer — [#7](https://github.com/mazurovn/mazzy-vpn/issues/7) |
 | Desktop macOS | UI preview | Network Extension, signing/notarization — [#10](https://github.com/mazurovn/mazzy-vpn/issues/10) |
 | Android | planned | native `VpnService`, device tests, signed AAB — [#13](https://github.com/mazurovn/mazzy-vpn/issues/13) |
@@ -19,7 +19,7 @@
 
 ## Порядок
 
-1. Закрыть RustSec gate #31 для Linux Desktop 0.3.
+1. Подтвердить исправленный RustSec gate #31 на `main` и выпустить Linux Desktop 0.3.
 2. Versioned core/API и Linux Desktop 1.0.
 3. Независимые Windows/macOS previews и platform gates.
 4. Android/iOS proof-of-concept на общем профильном контракте.
@@ -38,7 +38,7 @@ and the [capability matrix](https://github.com/mazurovn/mazzy-vpn/blob/main/docs
 | Surface | Current state | Next production gate |
 |---|---|---|
 | CLI/TUI | Linux 1.2 | stable schemas/error codes and complete TUI service parity — [#12](https://github.com/mazurovn/mazzy-vpn/issues/12) |
-| Desktop Linux | 0.3 candidate, publication blocked by RustSec issue #31 | versioned service API, fixed Tauri/GTK dependency graph, policy/localization/accessibility and signed lifecycle — [#4](https://github.com/mazurovn/mazzy-vpn/issues/4), [#31](https://github.com/mazurovn/mazzy-vpn/issues/31) |
+| Desktop Linux | 0.3 candidate, issue #31 fixed in source; PR/main checks pending | versioned service API, policy/localization/accessibility and signed lifecycle — [#4](https://github.com/mazurovn/mazzy-vpn/issues/4), [#31](https://github.com/mazurovn/mazzy-vpn/issues/31) |
 | Desktop Windows | UI preview | Windows Service, WireGuard/Wintun and signed installer — [#7](https://github.com/mazurovn/mazzy-vpn/issues/7) |
 | Desktop macOS | UI preview | Network Extension, signing and notarization — [#10](https://github.com/mazurovn/mazzy-vpn/issues/10) |
 | Android | planned | native `VpnService`, device tests and signed AAB — [#13](https://github.com/mazurovn/mazzy-vpn/issues/13) |
@@ -50,7 +50,7 @@ not WebView/Desktop wrappers.
 
 ## Order
 
-1. Close the #31 RustSec gate for Linux Desktop 0.3.
+1. Confirm the resolved #31 RustSec gate on `main` and publish Linux Desktop 0.3.
 2. Versioned core/API and Linux Desktop 1.0.
 3. Independent Windows/macOS previews and platform gates.
 4. Android/iOS proofs of concept on the common profile contract.

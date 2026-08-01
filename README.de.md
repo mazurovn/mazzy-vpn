@@ -61,8 +61,10 @@ Selbstdiagnose in einem modernen Fenster und im System-Tray. Unter Linux ist sie
 ein funktionsfähiger Begleiter des installierten CLI und wird als AppImage, DEB
 und RPM gebaut. macOS und Windows sind UI-Vorschauen, bis native VPN-Backends
 implementiert sind. Desktop 0.3 darf nicht als neuer Preview veröffentlicht
-werden, solange issue #31 den RustSec-Gate für Tauri/GTK `glib` 0.18 offen
-hält. Die GUI liest keine Profile oder Schlüssel. Details:
+werden, bevor PR #32, der Default-Branch-Dependabot-Scan und die Release-Seiten
+grün sind. Der Candidate enthält bereits den geprüften `glib`-Backport für
+issue #31 und besteht den lokalen RustSec-Gate ohne Ausnahmen. Die GUI liest
+keine Profile oder Schlüssel. Details:
 [Desktop guide (English)](docs/DESKTOP.en.md).
 
 ## Wichtige Befehle

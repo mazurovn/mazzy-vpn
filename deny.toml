@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 [advisories]
+db-path = "${MAZZY_ADVISORY_DB_PATH:-~/.cargo/advisory-dbs}"
 db-urls = ["https://github.com/RustSec/advisory-db"]
 yanked = "deny"
 unmaintained = "none"

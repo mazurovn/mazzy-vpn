@@ -2,7 +2,7 @@
 
 Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
-Last synchronized: 2026-07-30.
+Last synchronized: 2026-08-01.
 
 This file is the persistent handoff after interrupted Codex sessions. GitHub
 issues and release gates in [`capabilities.json`](capabilities.json) remain the
@@ -15,21 +15,24 @@ authoritative backlog; this page records the verified resumption point.
   audited AI-ready diagnostics and Desktop 0.3 candidate.
 - The published stable release is CLI/TUI `v1.2.0`. The published Desktop
   preview is `desktop-v0.2.0`.
-- CLI/TUI 1.3.0 and Linux Desktop 0.3.0 candidate code is merged to `main`,
-  but neither tag nor GitHub Release page exists yet. Linux Desktop 0.3.0 must
-  not be published while issue #31 remains open.
+- CLI/TUI 1.3.0 and Linux Desktop 0.3.0 remain release candidates in PR #32;
+  neither tag nor GitHub Release page exists yet. The branch now carries the
+  provenance-verified issue #31 `glib` backport and passes local RustSec checks
+  without advisory suppressions. Publication still requires green PR checks,
+  merge, the default-branch Dependabot scan and audited release artifacts.
 - Windows and macOS 0.2.0 artifacts are unsigned UI previews without native
   VPN backends. They must not be described as functional VPN clients.
 - Android and iOS clients are planned and have no application source or
   release artifacts.
-- There are no open pull requests. Open backlog issues are #4–#14 and #31; PRs
+- PR #32 is open as a draft. Open backlog issues are #4–#14 and #31; PRs
   #25–#30 are merged incremental slices, not proof that the corresponding
-  production gates are complete.
+  production gates are complete. Issue #31 remains open until the default-
+  branch dependency graph confirms the source-level remediation.
 - The uncompromising code, security, packaging and cross-platform review started
   in [`AUDIT_2026-07-28.ru.md`](AUDIT_2026-07-28.ru.md). The latest PR #32
-  resumption audit is [`AUDIT_2026-07-30.ru.md`](AUDIT_2026-07-30.ru.md); it
-  confirms macOS/Windows Desktop CI recovery and keeps the Linux `glib` RustSec
-  gate as the remaining Desktop release blocker.
+  resumption audit is [`AUDIT_2026-08-01.ru.md`](AUDIT_2026-08-01.ru.md); it
+  records the issue #31 backport, the new `event-listener` advisory update,
+  subprocess hang fix, tray-path consolidation and remaining production risks.
 
 Published release links:
 
@@ -184,22 +187,24 @@ captured stdout pipe. `tests.probe` and `tests.verify-egress` now capture bounde
 worker output through root-only temporary files and clean them on timeout; the
 regression suite asserts no `.probe-result.*` or `.verify-result.*` files remain.
 
-Verified locally for the current candidate:
+Verified locally for the current candidate on 2026-08-01:
 
-- shell regression suite: 74/74 in one uninterrupted 2026-07-29 run, including
+- shell regression suite: 74/74 in one uninterrupted 2026-08-01 run, including
   API query deadline cleanup, Unicode profile-spoofing and runtime hard-code
   boundary checks;
-- Rust unit tests: 22/22;
+- Rust unit tests: 24/24, including a descendant-pipe timeout regression;
+- all 12 documentation screenshots were already regenerated on the current PR
+  branch and were rechecked at 1680×951 with RFC 5737 preview data; the issue
+  #31, subprocess and packaging fixes have no visual UI delta;
 - ShellCheck, Clippy, capability/API validators, public audit and runtime
   hard-code audit;
-- `npm audit --audit-level=high` reported 0 known vulnerabilities on
-  2026-07-29. GitHub Dependabot then opened issue #31 for the transitive
-  Tauri/GTK3 `glib` 0.18 unsound advisory
-  `RUSTSEC-2024-0429`/`GHSA-wrw7-89jp-8q8g`; Linux Desktop remains preview and
-  production release stays blocked until the final Linux graph removes or
-  patches the affected implementation. A required `cargo-deny` RustSec advisory
-  gate is now configured to fail on vulnerability, unsound and yanked
-  advisories. System-package advisory scanning is still absent;
+- `npm audit --audit-level=high` reports 0 known vulnerabilities. Issue #31 is
+  remediated in candidate source by vendoring crates.io `glib` 0.18.5 and
+  applying the exact upstream soundness fix. The provenance gate verifies the
+  archive checksum and all source deltas before cargo-deny; `ignore = []`.
+  The 2026-08-01 RustSec refresh also found `RUSTSEC-2026-0221` in
+  `event-listener` 5.4.1, now updated to 5.4.2. Cargo-deny 0.20.2 reports
+  `advisories ok`. System-package advisory scanning is still absent;
 - crates.io checks on 2026-07-30 found no simple semver update that removes
   `glib` 0.18: `tauri` 2.11.5 and `webkit2gtk` 2.0.2 are current, `gtk` 0.18.2
   remains the GTK3 binding line, and `cargo update --dry-run` only offered minor

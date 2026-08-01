@@ -14,10 +14,11 @@ separate CLI installation is no longer a prerequisite. CLI and TUI remain
 independent clients of the same engine and state.
 
 > **0.3 status:** the Linux control center now covers the main workflow, but it
-> remains preview until the [release gates](FEATURE_PARITY.md) pass. Publication
-> of the Desktop 0.3 preview is blocked while issue #31 is open: the current
-> Tauri/GTK graph pulls `glib` 0.18 affected by `RUSTSEC-2024-0429` /
-> `GHSA-wrw7-89jp-8q8g`. Desktop 1.0 still needs a native shared service,
+> remains preview until the [release gates](FEATURE_PARITY.md) pass. The
+> candidate resolves issue #31 with the exact upstream `glib` 0.18 soundness
+> backport, verified source provenance and an empty cargo-deny ignore list.
+> Publication still waits for green PR #32/default-branch security checks and
+> the GitHub release workflow. Desktop 1.0 still needs a native shared service,
 > complete fallback-policy UI, six-language coverage for every screen, signed
 > updates, clean-device integration tests and migration of the remaining typed
 > `pkexec` operations to the partial versioned local API.
@@ -202,8 +203,8 @@ sudo dnf install "./Mazzy VPN Desktop-0.3.0-1.x86_64.rpm"
 For DEB/RPM, **Settings → Install / update / repair** runs package-safe
 `mazzy-vpn doctor --fix`: it repairs supported missing protocol dependencies
 and service state without copying package files into `/usr/local`. This slice is
-still preview and the 0.3 publication is blocked by the current Tauri/GTK
-`glib` 0.18 RustSec advisory until the graph is patched or migrated.
+still preview. The 0.3 candidate carries the verified issue #31 `glib`
+backport and a clean RustSec graph; publishing awaits PR/default-branch checks.
 Clean-device install/upgrade/remove tests across every supported distribution,
 package rollback/fault injection, AmneziaWG distribution and signing also remain
 open release gates.

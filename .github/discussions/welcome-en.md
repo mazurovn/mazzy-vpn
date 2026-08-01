@@ -12,8 +12,9 @@ License: GNU AGPL-3.0-or-later.
 
 - The published release line is CLI/TUI 1.2 for Linux and the functional Linux
   Desktop 0.2 preview. The 1.3/Desktop 0.3 source tree is a release candidate
-  until both tags and GitHub Releases exist. Desktop 0.3 publication is blocked
-  while issue #31 keeps the Tauri/GTK `glib` 0.18 RustSec gate open.
+  until both tags and GitHub Releases exist. The candidate resolves issue #31
+  with a verified `glib` backport; publication waits for PR/default-branch
+  checks and audited artifacts.
 - Windows/macOS — UI preview without a production VPN backend.
 - Android/iOS — planned native clients; no working mobile packages yet.
 

@@ -20,9 +20,9 @@ Desktop 0.3 не требует предварительной ручной ус
 preview до versioned service API, полного паритета режимов/локализаций,
 подписанного update/rollback, исправленного Tauri/GTK dependency graph и
 закрытия platform release gates. Сейчас публикация Desktop 0.3 дополнительно
-заблокирована [issue #31](https://github.com/mazurovn/mazzy-vpn/issues/31):
-transitive `glib` 0.18 affected by `RUSTSEC-2024-0429` /
-`GHSA-wrw7-89jp-8q8g`.
+ждёт PR/default-branch checks: [issue #31](https://github.com/mazurovn/mazzy-vpn/issues/31)
+исправлен в candidate точным provenance-verified backport `glib`, а локальный
+RustSec gate проходит без suppressions.
 
 Фактическая публикация определяется наличием tags `v1.3.0` и
 `desktop-v0.3.0` и соответствующих страниц в GitHub Releases. Пока хотя бы
@@ -97,10 +97,10 @@ an About screen, explicit privacy rules and Android/iOS release gates.
 Desktop 0.3 does not require a prior manual CLI installation, but remains a
 preview until the versioned service API, complete mode/localization parity,
 signed update/rollback, a fixed Tauri/GTK dependency graph and platform release
-gates are complete. Desktop 0.3 publication is currently blocked by
-[issue #31](https://github.com/mazurovn/mazzy-vpn/issues/31): transitive
-`glib` 0.18 is affected by `RUSTSEC-2024-0429` /
-`GHSA-wrw7-89jp-8q8g`.
+gates are complete. Desktop 0.3 publication waits for the remaining PR/default-
+branch checks: [issue #31](https://github.com/mazurovn/mazzy-vpn/issues/31) is
+resolved in the candidate with the exact provenance-verified `glib` backport,
+and the local RustSec gate passes without suppressions.
 
 Publication is determined by tags `v1.3.0` and `desktop-v0.3.0` and their
 corresponding GitHub Release pages. Treat the release line as a candidate while

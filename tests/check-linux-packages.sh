@@ -64,6 +64,19 @@ find_appimage_offset() {
     printf '%s\n' "$offset"
 }
 
+assert_gui_launch() {
+    local label="$1"
+    shift
+    local log="$TMP/${label,,}-launch.log" rc=0
+    GDK_BACKEND=x11 QT_QPA_PLATFORM=xcb \
+        /usr/bin/timeout --kill-after=2s 10s \
+        xvfb-run -a "$@" >"$log" 2>&1 || rc=$?
+    if ((rc != 124)); then
+        cat "$log" >&2
+        fail "$label bundle exited before the 10-second GUI launch smoke completed (exit $rc)"
+    fi
+}
+
 require_command cpio
 require_command dpkg-deb
 require_command python3
@@ -71,6 +84,7 @@ require_command rpm
 require_command rpm2cpio
 require_command systemd-analyze
 require_command unsquashfs
+require_command xvfb-run
 
 deb="$(single_package "$BUNDLE_ROOT/deb" '*.deb')"
 rpm_package="$(single_package "$BUNDLE_ROOT/rpm" '*.rpm')"
@@ -206,6 +220,7 @@ for listing in "$TMP/deb-files" "$TMP/rpm-files"; do
         /usr/bin/mazzyvpn \
         /usr/bin/vpnctl \
         /usr/lib/mazzy-vpn/api/v1/manifest.json \
+        /usr/lib/mazzy-vpn/deny.toml \
         /usr/lib/mazzy-vpn/desktop/package-lock.json \
         /usr/lib/mazzy-vpn/desktop/package.json \
         /usr/lib/mazzy-vpn/desktop/scripts/build-release.mjs \
@@ -214,7 +229,11 @@ for listing in "$TMP/deb-files" "$TMP/rpm-files"; do
         /usr/lib/mazzy-vpn/desktop/src-tauri/Cargo.toml \
         /usr/lib/mazzy-vpn/desktop/src-tauri/build.rs \
         /usr/lib/mazzy-vpn/desktop/src-tauri/capabilities/default.json \
+        /usr/lib/mazzy-vpn/desktop/src-tauri/vendor/glib-0.18.5/Cargo.toml \
+        /usr/lib/mazzy-vpn/desktop/src-tauri/vendor/glib-0.18.5/PATCH-PROVENANCE.md \
+        /usr/lib/mazzy-vpn/desktop/src-tauri/vendor/glib-0.18.5/src/variant_iter.rs \
         /usr/lib/mazzy-vpn/desktop/ui/mazzy-vpn-logo.svg \
+        /usr/lib/mazzy-vpn/rust-toolchain.toml \
         /usr/lib/systemd/system/mazzy-vpn-api.socket \
         /usr/lib/systemd/system/mazzy-vpn-api.socket.d/10-package-docs.conf \
         /usr/lib/systemd/system/mazzy-vpn-api@.service \
@@ -255,6 +274,12 @@ for extracted_root in "$deb_root" "$rpm_root"; do
     cmp -s "$ROOT/desktop/src-tauri/Cargo.lock" \
         "$extracted_root/usr/lib/mazzy-vpn/desktop/src-tauri/Cargo.lock" ||
         fail "package Cargo lockfile differs from source"
+    cmp -s "$ROOT/desktop/src-tauri/vendor/glib-0.18.5/src/variant_iter.rs" \
+        "$extracted_root/usr/lib/mazzy-vpn/desktop/src-tauri/vendor/glib-0.18.5/src/variant_iter.rs" ||
+        fail "package vendored glib backport differs from source"
+    cmp -s "$ROOT/tests/check-glib-backport.py" \
+        "$extracted_root/usr/lib/mazzy-vpn/tests/check-glib-backport.py" ||
+        fail "package glib provenance gate differs from source"
     cmp -s "$ROOT/desktop/scripts/tauri-audited.mjs" \
         "$extracted_root/usr/lib/mazzy-vpn/desktop/scripts/tauri-audited.mjs" ||
         fail "package audited release wrapper differs from source"
@@ -267,6 +292,7 @@ for relative in \
     mazzy-vpn \
     install.sh \
     api/v1/manifest.json \
+    deny.toml \
     desktop/package-lock.json \
     desktop/package.json \
     desktop/scripts/build-release.mjs \
@@ -276,6 +302,9 @@ for relative in \
     desktop/src-tauri/build.rs \
     desktop/src-tauri/capabilities/default.json \
     desktop/src-tauri/icons/icon.png \
+    desktop/src-tauri/vendor/glib-0.18.5/Cargo.toml \
+    desktop/src-tauri/vendor/glib-0.18.5/PATCH-PROVENANCE.md \
+    desktop/src-tauri/vendor/glib-0.18.5/src/variant_iter.rs \
     desktop/src-tauri/src/backend.rs \
     desktop/src-tauri/src/main.rs \
     desktop/src-tauri/tauri.conf.json \
@@ -284,7 +313,9 @@ for relative in \
     desktop/ui/index.html \
     desktop/ui/mazzy-vpn-logo.svg \
     packaging/linux/post-install.sh \
+    rust-toolchain.toml \
     tests/check-capabilities.py \
+    tests/check-glib-backport.py \
     tests/check-linux-packages.sh \
     tests/run.sh \
     wiki/Desktop-Dashboard-and-Tray.md; do
@@ -305,6 +336,12 @@ cmp -s "$ROOT/desktop/package-lock.json" \
 cmp -s "$ROOT/desktop/src-tauri/Cargo.lock" \
     "$appimage_engine/desktop/src-tauri/Cargo.lock" ||
     fail "AppImage embedded Cargo lockfile differs from source"
+cmp -s "$ROOT/desktop/src-tauri/vendor/glib-0.18.5/src/variant_iter.rs" \
+    "$appimage_engine/desktop/src-tauri/vendor/glib-0.18.5/src/variant_iter.rs" ||
+    fail "AppImage vendored glib backport differs from source"
+cmp -s "$ROOT/tests/check-glib-backport.py" \
+    "$appimage_engine/tests/check-glib-backport.py" ||
+    fail "AppImage glib provenance gate differs from source"
 cmp -s "$ROOT/desktop/scripts/tauri-audited.mjs" \
     "$appimage_engine/desktop/scripts/tauri-audited.mjs" ||
     fail "AppImage audited release wrapper differs from source"
@@ -331,4 +368,8 @@ python3 "$appimage_engine/tests/check-api-contract.py" >/dev/null ||
     --lang en >/dev/null ||
     fail "AppImage embedded installer source validation failed"
 
-echo "linux-package-audit: AppImage/DEB/RPM payload, dependencies and lifecycle scripts verified"
+assert_gui_launch "DEB" "$deb_root/usr/bin/mazzy-vpn-desktop"
+assert_gui_launch "RPM" "$rpm_root/usr/bin/mazzy-vpn-desktop"
+assert_gui_launch "AppImage" env APPIMAGE_EXTRACT_AND_RUN=1 "$appimage"
+
+echo "linux-package-audit: AppImage/DEB/RPM payload, dependencies, lifecycle and GUI launch verified"

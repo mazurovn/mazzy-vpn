@@ -14,10 +14,11 @@ Linux-пакет 0.3 включает совместимый engine installer: �
 клиентами того же движка и состояния.
 
 > **Статус 0.3:** Linux control-center уже покрывает основной рабочий цикл, но
-> остаётся preview до закрытия [release gates](FEATURE_PARITY.md). Публикация
-> Desktop 0.3 preview заблокирована, пока открыт issue #31: текущий Tauri/GTK
-> graph тянет `glib` 0.18 с `RUSTSEC-2024-0429` /
-> `GHSA-wrw7-89jp-8q8g`. Для Desktop 1.0 ещё нужны общий native service, полный
+> остаётся preview до закрытия [release gates](FEATURE_PARITY.md). В candidate
+> issue #31 исправлен точным upstream backport `glib` 0.18 с проверенным source
+> provenance и пустым cargo-deny ignore list. Публикация ждёт зелёных PR #32/
+> default-branch security checks и GitHub release workflow. Для Desktop 1.0 ещё
+> нужны общий native service, полный
 > fallback-policy UI, перевод всех экранов на шесть языков, подписанные
 > обновления, clean-device integration tests и перенос оставшихся typed
 > `pkexec`-операций в частично реализованный versioned local API.
@@ -203,8 +204,8 @@ sudo dnf install "./Mazzy VPN Desktop-0.3.0-1.x86_64.rpm"
 package-safe `mazzy-vpn doctor --fix`: оно исправляет поддерживаемые
 недостающие protocol dependencies и service state, но не копирует package
 files в `/usr/local`. Этот slice всё ещё preview, а публикация 0.3
-заблокирована текущим Tauri/GTK `glib` 0.18 RustSec advisory до patch или
-migration dependency graph. Также остаются clean-device install/upgrade/remove
+подготовлена с проверенным issue #31 backport `glib` и чистым RustSec graph;
+публикация ждёт PR/default-branch checks. Также остаются clean-device install/upgrade/remove
 tests для всех поддерживаемых дистрибутивов, package rollback/fault injection,
 доставка AmneziaWG и подпись.
 

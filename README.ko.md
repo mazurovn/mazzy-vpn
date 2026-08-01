@@ -57,9 +57,10 @@ Tauri Desktop은 Quick Connect, Reconnect, Disconnect, Refresh,
 Self-diagnostics를 창과 시스템 트레이에서 제공합니다. Linux 버전은 설치된
 CLI와 함께 실제로 동작하며 AppImage, DEB, RPM으로 제공됩니다. macOS와
 Windows는 네이티브 VPN 백엔드가 구현되기 전까지 UI 미리보기입니다. GUI는
-프로필이나 키를 읽지 않습니다. issue #31이 닫히기 전에는 Desktop 0.3을 새
-preview로 게시하지 마십시오. 현재 Tauri/GTK `glib` 0.18은 RustSec gate를
-통과하지 못합니다. 자세한 내용:
+프로필이나 키를 읽지 않습니다. Desktop 0.3 candidate에는 issue #31의 검토된
+`glib` backport가 포함되어 있으며 로컬 RustSec gate를 예외 없이 통과합니다.
+게시는 PR #32, 기본 브랜치 Dependabot scan 및 Release 페이지가 모두 완료된
+후 진행합니다. 자세한 내용:
 [Desktop guide (English)](docs/DESKTOP.en.md).
 
 ## 주요 명령

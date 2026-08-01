@@ -747,7 +747,7 @@ fn timed_privileged_output(
 ) -> io::Result<Output> {
     bounded_output(
         Command::new(TIMEOUT_PATH)
-            .args(["--foreground", "--kill-after=30s"])
+            .arg("--kill-after=30s")
             .arg(format!("{deadline_seconds}s"))
             .arg(PKEXEC_PATH)
             .arg(program)
@@ -1450,7 +1450,7 @@ pub(crate) fn verify_connection_sync(
     })?;
     let mut command = Command::new(TIMEOUT_PATH);
     command
-        .args(["--foreground", "--kill-after=2s", "240s", PKEXEC_PATH])
+        .args(["--kill-after=2s", "240s", PKEXEC_PATH])
         .arg(cli_path)
         .args(["verify", "--timeout"])
         .arg(timeout_seconds.to_string())
@@ -1518,7 +1518,7 @@ pub(crate) fn probe_profiles_sync(
     .div_ceil(1_000);
     let mut command = Command::new(TIMEOUT_PATH);
     command
-        .args(["--foreground", "--kill-after=2s"])
+        .arg("--kill-after=2s")
         .arg(format!("{probe_deadline}s"))
         .arg(PKEXEC_PATH)
         .arg(cli_path)
@@ -1728,7 +1728,7 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
                 "bootstrap".into(),
                 bounded_output(
                     Command::new(TIMEOUT_PATH)
-                        .args(["--foreground", "--kill-after=30s", "1800s", PKEXEC_PATH])
+                        .args(["--kill-after=30s", "1800s", PKEXEC_PATH])
                         .arg(SYSTEM_CLI_PATH)
                         .args(["doctor", "--fix"]),
                 ),
@@ -1748,7 +1748,7 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
             "bootstrap".into(),
             bounded_output(
                 Command::new(TIMEOUT_PATH)
-                    .args(["--foreground", "--kill-after=30s", "1800s", PKEXEC_PATH])
+                    .args(["--kill-after=30s", "1800s", PKEXEC_PATH])
                     .arg("/bin/bash")
                     .arg(installer)
                     .arg("--yes")
@@ -1810,7 +1810,7 @@ fn version_from_output(output: &str) -> Option<String> {
 fn installed_version(path: &Path) -> Option<String> {
     let output = bounded_output(
         Command::new(TIMEOUT_PATH)
-            .args(["--foreground", "--kill-after=2s", "10s"])
+            .args(["--kill-after=2s", "10s"])
             .arg(path)
             .arg("version"),
     )
@@ -2168,6 +2168,19 @@ mod tests {
             drain_bounded(std::io::Cursor::new(input), MAX_OUTPUT_STREAM_BYTES).expect("capture");
         assert_eq!(output.len(), MAX_OUTPUT_STREAM_BYTES);
         assert!(output.ends_with(TRUNCATED_OUTPUT_MARKER));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn timeout_kills_descendants_that_keep_output_pipes_open() {
+        let started = std::time::Instant::now();
+        let output = bounded_output(
+            Command::new(TIMEOUT_PATH)
+                .args(["--kill-after=1s", "0.1s", "/bin/sh", "-c", "sleep 30 & wait"]),
+        )
+        .expect("bounded timeout");
+        assert_eq!(output.status.code(), Some(124));
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
     }
 
     #[test]

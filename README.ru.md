@@ -17,8 +17,10 @@ L2TP/IPsec, безопасно импортирует профили, измер
 
 В исходном дереве объявлен release candidate 1.3.0/0.3.0. Пока не опубликованы
 оба соответствующих tag и GitHub Release, последней выпущенной линией остаются
-CLI/TUI 1.2.0 и Desktop 0.2.0 preview. Публикация Desktop 0.3 заблокирована,
-пока issue #31 держит открытым RustSec gate для Tauri/GTK `glib` 0.18.
+CLI/TUI 1.2.0 и Desktop 0.2.0 preview. В candidate уже включён проверенный
+backport issue #31 для `glib`, а локальный RustSec gate проходит без
+исключений; публикация ждёт зелёных checks PR #32, default-branch Dependabot
+scan и создания release pages.
 
 Основная команда — `mazzy-vpn`. Совместимые aliases: `vpnctl` и `mazzyvpn`.
 
@@ -155,10 +157,11 @@ manager; AppImage сохраняет явно разрешённый embedded in
 Linux-пакеты выпускаются как AppImage, DEB и RPM.
 
 Upgrade и remove DEB/RPM намеренно сохраняют профили `/etc/vpnctl` и state
-`/var/lib/vpnctl`. Публикация 0.3 сейчас блокируется RustSec issue #31:
-transitive Tauri/GTK `glib` 0.18 должен быть patched или заменён миграцией
-dependency graph. До production также нужны clean-device install/upgrade/remove,
-rollback/fault и signing gates на каждом поддерживаемом дистрибутиве.
+`/var/lib/vpnctl`. В candidate issue #31 исправлен точным upstream backport
+`glib` с проверкой checksum и всей source delta до cargo-deny; advisory ignore
+list остаётся пустым. До production также нужны clean-device
+install/upgrade/remove, rollback/fault и signing gates на каждом
+поддерживаемом дистрибутиве.
 
 «О программе» показывает версии Desktop/engine/platform, автора, copyright,
 лицензию AGPL, принципы приватности и правила безопасной работы.

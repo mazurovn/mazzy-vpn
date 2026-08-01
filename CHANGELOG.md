@@ -4,6 +4,31 @@ All notable changes to Mazzy VPN are documented here.
 
 ## Unreleased
 
+- Remediated `RUSTSEC-2024-0429` in the Tauri/GTK3 Linux graph by vendoring the
+  crates.io `glib` 0.18.5 source and applying the exact reviewed upstream
+  `VariantStrIter` soundness fix from gtk-rs commit
+  `b5a4071e439bef2b5eea76c3aa25e5ae84839e34`.
+- Added a release gate that verifies the original crate archive checksum,
+  compares every vendored file byte-for-byte, proves the two-line backport is
+  the only upstream source change and confirms Cargo resolves the local crate.
+  Cargo-deny continues with an empty advisory ignore list.
+- Included the vendored crate, provenance gate, `deny.toml` and pinned Rust
+  toolchain in AppImage/DEB/RPM corresponding-source payloads; package audits
+  now require and byte-compare the patched implementation and verifier.
+- Added isolated Xvfb launch-smoke checks for the assembled AppImage and the
+  binaries extracted from DEB/RPM; an immediate GTK/WebKit/resource crash now
+  blocks both pull requests and tagged Desktop preview releases.
+- Updated `event-listener` from 5.4.1 to 5.4.2 after the 2026-08-01 RustSec
+  refresh found `RUSTSEC-2026-0221` through the `rfd`/`ashpd` dependency chain.
+- Removed the duplicate direct tray-to-`pkexec` command table. Tray lifecycle,
+  service and recovery actions now use the same typed backend/local-API adapter
+  as the main Desktop UI.
+- Stopped using GNU `timeout --foreground` for Desktop helpers, so a timed-out
+  command's descendants cannot retain captured pipes and hang the GUI. A Linux
+  regression test covers a child that leaves a background process holding
+  stdout/stderr open.
+- Added the repeat architecture, security, code and release audit dated
+  2026-08-01 and synchronized release/security documentation for issue #31.
 - Added `mazzy-vpn verify [--speed] [--json]` and the protected read-only API
   query `tests.verify-egress`.
 - Compare interface-bound and default IPv4 egress, require two distinct
