@@ -143,10 +143,12 @@ OpenVPN использует DNS, переданный сервером/проф
 девять записей не участвуют в lifecycle selection со статусом `planned`.
 
 `mazzy-vpn protocols list --json` и API `protocols.list` возвращают только
-публичные capabilities. `protocols detect --stdin --json` распознаёт
-однозначные share schemes, но не выводит host, user info, UUID, password, query
-или fragment. Proxy-протоколам нужен отдельный TUN adapter; произвольный
-пользовательский sing-box JSON никогда не является root execution format.
+публичные capabilities. `protocols detect --stdin --json` классифицирует
+однозначные share URI и ограниченные JSON-структуры, но не выводит host, user
+info, UUID, password, query или fragment. Классифицированный JSON не считается
+валидированным runtime config. Proxy-протоколам нужен отдельный TUN adapter;
+произвольный пользовательский sing-box JSON никогда не является root execution
+format.
 Полная модель описана в
 [документе об оркестрации](PROTOCOL_ORCHESTRATION.ru.md).
 
@@ -165,7 +167,8 @@ audit и rollback boundaries.
 | Вход/состояние | Владелец | Использование planner |
 |---|---|---|
 | Наличие runtime, текущий parse профиля, права файла, rollback storage и platform support | backend | eligibility gates; caller не может их изменить |
-| Recent outcome, reachability, latency/loss и fit | caller в текущем срезе | только score; наблюдаемое health evidence старше 900 секунд даёт ноль |
+| Recent outcome, reachability, latency/loss и возраст измерения | caller в текущем срезе | только health score; evidence старше 900 секунд даёт ноль |
+| Censorship fit и workload fit | backend catalog + workload | score; caller не назначает эти значения |
 | Произвольный текст модели | недоверенный | никогда не разбирается как shell command, профиль или backend config |
 
 Для одинакового локального snapshot и evidence rank/reason codes

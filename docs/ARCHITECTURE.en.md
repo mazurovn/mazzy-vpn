@@ -144,8 +144,9 @@ nine entries cannot enter lifecycle selection while their platform state is
 `planned`.
 
 `mazzy-vpn protocols list --json` and API `protocols.list` expose only public
-capabilities. `protocols detect --stdin --json` recognizes unambiguous share
-schemes but returns no host, user info, UUID, password, query or fragment.
+capabilities. `protocols detect --stdin --json` classifies unambiguous share
+URIs and bounded JSON shapes but returns no host, user info, UUID, password,
+query or fragment. Classified JSON is not a validated runtime configuration.
 Proxy protocols require an explicit TUN adapter; arbitrary user-provided
 sing-box JSON is never a root execution format. See
 [Protocol orchestration](PROTOCOL_ORCHESTRATION.en.md) for scoring, custom
@@ -166,7 +167,8 @@ The trust boundary is explicit:
 | Input/state | Owner | Planner use |
 |---|---|---|
 | Runtime presence, current profile parse, file permissions, rollback storage and platform support | backend | eligibility gates; the caller cannot override them |
-| Recent outcome, reachability, latency/loss and fit | caller in the current slice | score only; observed health older than 900 seconds scores zero |
+| Recent outcome, reachability, latency/loss and measurement age | caller in the current slice | health score only; evidence older than 900 seconds scores zero |
+| Censorship fit and workload fit | backend catalog + workload | score; the caller cannot assign these values |
 | Free-form model output | untrusted | never parsed as a shell command, profile or backend configuration |
 
 For the same local snapshot and evidence, rank and reason codes are

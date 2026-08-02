@@ -147,8 +147,10 @@ journal/snapshot; возможность rollback конкретного кан�
 Policy v1 выделяет 30 баллов recent outcome, 25 censorship fit, 20
 reachability, 15 latency/loss и 10 workload fit. Наблюдаемое health evidence
 (`recent_outcome`, reachability и latency/loss) старше 900 секунд даёт ноль;
-переданный caller fit остаётся advisory. При равном score стабильным tie-breaker
-является opaque profile ID. Response содержит reason codes и баллы факторов,
+`censorship-fit` backend выводит из protocol catalog, а `workload-fit` — из
+workload, класса протокола и transports. Caller не может назначить эти факторы.
+При равном score стабильным tie-breaker является opaque profile ID. Response
+содержит reason codes и баллы факторов,
 но не display name, endpoint, filename, path, configuration или credential.
 Ответ всегда имеет `dry_run: true`: operation не подключает VPN и не выполняет
 failover. Candidate validation получает тот же абсолютный monotonic deadline,
@@ -162,17 +164,16 @@ jq -n --arg profile_id "$PROFILE_ID" '{
     profile_id: $profile_id,
     evidence: {
       recent_outcome: "success", consecutive_failures: 0,
-      censorship_fit: "high", reachability: "reachable",
-      latency_ms: 80, loss_percent: 0, workload_fit: "high",
+      reachability: "reachable", latency_ms: 80, loss_percent: 0,
       evidence_age_seconds: 30
     }
   }]
 }' | mazzy-vpn planner evaluate --stdin --json
 ```
 
-Переданный caller fit влияет на dry-run rank, но не может обойти backend-owned
-gate. Сбор history, authorized execution и автоматический failover остаются за
-границами этой operation.
+Caller может влиять на dry-run rank только через ограниченное health evidence и
+не может обойти backend-owned gate. Сбор доверенного history, authorized
+execution и автоматический failover остаются за границами этой operation.
 
 `tests.probe` проверяет все профили выбранного protocol scope с отдельным
 таймаутом endpoint и ограниченной параллельностью 1–8 workers. Результат

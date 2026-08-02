@@ -146,8 +146,10 @@ that pass every gate receive a score and rank.
 The policy-v1 score is 30 points for recent outcome, 25 for censorship fit, 20
 for reachability, 15 for latency/loss and 10 for workload fit. Observed health
 evidence (`recent_outcome`, reachability and latency/loss) older than 900
-seconds scores zero; caller-supplied fit remains advisory. Equal scores use the
-opaque profile ID as the stable tie-breaker. The response includes reason codes
+seconds scores zero. The backend derives `censorship-fit` from the protocol
+catalog and `workload-fit` from workload, protocol class and transports; the
+caller cannot self-assign either factor. Equal scores use the opaque profile ID
+as the stable tie-breaker. The response includes reason codes
 and factor points, but no display name, endpoint, filename, path, configuration
 or credential. It is always `dry_run: true`; it cannot connect or fail over.
 Candidate validation receives the same absolute monotonic deadline as the
@@ -162,17 +164,16 @@ jq -n --arg profile_id "$PROFILE_ID" '{
     profile_id: $profile_id,
     evidence: {
       recent_outcome: "success", consecutive_failures: 0,
-      censorship_fit: "high", reachability: "reachable",
-      latency_ms: 80, loss_percent: 0, workload_fit: "high",
+      reachability: "reachable", latency_ms: 80, loss_percent: 0,
       evidence_age_seconds: 30
     }
   }]
 }' | mazzy-vpn planner evaluate --stdin --json
 ```
 
-Caller-supplied fit evidence can influence a dry-run rank but cannot bypass a
-backend-owned gate. History collection, authorized execution and automatic
-failover remain outside this operation.
+The caller can influence dry-run rank only through bounded health evidence and
+cannot bypass a backend-owned gate. Trusted history collection, authorized
+execution and automatic failover remain outside this operation.
 
 `tests.probe` checks every profile in the requested protocol scope with a
 per-endpoint timeout and bounded concurrency of 1–8 workers. It returns an

@@ -71,6 +71,12 @@ deadline, audit и rollback. Custom server не равен arbitrary config exec
 и DEL отклоняются. Результат содержит только protocol ID, kind и readiness;
 host, UUID, username, password, query и fragment отсутствуют.
 
+Повторный аудит 2026-08-02 добавил отдельную JSON-ветку: стандартный JSON
+whitespace допустим, но duplicate keys, несколько документов и смешанные
+protocol outbounds отклоняются. Detector узнаёт bounded sing-box/Xray, Mieru и
+NaiveProxy shapes и возвращает только очищенную классификацию; исходный JSON не
+становится runtime config.
+
 ### 6. High: fake transport test не обнаружил закрытие API response-half
 
 После установки DEB 0.3.1 socket activation запускал worker, но клиентский

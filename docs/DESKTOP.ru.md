@@ -101,8 +101,8 @@ Desktop 0.3.2 также принимает legacy cache schema 0.2 без `prof
 
 Versioned protocol registry описывает 13 записей, но этот экран пока импортирует
 и подключает только четыре реализованных Linux backend. Redacted URI detection
-для современных proxy protocols является основой CLI/API; Desktop import, TUN
-adapters и умный выбор остаются gated work. См.
+есть в stable 1.3.2, а unreleased ветка также классифицирует ограниченный JSON;
+Desktop import, TUN adapters и умный выбор остаются gated work. См.
 [Оркестрацию протоколов](PROTOCOL_ORCHESTRATION.ru.md).
 
 ## Действия в окне и tray

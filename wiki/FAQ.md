@@ -46,8 +46,9 @@ AmneziaWG, WireGuard, OpenVPN и NetworkManager L2TP/IPsec. Поддержка �
 
 Versioned каталог дополнительно описывает VLESS/REALITY, Hysteria 2, Mieru,
 NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS и ShadowTLS v3. Сейчас для
-них реализовано безопасное catalog/URI detection, но не import/connect. Многие
-из них являются proxy/transport и требуют отдельного TUN adapter. Точная
+них реализовано безопасное catalog/URI detection, а unreleased ветка также
+классифицирует ограниченный JSON; import/connect ещё не реализованы. Многие из
+них являются proxy/transport и требуют отдельного TUN adapter. Точная
 матрица: [[Protocol Orchestration]].
 
 ## Почему Dashboard видит профили, а экран «Профили» был пустым?
@@ -178,8 +179,9 @@ functional on Windows, macOS or mobile.
 
 The versioned catalog additionally describes VLESS/REALITY, Hysteria 2, Mieru,
 NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS and ShadowTLS v3. Safe
-catalog/URI detection exists now, but import/connect does not. Many entries are
-proxy/transport protocols and require a separate TUN adapter. See
+catalog/URI detection exists now, and the unreleased branch also classifies
+bounded JSON; import/connect does not. Many entries are proxy/transport
+protocols and require a separate TUN adapter. See
 [[Protocol Orchestration]] for the exact matrix.
 
 ## Why did Dashboard see profiles while the Profiles screen was empty?

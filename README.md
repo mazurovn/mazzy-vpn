@@ -39,7 +39,7 @@ The versioned catalog now covers 13 protocols. Linux connection backends remain
 implemented for AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec. VLESS/REALITY,
 Hysteria 2, Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS and
 ShadowTLS v3 have a validated registry, redacted capability API and safe share
-URI detection where unambiguous. Their connection adapters are explicitly
+URI/JSON classification where unambiguous. Their connection adapters are explicitly
 `planned`, not advertised as working tunnels.
 
 [Русский](README.ru.md) · [English](README.en.md) ·

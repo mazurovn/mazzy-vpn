@@ -130,3 +130,5 @@ proves protected journal/snapshot storage only, stale observed health scores
 zero, and candidate parsing shares one absolute monotonic deadline. History,
 authorized execution/failover and Desktop/mobile integration remain in issue
 #39.
+Censorship/workload fit is backend-derived from the versioned catalog and
+workload; agents supply only bounded observed health evidence.

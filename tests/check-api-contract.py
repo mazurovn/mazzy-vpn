@@ -286,11 +286,9 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
     required_evidence = {
         "recent_outcome",
         "consecutive_failures",
-        "censorship_fit",
         "reachability",
         "latency_ms",
         "loss_percent",
-        "workload_fit",
         "evidence_age_seconds",
     }
     if (
@@ -298,7 +296,7 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
         or set(planner_evidence.get("required", [])) != required_evidence
         or set(planner_evidence.get("properties", {})) != required_evidence
     ):
-        fail("PlannerEvidence must require the complete bounded evidence set")
+        fail("PlannerEvidence must contain only bounded observed health evidence")
 
     planner_evaluation = defs.get("PlannerEvaluation", {})
     planner_evaluation_properties = planner_evaluation.get("properties", {})

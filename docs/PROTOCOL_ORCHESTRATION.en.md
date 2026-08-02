@@ -2,7 +2,7 @@
 
 Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
-Current as of 2026-08-01. The machine-readable source of truth is
+Current as of 2026-08-02. The machine-readable source of truth is
 [`protocols/v1/registry.json`](../protocols/v1/registry.json). `implemented`
 means a functionally tested connection backend on that platform. Recognizing a
 URI or listing a protocol does not mean that a tunnel can be established.
@@ -15,15 +15,15 @@ URI or listing a protocol does not mean that a tunnel can be established.
 | WireGuard | standard VPN | implemented | implemented |
 | OpenVPN | TCP/UDP and enterprise VPN | implemented | implemented |
 | L2TP/IPsec | legacy/enterprise VPN | implemented | implemented |
-| VLESS / REALITY | proxy + TUN, TLS/REALITY | planned | URI implemented |
-| Hysteria 2 | QUIC proxy + TUN, lossy links and HTTP/3 camouflage | planned | URI implemented |
-| Mieru | proxy + TUN, padding and probe resistance | planned | URI implemented |
-| NaiveProxy | Chromium HTTP/2/3 proxy + TUN | planned | planned |
-| TUIC v5 | QUIC proxy + TUN | planned | URI implemented |
-| Shadowsocks 2022 | AEAD 2022 proxy + TUN | planned | URI implemented |
-| Trojan | TLS proxy + TUN | planned | URI implemented |
-| AnyTLS | multiplexed TLS proxy + TUN | planned | URI implemented |
-| ShadowTLS v3 | TLS camouflage transport | planned | planned |
+| VLESS / REALITY | proxy + TUN, TLS/REALITY | planned | URI/JSON implemented |
+| Hysteria 2 | QUIC proxy + TUN, lossy links and HTTP/3 camouflage | planned | URI/JSON implemented |
+| Mieru | proxy + TUN, padding and probe resistance | planned | URI/JSON implemented |
+| NaiveProxy | Chromium HTTP/2/3 proxy + TUN | planned | JSON implemented |
+| TUIC v5 | QUIC proxy + TUN | planned | URI/JSON implemented |
+| Shadowsocks 2022 | AEAD 2022 proxy + TUN | planned | URI/JSON implemented |
+| Trojan | TLS proxy + TUN | planned | URI/JSON implemented |
+| AnyTLS | multiplexed TLS proxy + TUN | planned | URI/JSON implemented |
+| ShadowTLS v3 | TLS camouflage transport | planned | JSON implemented |
 
 VLESS, Hysteria 2, TUIC, Shadowsocks, Trojan, AnyTLS and Naive are documented
 sing-box outbounds. VLESS must not reach a public server without outer
@@ -40,6 +40,14 @@ Primary references:
 - [sing-box outbound catalog](https://sing-box.sagernet.org/configuration/outbound/)
 - [Shadowsocks 2022](https://sing-box.sagernet.org/manual/proxy-protocol/shadowsocks/)
 - [ShadowTLS v3](https://github.com/ihciah/shadow-tls/blob/master/docs/protocol-v3-en.md)
+
+IETF MASQUE (`CONNECT-UDP` and `CONNECT-IP`,
+[RFC 9298](https://www.rfc-editor.org/rfc/rfc9298.html) and
+[RFC 9484](https://www.rfc-editor.org/rfc/rfc9484.html)) was also evaluated. It
+is a promising HTTP/2/3 L3 transport, but is not in the primary catalog yet:
+there is no selected runtime, server contract or demonstrated censorship
+resistance for this product. Tor pluggable transports are useful for reaching
+Tor, but are not counted as separate general-purpose Mazzy VPN L3 protocols.
 
 ## Implementation layers
 
@@ -65,8 +73,8 @@ configuration must be synthesized from an allowlist schema.
 
 ## Detection and custom servers
 
-The current detector accepts a share URI only through stdin and returns
-redacted metadata:
+The current detector accepts a share URI or one JSON object only through stdin
+and returns redacted metadata:
 
 ```bash
 printf '%s\n' "$SHARE_URI" | mazzy-vpn protocols detect --stdin --json
@@ -74,9 +82,12 @@ mazzy-vpn protocols list --json
 mazzy-vpn protocols diagnose --json
 ```
 
-The detector accepts one terminal `LF` or `CRLF` from a normal pipeline. It
-rejects embedded or repeated line terminators, other control bytes and payloads
-larger than 64 KiB after removing that terminal delimiter.
+For URIs, the detector accepts one terminal `LF` or `CRLF`, rejects embedded
+line terminators and requires a non-empty scheme payload. JSON accepts normal
+space, `TAB`, `LF` and `CR`; duplicate keys, multiple documents, ambiguous
+multi-protocol configurations and payloads larger than 64 KiB are rejected.
+It recognizes sing-box/Xray outbounds, the official Mieru shape and NaiveProxy
+`listen`/`proxy`. This classifies a format; it is not full validation.
 
 It never returns the host, user info, UUID, password, query or fragment. Full
 custom-server import is the next backend slice:
@@ -104,10 +115,10 @@ and 1–128 unique opaque profile IDs.
 Eligible candidates receive a deterministic 100-point score:
 
 - 30: recent tunnel/egress success, with repeated-failure penalties;
-- 25: caller-supplied fit for observed blocking and transport availability;
+- 25: censorship resistance derived from the versioned protocol catalog;
 - 20: supplied reachability without treating it as a VPN test;
 - 15: supplied latency and loss with bounded result freshness;
-- 10: workload fit for LLM streams, short API calls, video or split routing.
+- 10: workload fit derived from workload, protocol class and transports.
 
 Observed health evidence (recent outcome, reachability and latency/loss) older
 than 900 seconds scores zero. Equal scores are ordered by opaque profile ID,
@@ -122,17 +133,19 @@ jq -n --arg profile_id "$PROFILE_ID" '{
     profile_id: $profile_id,
     evidence: {
       recent_outcome: "unknown", consecutive_failures: 0,
-      censorship_fit: "medium", reachability: "reachable",
-      latency_ms: 150, loss_percent: 1, workload_fit: "high",
+      reachability: "reachable", latency_ms: 150, loss_percent: 1,
       evidence_age_seconds: 30
     }
   }]
 }' | mazzy-vpn planner evaluate --stdin --json
 ```
 
-Fit and health evidence is caller-supplied in this slice. It can change a
-dry-run score, but it cannot make a planned backend, invalid profile or unsafe
-secret file eligible. Future switching must be transactional: snapshot,
+The caller supplies only bounded health evidence: recent outcome, consecutive
+failures, reachability, latency/loss and measurement age. The backend derives
+`censorship-fit` and `workload-fit` from the versioned catalog and workload, so
+an LLM cannot self-assign them. A caller can still distort health scoring, but
+cannot make a planned backend, invalid profile or unsafe secret file eligible.
+Future switching must be transactional: snapshot,
 bounded start, actual egress/DNS/IPv6 verification, then commit or rollback.
 The evaluator passes its absolute monotonic deadline into candidate validation,
 including the external OpenVPN parser, and returns `deadline-exceeded` when the

@@ -92,14 +92,30 @@ read-only planner slice; it is not part of the published 1.3.2 packages:
   delayed Unix-socket integration test covers the installed systemd transport,
   which the previous fake dispatcher test did not model.
 - The draft deterministic read-only planner applies backend-owned hard gates
-  and versioned scoring to opaque profile IDs. Its OpenVPN parser shares the
-  request deadline, stale observed health is ignored, and rollback readiness is
-  explicitly limited to protected storage. Remaining issue #39 work is history,
+  and versioned scoring to opaque profile IDs. Censorship/workload fit is now
+  derived from the trusted catalog and workload instead of caller assertions.
+  Its OpenVPN parser shares the request deadline, stale observed health is
+  ignored, and rollback readiness is explicitly limited to protected storage.
+  Remaining issue #39 work is history,
   authorized execution/failover and non-CLI integration. Platform work still
   includes pinned sing-box-family, Mieru and Naive/Cronet adapters;
   custom-server secret import; Linux TUN lifecycle; Windows service/Wintun;
   Android `VpnService`; and real integration, rollback and leak tests.
-- Local patch verification is green: 81 Bash/end-to-end tests, 24 Rust tests,
+- The unreleased detector also classifies bounded sing-box/Xray, official Mieru
+  and NaiveProxy JSON shapes. It rejects duplicate keys, ambiguous mixed
+  protocols and secret reflection; classification is not import or execution.
+- The capability matrix tracks macOS separately, but strict protocol registry
+  v1 has only Linux, Windows and Android fields. Adding per-protocol macOS
+  status requires a versioned registry v2; mutating the published v1 shape
+  would break strict API/CLI consumers.
+- Desktop profile-cache failures now preserve redacted missing/permission/shape
+  reason codes instead of collapsing every failure into an unexplained empty
+  list. The installed 0.3.2 cache was verified readable with 24 entries (9
+  AmneziaWG and 15 OpenVPN).
+- The regression suite now pins its API socket inside the temporary test root;
+  an active installed daemon can no longer replace fixture profiles with the
+  host's live profile catalog during a local run.
+- Local patch verification is green: 81 Bash/end-to-end tests, 25 Rust tests,
   Clippy, ShellCheck, npm audit, cargo-deny, public leak audit and the unpacked
   AppImage/DEB/RPM lifecycle/source/GUI audit. All 12 documentation screenshots
   were regenerated at 1680×951 from the localhost-only RFC 5737 fixture.

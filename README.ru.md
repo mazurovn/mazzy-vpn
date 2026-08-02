@@ -26,7 +26,7 @@ default-branch результатами RustSec, Dependabot и CodeQL.
 backends по-прежнему готовы для AmneziaWG, WireGuard, OpenVPN и L2TP/IPsec.
 VLESS/REALITY, Hysteria 2, Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022,
 Trojan, AnyTLS и ShadowTLS v3 получили проверяемый registry, очищенный API и
-безопасное распознавание однозначных share URI. Их подключение помечено
+безопасную классификацию однозначных share URI и JSON. Их подключение помечено
 `planned`, пока не готовы TUN/routing/rollback integration tests.
 
 Основная команда — `mazzy-vpn`. Совместимые aliases: `vpnctl` и `mazzyvpn`.

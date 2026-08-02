@@ -98,9 +98,9 @@ empty-library message. This fixes the observed state where Dashboard counted
 24 profiles while the Profiles screen said none were found.
 
 The versioned protocol registry catalogs 13 entries, but this screen currently
-imports and connects only the four implemented Linux backends. URI detection
-for modern proxy protocols is a redacted CLI/API foundation; their Desktop
-import, TUN adapters and smart selection remain gated work. See
+imports and connects only the four implemented Linux backends. Stable 1.3.2
+provides redacted URI detection, while the unreleased branch also classifies
+bounded JSON. Desktop import, TUN adapters and smart selection remain gated. See
 [Protocol orchestration](PROTOCOL_ORCHESTRATION.en.md).
 
 ## Window and tray actions

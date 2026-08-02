@@ -350,6 +350,7 @@ export VPNCTL_STATE_DIR="$TMP/state"
 export VPNCTL_API_ACTION_DIR="$TMP/state/api-actions"
 export VPNCTL_API_AUDIT_FILE="$TMP/state/api-audit.jsonl"
 export VPNCTL_RUN_DIR="$TMP/run"
+export VPNCTL_API_SOCKET="$TMP/run/api-v1.sock"
 export VPNCTL_DASHBOARD_DIR="$TMP/dashboard"
 export VPNCTL_PROBE_URL="https://probe.invalid"
 export VPNCTL_ADGUARD_CLI="$TMP/fakebin/adguardvpn-cli"
@@ -1045,11 +1046,9 @@ planner_payload="$(
                 evidence: {
                     recent_outcome: "success",
                     consecutive_failures: 0,
-                    censorship_fit: "high",
                     reachability: "reachable",
                     latency_ms: 50,
                     loss_percent: 0,
-                    workload_fit: "high",
                     evidence_age_seconds: 30
                 }
             },
@@ -1058,11 +1057,9 @@ planner_payload="$(
                 evidence: {
                     recent_outcome: "unknown",
                     consecutive_failures: 0,
-                    censorship_fit: "unknown",
                     reachability: "unknown",
                     latency_ms: null,
                     loss_percent: 0,
-                    workload_fit: "unknown",
                     evidence_age_seconds: 30
                 }
             }
@@ -1095,10 +1092,10 @@ jq -e \
     and .result.candidates[0].protocol == "openvpn"
     and .result.candidates[0].eligible == true
     and .result.candidates[0].rank == 1
-    and .result.candidates[0].score == 100
+    and .result.candidates[0].score == 92
     and (.result.candidates[0].hard_gates | length) == 5
     and all(.result.candidates[0].hard_gates[]; .passed == true)
-    and (.result.candidates[0].factors | map(.points) | add) == 100
+    and (.result.candidates[0].factors | map(.points) | add) == 92
     and .result.candidates[1].profile_id == $unknown_profile_id
     and .result.candidates[1].eligible == false
     and .result.candidates[1].rank == null
@@ -1138,7 +1135,7 @@ planner_stale_response="$(
 )"
 jq -e '
     .status == "ok"
-    and .result.candidates[0].score == 35
+    and .result.candidates[0].score == 27
     and (.result.candidates[0].reason_codes | index(
         "planner.factor.recent-stale"
     )) != null
@@ -1219,6 +1216,23 @@ jq -e '
 ' <<<"$planner_duplicate_candidate_response" >/dev/null ||
     fail "local API planner.evaluate accepted duplicate candidate IDs"
 
+planner_untrusted_fit_request="$(
+    jq -c '
+        .request_id = "request-planner-untrusted-fit-0001"
+        | .payload.candidates = [.payload.candidates[0]]
+        | .payload.candidates[0].evidence.censorship_fit = "high"
+    ' <<<"$planner_request"
+)"
+planner_untrusted_fit_response="$(
+    printf '%s\n' "$planner_untrusted_fit_request" | "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "invalid-request"
+    and .error.message_key == "api.planner.payload-invalid"
+' <<<"$planner_untrusted_fit_response" >/dev/null ||
+    fail "local API planner.evaluate trusted caller-supplied policy fit"
+
 planner_nested_duplicate_response="$(
     printf '%s\n' \
         "{\"api_version\":\"1.0\",\"request_id\":\"request-planner-duplicate-0002\",\"operation\":\"planner.evaluate\",\"deadline_ms\":5000,\"payload\":{\"workload\":\"general\",\"candidates\":[{\"profile_id\":\"$profile_id\",\"evidence\":{},\"evidence\":{\"recent_outcome\":\"success\"}}]}}" |
@@ -1240,7 +1254,13 @@ jq -e \
     --arg profile_id "$profile_id" '
     .dry_run == true
     and .ordered_profile_ids == [$profile_id]
-    and .candidates[0].score == 100
+    and .candidates[0].score == 92
+    and (.candidates[0].reason_codes | index(
+        "planner.factor.censorship-catalog-medium"
+    )) != null
+    and (.candidates[0].reason_codes | index(
+        "planner.factor.workload-derived-high"
+    )) != null
 ' <<<"$planner_cli_response" >/dev/null ||
     fail "planner CLI did not use the typed local API query"
 
@@ -1249,11 +1269,9 @@ planner_max_payload="$(
         def evidence: {
             recent_outcome: "unknown",
             consecutive_failures: 0,
-            censorship_fit: "unknown",
             reachability: "unknown",
             latency_ms: null,
             loss_percent: 0,
-            workload_fit: "unknown",
             evidence_age_seconds: 30
         };
         {
@@ -2965,6 +2983,109 @@ for protocol_scheme in "${!protocol_uri_schemes[@]}"; do
         fail "protocol detector exposed $protocol_scheme credentials"
     fi
 done
+declare -A protocol_json_types=(
+    [vless]=vless
+    [hysteria2]=hysteria2
+    [tuic]=tuic
+    [trojan]=trojan
+    [anytls]=anytls
+    [shadowtls]=shadowtls
+    [naive]=naive
+    [mieru]=mieru
+)
+for protocol_type in "${!protocol_json_types[@]}"; do
+    protocol_detection="$(
+        jq -nc --arg type "$protocol_type" '{
+            outbounds: [{
+                type: $type,
+                server: "example.invalid",
+                password: "json-secret"
+            }]
+        }' | "$ROOT/mazzy-vpn" protocols detect --stdin --json
+    )" || fail "JSON protocol detector rejected $protocol_type"
+    jq -e --arg protocol "${protocol_json_types[$protocol_type]}" '
+        .recognized == true
+        and .protocol == $protocol
+        and .input_kind == "configuration-json"
+        and .contains_secrets == true
+    ' <<<"$protocol_detection" >/dev/null ||
+        fail "JSON protocol detector mislabeled $protocol_type"
+    if jq -r '.. | strings' <<<"$protocol_detection" |
+        grep -Eq 'example\.invalid|json-secret'; then
+        fail "JSON protocol detector exposed $protocol_type secrets"
+    fi
+done
+protocol_detection="$(
+    jq -nc '{
+        outbounds: [{
+            type: "shadowsocks",
+            method: "2022-blake3-aes-256-gcm",
+            server: "example.invalid",
+            password: "json-secret"
+        }]
+    }' | "$ROOT/mazzy-vpn" protocols detect --stdin --json
+)" || fail "JSON protocol detector rejected Shadowsocks 2022"
+jq -e '.recognized == true and .protocol == "shadowsocks2022"' \
+    <<<"$protocol_detection" >/dev/null ||
+    fail "JSON protocol detector mislabeled Shadowsocks 2022"
+protocol_detection="$(
+    printf '%s\n' '{' \
+        '  "listen": "socks://127.0.0.1:1080",' \
+        '  "proxy": "https://user:json-secret@example.invalid"' \
+        '}' | "$ROOT/mazzy-vpn" protocols detect --stdin --json
+)" || fail "JSON protocol detector rejected official NaiveProxy shape"
+jq -e '.recognized == true and .protocol == "naive"' \
+    <<<"$protocol_detection" >/dev/null ||
+    fail "JSON protocol detector mislabeled official NaiveProxy shape"
+protocol_detection="$(
+    jq -nc '{
+        profiles: [{
+            profileName: "default",
+            user: {name: "user", password: "json-secret"},
+            servers: [{domainName: "example.invalid", portBindings: []}]
+        }],
+        activeProfile: "default"
+    }' | "$ROOT/mazzy-vpn" protocols detect --stdin --json
+)" || fail "JSON protocol detector rejected official Mieru shape"
+jq -e '.recognized == true and .protocol == "mieru"' \
+    <<<"$protocol_detection" >/dev/null ||
+    fail "JSON protocol detector mislabeled official Mieru shape"
+set +e
+protocol_detection="$(
+    printf '%s' '{"type":"vless","type":"trojan"}' |
+        "$ROOT/mazzy-vpn" protocols detect --stdin --json
+)"
+protocol_detection_status=$?
+set -e
+[[ "$protocol_detection_status" -eq 2 ]] ||
+    fail "JSON protocol detector accepted duplicate keys"
+jq -e '.recognized == false and .reason == "duplicate-key"' \
+    <<<"$protocol_detection" >/dev/null ||
+    fail "JSON protocol detector returned an unsafe duplicate-key response"
+set +e
+protocol_detection="$(
+    printf '%s' '{"type":"vless","\u0074ype":"trojan"}' |
+        "$ROOT/mazzy-vpn" protocols detect --stdin --json
+)"
+protocol_detection_status=$?
+set -e
+[[ "$protocol_detection_status" -eq 2 ]] ||
+    fail "JSON protocol detector accepted an escaped-equivalent duplicate key"
+jq -e '.recognized == false and .reason == "duplicate-key"' \
+    <<<"$protocol_detection" >/dev/null ||
+    fail "JSON protocol detector did not normalize escaped duplicate keys"
+set +e
+protocol_detection="$(
+    printf '%s' '{"outbounds":[{"type":"vless"},{"type":"trojan"}]}' |
+        "$ROOT/mazzy-vpn" protocols detect --stdin --json
+)"
+protocol_detection_status=$?
+set -e
+[[ "$protocol_detection_status" -eq 2 ]] ||
+    fail "JSON protocol detector accepted an ambiguous multi-protocol config"
+jq -e '.recognized == false and .reason == "ambiguous-protocol"' \
+    <<<"$protocol_detection" >/dev/null ||
+    fail "JSON protocol detector returned an unsafe ambiguity response"
 protocol_detection="$(
     printf '%s\n' 'vless://user:password@example.invalid:443?id=secret#private' |
         "$ROOT/mazzy-vpn" protocols detect --stdin --json
@@ -3015,7 +3136,7 @@ set -e
 jq -e '.recognized == false and .reason == "invalid-input"' \
     <<<"$protocol_detection" >/dev/null ||
     fail "protocol detector returned an unsafe multi-line response"
-ok "protocol URI detection is bounded and credential-redacted"
+ok "protocol URI/JSON classification is bounded and credential-redacted"
 
 python3 "$ROOT/tests/audit-runtime-hardcodes.py" >/dev/null ||
     fail "runtime hard-code boundaries are inconsistent"

@@ -62,10 +62,11 @@ Android и iOS пока являются только планом: UI preview �
 Каталог из 13 протоколов и redacted CLI/API detection уже реализованы, но это
 не девять новых connection backends. VLESS/REALITY, Hysteria 2, Mieru,
 NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS и ShadowTLS v3 остаются
-`planned` для Linux/Windows/Android до platform adapter, TUN/routing/DNS,
+`planned` для Linux/macOS/Windows/Android до platform adapter, TUN/routing/DNS,
 secret storage, rollback и реальных integration tests. AI orchestration пока
 `partial`: CLI/API уже исполняют детерминированную read-only оценку с hard
-gates, но history store, authorized execution/failover и Desktop/mobile
+gates; censorship/workload fit выводится из trusted catalog/workload, а не
+назначается агентом. History store, authorized execution/failover и Desktop/mobile
 integration ещё не реализованы.
 
 Новая функция считается завершённой не после добавления одной кнопки, а после
@@ -92,10 +93,11 @@ frontend does not count as a mobile VPN client.
 The 13-protocol catalog and redacted CLI/API detection are implemented, but
 this is not a claim of nine new connection backends. VLESS/REALITY, Hysteria 2,
 Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS and ShadowTLS v3
-remain `planned` on Linux/Windows/Android until platform adapters,
+remain `planned` on Linux/macOS/Windows/Android until platform adapters,
 TUN/routing/DNS, secret storage, rollback and real integration tests pass. AI
 orchestration is `partial`: CLI/API now execute deterministic read-only
-evaluation with hard gates, but history storage, authorized execution/failover
+evaluation with hard gates; censorship/workload fit is derived from the trusted
+catalog/workload rather than assigned by an agent. History storage, authorized execution/failover
 and Desktop/mobile integration are not implemented.
 
 A feature is complete only after its shared API/core, every applicable

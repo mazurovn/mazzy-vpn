@@ -20,6 +20,7 @@ connect/failover и Desktop/mobile integration отсутствуют.
 | Medium | Public JSON Schema не требовал planner deadline и не связывал operation с `PlannerRequest` | Добавлен двусторонний conditional discriminator и planner-specific диапазон `100..30000 ms` |
 | Low | Python example отвергал допустимый leading whitespace и принимал `NaN`/`Infinity` как JSON | Переход на strict `json.loads` с duplicate-key hook и запретом non-finite constants; добавлен отдельный validator |
 | Low | Localization regression был flaky из-за `grep -q`/`SIGPIPE` при `pipefail` | Help сначала полностью считывается, затем проверяется marker |
+| Medium | Regression suite при запущенном установленном API читал системный `/run/mazzy-vpn/api-v1.sock` и реальные профили вместо test fixture | `VPNCTL_API_SOCKET` изолирован внутри временного test root; воспроизводимость больше не зависит от состояния хоста |
 
 ## Секреты
 
@@ -36,9 +37,12 @@ connect/failover и Desktop/mobile integration отсутствуют.
 ## Архитектурная оценка
 
 Planner сохраняет правильную privilege boundary: caller и LLM передают только
-opaque IDs и advisory evidence, а eligibility вычисляет root backend из runtime,
+opaque IDs и bounded health evidence, а eligibility вычисляет root backend из runtime,
 текущего parse профиля, прав secret storage, platform support и защищённого
 rollback storage. Result read-only, credential-free и всегда `dry_run: true`.
+Повторное ревью нашло лишнее доверие к caller: он мог сам назначать
+`censorship_fit` и `workload_fit`. Эти поля удалены из request schema; backend
+теперь выводит их из versioned protocol catalog, workload и transport class.
 
 Детерминированны rank, score и reason codes для одинакового local snapshot и
 evidence; поле `evaluated_at` намеренно меняется. Внешний parser теперь включён
@@ -63,11 +67,31 @@ Shadowsocks 2022, Trojan, AnyTLS и ShadowTLS не должны продвига
 рабочие подключения до задач #36–#38 и реальных TUN/DNS/route/leak/rollback
 tests.
 
+Capability contract отдельно учитывает Linux, Windows, macOS и Android, но
+strict protocol registry v1 содержит только Linux, Windows и Android. Добавлять
+обязательный `macos` в опубликованную v1-схему нельзя: старые strict consumers
+отклонят новое поле. Per-protocol macOS status требует registry v2. Windows
+preview не содержит Windows Service/Wintun, macOS preview не содержит Network
+Extension, а Android client source отсутствует; сборка UI не закрывает gates.
+
+Detector расширен на bounded JSON classification для sing-box/Xray, официальных
+Mieru и NaiveProxy shapes. Он не отражает secrets, отклоняет duplicate keys,
+несколько JSON documents и неоднозначные multi-protocol configs. Классификация
+не является import, полной валидацией или разрешением root execution.
+
 ## Проверки
 
 - `./tests/run.sh`: `81/81`;
+- Rust unit tests: `25/25`;
 - API contract: `28 operations`, `14 errors` в development branch;
 - protocol registry: `13 protocols`, `9 share URI schemes`;
 - Python planner example strict-boundary validator: пройден;
 - `git diff --check`, Bash syntax и Python bytecode compilation: пройдены;
 - public leak audit и gitleaks history scan: пройдены.
+- локально собраны DEB, RPM и AppImage; package audit проверил payload,
+  dependencies, lifecycle, embedded source и GUI launch;
+- установленный DEB `0.3.2` проходит `dpkg -V`; `/usr/local/bin/mazzy-vpn` и
+  `/usr/bin/mazzy-vpn` разрешаются в один package-owned файл. Локальный
+  unreleased кандидат с тем же version не устанавливался и не публиковался;
+- все 12 screenshots проверены как `1680×951`. Frontend в этом срезе не
+  менялся, поэтому повторная генерация не требуется.

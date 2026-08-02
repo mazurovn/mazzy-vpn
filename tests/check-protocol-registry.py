@@ -63,6 +63,13 @@ def main() -> None:
     required = CURRENT | REQUESTED | ANTI_CENSORSHIP
     if not required.issubset(by_id):
         fail(f"required protocol entries are missing: {sorted(required - set(by_id))}")
+    detection_missing = sorted(
+        protocol_id
+        for protocol_id in REQUESTED | ANTI_CENSORSHIP
+        if by_id[protocol_id].get("support", {}).get("detection") != "implemented"
+    )
+    if detection_missing:
+        fail(f"modern protocol classification regressed: {detection_missing}")
 
     schemes: dict[str, str] = {}
     for protocol_id, protocol in by_id.items():

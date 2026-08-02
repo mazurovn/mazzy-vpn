@@ -120,11 +120,9 @@
       "required": [
         "recent_outcome",
         "consecutive_failures",
-        "censorship_fit",
         "reachability",
         "latency_ms",
         "loss_percent",
-        "workload_fit",
         "evidence_age_seconds"
       ],
       "properties": {
@@ -135,9 +133,6 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 10
-        },
-        "censorship_fit": {
-          "enum": ["high", "medium", "low", "unknown"]
         },
         "reachability": {
           "enum": ["reachable", "unknown", "unreachable"]
@@ -151,9 +146,6 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 100
-        },
-        "workload_fit": {
-          "enum": ["high", "medium", "low", "unknown"]
         },
         "evidence_age_seconds": {
           "type": "integer",

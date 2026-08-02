@@ -51,6 +51,17 @@ Hysteria 2, Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS и
 ShadowTLS v3 остаются работой над адаптерами с отдельными platform gates.
 Большинство из них являются proxy protocols и требуют проверенного TUN adapter,
 прежде чем их можно показывать как device-wide VPN.
+Capability matrix хранит отдельный status для Linux, Windows, macOS и Android.
+Strict protocol registry v1 пока содержит только Linux/Windows/Android;
+per-protocol macOS status должен появиться в registry v2, без несовместимого
+изменения опубликованной v1-схемы. `planned` не подтверждает runtime.
+
+Порядок adapter work общий для каждой новой семьи: строгий parser и redacted
+import preview; platform secret store; pinned/reproducible engine; TUN, route и
+DNS lifecycle; leak/rollback/fault tests; только затем перевод platform status
+из `planned`. На Linux первой общей runtime-основой остаётся sing-box-compatible
+TUN для VLESS, Hysteria 2, TUIC, Shadowsocks 2022, Trojan, AnyTLS и ShadowTLS, а
+Mieru и NaiveProxy требуют отдельных pinned adapters.
 
 ```mermaid
 flowchart LR
@@ -152,6 +163,11 @@ macOS preview показывает интерфейс, но ещё не подн
 - instrumented tests на поддерживаемых версиях Android.
 
 Gate: `mobile-android-1.0`.
+
+Shell CLI внутри Android app не является целевой product surface: управление
+должно идти через typed mobile API/intent и общий SDK-контракт для агентов. Это
+сохраняет Android `VpnService` lifecycle и permission boundary вместо запуска
+root-like команд из LLM или terminal wrapper.
 
 ## iOS
 

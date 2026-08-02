@@ -19,6 +19,17 @@ All notable changes to Mazzy VPN are documented here.
   expired health evidence, including recent outcome, contributes no health
   score. The Python SDK example accepts legal JSON whitespace but rejects
   duplicate keys, non-finite numbers and multiple documents.
+- Removed caller-assigned censorship/workload fit from planner evidence. The
+  backend now derives both factors from the versioned protocol catalog,
+  workload, protocol class and transports, while caller evidence is limited to
+  observed health inputs.
+- Extended credential-redacted protocol classification to bounded JSON for
+  sing-box/Xray outbounds, official Mieru settings and NaiveProxy. Duplicate
+  keys, multiple documents and ambiguous mixed-protocol configurations fail
+  closed; classification never authorizes import or engine execution.
+- Desktop profile-cache failures now retain safe missing, permission and
+  invalid-shape reason codes instead of collapsing every failure into an
+  unexplained empty library.
 - Added deterministic, deadline, stale-evidence, unsafe-storage,
   unknown-profile, duplicate-input and local-transport regressions. Automatic
   switching, failover and mutation authorization remain tracked in issue #39.

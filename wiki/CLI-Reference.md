@@ -10,7 +10,7 @@
 | `mazzy-vpn profiles --api-json` | каталог с opaque ID без engine filenames |
 | `mazzy-vpn protocols list --json` | versioned каталог 13 протоколов и readiness |
 | `mazzy-vpn protocols diagnose --json` | candidate runtimes и готовность backend |
-| `... \| mazzy-vpn protocols detect --stdin --json` | redacted распознавание share URI |
+| `... \| mazzy-vpn protocols detect --stdin --json` | redacted классификация share URI/JSON |
 | `... \| mazzy-vpn planner evaluate --stdin --json` | draft PR #43: deterministic dry-run rank; ещё не в stable 1.3.2 |
 | `mazzy-vpn quick` | подключить сохранённый default через local API |
 | `mazzy-vpn connect PROTOCOL PROFILE` | выбрать и подключить профиль |
@@ -51,7 +51,7 @@
 | `mazzy-vpn profiles --api-json` | opaque-ID catalog without engine filenames |
 | `mazzy-vpn protocols list --json` | versioned 13-protocol catalog and readiness |
 | `mazzy-vpn protocols diagnose --json` | candidate runtimes and backend readiness |
-| `... \| mazzy-vpn protocols detect --stdin --json` | redacted share-URI detection |
+| `... \| mazzy-vpn protocols detect --stdin --json` | redacted share URI/JSON classification |
 | `... \| mazzy-vpn planner evaluate --stdin --json` | draft PR #43: deterministic dry-run rank; not in stable 1.3.2 yet |
 | `mazzy-vpn quick` | connect the saved default through the local API |
 | `mazzy-vpn connect PROTOCOL PROFILE` | select and connect a profile |

@@ -2,7 +2,7 @@
 
 Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
-Актуально на 2026-08-01. Машиночитаемый источник истины:
+Актуально на 2026-08-02. Машиночитаемый источник истины:
 [`protocols/v1/registry.json`](../protocols/v1/registry.json). Статус
 `implemented` означает проверенный функциональный backend именно на указанной
 платформе. Распознавание URI или запись в каталоге не означают, что туннель уже
@@ -16,15 +16,15 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 | WireGuard | стандартный VPN | готово | готово |
 | OpenVPN | TCP/UDP и enterprise VPN | готово | готово |
 | L2TP/IPsec | legacy/enterprise VPN | готово | готово |
-| VLESS / REALITY | proxy + TUN, TLS/REALITY | план | URI готово |
-| Hysteria 2 | QUIC proxy + TUN, потери и HTTP/3 camouflage | план | URI готово |
-| Mieru | proxy + TUN, padding и probe resistance | план | URI готово |
-| NaiveProxy | Chromium HTTP/2/3 proxy + TUN | план | план |
-| TUIC v5 | QUIC proxy + TUN | план | URI готово |
-| Shadowsocks 2022 | AEAD 2022 proxy + TUN | план | URI готово |
-| Trojan | TLS proxy + TUN | план | URI готово |
-| AnyTLS | multiplexed TLS proxy + TUN | план | URI готово |
-| ShadowTLS v3 | TLS camouflage transport | план | план |
+| VLESS / REALITY | proxy + TUN, TLS/REALITY | план | URI/JSON готово |
+| Hysteria 2 | QUIC proxy + TUN, потери и HTTP/3 camouflage | план | URI/JSON готово |
+| Mieru | proxy + TUN, padding и probe resistance | план | URI/JSON готово |
+| NaiveProxy | Chromium HTTP/2/3 proxy + TUN | план | JSON готово |
+| TUIC v5 | QUIC proxy + TUN | план | URI/JSON готово |
+| Shadowsocks 2022 | AEAD 2022 proxy + TUN | план | URI/JSON готово |
+| Trojan | TLS proxy + TUN | план | URI/JSON готово |
+| AnyTLS | multiplexed TLS proxy + TUN | план | URI/JSON готово |
+| ShadowTLS v3 | TLS camouflage transport | план | JSON готово |
 
 VLESS, Hysteria 2, TUIC, Shadowsocks, Trojan, AnyTLS и Naive доступны как
 outbound в документации sing-box. VLESS без внешней transport security нельзя
@@ -41,6 +41,14 @@ ShadowTLS v3 является TCP transport, а не самостоятельн�
 - [sing-box outbound catalog](https://sing-box.sagernet.org/configuration/outbound/)
 - [Shadowsocks 2022](https://sing-box.sagernet.org/manual/proxy-protocol/shadowsocks/)
 - [ShadowTLS v3](https://github.com/ihciah/shadow-tls/blob/master/docs/protocol-v3-en.md)
+
+Также рассмотрен стандартизованный IETF MASQUE (`CONNECT-UDP` и `CONNECT-IP`,
+[RFC 9298](https://www.rfc-editor.org/rfc/rfc9298.html) и
+[RFC 9484](https://www.rfc-editor.org/rfc/rfc9484.html)). Он перспективен как
+HTTP/2/3 L3 transport, но пока не включён в основной каталог: выбранный runtime,
+server contract и доказанная устойчивость к блокировкам отсутствуют. Tor
+pluggable transports полезны для доступа к Tor, но не считаются отдельными
+универсальными L3 VPN-протоколами Mazzy VPN.
 
 ## Слои реализации
 
@@ -66,8 +74,8 @@ rule sets. Runtime-конфигурация должна синтезирова�
 
 ## Распознавание и свои серверы
 
-Текущий detector принимает share URI только через stdin и возвращает очищенные
-метаданные:
+Текущий detector принимает share URI или один JSON object только через stdin и
+возвращает очищенные метаданные:
 
 ```bash
 printf '%s\n' "$SHARE_URI" | mazzy-vpn protocols detect --stdin --json
@@ -75,9 +83,12 @@ mazzy-vpn protocols list --json
 mazzy-vpn protocols diagnose --json
 ```
 
-Детектор принимает один завершающий `LF` или `CRLF` от обычного pipeline. Он
-отклоняет встроенные и повторные переводы строк, остальные control bytes и
-payload больше 64 КиБ после удаления конечного разделителя.
+Для URI detector принимает один завершающий `LF` или `CRLF`, отклоняет
+встроенные переводы строк и пустую часть после scheme. Для JSON разрешены
+обычные пробелы, `TAB`, `LF` и `CR`; повторные ключи, несколько документов,
+неоднозначные multi-protocol configs и payload больше 64 КиБ отклоняются.
+Распознаются sing-box/Xray outbound, официальная структура Mieru и
+NaiveProxy `listen`/`proxy`. Это классификация формата, а не полная валидация.
 
 Он не возвращает host, user info, UUID, password, query или fragment. Полный
 импорт своих серверов является следующим backend-срезом:
@@ -103,10 +114,10 @@ constraints из локального состояния backend: backend гот
 Оставшиеся кандидаты получают детерминированные 100 баллов:
 
 - 30: недавний успешный tunnel/egress и штраф за повторные failures;
-- 25: переданное caller соответствие блокировке и доступности transport;
+- 25: устойчивость к блокировкам из versioned protocol catalog;
 - 20: переданная reachability без подмены VPN test обычным ping;
 - 15: переданные latency и loss с ограниченным сроком жизни результатов;
-- 10: workload fit для LLM stream, коротких API calls, video или split routing.
+- 10: workload fit, вычисленный из workload, класса протокола и transport.
 
 Наблюдаемое health evidence (recent outcome, reachability и latency/loss)
 старше 900 секунд даёт ноль баллов. При равном score кандидаты стабильно
@@ -121,17 +132,19 @@ jq -n --arg profile_id "$PROFILE_ID" '{
     profile_id: $profile_id,
     evidence: {
       recent_outcome: "unknown", consecutive_failures: 0,
-      censorship_fit: "medium", reachability: "reachable",
-      latency_ms: 150, loss_percent: 1, workload_fit: "high",
+      reachability: "reachable", latency_ms: 150, loss_percent: 1,
       evidence_age_seconds: 30
     }
   }]
 }' | mazzy-vpn planner evaluate --stdin --json
 ```
 
-В этом срезе fit и health evidence передаёт caller. Он может изменить dry-run
-score, но не сделать eligible запланированный backend, невалидный профиль или
-небезопасный файл с секретом. Будущая смена протокола должна быть
+Caller передаёт только ограниченное health evidence: recent outcome,
+consecutive failures, reachability, latency/loss и возраст измерения.
+`censorship-fit` и `workload-fit` backend выводит из versioned catalog и
+workload, поэтому LLM не может назначить их себе. Caller всё ещё может исказить
+health score, но не сделать eligible запланированный backend, невалидный
+профиль или небезопасный файл с секретом. Будущая смена протокола должна быть
 транзакционной: snapshot, bounded start, фактическая egress/DNS/IPv6 проверка,
 затем commit или rollback.
 Evaluator передаёт абсолютный monotonic deadline внутрь candidate validation,

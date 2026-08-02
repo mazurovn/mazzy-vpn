@@ -2023,18 +2023,42 @@ fn dependencies() -> Vec<DependencyState> {
 
 #[tauri::command]
 pub fn get_profiles() -> Value {
-    fs::read_to_string(PROFILES_FILE)
-        .ok()
-        .and_then(|contents| sanitize_profile_cache(&contents).ok())
-        .unwrap_or_else(|| {
-            json!({
-                "schema_version": 1,
-                "generated_at": 0,
-                "available": false,
-                "error": "Profile cache is not ready. Refresh the engine cache.",
-                "profiles": []
-            })
-        })
+    profile_cache_response(fs::read_to_string(PROFILES_FILE))
+}
+
+fn unavailable_profile_cache(error_code: &str, error: &str) -> Value {
+    json!({
+        "schema_version": 1,
+        "generated_at": 0,
+        "available": false,
+        "error_code": error_code,
+        "error": error,
+        "profiles": []
+    })
+}
+
+fn profile_cache_response(contents: io::Result<String>) -> Value {
+    match contents {
+        Ok(contents) => sanitize_profile_cache(&contents)
+            .unwrap_or_else(|error| unavailable_profile_cache("profile-cache-invalid", &error)),
+        Err(error) => {
+            let (code, message) = match error.kind() {
+                io::ErrorKind::NotFound => (
+                    "profile-cache-missing",
+                    "Profile cache is not ready. Refresh the engine cache.",
+                ),
+                io::ErrorKind::PermissionDenied => (
+                    "profile-cache-permission-denied",
+                    "Profile cache is not readable by the Desktop process.",
+                ),
+                _ => (
+                    "profile-cache-unavailable",
+                    "Profile cache could not be read. Refresh the engine cache.",
+                ),
+            };
+            unavailable_profile_cache(code, message)
+        }
+    }
 }
 
 #[tauri::command]
@@ -2556,6 +2580,28 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn profile_cache_failures_are_reported_as_unavailable_not_empty() {
+        let missing = profile_cache_response(Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "fixture missing",
+        )));
+        assert_eq!(missing["available"], false);
+        assert_eq!(missing["error_code"], "profile-cache-missing");
+        assert_eq!(missing["profiles"], json!([]));
+
+        let denied = profile_cache_response(Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "fixture denied",
+        )));
+        assert_eq!(denied["error_code"], "profile-cache-permission-denied");
+
+        let invalid = profile_cache_response(Ok("{}".to_owned()));
+        assert_eq!(invalid["available"], false);
+        assert_eq!(invalid["error_code"], "profile-cache-invalid");
+        assert_ne!(invalid["error"], "");
     }
 
     #[test]

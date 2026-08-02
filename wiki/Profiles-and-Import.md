@@ -28,13 +28,15 @@ sudo mazzy-vpn import-dir ~/MazzyConfigs
 plugin, script hooks и вложенные configs отклоняются. WireGuard/AmneziaWG hooks
 не исполняются. Изменённый одноимённый файл без `--force` сохраняется.
 
-URI современных протоколов можно распознать без вывода самого URI:
+URI или JSON современных протоколов можно классифицировать без вывода входа:
 
 ```bash
 printf '%s' 'vless://REDACTED' | mazzy-vpn protocols detect --stdin --json
+mazzy-vpn protocols detect --stdin --json < custom-server.json
 ```
 
-Это только безопасное распознавание. Импорт и подключение VLESS, Hysteria 2,
+Это только безопасная классификация, не полная validation. Duplicate JSON keys,
+несколько документов и смешанные protocol outbounds отклоняются. Импорт и подключение VLESS, Hysteria 2,
 Mieru, NaiveProxy, TUIC, Shadowsocks 2022, Trojan, AnyTLS и ShadowTLS ещё не
 реализованы. Собственные серверы будут добавляться через typed schema и
 root-only secret store, а не через произвольный JSON для запуска от root.
@@ -83,13 +85,15 @@ permissions and unsafe directives are checked. OpenVPN includes, plugins,
 script hooks and nested configs are rejected. WireGuard/AmneziaWG hooks are not
 executed. A changed same-name file is preserved unless `--force` is explicit.
 
-Modern share URIs can be identified without echoing the input:
+Modern share URIs or JSON can be classified without echoing the input:
 
 ```bash
 printf '%s' 'vless://REDACTED' | mazzy-vpn protocols detect --stdin --json
+mazzy-vpn protocols detect --stdin --json < custom-server.json
 ```
 
-This is detection only. Import and connection for VLESS, Hysteria 2, Mieru,
+This is classification only, not full validation. Duplicate JSON keys, multiple
+documents and mixed protocol outbounds are rejected. Import and connection for VLESS, Hysteria 2, Mieru,
 NaiveProxy, TUIC, Shadowsocks 2022, Trojan, AnyTLS and ShadowTLS are not yet
 implemented. Custom servers will use a typed schema and root-only secret store,
 not arbitrary engine JSON executed as root.

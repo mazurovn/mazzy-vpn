@@ -26,7 +26,7 @@ The versioned catalog now contains 13 protocols. Functional Linux connection
 backends remain AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec. VLESS/REALITY,
 Hysteria 2, Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS and
 ShadowTLS v3 now have a validated registry, redacted capability API and safe
-share URI detection where unambiguous. Their connection adapters remain
+share URI/JSON classification where unambiguous. Their connection adapters remain
 explicitly `planned` until TUN/routing/rollback integration tests pass.
 
 The primary command is `mazzy-vpn`. The installer also creates the compatibility
