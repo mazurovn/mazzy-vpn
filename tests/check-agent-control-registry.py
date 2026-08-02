@@ -21,6 +21,7 @@ TRANSPORTS = {
     "reverse-wss-broker",
 }
 CHANNELS = {
+    "desktop-first-party",
     "web-first-party",
     "cli-first-party",
     "telegram-bot",
@@ -107,6 +108,11 @@ def main() -> None:
         fail("agent-control ingress catalog is incomplete or has duplicate IDs")
     for channel_id, channel in channels_by_id.items():
         validate_support(channel_id, channel.get("support"))
+    desktop = channels_by_id["desktop-first-party"]
+    if desktop.get("support", {}).get("diagnostics") != "implemented":
+        fail("Desktop agent integration diagnostics regressed")
+    if desktop.get("support", {}).get("linux") != "partial":
+        fail("Desktop agent integration overclaims or hides its partial Linux slice")
     telegram = channels_by_id["telegram-bot"]
     if telegram.get("risk_ceiling") != "low":
         fail("Telegram Bot may authorize actions above the low-risk ceiling")
@@ -119,6 +125,16 @@ def main() -> None:
     priority = policy.get("path_priority")
     if not isinstance(priority, list) or set(priority) != TRANSPORTS:
         fail("transport priority does not cover the complete catalog")
+    if priority != [
+        "reverse-wss-broker",
+        "lan-wss",
+        "iroh-quic",
+        "tailscale-headscale",
+        "webrtc-datachannel",
+        "webtransport",
+        "libp2p-quic",
+    ]:
+        fail("transport priority contradicts the reverse-HTTPS-first architecture")
     constraints = set(policy.get("hard_constraints", []))
     if not {
         "runtime-ready",

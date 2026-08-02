@@ -27,6 +27,7 @@ API_AUDIT_MAX_BYTES="${VPNCTL_API_AUDIT_MAX_BYTES:-2097152}"
 API_ROLLBACK_TIMEOUT_SECONDS="${VPNCTL_API_ROLLBACK_TIMEOUT_SECONDS:-30}"
 API_CACHE_REFRESH_TIMEOUT_SECONDS="${VPNCTL_API_CACHE_REFRESH_TIMEOUT_SECONDS:-10}"
 RUN_DIR="${VPNCTL_RUN_DIR:-/run/vpnctl}"
+MUTATION_LOCK_FILE="$RUN_DIR/.mutation.lock"
 SERVICE_NAME="${VPNCTL_SERVICE_NAME:-vpnctl.service}"
 HEALTH_TIMER="${VPNCTL_HEALTH_TIMER:-vpnctl-health.timer}"
 TEST_RECOVERY_SERVICE="${VPNCTL_TEST_RECOVERY_SERVICE:-vpnctl-test-recovery.service}"
@@ -1399,6 +1400,7 @@ cmd_protocols_managed_import() {
     fi
 
     require_root protocols managed-import "${original[@]}"
+    acquire_action_lock
     command -v flock >/dev/null 2>&1 || die "flock не найден"
     managed_import_secure_directory "$dir"
     umask 077
@@ -4212,19 +4214,42 @@ validate_test_timeout() {
     ((timeout >= 2 && timeout <= 600))
 }
 
+inherited_mutation_lock_valid() {
+    local fd="${VPNCTL_MUTATION_LOCK_FD:-}" expected_inode actual_inode
+    [[ "$fd" =~ ^[0-9]+$ ]] || return 1
+    [[ -e "/proc/$$/fd/$fd" ]] || return 1
+    expected_inode="$(stat -Lc '%d:%i' -- "$MUTATION_LOCK_FILE" 2>/dev/null)" ||
+        return 1
+    actual_inode="$(stat -Lc '%d:%i' -- "/proc/$$/fd/$fd" 2>/dev/null)" ||
+        return 1
+    [[ "$actual_inode" == "$expected_inode" ]] || return 1
+    flock -n "$fd"
+}
+
 acquire_action_lock() {
     mkdir -p "$RUN_DIR"
     chmod 700 "$RUN_DIR"
-    exec 8>"$RUN_DIR/.action.lock"
+    if [[ -n "${VPNCTL_MUTATION_LOCK_FD:-}" ]]; then
+        inherited_mutation_lock_valid ||
+            die "Недействительная унаследованная блокировка мутации $PRODUCT_NAME"
+        return
+    fi
+    exec 8>"$MUTATION_LOCK_FILE"
     flock -n 8 || die "Другая операция $PRODUCT_NAME уже выполняется"
+    export VPNCTL_MUTATION_LOCK_FD=8
 }
 
 acquire_recovery_lock() {
     local wait_seconds="${1:-30}"
     mkdir -p "$RUN_DIR"
     chmod 700 "$RUN_DIR"
-    exec 8>"$RUN_DIR/.action.lock"
-    flock -w "$wait_seconds" 8
+    if [[ -n "${VPNCTL_MUTATION_LOCK_FD:-}" ]]; then
+        inherited_mutation_lock_valid
+        return
+    fi
+    exec 8>"$MUTATION_LOCK_FILE"
+    flock -w "$wait_seconds" 8 || return 1
+    export VPNCTL_MUTATION_LOCK_FD=8
 }
 
 stop_service_bounded() {
@@ -4452,7 +4477,7 @@ run_adguard_fallback() {
     timeout "$limit" env HOME="$home" \
         XDG_RUNTIME_DIR="/run/user/$uid" \
         DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
-        "$ADGUARD_FALLBACK_CLI" "$@" 8>&- 9>&-
+        "$ADGUARD_FALLBACK_CLI" "$@" 7>&- 8>&- 9>&-
 }
 
 adguard_fallback_pid_file() {
@@ -4534,7 +4559,7 @@ stop_one_external_fallback() {
                 error "Fallback stop-скрипт недоступен: $LEGACY_FALLBACK_STOP"
                 return 1
             }
-            timeout "$FALLBACK_TIMEOUT" "$LEGACY_FALLBACK_STOP" 8>&- 9>&- ||
+            timeout "$FALLBACK_TIMEOUT" "$LEGACY_FALLBACK_STOP" 7>&- 8>&- 9>&- ||
                 return 1
             while legacy_fallback_active; do
                 (($(date +%s) < deadline)) || return 1
@@ -4578,7 +4603,7 @@ start_external_fallback() {
                 error "Fallback setup-скрипт недоступен: $LEGACY_FALLBACK_START"
                 return 1
             }
-            timeout "$FALLBACK_TIMEOUT" "$LEGACY_FALLBACK_START" 8>&- 9>&- ||
+            timeout "$FALLBACK_TIMEOUT" "$LEGACY_FALLBACK_START" 7>&- 8>&- 9>&- ||
                 return 1
             while ! legacy_fallback_active; do
                 (($(date +%s) < deadline)) || return 1
@@ -6656,11 +6681,20 @@ api_run_lifecycle_action() {
         api_error_response "$request_id" internal-error api.journal.unavailable true true
         return
     }
-    exec 7>"$API_ACTION_DIR/.mutation.lock"
+    mkdir -p -- "$RUN_DIR" || {
+        api_error_response "$request_id" internal-error api.journal.unavailable true true
+        return
+    }
+    chmod 700 -- "$RUN_DIR" || {
+        api_error_response "$request_id" internal-error api.journal.unavailable true true
+        return
+    }
+    exec 7>"$MUTATION_LOCK_FILE"
     if ! flock -n 7; then
         api_error_response "$request_id" busy api.action.busy true false
         return
     fi
+    export VPNCTL_MUTATION_LOCK_FD=7
     if ! api_recover_interrupted_actions; then
         api_error_response "$request_id" internal-error \
             api.action.recovery-required false true
@@ -6890,7 +6924,7 @@ api_dispatch() {
         return
     }
     export VPNCTL_API_SERVER_CONTEXT=1
-    for command in awk jq sha256sum flock timeout install; do
+    for command in awk jq sha256sum flock timeout install stat; do
         command -v "$command" >/dev/null 2>&1 || {
             api_error_response "$(api_server_request_id)" backend-unavailable \
                 api.runtime.missing-dependency false true
@@ -7634,9 +7668,13 @@ cmd_api_clear_recovery() {
         die "Unable to open the local API action journal"
     chmod 700 -- "$API_ACTION_DIR" ||
         die "Unable to protect the local API action journal"
-    exec 7>"$API_ACTION_DIR/.mutation.lock"
+    mkdir -p -- "$RUN_DIR" ||
+        die "Unable to open the runtime mutation lock directory"
+    chmod 700 -- "$RUN_DIR" ||
+        die "Unable to protect the runtime mutation lock directory"
+    exec 7>"$MUTATION_LOCK_FILE"
     flock -n 7 ||
-        die "Cannot acknowledge recovery while another API mutation is active"
+        die "Cannot acknowledge recovery while another mutation is active"
     if [[ -e "$API_RECOVERY_MARKER" ]]; then
         rm -f -- "$API_RECOVERY_MARKER" ||
             die "Unable to clear the local API recovery marker"
@@ -7656,6 +7694,7 @@ cmd_doctor() {
     esac
     if ((fix)); then
         require_root doctor --fix
+        acquire_action_lock
         doctor_fix
     fi
 
@@ -7743,6 +7782,7 @@ cmd_autostart() {
         die "Использование: $CLI_COMMAND autostart on|off"
     require_root autostart "$mode"
     systemd_available || die "systemd недоступен"
+    acquire_action_lock
     if [[ "$mode" == "on" ]]; then
         selected_from_state || die "Сначала выберите профиль: $CLI_COMMAND connect"
         systemctl enable "$SERVICE_NAME" || die "Не удалось включить $SERVICE_NAME"
@@ -7762,6 +7802,7 @@ cmd_monitor() {
         die "Использование: $CLI_COMMAND monitor on|off"
     require_root monitor "$mode"
     systemd_available || die "systemd недоступен"
+    acquire_action_lock
     if [[ "$mode" == "on" ]]; then
         systemctl enable --now "$HEALTH_TIMER" ||
             die "Не удалось включить $HEALTH_TIMER"
@@ -7835,6 +7876,7 @@ cmd_import() {
     validate_profile "$protocol" "$source" 1 ||
         die "Профиль не прошёл проверку формата/безопасности"
     require_root import "$protocol" "$source" "$force"
+    acquire_action_lock
 
     dir="$(import_target_dir "$protocol")"
     mkdir -p "$dir"
@@ -7873,6 +7915,7 @@ cmd_import_files() {
     done
 
     require_root import-files "${original[@]}"
+    acquire_action_lock
 
     if ((force == 0)); then
         for index in "${!files[@]}"; do
@@ -7930,7 +7973,10 @@ cmd_import_dir() {
     )
     ((${#files[@]} > 0)) ||
         die "В папке нет файлов *.conf, *.ovpn или *.nmconnection"
-    ((dry_run)) || require_root import-dir "${original[@]}"
+    if ((dry_run == 0)); then
+        require_root import-dir "${original[@]}"
+        acquire_action_lock
+    fi
 
     say "$PRODUCT_NAME: анализ папки $source_dir"
     for file in "${files[@]}"; do
@@ -8008,6 +8054,8 @@ cmd_remove() {
     require_profile_access remove "${original[@]}"
     resolve_profile "$protocol" "$requested_profile" || return 1
     require_root remove "$protocol" "$(basename -- "$SELECTED_PROFILE")"
+    acquire_action_lock
+    resolve_profile "$protocol" "$requested_profile" || return 1
     active_profile="$(state_get PROFILE 2>/dev/null || true)"
     if [[ "$(state_get PROTOCOL 2>/dev/null || true)" == "$protocol" &&
           "$active_profile" == "$(basename -- "$SELECTED_PROFILE")" ]]; then
@@ -8319,8 +8367,9 @@ health_internet_ok() {
 }
 
 health_acquire_action_lock() {
-    exec 8>"$RUN_DIR/.action.lock"
-    flock -n 8
+    exec 8>"$MUTATION_LOCK_FILE"
+    flock -n 8 || return 1
+    export VPNCTL_MUTATION_LOCK_FD=8
 }
 
 health_recover() {
@@ -8952,6 +9001,7 @@ main() {
         _recover-stale-test) recover_stale_test_state ;;
         _dedupe-quick-policy)
             require_root _dedupe-quick-policy
+            acquire_action_lock
             cleanup_duplicate_quick_policy
             ;;
         _openvpn-dns-up) openvpn_dns_up "${1:-}" ;;

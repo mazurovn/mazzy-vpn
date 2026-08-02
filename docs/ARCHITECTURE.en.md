@@ -33,7 +33,7 @@ flowchart TB
 
     subgraph Control["Validated control plane"]
         Validation["Profile parser and security validation"]
-        ActionLock["Exclusive action lock"]
+        ActionLock["Shared fail-closed mutation lock"]
         State["Desired state and selected default<br/>/var/lib/vpnctl/active"]
         Runtime["Ephemeral counters, locks and test data<br/>/run/vpnctl"]
         ActionJournal["Idempotency and sanitized audit<br/>/var/lib/vpnctl/api-*"]
@@ -164,7 +164,7 @@ server storage and agent constraints.
 
 ## Reverse agent-control plane
 
-Mazzy has a separate versioned contract for reverse control of AI agents.
+Mazzy has a separate versioned draft contract for reverse control of AI agents.
 [`agent-control/v1/registry.json`](../agent-control/v1/registry.json) catalogs
 LAN WSS, iroh, libp2p, WebRTC, WebTransport, Tailscale/Headscale and reverse
 WSS paths without mislabeling them as VPN protocols. Web, CLI and Telegram are
@@ -172,11 +172,19 @@ ingress channels above those paths. Standard Telegram Bot access is explicitly
 low-risk and gateway-visible; full control requires a paired first-party Web
 or Mini App channel.
 
-The current implementation is contract, packaging and fail-closed diagnostics
-only. No agent transport runtime is release-ready. The E2EE envelope, path
-failover, anti-replay, capability policy and separate gateway repository
-boundary are specified in
-[Reverse agent control](AGENT_CONTROL_ARCHITECTURE.en.md).
+The current implementation includes the draft catalog/schemas, packaging, fail-closed
+diagnostics and a partial first-party Desktop ingress. The AI Agents screen
+discovers Codex/Claude Code and uses a fixed Rust adapter for official
+experimental Codex Remote Control `start|pair|stop`; pairing codes are not
+persisted. This is a vendor-native relay, not a first-party `mazzy-agentd`.
+None of the seven agent transports is
+release-ready; Web/Telegram and Claude lifecycle remain planned. Provider
+adapters, E2EE, failover and anti-replay are target design, not a working
+runtime; they and the separate gateway boundary are
+specified in [Reverse agent control](AGENT_CONTROL_ARCHITECTURE.en.md).
+The deeper normative review, including state ownership, protocol gaps,
+transport policy and the delivery DAG, is in the
+[target architecture (RU)](TARGET_ARCHITECTURE_2026-08-02.ru.md).
 
 The implemented `planner.evaluate` query is subordinate to hard constraints
 computed by the backend: platform backend ready, profile valid, backend-only
@@ -357,7 +365,7 @@ There are two independent recovery layers:
 
 Manual `disconnect` writes `DESIRED=down` before stopping the service, so the
 health monitor does not undo an intentional disconnect. An idle TUI does not
-retain the action lock.
+retain the mutation lock.
 
 ## Transactional live test and rollback
 
@@ -409,7 +417,7 @@ previous connection has been restored successfully.
 | `/var/lib/vpnctl/api-actions` | Completed/running action IDs, rollback snapshots and sanitized outcomes | Persistent, directory `700`, records `600`; newest 512 completed outcomes by default |
 | `/var/lib/vpnctl/api-audit.jsonl{,.1}` | Operation, authorization decision and outcome | Persistent, mode `600`; no payload/backend output; 2 MiB rotation with one archive |
 | `/var/lib/vpnctl/api-recovery-required.json` | Failed/missing rollback snapshot marker | Persistent mode `600`; blocks API mutations until explicit administrator acknowledgement |
-| `/run/vpnctl` | Locks, health counter and sanitized runtime log | Cleared at boot |
+| `/run/vpnctl` | Shared `.mutation.lock`, singleton `.health.lock`, health counter and sanitized runtime log | Cleared at boot |
 | `/run/mazzy-vpn/status.json` | Sanitized Desktop status | Recreated by root, `0640 root:mazzy-vpn`, without keys or endpoint |
 | `/run/mazzy-vpn/api-v1.sock` | Versioned local API transport | Socket `0660 root:mazzy-vpn`, systemd activated |
 | `vpnctl.service` | Owns the active managed tunnel | Long-running, systemd supervised |
@@ -418,7 +426,11 @@ previous connection has been restored successfully.
 
 Security invariants:
 
-- one managed tunnel and one serialized state-changing operation;
+- in the current unreleased branch, one managed tunnel and one state-changing
+  operation are serialized by the shared `.mutation.lock` across API, direct
+  CLI, recovery, health remediation and service-policy paths;
+- this is a transitional R0a process lock: the API journal still covers API
+  lifecycle only, and the target single `mazzy-vpnd` owner is not implemented;
 - an interrupted API action is reconciled from its pre-action snapshot before
   another mutation starts;
 - profile type is detected from content, then validated before import;

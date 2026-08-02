@@ -10,7 +10,7 @@
     "command_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{16,128}$"},
     "session_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{16,128}$"},
     "actor_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{3,128}$"},
-    "source_channel": {"enum": ["web-first-party", "cli-first-party", "telegram-bot", "telegram-mini-app"]},
+    "source_channel": {"enum": ["desktop-first-party", "web-first-party", "cli-first-party", "telegram-bot", "telegram-mini-app"]},
     "capability": {"enum": ["agent.status", "agent.list", "session.list", "session.create", "session.prompt", "session.pause", "session.cancel", "permission.respond", "artifact.list", "artifact.get"]},
     "target_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$"},
     "issued_at": {"type": "string", "format": "date-time"},

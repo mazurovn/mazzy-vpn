@@ -39,7 +39,15 @@ aliases `vpnctl` and `mazzyvpn`.
 [local API v1 contract](docs/API_CONTRACT.en.md) ·
 [protocol and AI orchestration](docs/PROTOCOL_ORCHESTRATION.en.md) ·
 [reverse agent-control architecture](docs/AGENT_CONTROL_ARCHITECTURE.en.md) ·
+[deep target architecture and delivery DAG (RU)](docs/TARGET_ARCHITECTURE_2026-08-02.ru.md) ·
+[R0a mutation single-flight specification (RU)](docs/R0_MUTATION_SINGLE_FLIGHT.ru.md) ·
 [Архитектура на русском](docs/ARCHITECTURE.ru.md)
+
+The current unreleased R0a slice moves API lifecycle, direct CLI, recovery,
+health remediation and service-policy commands onto the shared
+`/run/vpnctl/.mutation.lock`. This removes the confirmed split-lock race but is
+not the target `mazzy-vpnd`: a common journal for every root path and proof of
+route/DNS/firewall/leak restoration remain P0 work.
 
 Agent-safe protocol inventory and detection:
 
@@ -55,9 +63,13 @@ mazzy-vpn agent-transports diagnose --json
 ```
 
 The agent-control catalog is a separate reverse-control layer for Web, CLI and
-Telegram clients. Its seven transport adapters, including iroh and alternatives,
-are contract-only in this branch; diagnostics intentionally report no
-release-ready runtime.
+Telegram clients. The unreleased Desktop branch adds Codex/Claude discovery and
+typed official but experimental Codex Remote Control `start|pair|stop` with
+memory-only pairing.
+This is vendor-native integration, not the planned first-party `mazzy-agentd`:
+all seven cataloged network
+adapters, Web/Telegram clients and `mazzy-agentd` remain non-release-ready, and
+diagnostics report that explicitly.
 
 ## Install
 

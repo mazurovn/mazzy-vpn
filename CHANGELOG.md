@@ -20,9 +20,41 @@ All notable changes to Mazzy VPN are documented here.
   explicit engine versions, process graphs and supply-chain, rollback, leak and
   crash-test gates.
 - Added a separate reverse agent-control v1 contract for LAN WSS, iroh, libp2p,
-  WebRTC, WebTransport, Tailscale/Headscale and reverse WSS, plus signed E2EE
-  envelopes and Web/CLI/Telegram channel-risk policy. Runtime support remains
-  planned.
+  WebRTC, WebTransport, Tailscale/Headscale and reverse WSS, plus draft schemas
+  that declare future signed E2EE envelopes and Desktop/Web/CLI/Telegram
+  channel-risk policy. No E2EE runtime is claimed; all seven paths are planned.
+- Added the first embedded Desktop agent-control slice: local Codex/Claude
+  discovery, cataloged provider/transport status, and typed official
+  **experimental** Codex Remote Control start/pair/stop actions. Operations use
+  fixed argv without a shell, a 12-second direct-child timeout and renderer
+  confirmation; process-group termination and native command-bound approval
+  remain R0 blockers. Pairing exposes only a manual code and expiry and keeps
+  them in memory. The unreleased screen has refreshed English and Russian
+  documentation captures. Claude remains discovery-only, and no first-party
+  Mazzy relay or Telegram client is claimed.
+- Documented the source-level Happy, Claude Bridge, Paseo and Yep Anywhere
+  comparison and separated ingress, E2EE transport and provider-adapter
+  boundaries. Typed Codex app-server/Claude/ACP adapters are preferred over a
+  PTY protocol.
+- Added the five-role target-architecture audit and executable delivery DAG for
+  the privileged egress and unprivileged Agent Control planes. It records the
+  split-lock/rollback P0 debt, selects reverse HTTPS/WSS as the durable first
+  path, defines `mazzy-vpnd`/`mazzy-agentd` ownership, protocol/crypto/ACK/key
+  requirements and defers optional transports behind measured release gates.
+- Removed the Desktop pairing parser fallback that could expose an opaque
+  vendor `pairingCode` when `manualPairingCode` was absent. Opaque-only
+  responses now fail closed and are covered by a Rust regression.
+- Added the transitional R0a single-flight boundary: API lifecycle, direct
+  CLI, ordinary/managed profile import/remove, timeout/boot recovery, health
+  remediation, policy cleanup, `doctor --fix`, autostart and monitor now
+  contend on one runtime `.mutation.lock`. API child operations
+  validate the inherited lock inode; invalid descriptors fail closed before a
+  system mutation, and fallback subprocesses close API/direct lock descriptors
+  before they may daemonize. This does not claim the planned `mazzy-vpnd` owner
+  or full route/DNS/firewall rollback proof.
+- Aligned the Agent Control registry with ADR-009: reverse WSS is the durable
+  baseline, followed by LAN and iroh accelerators; optional/later transports
+  no longer precede the baseline in executable path priority.
 
 - Added the read-only API v1 `planner.evaluate` operation and
   `mazzy-vpn planner evaluate --stdin --json`. The backend enforces five

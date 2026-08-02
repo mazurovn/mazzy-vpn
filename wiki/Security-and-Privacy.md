@@ -22,7 +22,8 @@ Mazzy VPN не использует обязательный cloud account и н
 - root-owned профили `600`, вся цепочка каталогов без group/world write;
 - повторная проверка профиля внутри root service;
 - запрет executable hooks/includes/plugins;
-- один managed tunnel и одна изменяющая операция;
+- один managed tunnel и одна изменяющая операция через общий runtime
+  `.mutation.lock` в текущей непубликованной ветке;
 - атомарное desired state;
 - транзакционный rollback;
 - redaction приватных параметров в расширенных журналах;
@@ -34,6 +35,15 @@ Mazzy VPN не использует обязательный cloud account и н
   одинаковые display names не считаются достаточной идентичностью;
 - отсутствие неявного публичного DNS: OpenVPN использует переданный сервером
   DNS либо явный `VPNCTL_OPENVPN_FALLBACK_DNS`.
+
+Общий lock является переходным R0a, а не полноценным `mazzy-vpnd`: direct root
+paths пока не имеют общего с API action journal, а rollback ещё не доказывает
+восстановление routes, DNS, firewall и отсутствие leak.
+
+Текущий Desktop Agent Control остаётся preview. Fixed enum/argv и отсутствие
+shell уменьшают поверхность атаки, но renderer `window.confirm()` ещё не
+является command-bound proof присутствия пользователя. До закрытия R0-2 нельзя
+использовать этот preview как доверенную границу для high-risk remote actions.
 
 ## Проверки репозитория
 
@@ -75,6 +85,12 @@ redaction. Desktop uses a restrictive CSP, enum action allowlist, no shell and
 a strictly validated cache with no endpoint, path or config content. OpenVPN
 uses server-provided DNS or an explicit `VPNCTL_OPENVPN_FALLBACK_DNS`; it no
 longer silently substitutes a public resolver.
+
+The shared lock is a transitional unreleased R0a boundary, not the target
+`mazzy-vpnd`; direct root paths do not yet share the API action journal and
+rollback does not prove route/DNS/firewall/leak restoration. Desktop Agent
+Control also remains preview-only: its renderer confirmation is not yet a
+native command-bound approval proof for high-risk remote actions.
 
 The repository runs public-tree audit, Gitleaks, npm audit, Rust tests and
 Clippy. GitHub Actions are pinned to full commit SHAs. Do not put a secret in a

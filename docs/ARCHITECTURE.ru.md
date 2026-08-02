@@ -165,17 +165,26 @@ format.
 
 ## Контур обратного управления агентами
 
-Для управления AI-агентами выделен отдельный versioned contract.
+Для управления AI-агентами выделен отдельный versioned draft contract.
 [`agent-control/v1/registry.json`](../agent-control/v1/registry.json) содержит
 LAN WSS, iroh, libp2p, WebRTC, WebTransport, Tailscale/Headscale и reverse WSS,
 не выдавая их за VPN-протоколы. Web, CLI и Telegram являются ingress channels
 над этими transports. Обычный Telegram Bot явно ограничен low-risk командами и
 не заявляет first-party E2EE; полное управление требует paired Web или Mini App.
 
-Сейчас реализованы contract, package payload и fail-closed diagnostics. Ни один
-agent transport runtime ещё не готов к релизу. E2EE envelope, anti-replay,
-capability policy, path failover и граница отдельного server repository описаны
-в [архитектуре Agent Control](AGENT_CONTROL_ARCHITECTURE.ru.md).
+Сейчас реализованы draft catalog/schema, package payload, fail-closed diagnostics и
+частичный first-party Desktop ingress. Экран «AI-агенты» обнаруживает
+Codex/Claude Code и через фиксированный Rust adapter выполняет официальный
+experimental Codex Remote Control `start|pair|stop`; pairing code не
+сохраняется. Это vendor-native relay, а не first-party `mazzy-agentd`. Ни один из семи agent
+transport runtimes ещё не готов к релизу; Web/Telegram и Claude lifecycle
+остаются planned. E2EE envelope, anti-replay и path failover являются целевой
+архитектурой, а не работающим runtime. Provider adapters
+и граница отдельного server repository описаны в
+[архитектуре Agent Control](AGENT_CONTROL_ARCHITECTURE.ru.md). Повторный
+критический разбор state ownership, wire protocol, transport orchestration,
+provider SPI, security boundaries и release DAG находится в
+[целевой архитектуре](TARGET_ARCHITECTURE_2026-08-02.ru.md).
 
 Реализованный query `planner.evaluate` подчинён вычисляемым backend hard
 constraints: platform backend готов, профиль валиден, секрет доступен только
@@ -356,7 +365,7 @@ stateDiagram-v2
 
 Ручной `disconnect` записывает `DESIRED=down` до остановки сервиса, поэтому
 монитор не отменяет осознанное отключение. Ожидающее ввода TUI не удерживает
-action lock.
+общий mutation lock.
 
 ## Транзакционный live-test и rollback
 
@@ -408,7 +417,7 @@ sequenceDiagram
 | `/var/lib/vpnctl/api-actions` | Action IDs, rollback snapshots и очищенные outcomes | Постоянно, каталог `700`, records `600`; по умолчанию 512 последних завершённых outcomes |
 | `/var/lib/vpnctl/api-audit.jsonl{,.1}` | Operation, решение авторизации и outcome | Постоянно, `600`; без payload/backend output; ротация 2 МиБ с одним архивом |
 | `/var/lib/vpnctl/api-recovery-required.json` | Marker отсутствующего/неудачного rollback snapshot | Постоянно, `600`; блокирует API mutations до явного подтверждения администратора |
-| `/run/vpnctl` | Locks, health-счётчик и очищенный runtime log | Очищается при загрузке |
+| `/run/vpnctl` | Общий `.mutation.lock`, singleton `.health.lock`, health-счётчик и очищенный runtime log | Очищается при загрузке |
 | `/run/mazzy-vpn/status.json` | Очищенный статус для Desktop | Пересоздаётся root, `0640 root:mazzy-vpn`, без ключей и endpoint |
 | `/run/mazzy-vpn/api-v1.sock` | Versioned local API transport | Socket `0660 root:mazzy-vpn`, активируется systemd |
 | `vpnctl.service` | Владеет активным managed-туннелем | Долгоживущий, под контролем systemd |
@@ -417,7 +426,11 @@ sequenceDiagram
 
 Инварианты безопасности:
 
-- один managed-туннель и одна изменяющая состояние операция одновременно;
+- в текущей непубликованной ветке один managed-туннель и одна изменяющая
+  состояние операция одновременно защищены общим `.mutation.lock` для API,
+  direct CLI, recovery, health remediation и service-policy paths;
+- это переходный R0a process lock: API journal всё ещё покрывает только API
+  lifecycle, а целевой единственный владелец `mazzy-vpnd` не реализован;
 - прерванная API mutation согласуется по pre-action snapshot до запуска
   следующей изменяющей операции;
 - тип профиля определяется по содержимому, затем проверяется до импорта;

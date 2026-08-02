@@ -2,6 +2,8 @@
   "schema_version": 1,
   "product": "Mazzy VPN",
   "author": "Nik m (@mazurovn)",
+  "matrix_scope": "current-unreleased-worktree",
+  "published_baseline": "desktop-v0.3.2",
   "status_values": [
     "implemented",
     "partial",
@@ -274,6 +276,23 @@
       "docs": ["docs/PROTOCOL_ORCHESTRATION.en.md", "docs/PROTOCOL_ORCHESTRATION.ru.md", "docs/ARCHITECTURE.en.md", "docs/ARCHITECTURE.ru.md"]
     },
     {
+      "id": "agent-provider-integration",
+      "name_en": "Typed local AI-agent discovery and provider-native remote control",
+      "name_ru": "Типизированное обнаружение AI-агентов и provider-native remote control",
+      "owner": "agent-control",
+      "surfaces": {
+        "cli": "planned",
+        "tui": "planned",
+        "desktop_linux": "partial",
+        "desktop_macos": "partial",
+        "desktop_windows": "partial",
+        "mobile_android": "planned",
+        "mobile_ios": "planned"
+      },
+      "tests": ["desktop/src-tauri/src/agent_control.rs", "tests/check-desktop-ui.py", "tests/check-agent-control-registry.py", "tests/run.sh"],
+      "docs": ["README.en.md", "README.ru.md", "docs/DESKTOP.en.md", "docs/DESKTOP.ru.md", "docs/AGENT_CONTROL_ARCHITECTURE.en.md", "docs/AGENT_CONTROL_ARCHITECTURE.ru.md", "docs/RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md", "docs/TARGET_ARCHITECTURE_2026-08-02.ru.md", "wiki/Agent-Control-Gateway.md"]
+    },
+    {
       "id": "mobile-vpn-lifecycle",
       "name_en": "OS-managed mobile tunnel, background lifecycle and protected secrets",
       "name_ru": "Мобильный VPN-туннель, фоновый lifecycle и защищённые секреты",
@@ -340,7 +359,8 @@
         {"capability": "automatic-recovery", "surfaces": ["desktop_linux"]},
         {"capability": "self-contained-runtime", "surfaces": ["desktop_linux"]},
         {"capability": "privilege-boundary", "surfaces": ["desktop_linux"]},
-        {"capability": "versioned-local-api", "surfaces": ["desktop_linux"]}
+        {"capability": "versioned-local-api", "surfaces": ["desktop_linux"]},
+        {"capability": "agent-provider-integration", "surfaces": ["desktop_linux"]}
       ]
     },
     {
@@ -360,7 +380,8 @@
         {"capability": "automatic-recovery", "surfaces": ["desktop_macos"]},
         {"capability": "self-contained-runtime", "surfaces": ["desktop_macos"]},
         {"capability": "privilege-boundary", "surfaces": ["desktop_macos"]},
-        {"capability": "versioned-local-api", "surfaces": ["desktop_macos"]}
+        {"capability": "versioned-local-api", "surfaces": ["desktop_macos"]},
+        {"capability": "agent-provider-integration", "surfaces": ["desktop_macos"]}
       ]
     },
     {
@@ -380,7 +401,8 @@
         {"capability": "automatic-recovery", "surfaces": ["desktop_windows"]},
         {"capability": "self-contained-runtime", "surfaces": ["desktop_windows"]},
         {"capability": "privilege-boundary", "surfaces": ["desktop_windows"]},
-        {"capability": "versioned-local-api", "surfaces": ["desktop_windows"]}
+        {"capability": "versioned-local-api", "surfaces": ["desktop_windows"]},
+        {"capability": "agent-provider-integration", "surfaces": ["desktop_windows"]}
       ]
     },
     {

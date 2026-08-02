@@ -173,6 +173,9 @@ validate_source_tree() {
         docs/PROTOCOL_ORCHESTRATION.ru.md \
         docs/AGENT_CONTROL_ARCHITECTURE.en.md \
         docs/AGENT_CONTROL_ARCHITECTURE.ru.md \
+        docs/TARGET_ARCHITECTURE_2026-08-02.ru.md \
+        docs/RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md \
+        docs/R0_MUTATION_SINGLE_FLIGHT.ru.md \
         docs/FEATURE_PARITY.md docs/capabilities.json \
         docs/API_CONTRACT.en.md docs/API_CONTRACT.ru.md docs/PROJECT_STATUS.md \
         docs/AUDIT_2026-07-28.ru.md docs/AUDIT_2026-08-01.ru.md \
@@ -305,6 +308,9 @@ post_install_checks() {
        -r /usr/local/lib/mazzy-vpn/docs/PROTOCOL_ORCHESTRATION.ru.md &&
        -r /usr/local/lib/mazzy-vpn/docs/AGENT_CONTROL_ARCHITECTURE.en.md &&
        -r /usr/local/lib/mazzy-vpn/docs/AGENT_CONTROL_ARCHITECTURE.ru.md &&
+       -r /usr/local/lib/mazzy-vpn/docs/TARGET_ARCHITECTURE_2026-08-02.ru.md &&
+       -r /usr/local/lib/mazzy-vpn/docs/RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md &&
+       -r /usr/local/lib/mazzy-vpn/docs/R0_MUTATION_SINGLE_FLIGHT.ru.md &&
        -r /usr/local/lib/mazzy-vpn/docs/API_CONTRACT.en.md &&
        -r /usr/local/lib/mazzy-vpn/docs/API_CONTRACT.ru.md &&
        -r /usr/local/lib/mazzy-vpn/docs/PROJECT_STATUS.md &&
@@ -657,6 +663,12 @@ install_files() {
         "$docs_dir/AGENT_CONTROL_ARCHITECTURE.en.md"
     run install -m 644 "$SCRIPT_DIR/docs/AGENT_CONTROL_ARCHITECTURE.ru.md" \
         "$docs_dir/AGENT_CONTROL_ARCHITECTURE.ru.md"
+    run install -m 644 "$SCRIPT_DIR/docs/TARGET_ARCHITECTURE_2026-08-02.ru.md" \
+        "$docs_dir/TARGET_ARCHITECTURE_2026-08-02.ru.md"
+    run install -m 644 "$SCRIPT_DIR/docs/RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md" \
+        "$docs_dir/RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md"
+    run install -m 644 "$SCRIPT_DIR/docs/R0_MUTATION_SINGLE_FLIGHT.ru.md" \
+        "$docs_dir/R0_MUTATION_SINGLE_FLIGHT.ru.md"
     run install -m 644 "$SCRIPT_DIR/docs/FEATURE_PARITY.md" \
         "$docs_dir/FEATURE_PARITY.md"
     run install -m 644 "$SCRIPT_DIR/docs/capabilities.json" \

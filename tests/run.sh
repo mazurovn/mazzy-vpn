@@ -717,11 +717,11 @@ for _ in {1..30}; do
 done
 grep -q 'Подключение запущено' "$menu_live_output" ||
     fail "live TUI did not complete the connect action"
-exec 6>"$TMP/run/.action.lock"
-flock -n 6 || fail "idle TUI retained the action lock after connect"
+exec 6>"$TMP/run/.mutation.lock"
+flock -n 6 || fail "idle TUI retained the mutation lock after connect"
 flock -u 6
 wait "$menu_live_pid"
-ok "idle TUI releases the watchdog action lock"
+ok "idle TUI releases the watchdog mutation lock"
 
 printf '15\n3\n%s\n0\n' "$TMP/tui-config-tree" |
     VPNCTL_FORCE_INTERACTIVE=1 "$CLI" >/dev/null 2>&1
@@ -1592,7 +1592,7 @@ api_busy_request="$(
     }'
 )"
 mkdir -p "$VPNCTL_API_ACTION_DIR"
-exec 8>"$VPNCTL_API_ACTION_DIR/.mutation.lock"
+exec 8>"$TMP/run/.mutation.lock"
 flock 8
 api_busy_response="$(
     printf '%s\n' "$api_busy_request" | "$CLI" _api-dispatch
@@ -2305,10 +2305,41 @@ grep -q '^DESIRED=down$' "$TMP/state/active" ||
     fail "managed watchdog remained armed over restored AdGuard fallback"
 rm -f "$FAKE_ADGUARD_ACTIVE"
 if ! "$CLI" connect openvpn "Test Server" >/dev/null; then
-    fail "daemonized AdGuard fallback inherited the vpnctl action lock"
+    fail "daemonized AdGuard fallback inherited the vpnctl mutation lock"
 fi
+
+"$CLI" disconnect >/dev/null
+touch "$FAKE_ADGUARD_ACTIVE"
+export FAKE_SYSTEMCTL_START_FAIL=1
+api_fallback_fd_request="$(
+    jq -cn --arg profile_id "$profile_id" '{
+        api_version: "1.0",
+        request_id: "request-fallback-fd-0001",
+        operation: "lifecycle.connect",
+        action_id: "action-fallback-fd-0001",
+        authorization: "system-mutate",
+        deadline_ms: 10000,
+        payload: {profile_id: $profile_id}
+    }'
+)"
+api_fallback_fd_response="$(
+    printf '%s\n' "$api_fallback_fd_request" | "$CLI" _api-dispatch
+)"
+unset FAKE_SYSTEMCTL_START_FAIL
+jq -e '
+    .status == "ok"
+    and .result.state == "rolled-back"
+    and .result.rollback.state == "completed"
+' <<<"$api_fallback_fd_response" >/dev/null ||
+    fail "API fallback fd regression did not complete a rollback"
+rm -f "$FAKE_ADGUARD_ACTIVE"
+exec 6>"$TMP/run/.mutation.lock"
+flock -n 6 || fail "daemonized API fallback retained inherited mutation fd 7"
+flock -u 6
+exec 6>&-
+"$CLI" connect openvpn "Test Server" >/dev/null
 unset FAKE_ADGUARD_FORK
-ok "AdGuard fallback is restored without inheriting the action lock"
+ok "AdGuard fallback cannot retain direct or API mutation locks"
 
 rm -f "$FAKE_ADGUARD_ACTIVE"
 (exec -a "/opt/adguardvpn_cli/adguardvpn-cli connect" sleep 30) &
@@ -2372,12 +2403,12 @@ touch "$TMP/state/test.previous.exists" "$TMP/state/test.previous.active" \
     "$TMP/state/test.transaction"
 sed -i 's/^MODE=normal$/MODE=test/' "$TMP/state/active"
 printf 'TEST_TOKEN=race-token\nTEST_DEADLINE=1\n' >>"$TMP/state/active"
-exec 7>"$TMP/run/.action.lock"
+exec 7>"$TMP/run/.mutation.lock"
 flock 7
 timeout 5 "$CLI" _test-timeout race-token >/dev/null 2>&1 &
 guard_pid=$!
 sleep 0.2
-kill -0 "$guard_pid" 2>/dev/null || fail "timeout guard did not wait for action lock"
+kill -0 "$guard_pid" 2>/dev/null || fail "timeout guard did not wait for mutation lock"
 flock -u 7
 wait "$guard_pid"
 exec 7>&-
@@ -2543,6 +2574,35 @@ grep -q '^disable --now vpnctl-health.timer$' "$TMP/systemctl.log" ||
     fail "Desktop monitor control did not stop the health timer"
 ok "independent health monitor control"
 
+: >"$TMP/systemctl.log"
+exec 6>"$TMP/run/.mutation.lock"
+flock 6
+if "$CLI" monitor on >/dev/null 2>&1; then
+    fail "monitor bypassed the shared mutation lock"
+fi
+profile_checksum_before="$(sha256sum "$TMP/config/openvpn/Test Server.ovpn")"
+if "$CLI" import openvpn "$TMP/config/openvpn/Test Server.ovpn" --force \
+    >/dev/null 2>&1; then
+    fail "profile import bypassed the shared mutation lock"
+fi
+[[ "$(sha256sum "$TMP/config/openvpn/Test Server.ovpn")" == \
+   "$profile_checksum_before" ]] ||
+    fail "blocked profile import changed the active fixture"
+flock -u 6
+exec 6>&-
+if grep -Eq '^(enable|disable|start|stop|restart|kill|daemon-reload)([[:space:]]|$)' \
+    "$TMP/systemctl.log"; then
+    fail "blocked monitor mutated systemd policy"
+fi
+if VPNCTL_MUTATION_LOCK_FD=99 "$CLI" autostart off >/dev/null 2>&1; then
+    fail "autostart trusted an invalid inherited mutation lock"
+fi
+if grep -Eq '^(enable|disable|start|stop|restart|kill|daemon-reload)([[:space:]]|$)' \
+    "$TMP/systemctl.log"; then
+    fail "invalid inherited mutation lock reached mutating systemctl"
+fi
+ok "service policy mutations fail closed behind the shared lock"
+
 logs_output="$("$CLI" logs --lines 250)"
 grep -q 'fake journal: -u vpnctl.service --no-pager -n 250' <<<"$logs_output" ||
     fail "bounded Desktop log retrieval used unexpected journal arguments"
@@ -2573,6 +2633,9 @@ stage="$TMP/stage"
    -f "$stage/usr/local/lib/mazzy-vpn/docs/PLATFORM_ROADMAP.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/PROTOCOL_ORCHESTRATION.en.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/PROTOCOL_ORCHESTRATION.ru.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/TARGET_ARCHITECTURE_2026-08-02.ru.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/R0_MUTATION_SINGLE_FLIGHT.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/FEATURE_PARITY.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/capabilities.json" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/API_CONTRACT.en.md" &&
@@ -2968,6 +3031,18 @@ ok "protocol registry and AI orchestration policy"
 python3 "$ROOT/tests/check-agent-control-registry.py" >/dev/null ||
     fail "agent-control transport registry and security policy are inconsistent"
 ok "reverse agent-control transports and ingress policy"
+
+grep -q 'id="codex-remote-pair"' "$ROOT/desktop/ui/index.html" ||
+    fail "Desktop has no explicit agent pairing control"
+grep -q 'agent_control::get_agent_integrations' "$ROOT/desktop/src-tauri/src/main.rs" ||
+    fail "Desktop agent diagnostics are not exposed through a typed command"
+grep -q 'AgentOperation::Pair' "$ROOT/desktop/src-tauri/src/agent_control.rs" ||
+    fail "Desktop agent pairing is not mapped to a fixed provider operation"
+if grep -qE 'shell\.exec|Command::new\([^)]*(sh|cmd|powershell)' \
+    "$ROOT/desktop/src-tauri/src/agent_control.rs"; then
+    fail "Desktop agent adapter crosses an arbitrary shell boundary"
+fi
+ok "Desktop agent discovery and Codex native pairing boundary"
 
 python3 "$ROOT/tests/check-managed-protocol-adapter.py" >/dev/null ||
     fail "managed proxy profile and sing-box renderer boundary are inconsistent"

@@ -72,10 +72,10 @@ iroh, libp2p, WebRTC, WebTransport, Tailscale/Headscale и reverse WSS реша�
 
 ### Medium: Telegram Bot не является first-party E2EE transport
 
-Bot ingress ограничен read-only/low-risk capability. Prompt, artifact,
-credential и high-risk approval идут только через paired first-party Web или
-Telegram Mini App с тем же signed encrypted envelope. В command v1 нет
-arbitrary `shell.exec`; agent повторно проверяет actor, risk, TTL и confirmation.
+Bot ingress должен быть ограничен read-only/low-risk capability. Draft schemas
+резервируют paired first-party Web/Telegram Mini App и signed envelope для
+будущего runtime, но canonical crypto и endpoint authorization ещё не
+реализованы. В command v1 нет arbitrary `shell.exec`.
 
 ## Сравнение с Happy и Claude Bridge
 
@@ -118,8 +118,8 @@ platform backends и supply chain.
 
 Фактический verification run текущего дерева:
 
-- `./tests/run.sh`: `84/84`;
-- Rust unit tests: `25/25`, Clippy с `-D warnings` для owned crate;
+- `./tests/run.sh`: `86/86`;
+- Rust unit tests: `30/30`, Clippy с `-D warnings` для owned crate;
 - npm audit: `0 vulnerabilities`;
 - ShellCheck, JSON contracts и public secret/history audit: успешно;
 - официальный sing-box 1.13.12 linux-amd64 загружен во временный каталог,

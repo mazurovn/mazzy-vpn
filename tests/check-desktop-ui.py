@@ -130,6 +130,16 @@ def main() -> None:
         fail("Desktop real egress card bypasses the typed Rust command")
     if 'invoke("probe_profiles"' not in javascript:
         fail("Desktop location checks bypass the typed Rust command")
+    if 'invoke("get_agent_integrations"' not in javascript:
+        fail("Desktop agent view bypasses the typed Rust diagnostics command")
+    if 'invoke("run_agent_operation"' not in javascript:
+        fail("Desktop agent lifecycle bypasses the typed Rust operation command")
+    if 'state.pairingGrant = pairing' not in javascript or "localStorage" in javascript[
+        javascript.find("function retainPairingGrant") : javascript.find(
+            "function renderAgentIntegrations"
+        )
+    ]:
+        fail("Desktop pairing grant is missing or persisted in browser storage")
     if 'previewParameters.get("preview") === "docs"' not in javascript:
         fail("Desktop documentation preview is missing")
     if (
@@ -176,8 +186,11 @@ def main() -> None:
         fail("Desktop status command bypasses the typed cache sanitizer")
     if 'backend::verify_connection' not in main_rust:
         fail("Desktop does not expose the typed egress verification command")
+    if 'agent_control::run_agent_operation' not in main_rust:
+        fail("Desktop does not expose the typed agent operation command")
     for tray_id in (
         "profiles",
+        "agents",
         "diagnostics",
         "settings",
         "about",

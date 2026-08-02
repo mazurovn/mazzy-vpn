@@ -8,6 +8,12 @@ test/document reference and release gate remains consistent.
 
 Status: **I** implemented · **P** partial · **R** planned · **—** not applicable.
 
+Matrix scope: **current unreleased worktree**. Published
+`desktop-v0.3.2` does not contain the AI Agents screen or
+`agent-provider-integration`; `P` below describes source in this branch, not a
+shipped artifact. That capability is an explicit Desktop 1.0 gate on Linux,
+macOS and Windows.
+
 | Capability ID | CLI | TUI | Linux | macOS | Windows | Android | iOS |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | `connection-lifecycle` | I | I | I | R | R | R | R |
@@ -25,6 +31,7 @@ Status: **I** implemented · **P** partial · **R** planned · **—** not appli
 | `privilege-boundary` | I | I | P | R | R | R | R |
 | `protocol-catalog-detection` | I | R | R | R | R | R | R |
 | `ai-orchestration-contract` | P | R | R | R | R | R | R |
+| `agent-provider-integration` | R | R | P | P | P | R | R |
 | `versioned-local-api` | P | P | P | P | P | R | R |
 | `mobile-vpn-lifecycle` | — | — | — | — | — | R | R |
 
@@ -69,6 +76,12 @@ gates; censorship/workload fit выводится из trusted catalog/workload,
 назначается агентом. History store, authorized execution/failover и Desktop/mobile
 integration ещё не реализованы.
 
+Agent provider integration также `partial`: unreleased Desktop обнаруживает
+Codex/Claude и управляет официальным experimental Codex Remote Control через три
+типизированные операции с memory-only pairing. Это не готовый
+client-to-client `mazzy-agentd`; семь network paths, Web,
+Telegram и Claude lifecycle остаются `planned`.
+
 Новая функция считается завершённой не после добавления одной кнопки, а после
 обновления общего API/core, всех применимых интерфейсов, автоматических тестов,
 матрицы и документации на русском и английском.
@@ -99,6 +112,12 @@ orchestration is `partial`: CLI/API now execute deterministic read-only
 evaluation with hard gates; censorship/workload fit is derived from the trusted
 catalog/workload rather than assigned by an agent. History storage, authorized execution/failover
 and Desktop/mobile integration are not implemented.
+
+Agent provider integration is also `partial`: the unreleased Desktop discovers
+Codex/Claude and controls official experimental Codex Remote Control through three typed
+operations with memory-only pairing. This is not a complete client-to-client
+`mazzy-agentd`; all seven network paths, Web, Telegram and Claude
+lifecycle remain `planned`.
 
 A feature is complete only after its shared API/core, every applicable
 interface, automated tests, this registry and both Russian and English

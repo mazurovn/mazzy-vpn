@@ -46,6 +46,30 @@ stateDiagram-v2
 systemd timeout guard и boot recovery. Предыдущее managed или внешнее
 соединение восстанавливается после ошибки, timeout, сигнала или перезагрузки.
 
+## Recovery-required marker
+
+Если API не смог доказать хотя бы восстановление сохранённого intent/service,
+он создаёт root-only `/var/lib/vpnctl/api-recovery-required.json` и блокирует
+следующие API mutations. Сначала оператор должен проверить фактическое
+состояние, исправить сеть и сохранить диагностические данные:
+
+```bash
+sudo mazzy-vpn doctor
+sudo mazzy-vpn diagnose
+mazzy-vpn verify
+sudo journalctl -u vpnctl.service -n 200 --no-pager
+```
+
+Только после ручной проверки текущего tunnel, routes и DNS marker снимается
+явным административным подтверждением под общим mutation lock:
+
+```bash
+sudo mazzy-vpn _api-clear-recovery --acknowledge-current-state
+```
+
+Эта команда не ремонтирует соединение и не доказывает отсутствие leak; она
+только подтверждает, что оператор принимает уже проверенное текущее состояние.
+
 ---
 
 <a id="english"></a>
@@ -82,3 +106,15 @@ after two consecutive confirmed failures.
 Manual disconnect writes `DESIRED=down` first, so the watchdog never undoes an
 intentional disconnect. Transactional tests add a main rollback, independent
 systemd timeout guard and boot recovery.
+
+If `/var/lib/vpnctl/api-recovery-required.json` exists, further API mutations
+are blocked. Run `sudo mazzy-vpn doctor`, `sudo mazzy-vpn diagnose`,
+`mazzy-vpn verify` and inspect the service journal first. Only after manually
+checking the tunnel, routes and DNS, acknowledge the current state with:
+
+```bash
+sudo mazzy-vpn _api-clear-recovery --acknowledge-current-state
+```
+
+This acknowledgment does not repair the network or prove leak freedom; it only
+clears the fail-closed marker under the shared mutation lock.

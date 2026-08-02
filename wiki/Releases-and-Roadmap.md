@@ -3,8 +3,23 @@
 ## После 1.3.2 — текущая разработка
 
 - добавлен отдельный `agent-control/v1` contract для LAN WSS, iroh, libp2p,
-  WebRTC, WebTransport, Tailscale/Headscale и reverse WSS; runtime support пока
-  `planned`, подробности в [[Agent Control Gateway]];
+  WebRTC, WebTransport, Tailscale/Headscale и reverse WSS; все network runtimes
+  пока `planned`, подробности в [[Agent Control Gateway]];
+- повторный пяти-ролевой аудит зафиксирован в
+  [целевой архитектуре](https://github.com/mazurovn/mazzy-vpn/blob/main/docs/TARGET_ARCHITECTURE_2026-08-02.ru.md):
+  сначала hardening Desktop preview и один egress mutation owner, затем
+  `mazzy-agentd`, reverse HTTPS/WSS read-only slice, pairing/E2EE и только
+  после этого interactive Web/Telegram, LAN и iroh;
+- первый непубликованный срез R0a свёл API, direct CLI, profile import/remove,
+  recovery, health remediation, policy cleanup, `doctor --fix`, autostart и monitor на общий runtime
+  `.mutation.lock`; это закрывает split-lock race, но ещё не является
+  `mazzy-vpnd` и не доказывает rollback routes/DNS/firewall/leak state;
+- `agent-control/v1/registry.json` синхронизирован с ADR-009: reverse WSS/H2 —
+  durable baseline, LAN и iroh — accelerators, поздние paths не блокируют
+  первые релизы;
+- Desktop получил partial first-party agent ingress: обнаружение Codex/Claude,
+  catalog status семи paths и фиксированные official experimental Codex Remote Control
+  `start|pair|stop`. Pairing memory-only; `mazzy-agentd`/Web/Telegram не готовы;
 - draft [PR #43](https://github.com/mazurovn/mazzy-vpn/pull/43) добавляет
   read-only `planner.evaluate` с пятью backend-owned hard gates, versioned
   scoring и стабильным ранжированием opaque profile IDs;
@@ -137,6 +152,17 @@ All nine modern entries now have a closed neutral managed-profile validator and
 atomic root-only import. Six have a closed sing-box renderer. The versioned
 runtime adapter registry pins candidate versions and keeps service lifecycle,
 rollback and leak tests explicitly planned.
+
+The current unreleased R0a slice also converges API, direct CLI, recovery,
+health remediation and service-policy mutations on one runtime lock. It fixes
+the split-lock race but does not claim the target `mazzy-vpnd` owner or full
+route/DNS/firewall rollback proof. Agent Control path priority now follows
+ADR-009: reverse WSS/H2 first, then LAN and iroh accelerators.
+The Agent Control files are still draft catalog/schema declarations, not an
+implemented E2EE runtime. The unreleased Desktop has Codex/Claude discovery and
+fixed official experimental Codex Remote Control `start|pair|stop`; native
+command-bound approval and process-group termination remain R0 blockers.
+`mazzy-agentd`, relay, Web/Telegram and all seven network runtimes are planned.
 
 Version 1.3.2 / Desktop 0.3.2 fixes legacy profile-cache compatibility and the
 mixed `/usr/local` versus package `/usr/bin` upgrade conflict. It adds a

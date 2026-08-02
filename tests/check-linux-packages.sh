@@ -224,6 +224,9 @@ for listing in "$TMP/deb-files" "$TMP/rpm-files"; do
         /usr/lib/mazzy-vpn/agent-control/v1/schema.json \
         /usr/lib/mazzy-vpn/agent-control/v1/envelope.schema.json \
         /usr/lib/mazzy-vpn/agent-control/v1/command.schema.json \
+        /usr/lib/mazzy-vpn/docs/TARGET_ARCHITECTURE_2026-08-02.ru.md \
+        /usr/lib/mazzy-vpn/docs/RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md \
+        /usr/lib/mazzy-vpn/docs/R0_MUTATION_SINGLE_FLIGHT.ru.md \
         /usr/lib/mazzy-vpn/protocols/v1/registry.json \
         /usr/lib/mazzy-vpn/protocols/v1/schema.json \
         /usr/lib/mazzy-vpn/protocols/v1/managed-profile.schema.json \
@@ -342,6 +345,7 @@ for relative in \
     desktop/src-tauri/vendor/glib-0.18.5/Cargo.toml \
     desktop/src-tauri/vendor/glib-0.18.5/PATCH-PROVENANCE.md \
     desktop/src-tauri/vendor/glib-0.18.5/src/variant_iter.rs \
+    desktop/src-tauri/src/agent_control.rs \
     desktop/src-tauri/src/backend.rs \
     desktop/src-tauri/src/main.rs \
     desktop/src-tauri/tauri.conf.json \

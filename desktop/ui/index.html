@@ -53,6 +53,8 @@
                 data-i18n="navDashboard">Обзор</button>
         <button class="section-tab" type="button" data-page="profiles"
                 data-i18n="navProfiles">Профили</button>
+        <button class="section-tab" type="button" data-page="agents"
+                data-i18n="navAgents">Агенты</button>
         <button class="section-tab" type="button" data-page="diagnostics"
                 data-i18n="navDiagnostics">Диагностика</button>
         <button class="section-tab" type="button" data-page="settings"
@@ -330,6 +332,75 @@
               Живые тесты временно меняют маршрут и всегда используют timeout + rollback.
             </p>
           </aside>
+        </section>
+      </div>
+
+      <div class="page-panel" data-page-panel="agents">
+        <section class="page-heading glass">
+          <div>
+            <p class="eyebrow" data-i18n="agentsCenter">AGENT CONTROL</p>
+            <h2 data-i18n="agentsTitle">Доступ к AI-агентам</h2>
+            <p class="muted" data-i18n="agentsHint">
+              Локальные адаптеры, сопряжение устройств и готовность каналов управления.
+            </p>
+          </div>
+          <button class="compact-action primary" id="agents-refresh-button" type="button"
+                  data-i18n="refreshAgents">Обновить</button>
+        </section>
+
+        <section class="agent-layout">
+          <article class="glass card agent-providers-card">
+            <div class="card-heading">
+              <div>
+                <p class="eyebrow" data-i18n="providerAdapters">PROVIDER ADAPTERS</p>
+                <h3 data-i18n="localAgents">Локальные агенты</h3>
+              </div>
+              <span class="health-badge" id="agent-provider-badge">CHECK</span>
+            </div>
+            <div class="agent-provider-list" id="agent-provider-list" aria-live="polite">
+              <div class="empty-state" data-i18n="agentsLoading">Проверяем агенты…</div>
+            </div>
+          </article>
+
+          <aside class="glass card agent-access-card">
+            <p class="eyebrow" data-i18n="remoteAccess">REMOTE ACCESS</p>
+            <h3>Codex Remote Control</h3>
+            <dl class="agent-readiness">
+              <div><dt data-i18n="embeddedAgentClient">Встроенный клиент</dt>
+                <dd id="embedded-agent-client-state">—</dd></div>
+              <div><dt data-i18n="firstPartyGateway">Mazzy gateway</dt>
+                <dd id="first-party-gateway-state">—</dd></div>
+              <div><dt data-i18n="telegramIngress">Telegram</dt>
+                <dd id="telegram-agent-state">—</dd></div>
+            </dl>
+            <div class="agent-actions">
+              <button class="compact-action primary" id="codex-remote-start" type="button"
+                      data-i18n="startRemote">Запустить</button>
+              <button class="compact-action" id="codex-remote-pair" type="button"
+                      data-i18n="createPairing">Создать код</button>
+              <button class="compact-action danger" id="codex-remote-stop" type="button"
+                      data-i18n="stopRemote">Остановить</button>
+            </div>
+            <div class="pairing-grant" id="pairing-grant" aria-live="polite">
+              <span data-i18n="pairingCode">Код сопряжения</span>
+              <output id="codex-pairing-code">—</output>
+              <small id="codex-pairing-expiry" data-i18n="pairingNotCreated">Код не создан</small>
+            </div>
+            <p class="safety-note" data-i18n="vendorRemoteBoundary">
+              Этот путь использует официальный relay провайдера. Собственный Mazzy E2EE gateway ещё не готов.
+            </p>
+          </aside>
+
+          <article class="glass card agent-transports-card">
+            <div class="card-heading">
+              <div>
+                <p class="eyebrow" data-i18n="transportReadiness">TRANSPORT READINESS</p>
+                <h3 data-i18n="mazzyControlPaths">Каналы Mazzy Agent Control</h3>
+              </div>
+              <span class="health-badge" id="agent-transport-badge">CHECK</span>
+            </div>
+            <div class="agent-transport-list" id="agent-transport-list" aria-live="polite"></div>
+          </article>
         </section>
       </div>
 

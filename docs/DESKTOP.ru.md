@@ -23,6 +23,10 @@ Linux-пакет 0.3 включает совместимый engine installer: �
 > обновления, clean-device integration tests и перенос оставшихся typed
 > `pkexec`-операций в частично реализованный versioned local API.
 
+> **Разделение версий:** опубликованный `desktop-v0.3.2` содержит Dashboard,
+> Profiles, Diagnostics, Settings и About. Экран «AI-агенты» и его снимок ниже
+> относятся только к текущей непубликованной ветке.
+
 ## Визуальный обзор
 
 Все кадры используют документационные адреса RFC 5737 и видимый banner
@@ -36,6 +40,10 @@ Linux-пакет 0.3 включает совместимый engine installer: �
 |---|---|
 | ![Зависимости и службы](images/settings-ru.png) | [English](images/dashboard-en.png) · [Русский](images/dashboard-ru.png) · [Deutsch](images/dashboard-de.png) · [中文](images/dashboard-zh.png) · [日本語](images/dashboard-ja.png) · [한국어](images/dashboard-ko.png) |
 
+| Управление AI-агентами — только текущая непубликованная ветка |
+|---|
+| ![Provider adapters и catalog status](images/agents-ru.png) |
+
 ## Статус платформ
 
 | Платформа | Статус | Пакеты |
@@ -48,19 +56,22 @@ macOS и Windows preview не нужно использовать как сре�
 Для полноценной поддержки нужны нативные Network Extension/launchd и Windows
 service/Wintun backends, подпись кода и platform-specific тесты.
 
-## Экраны Desktop 0.3
+## Опубликованные экраны 0.3.2 и текущая ветка
 
 1. **Обзор** — туннель, интернет, IP, handshake, health, recovery, проверка
    фактического egress и tray.
 2. **Профили** — безопасный импорт файлов/папок, поиск, протоколы, выбор
    локации/default-профиля, удаление, массовая проверка endpoint с отдельными
    reachability/latency/active и точечный live-test.
-3. **Диагностика** — validate, DNS/ping probe, транзакционные тесты, `test-all`,
+3. **AI-агенты (не опубликован)** — обнаружение Codex/Claude, официальный
+   experimental Codex Remote Control, memory-only pairing и catalog status
+   семи будущих transport paths.
+4. **Диагностика** — validate, DNS/ping probe, транзакционные тесты, `test-all`,
    emergency recovery, полный результат Doctor/self-test и ограниченный журнал
    systemd.
-4. **Настройки** — версии bundled/installed engine, состояние зависимостей,
+5. **Настройки** — версии bundled/installed engine, состояние зависимостей,
    Install/Update/Repair, autostart, health monitor, privacy и уведомления.
-5. **О программе** — версии Desktop/engine/platform, автор, лицензия,
+6. **О программе** — версии Desktop/engine/platform, автор, лицензия,
    приватность и правила безопасной работы.
 
 ## Что показывает Dashboard
@@ -104,6 +115,19 @@ Versioned protocol registry описывает 13 записей, но этот 
 есть в stable 1.3.2, а unreleased ветка также классифицирует ограниченный JSON;
 Desktop import, TUN adapters и умный выбор остаются gated work. См.
 [Оркестрацию протоколов](PROTOCOL_ORCHESTRATION.ru.md).
+
+Unreleased экран «AI-агенты» использует отдельный непривилегированный Rust
+adapter. Он принимает только `codex-remote-start|pair|stop`, запускает
+фиксированные аргументы без shell, использует 12-секундный timeout direct child
+и renderer confirmation для start/pair. Process-group termination, bounded
+reader join и native command-bound approval остаются R0 blockers. В WebView
+попадают только manual pairing code и expiry; они остаются в памяти до
+истечения срока и не журналируются.
+
+Это partial provider integration: официальный experimental vendor-native Codex relay
+можно включить из клиента, Claude пока только обнаруживается. Собственный
+`mazzy-agentd`, E2EE reverse WSS/iroh, Web и Telegram ещё не реализованы. См.
+[исследование и архитектуру](RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md).
 
 ## Действия в окне и tray
 

@@ -85,6 +85,22 @@
   ],
   "ingress_channels": [
     {
+      "id": "desktop-first-party",
+      "display_name": "Mazzy Desktop",
+      "trust_model": "local-user",
+      "risk_ceiling": "high",
+      "e2ee_mode": "local-only",
+      "support": {
+        "contract": "implemented",
+        "diagnostics": "implemented",
+        "linux": "partial",
+        "windows": "partial",
+        "macos": "partial",
+        "android": "planned",
+        "web": "planned"
+      }
+    },
+    {
       "id": "web-first-party",
       "display_name": "Mazzy Web",
       "trust_model": "paired-first-party",
@@ -119,7 +135,7 @@
   ],
   "orchestration": {
     "policy_version": 1,
-    "path_priority": ["lan-wss", "iroh-quic", "libp2p-quic", "webrtc-datachannel", "tailscale-headscale", "webtransport", "reverse-wss-broker"],
+    "path_priority": ["reverse-wss-broker", "lan-wss", "iroh-quic", "tailscale-headscale", "webrtc-datachannel", "webtransport", "libp2p-quic"],
     "hard_constraints": [
       "runtime-ready",
       "paired-peer-authorized",

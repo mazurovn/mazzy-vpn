@@ -57,6 +57,10 @@ sing-box config renderer. Their connection adapters remain explicitly
 [Capability parity](docs/FEATURE_PARITY.md) ·
 [Cross-platform roadmap](docs/PLATFORM_ROADMAP.en.md) ·
 [Protocol and AI orchestration](docs/PROTOCOL_ORCHESTRATION.en.md) ·
+[Reverse Agent Control architecture](docs/AGENT_CONTROL_ARCHITECTURE.en.md) ·
+[Target architecture and delivery DAG (RU)](docs/TARGET_ARCHITECTURE_2026-08-02.ru.md) ·
+[R0a mutation single-flight specification (RU)](docs/R0_MUTATION_SINGLE_FLIGHT.ru.md) ·
+[Agent remote-control research (RU)](docs/RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md) ·
 [Project Wiki](https://github.com/mazurovn/mazzy-vpn/wiki)
 
 ![Mazzy VPN Desktop Dashboard in English](docs/images/dashboard-en.png)

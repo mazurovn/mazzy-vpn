@@ -38,7 +38,15 @@ ShadowTLS ещё не готовы. Подключение всех девяти
 [контракт локального API v1](docs/API_CONTRACT.ru.md) ·
 [протоколы и AI-оркестрация](docs/PROTOCOL_ORCHESTRATION.ru.md) ·
 [обратное управление AI-агентами](docs/AGENT_CONTROL_ARCHITECTURE.ru.md) ·
+[целевая архитектура и delivery DAG](docs/TARGET_ARCHITECTURE_2026-08-02.ru.md) ·
+[техническая спецификация R0a](docs/R0_MUTATION_SINGLE_FLIGHT.ru.md) ·
 [Architecture in English](docs/ARCHITECTURE.en.md)
+
+В текущей непубликованной ветке первый срез R0a переводит API lifecycle,
+прямой CLI, recovery, health remediation и service-policy команды на общий
+`/run/vpnctl/.mutation.lock`. Это устраняет обнаруженную split-lock гонку, но
+ещё не является целевым `mazzy-vpnd`: общий action journal для всех root paths
+и доказательство восстановления routes/DNS/firewall/leak state остаются P0.
 
 ## Установка
 
@@ -127,9 +135,13 @@ mazzy-vpn language en
 ```
 
 Agent-control catalog является отдельным слоем обратного управления из Web,
-CLI и Telegram. Семь adapters, включая iroh и его альтернативы, пока имеют
-реализованный contract, но не release-ready runtime; diagnostics не скрывает
-этот blocker.
+CLI, Desktop и Telegram. В unreleased Desktop уже есть обнаружение Codex/Claude
+и типизированный официальный, но experimental Codex Remote Control
+`start|pair|stop` с
+memory-only pairing. Это vendor-native integration, не планируемый first-party
+`mazzy-agentd`: семь каталогизированных network adapters, включая iroh,
+Web/Telegram и сам `mazzy-agentd` пока не
+release-ready; diagnostics не скрывает этот blocker.
 
 После установки status, list/dashboard и lifecycle-команды CLI/TUI используют
 защищённый `/run/mazzy-vpn/api-v1.sock` без `sudo`. Установщик добавляет

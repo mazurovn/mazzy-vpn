@@ -130,7 +130,25 @@ const translations = {
 
 Object.assign(translations.ru, {
   navDashboard: "Обзор", navProfiles: "Профили", navDiagnostics: "Диагностика",
-  navSettings: "Настройки", navAbout: "О программе",
+  navAgents: "Агенты", navSettings: "Настройки", navAbout: "О программе",
+  agentsCenter: "УПРАВЛЕНИЕ АГЕНТАМИ", agentsTitle: "Доступ к AI-агентам",
+  agentsHint: "Локальные адаптеры, сопряжение устройств и готовность каналов управления.",
+  refreshAgents: "Обновить", providerAdapters: "АДАПТЕРЫ ПРОВАЙДЕРОВ",
+  localAgents: "Локальные агенты", agentsLoading: "Проверяем агенты…",
+  remoteAccess: "УДАЛЁННЫЙ ДОСТУП", embeddedAgentClient: "Встроенный клиент",
+  firstPartyGateway: "Mazzy gateway", telegramIngress: "Telegram",
+  startRemote: "Запустить", createPairing: "Создать код", stopRemote: "Остановить",
+  pairingCode: "Код сопряжения", pairingNotCreated: "Код не создан",
+  pairingExpires: "Действует до", vendorRemoteBoundary: "Этот путь использует официальный relay провайдера. Собственный Mazzy E2EE gateway ещё не готов.",
+  transportReadiness: "ГОТОВНОСТЬ ТРАНСПОРТОВ", mazzyControlPaths: "Каналы Mazzy Agent Control",
+  runtimeReady: "ГОТОВ", runtimeUnavailable: "НЕТ RUNTIME", gatewayPlanned: "ЗАПЛАНИРОВАНО",
+  providerInstalled: "установлен", providerMissing: "не установлен", daemonRunning: "работает",
+  daemonStopped: "остановлен", remoteSupported: "remote control доступен",
+  remoteUnsupported: "remote control недоступен", discoveryOnly: "ТОЛЬКО ОБНАРУЖЕНИЕ",
+  confirmAgentRemote: "Включить официальный Codex Remote Control через relay провайдера?",
+  confirmAgentPair: "Создать краткоживущий код сопряжения для доверенного устройства?",
+  agentStarted: "Codex Remote Control запущен", agentStopped: "Codex Remote Control остановлен",
+  agentPaired: "Код сопряжения создан",
   profileLibrary: "БИБЛИОТЕКА ПРОФИЛЕЙ", profileManagement: "Профили и локации",
   profileManagementHint: "Импорт, проверка, выбор и безопасный тест конфигураций.",
   importFiles: "Загрузить файлы", scanFolder: "Проверить папку", importFolder: "Импортировать папку",
@@ -207,7 +225,24 @@ Object.assign(translations.ru, {
 
 Object.assign(translations.en, {
   navDashboard: "Dashboard", navProfiles: "Profiles", navDiagnostics: "Diagnostics",
-  navSettings: "Settings", navAbout: "About",
+  navAgents: "Agents", navSettings: "Settings", navAbout: "About",
+  agentsCenter: "AGENT CONTROL", agentsTitle: "AI agent access",
+  agentsHint: "Local adapters, device pairing and control-channel readiness.",
+  refreshAgents: "Refresh", providerAdapters: "PROVIDER ADAPTERS", localAgents: "Local agents",
+  agentsLoading: "Checking agents…", remoteAccess: "REMOTE ACCESS",
+  embeddedAgentClient: "Embedded client", firstPartyGateway: "Mazzy gateway",
+  telegramIngress: "Telegram", startRemote: "Start", createPairing: "Create code",
+  stopRemote: "Stop", pairingCode: "Pairing code", pairingNotCreated: "No code created",
+  pairingExpires: "Expires", vendorRemoteBoundary: "This path uses the provider's official relay. The Mazzy first-party E2EE gateway is not ready yet.",
+  transportReadiness: "TRANSPORT READINESS", mazzyControlPaths: "Mazzy Agent Control paths",
+  runtimeReady: "READY", runtimeUnavailable: "NO RUNTIME", gatewayPlanned: "PLANNED",
+  providerInstalled: "installed", providerMissing: "not installed", daemonRunning: "running",
+  daemonStopped: "stopped", remoteSupported: "remote control available",
+  remoteUnsupported: "remote control unavailable", discoveryOnly: "DISCOVERY ONLY",
+  confirmAgentRemote: "Enable official Codex Remote Control through the provider relay?",
+  confirmAgentPair: "Create a short-lived pairing code for a trusted device?",
+  agentStarted: "Codex Remote Control started", agentStopped: "Codex Remote Control stopped",
+  agentPaired: "Pairing code created",
   profileLibrary: "PROFILE LIBRARY", profileManagement: "Profiles and locations",
   profileManagementHint: "Import, validate, select and safely test configurations.",
   importFiles: "Import files", scanFolder: "Scan folder", importFolder: "Import folder",
@@ -379,6 +414,9 @@ const state = {
   probeRunningScope: null,
   verification: null,
   installation: null,
+  agentIntegrations: null,
+  pairingGrant: null,
+  pairingTimer: null,
   platformInfo: null,
   lastSignature: "",
   lastActiveProfileSignature: "",
@@ -405,6 +443,7 @@ function applyLanguage() {
   renderProbeCheckedAt();
   renderVerification();
   if (state.installation) renderInstallation(state.installation);
+  if (state.agentIntegrations) renderAgentIntegrations(state.agentIntegrations);
   renderAbout();
 }
 
@@ -457,7 +496,7 @@ function showToast(message, error = false) {
 }
 
 function showPage(page) {
-  if (!["dashboard", "profiles", "diagnostics", "settings", "about"].includes(page)) return;
+  if (!["dashboard", "profiles", "agents", "diagnostics", "settings", "about"].includes(page)) return;
   state.page = page;
   document.querySelectorAll("[data-page]").forEach((button) => {
     button.classList.toggle("active", button.dataset.page === page);
@@ -465,6 +504,7 @@ function showPage(page) {
   document.querySelectorAll("[data-page-panel]").forEach((panel) => {
     panel.classList.toggle("active", panel.dataset.pagePanel === page);
   });
+  if (page === "agents" && invoke && !state.agentIntegrations) refreshAgents(false);
 }
 
 // Documentation-only browser fixture. Runtime profiles always come from get_profiles/API.
@@ -649,6 +689,35 @@ function documentationPreviewData() {
         }
       ]
     },
+    agents: {
+      schema_version: 1,
+      generated_at: Math.floor(Date.now() / 1000),
+      embedded_client_ready: true,
+      first_party_gateway_ready: false,
+      telegram_ready: false,
+      providers: [
+        {
+          id: "codex", display_name: "Codex", installed: true,
+          version: "codex-cli 0.146.0", adapter_status: "implemented",
+          connection_model: "vendor-native", remote_control_supported: true,
+          running: true,
+          actions: ["codex-remote-start", "codex-remote-pair", "codex-remote-stop"]
+        },
+        {
+          id: "claude-code", display_name: "Claude Code", installed: true,
+          version: "2.1.197", adapter_status: "discovery-only",
+          connection_model: "interactive-vendor-native", remote_control_supported: true,
+          running: null, actions: []
+        }
+      ],
+      transports: [
+        "LAN WSS", "iroh QUIC", "libp2p QUIC", "WebRTC DataChannel",
+        "WebTransport", "Tailscale / Headscale", "Reverse WSS broker"
+      ].map((display_name, index) => ({
+        id: `docs-transport-${index}`, display_name,
+        candidate_runtime_available: false, runtime_ready: false
+      }))
+    },
     platform: {
       functional: true,
       os: "linux",
@@ -681,6 +750,7 @@ function renderDocumentationPreview() {
   fixture.probe.results.forEach((entry) => state.profileHealth.set(entry.profile_id, entry));
   state.probeCheckedAt = fixture.probe.checked_at;
   state.installation = fixture.installation;
+  state.agentIntegrations = fixture.agents;
   state.platformInfo = fixture.platform;
   renderStatus(fixture.status);
   state.verification = fixture.verification;
@@ -688,6 +758,7 @@ function renderDocumentationPreview() {
   renderProbeCheckedAt();
   renderVerification();
   renderInstallation(fixture.installation);
+  renderAgentIntegrations(fixture.agents);
   renderAbout();
   const verification = verificationOutput(fixture.verification);
   showOperationResult({
@@ -724,6 +795,7 @@ function setBusy(busy) {
   document.querySelectorAll("button").forEach((button) => {
     if (!button.matches("[data-page], #hide-button, #privacy-button")) button.disabled = busy;
   });
+  if (!busy && state.agentIntegrations) renderAgentIntegrations(state.agentIntegrations);
 }
 
 function showOperationResult(result, title = "") {
@@ -1263,6 +1335,135 @@ function renderInstallation(report) {
   renderAbout();
 }
 
+function pairingExpiryLabel(expiresAt) {
+  const expiry = new Date(expiresAt);
+  if (Number.isNaN(expiry.getTime())) return t("pairingNotCreated");
+  return `${t("pairingExpires")}: ${expiry.toLocaleTimeString([], {
+    hour: "2-digit", minute: "2-digit", second: "2-digit"
+  })}`;
+}
+
+function clearPairingGrant() {
+  if (state.pairingTimer) clearTimeout(state.pairingTimer);
+  state.pairingTimer = null;
+  state.pairingGrant = null;
+}
+
+function retainPairingGrant(pairing) {
+  clearPairingGrant();
+  state.pairingGrant = pairing;
+  const expiry = new Date(pairing?.expires_at || "").getTime();
+  const remaining = Number.isFinite(expiry) ? expiry - Date.now() : 5 * 60 * 1000;
+  state.pairingTimer = setTimeout(() => {
+    clearPairingGrant();
+    if (state.agentIntegrations) renderAgentIntegrations(state.agentIntegrations);
+  }, Math.min(10 * 60 * 1000, Math.max(1000, remaining)));
+}
+
+function renderAgentIntegrations(report) {
+  state.agentIntegrations = report;
+  const providers = report?.providers || [];
+  const providerList = $("#agent-provider-list");
+  if (!providerList) return;
+  providerList.replaceChildren(...providers.map((provider) => {
+    const row = document.createElement("div");
+    row.className = "agent-provider-row";
+    const copy = document.createElement("div");
+    copy.className = "agent-provider-copy";
+    const name = document.createElement("strong");
+    name.textContent = provider.display_name;
+    const details = document.createElement("small");
+    const installation = provider.installed ? t("providerInstalled") : t("providerMissing");
+    const remote = provider.remote_control_supported ? t("remoteSupported") : t("remoteUnsupported");
+    const running = provider.running === true ? t("daemonRunning")
+      : provider.running === false ? t("daemonStopped") : "";
+    details.textContent = [provider.version || installation, remote, running].filter(Boolean).join(" · ");
+    copy.append(name, details);
+    const status = document.createElement("span");
+    const implemented = provider.adapter_status === "implemented";
+    const discovery = provider.adapter_status === "discovery-only";
+    status.className = `agent-provider-state${implemented ? " ready" : discovery ? " partial" : ""}`;
+    status.textContent = implemented ? t("runtimeReady")
+      : discovery ? t("discoveryOnly") : t("runtimeUnavailable");
+    row.append(copy, status);
+    return row;
+  }));
+
+  const readyProviders = providers.filter((provider) => provider.adapter_status === "implemented").length;
+  const providerBadge = $("#agent-provider-badge");
+  providerBadge.textContent = `${readyProviders}/${providers.length}`;
+  providerBadge.className = `health-badge ${readyProviders ? "ok" : "bad"}`;
+
+  $("#embedded-agent-client-state").textContent = report?.embedded_client_ready
+    ? t("runtimeReady") : t("runtimeUnavailable");
+  $("#first-party-gateway-state").textContent = report?.first_party_gateway_ready
+    ? t("runtimeReady") : t("gatewayPlanned");
+  $("#telegram-agent-state").textContent = report?.telegram_ready
+    ? t("runtimeReady") : t("gatewayPlanned");
+
+  const codex = providers.find((provider) => provider.id === "codex");
+  const supported = Boolean(codex?.installed && codex?.remote_control_supported);
+  const running = codex?.running === true;
+  $("#codex-remote-start").disabled = state.busy || !supported || running;
+  $("#codex-remote-pair").disabled = state.busy || !supported || !running;
+  $("#codex-remote-stop").disabled = state.busy || !supported || !running;
+  $("#codex-pairing-code").textContent = state.pairingGrant?.code || "—";
+  $("#codex-pairing-expiry").textContent = state.pairingGrant
+    ? pairingExpiryLabel(state.pairingGrant.expires_at) : t("pairingNotCreated");
+
+  const transports = report?.transports || [];
+  $("#agent-transport-list").replaceChildren(...transports.map((transport) => {
+    const row = document.createElement("div");
+    row.className = `agent-transport-row${transport.runtime_ready ? " ready" : ""}`;
+    const label = document.createElement("span");
+    label.textContent = transport.display_name;
+    const status = document.createElement("strong");
+    status.textContent = transport.runtime_ready ? t("runtimeReady") : t("runtimeUnavailable");
+    row.append(label, status);
+    return row;
+  }));
+  const readyTransports = transports.filter((transport) => transport.runtime_ready).length;
+  const transportBadge = $("#agent-transport-badge");
+  transportBadge.textContent = `${readyTransports}/${transports.length}`;
+  transportBadge.className = `health-badge ${readyTransports ? "ok" : "bad"}`;
+}
+
+async function refreshAgents(manual = false) {
+  if (!invoke) return;
+  try {
+    const report = await invoke("get_agent_integrations");
+    renderAgentIntegrations(report);
+    if (manual) showToast(t("refreshed"));
+  } catch (error) {
+    if (manual) showToast(String(error), true);
+  }
+}
+
+async function runAgentOperation(operation) {
+  if (!invoke || state.busy) return;
+  const confirmation = operation === "codex-remote-pair" ? t("confirmAgentPair")
+    : operation === "codex-remote-start" ? t("confirmAgentRemote") : null;
+  if (confirmation && !window.confirm(confirmation)) return;
+  setBusy(true);
+  try {
+    const result = await invoke("run_agent_operation", {
+      operation,
+      confirmed: Boolean(confirmation)
+    });
+    if (result?.pairing) retainPairingGrant(result.pairing);
+    if (operation === "codex-remote-stop") clearPairingGrant();
+    const message = operation === "codex-remote-start" ? t("agentStarted")
+      : operation === "codex-remote-stop" ? t("agentStopped") : t("agentPaired");
+    showToast(message);
+    await refreshAgents(false);
+  } catch (error) {
+    showToast(`${t("actionFailed")}: ${error}`, true);
+  } finally {
+    setBusy(false);
+    if (state.agentIntegrations) renderAgentIntegrations(state.agentIntegrations);
+  }
+}
+
 function renderAbout() {
   const info = state.platformInfo;
   if (!$("#about-version")) return;
@@ -1380,6 +1581,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("#connect-fastest-button").addEventListener("click", connectFastestProfile);
   $("#verify-egress-button").addEventListener("click", () => verifyConnection(false));
   $("#verify-speed-button").addEventListener("click", () => verifyConnection(true));
+  $("#agents-refresh-button").addEventListener("click", () => refreshAgents(true));
+  $("#codex-remote-start").addEventListener("click", () =>
+    runAgentOperation("codex-remote-start"));
+  $("#codex-remote-pair").addEventListener("click", () =>
+    runAgentOperation("codex-remote-pair"));
+  $("#codex-remote-stop").addEventListener("click", () =>
+    runAgentOperation("codex-remote-stop"));
 
   $("#import-files-button").addEventListener("click", async () => {
     if (!invoke || state.busy) return;
@@ -1520,6 +1728,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     $("#platform-note").textContent = platform?.functional ? "" : t("preview");
     renderAbout();
   }
-  await Promise.all([refreshStatus(false), refreshProfiles(false), refreshInstallation()]);
+  await Promise.all([
+    refreshStatus(false), refreshProfiles(false), refreshInstallation(), refreshAgents(false)
+  ]);
   setInterval(() => refreshStatus(false), 5000);
+  setInterval(() => {
+    if (state.page === "agents" && !state.busy) refreshAgents(false);
+  }, 15000);
 });
