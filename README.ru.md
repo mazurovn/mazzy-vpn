@@ -121,6 +121,8 @@ mazzy-vpn protocols managed-import profile.json --dry-run --json
 mazzy-vpn diagnose
 mazzy-vpn verify                       # реальный egress, geo, DNS и IPv6
 mazzy-vpn verify --speed               # явный ограниченный sample 5 MB
+mazzy-vpn verify-service all --timeout 5 --json
+                                      # явная eligibility NotebookLM/OpenAI
 mazzy-vpn validate all
 mazzy-vpn probe all --timeout 3 --jobs 4
 mazzy-vpn probe all --timeout 3 --jobs 4 --json
@@ -136,17 +138,18 @@ mazzy-vpn language en
 
 Agent-control catalog является отдельным слоем обратного управления из Web,
 CLI, Desktop и Telegram. В unreleased Desktop уже есть обнаружение Codex/Claude
-и типизированный официальный, но experimental Codex Remote Control
-`start|pair|stop` с
-memory-only pairing. Это vendor-native integration, не планируемый first-party
+и catalog diagnostics без исполняемых действий. Provider start/pair/stop
+отсутствует в renderer и Tauri IPC до реализации native approval, trusted
+executable resolution и process-tree containment. Это не планируемый first-party
 `mazzy-agentd`: семь каталогизированных network adapters, включая iroh,
 Web/Telegram и сам `mazzy-agentd` пока не
 release-ready; diagnostics не скрывает этот blocker.
 
 После установки status, list/dashboard и lifecycle-команды CLI/TUI используют
 защищённый `/run/mazzy-vpn/api-v1.sock` без `sudo`. Установщик добавляет
-пользователя в группу `mazzy-vpn` и автоматически ставит `jq`/`socat`; после
-первой установки может потребоваться повторный вход в сеанс. Test, import,
+пользователя в группу `mazzy-vpn` и автоматически ставит `jq`, `socat`,
+`nftables` и `python3` (для suspend-safe monotonic grace); после первой
+установки может потребоваться повторный вход в сеанс. Test, import,
 Doctor fixes и остальные ещё не перенесённые системные операции по-прежнему
 явно запрашивают root.
 
@@ -425,11 +428,22 @@ OpenVPN также использует собственное переподк�
 AmneziaWG systemd перезапускает процесс после любого неожиданного завершения.
 Независимый health timer примерно каждые 20 секунд проверяет сохранённое
 состояние, сервис, VPN-интерфейс и реальный HTTPS-доступ именно через него. Если
-при `DESIRED=up` сервис остановлен, он запускается сразу; две последовательные
-ошибки трафика вызывают переподключение. `doctor --fix` включает мониторинг и
+при `DESIRED=up` сервис остановлен, он запускается сразу. Отсутствие OpenVPN
+interface или ещё не передающий HTTPS data plane игнорируется в ограниченный
+60-секундный startup grace по монотонному возрасту systemd. На второй
+последовательной ошибке watchdog выполняет ровно
+один restart, не обнуляя счётчик и systemd failure state. Следующая ошибка
+насыщает счётчик значением 3 и приостанавливает watchdog recovery, оставляя
+native retry OpenVPN. Успех, явные connect/reconnect и mutation профиля
+сбрасывают счётчик. `vpnctl.service` допускает пять starts за десять минут и не
+перезапускает намеренный exit status 77. `doctor --fix` включает мониторинг и
 восстанавливает автозапуск при наличии корректного профиля по умолчанию.
-Счётчик ошибок хранится только в `/run/vpnctl` и сбрасывается после успешной
-проверки.
+
+`verify-service [notebooklm|openai|all]` — отдельная явная credential-free
+HEAD-проверка через выбранный VPN interface. Она не следует redirects, не
+принимает URL пользователя и возвращает только очищенные enum-результаты. Она
+не проверяет login, account, organization, subscription или content access и
+не используется фоновым health monitor или planner.
 
 ## Публикация проекта
 

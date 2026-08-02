@@ -46,10 +46,13 @@ This page records the verified resumption point.
 - The reverse agent-control plane is specified separately in
   [`AGENT_CONTROL_ARCHITECTURE.ru.md`](AGENT_CONTROL_ARCHITECTURE.ru.md).
   The v1 draft contract catalogs seven paths and five ingress channels. The
-  unreleased Desktop branch now implements partial first-party Desktop ingress:
-  Codex/Claude discovery, catalog status and fixed official experimental Codex
-  Remote Control start/pair/stop. The seven Mazzy transport runtimes, first-party
-  gateway, Web and Telegram remain planned and are not in published releases.
+  unreleased Desktop branch now implements diagnostics-only Codex/Claude
+  discovery and catalog status. Provider start/pair/stop was removed from both
+  renderer and Tauri invoke after the P0 review; native command-bound approval,
+  trusted executable resolution and process-tree containment are prerequisites
+  for restoring any such authority. The seven Mazzy transport runtimes,
+  first-party gateway, Web and Telegram remain planned and are not in published
+  releases.
 - The five-role repeat review and normative implementation plan are recorded in
   [`TARGET_ARCHITECTURE_2026-08-02.ru.md`](TARGET_ARCHITECTURE_2026-08-02.ru.md).
   It identifies the original P0 split-lock/rollback debt in the egress plane and incomplete
@@ -64,6 +67,11 @@ This page records the verified resumption point.
   restoration of routes, DNS, firewall or leak state.
   Implementation scope and migration criteria are recorded in
   [`R0_MUTATION_SINGLE_FLIGHT.ru.md`](R0_MUTATION_SINGLE_FLIGHT.ru.md).
+- The P0 reboot slice adds a hardened root oneshot before `vpnctl.service`,
+  health remediation and the API socket. It reconciles interrupted API actions
+  under the same lock; rollback failure keeps the root-only marker, while
+  health checks refuse remediation behind that marker and retain the lock until
+  systemd reports a terminal result.
 - The source-level comparison and implementation decision is recorded in
   [`RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md`](RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md).
 - The repeat managed-runtime and agent-control audit is
@@ -95,15 +103,16 @@ R0 status synchronized with the target architecture:
 
 | ID | Status | Remaining release gate |
 |---|---|---|
-| R0-1 | open | process-group/job-object deadline and bounded reader shutdown |
-| R0-2 | open | native command-bound approval proof |
-| R0-3 | open | executable provenance fixtures on Linux/Windows/macOS |
+| R0-1 | contained | Desktop provider actions removed; process-group/job-object deadline required before re-enabling |
+| R0-2 | contained | Desktop provider actions removed; native command-bound approval required before re-enabling |
+| R0-3 | contained | diagnostics do not execute discovered agents; trusted executable provenance required before re-enabling |
 | R0-4 | partial | shared R0a lock is implemented; daemon ownership, common audit IDs and provider fixtures remain |
 | R0-5 | partial | all UI/docs/registry readiness labels must remain evidence-backed |
 
-1. Harden the current Desktop vendor-native preview: process-group/job-object
-   deadlines, native command-bound confirmation, cross-platform executable
-   provenance, mutation single-flight/audit and unambiguous readiness labels.
+1. Keep Desktop Agent Control diagnostics-only while implementing
+   process-group/job-object deadlines, native command-bound confirmation,
+   cross-platform executable provenance, mutation single-flight/audit and
+   unambiguous readiness labels behind a new review gate.
 2. Converge egress mutations from the transitional shared R0a lock on one
    `mazzy-vpnd` owner. Rollback still restores desired intent without proving
    routes/DNS/interfaces/firewall. This remains P0 consistency debt before a

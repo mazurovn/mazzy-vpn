@@ -46,7 +46,7 @@ if [ -d /run/systemd/system ]; then
     systemctl daemon-reload
     systemctl reset-failed vpnctl.service mazzy-vpn-api.socket \
         vpnctl-health.service vpnctl-health.timer \
-        vpnctl-test-recovery.service || true
+        vpnctl-test-recovery.service mazzy-vpn-api-recovery.service || true
 fi
 
 # /etc/vpnctl and /var/lib/vpnctl are user state and are intentionally kept.

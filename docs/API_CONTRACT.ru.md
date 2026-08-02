@@ -111,7 +111,13 @@ audit-файл ротируется при 2 МиБ с одним root-only ар
 
 Если crash reconciliation не может прочитать pre-action snapshot или
 восстановить его, daemon сохраняет root-only recovery marker и отклоняет все
-следующие API mutations. После ручной проверки и исправления текущего состояния
+следующие API mutations. Hardened root boot oneshot согласует прерванные actions
+под общим mutation lock до test recovery, `vpnctl.service`, health
+remediation и API socket. Невозможность подготовить защищённые
+каталоги или получить lock также сохраняет marker. Test recovery
+требует успешного прохождения этого gate и запускается только после
+него. Пока marker существует, managed-service start, test recovery и
+health remediation fail closed. После ручной проверки и исправления текущего состояния
 администратор должен явно подтвердить его командой
 `sudo mazzy-vpn _api-clear-recovery --acknowledge-current-state`. Marker никогда
 не снимается по таймеру или после постороннего успешного request.
@@ -210,6 +216,21 @@ full-tunnel DNS и пустой список findings. Strict Desktop parser п�
 verdict. Response не содержит VPN endpoint, profile path, key или
 configuration. По умолчанию `include_speed=false`; 5-МБ transfer никогда не
 запускается неявно.
+
+`tests.verify-service-egress` — отдельный read-only query. Его strict payload
+содержит ровно `service` (`notebooklm`, `openai` или `all`) и целый
+`timeout_seconds` от 3 до 15. Engine отправляет credential-free HEAD только на
+встроенный HTTPS allowlist, привязывает запрос к выбранному VPN interface,
+отключает redirects и proxy environment и ограничивает response headers.
+Strict result содержит только schema/timestamp/scope, service ID,
+reachability, egress eligibility, reason code и необязательный HTTP status.
+NotebookLM доверяет только точным redirects unsupported-location и home.
+OpenAI считает 401 или 405 с точным `Allow: POST` достижением auth boundary;
+403 означает edge denial, а 429, 5xx и неизвестные ответы остаются
+indeterminate. Network error даёт unreachable/indeterminate. URL, headers,
+body, address, account и credentials не возвращаются и не сохраняются. Query
+не используется health recovery или planner и не доказывает authentication,
+subscription, organization или content access.
 
 Установленные CLI и TUI используют socket без `sudo` для status, списка
 профилей, batch endpoint probe, egress verification, connect, quick, reconnect

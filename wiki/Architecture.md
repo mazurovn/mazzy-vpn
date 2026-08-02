@@ -123,9 +123,9 @@ monotonic deadline передаётся внутрь OpenVPN parser.
 ## Обратное управление агентами — текущая ветка и target
 
 Отдельный `agent-control/v1` сейчас является draft catalog/schema contract, а
-не работающим E2EE protocol. Непубликованный Desktop обнаруживает Codex/Claude
-и предоставляет фиксированные операции official experimental Codex Remote
-Control; renderer confirmation и direct-child timeout ещё имеют R0 blockers.
+не работающим E2EE protocol. Непубликованный Desktop только обнаруживает
+кандидаты Codex/Claude и показывает catalog diagnostics; renderer/Tauri IPC не
+предоставляет lifecycle authority и не запускает найденные binaries.
 Reverse WSS/H2 является целевым durable baseline, LAN и iroh — accelerators.
 `mazzy-agentd`, relay, E2EE runtime, Web и Telegram не реализованы. Подробности:
 [[Agent Control Gateway]] и [целевая архитектура](https://github.com/mazurovn/mazzy-vpn/blob/main/docs/TARGET_ARCHITECTURE_2026-08-02.ru.md).
@@ -167,8 +167,8 @@ Reverse control of remote agents is a separate plane with a draft registry,
 future E2EE-envelope declarations and channel policy. See [[Agent Control Gateway]] and the detailed
 [target architecture](https://github.com/mazurovn/mazzy-vpn/blob/main/docs/TARGET_ARCHITECTURE_2026-08-02.ru.md). iroh, libp2p,
 WebRTC and reverse WSS are agent transports rather than VPN protocols. The
-unreleased Desktop branch has a partial ingress for Codex/Claude discovery and
-typed official experimental Codex Remote Control lifecycle/pairing. No Mazzy transport is
-therefore marked ready; the target keeps Desktop/Web/Telegram ingress,
+unreleased Desktop branch has diagnostics-only Codex/Claude discovery and no
+provider lifecycle/pairing authority. No Mazzy transport is therefore marked
+ready; the target keeps Desktop/Web/Telegram ingress,
 transport and Codex app-server/Claude/ACP provider adapters as separate trust
 boundaries.

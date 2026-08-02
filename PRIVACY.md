@@ -32,6 +32,12 @@ Mazzy VPN не содержит телеметрии, рекламных SDK, а
   `Проверить + скорость` загружается ограниченный 5 MB sample с
   `speed.cloudflare.com` через VPN-интерфейс. В результат не включается история
   посещений или содержимое VPN-профиля.
+- Явная `verify-service` отправляет только HEAD-запросы без credentials,
+  redirects, cookies, body и proxy на фиксированные allowlisted endpoints
+  NotebookLM и OpenAI через выбранный VPN-интерфейс. Возвращаются только
+  enum-классификация и ограниченный HTTP status; URL, headers, IP, account и
+  body не сохраняются. Проверка не запускается в фоне, не влияет на
+  health/planner и не доказывает доступ учётной записи или к контенту.
 - URL диагностических сервисов задаются открытыми переменными окружения и
   видны в исходном коде. Организация может заменить их собственными
   совместимыми endpoints.
@@ -73,6 +79,13 @@ device.
   `Verify + speed` action downloads a bounded 5 MB sample from
   `speed.cloudflare.com` through the VPN interface. No browsing history or VPN
   profile content is included.
+- Explicit `verify-service` sends credential-free HEAD requests without
+  redirects, cookies, bodies or proxy inheritance to fixed NotebookLM/OpenAI
+  allowlisted endpoints through the selected VPN interface. Only enum
+  classification and a bounded HTTP status are returned; URLs, headers,
+  addresses, accounts and bodies are not persisted. It never runs in the
+  background, affects neither health nor planner, and does not prove account or
+  content access.
 - Diagnostic URLs are visible as environment-overridable settings in the open
   source. An organization can replace them with compatible internal endpoints.
 - The systemd journal may contain technical profile labels and VPN runtime

@@ -118,6 +118,13 @@ service. Это полезная защита, но недостаточная �
 Если доказать восстановление нельзя, состояние должно стать
 `RECOVERY_REQUIRED`, а новые mutations блокируются.
 
+**Текущий containment slice:** hardened root oneshot теперь согласует
+прерванные API actions при загрузке под общим mutation lock и запускается до
+tunnel, health remediation и API socket. Неудачный rollback сохраняет
+root-only marker; health проверяет его под тем же lock и ждёт terminal
+`systemctl` result вместо `--no-block`. Полная resource/leak verification по
+этому finding всё ещё не реализована.
+
 ### 3.3 P0: Agent Control schema не является полным protocol
 
 Сейчас отсутствуют отдельные контракты для:
@@ -146,6 +153,10 @@ Desktop вызывает `window.confirm()`, затем передаёт Rust п
 actor/device, target, policy version, expiry и nonce. Свободный boolean или
 непривязанный `confirmation_id` запрещены.
 
+**Текущий containment slice:** `run_agent_operation` удалён из Tauri invoke и
+renderer, кнопки start/pair/stop и pairing state удалены. Agent Control остаётся
+read-only diagnostics до реализации этого требования.
+
 ### 3.5 P0: subprocess deadline не закрывает descendants
 
 `agent_control.rs::run_limited` убивает только direct child, после чего без
@@ -156,11 +167,15 @@ deadline ждёт reader threads. Descendant, унаследовавший stdou
 cgroup, завершать всю группу, закрывать pipes с общим deadline и проверять это
 fixture, которая оставляет inherited pipe открытым.
 
+**Текущий containment slice:** Desktop diagnostics больше не запускают
+обнаруженный agent executable. Lifecycle authority может вернуться только
+вместе с trusted executable resolution и проверенным process-tree containment.
+
 ### 3.6 P1: readiness и registry переоценивают доказательства
 
-- `ProviderState.adapter_status: "implemented"` в
-  `desktop/src-tauri/src/agent_control.rs` сейчас означает только три
-  vendor-native Codex lifecycle operation, а не first-party gateway. В
+- До containment `ProviderState.adapter_status: "implemented"` в
+  `desktop/src-tauri/src/agent_control.rs` означал только три vendor-native
+  Codex lifecycle operation, а не first-party gateway. В
   registry Desktop ingress имеет `diagnostics: "implemented"` и platform
   status `partial`, тогда как все transport platform runtimes остаются
   `planned`.
@@ -175,6 +190,10 @@ fixture, которая оставляет inherited pipe открытым.
 ```text
 discovered -> compatible -> locally_operational -> e2e_verified -> release_ready
 ```
+
+Текущий Desktop теперь сообщает только `discovery-only`, не выставляет
+`embedded_client_ready`, возвращает пустой список actions и имеет low-risk
+ceiling в registry.
 
 ### 3.7 Исправлено в ходе аудита: opaque pairing secret fallback
 

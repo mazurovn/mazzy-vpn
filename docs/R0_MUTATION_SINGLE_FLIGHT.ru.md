@@ -30,8 +30,8 @@ default: /run/vpnctl/.mutation.lock
 |---|---|
 | API `lifecycle.connect/reconnect/disconnect` | non-blocking lock, ответ `busy` при конфликте |
 | Direct `connect/reconnect/disconnect/test/emergency` | тот же non-blocking lock |
-| Timeout и boot recovery | тот же lock с ограниченным ожиданием |
-| Health remediation | `.health.lock` сериализует ticks; start/restart дополнительно требует общий lock |
+| Timeout, test boot recovery и API action boot recovery | тот же lock с ограниченным ожиданием; API oneshot выполняется до test recovery/tunnel/health/socket, а test recovery требует его успеха и ограничен 60 секундами |
+| Health remediation | `.health.lock` сериализует ticks; start/restart проверяет API recovery marker под общим lock и держит lock до terminal результата systemd |
 | Ordinary и managed profile import/remove | общий lock плюс существующая локальная atomic/per-directory защита |
 | `doctor --fix`, `autostart`, `monitor` | fail-closed до вызова system tools |
 | Internal quick-policy cleanup | общий lock до изменения policy rules |
@@ -86,7 +86,17 @@ sequenceDiagram
 - Direct CLI завершает действие сообщением о другой активной операции.
 - Invalid inherited FD не приводит к fallback на незаблокированную мутацию.
 - Failed API rollback сохраняет root-only recovery marker и блокирует следующие
-  API actions до ручной проверки.
+  API actions, новый managed-service start и health remediation до ручной
+  проверки.
+- Hardened `mazzy-vpn-api-recovery.service` запускает
+  `_api-recover-interrupted-actions` от root при загрузке, до
+  test recovery, `vpnctl.service`, `vpnctl-health.service` и API socket. Boot path
+  восстанавливает durable intent, не ожидая рекурсивно уже упорядоченный
+  `vpnctl.service` job; systemd применяет восстановленный intent после выхода
+  oneshot. Ошибки подготовки каталогов, permissions или получения lock
+  также долговечно сохраняют fail-closed marker.
+- Health remediation больше не использует `systemctl --no-block`: общий lock
+  освобождается только после terminal результата start/restart.
 - Снятие marker выполняется только командой
   `sudo mazzy-vpn _api-clear-recovery --acknowledge-current-state` под тем же
   lock. Операторская процедура описана в Wiki Diagnostics and Recovery.
@@ -105,6 +115,8 @@ sequenceDiagram
   занятом lock;
 - фиктивный `VPNCTL_MUTATION_LOCK_FD` отклоняется до `systemctl`;
 - rollback failure сохраняет recovery-only state.
+- boot API recovery success/failure, включая реально занятый общий
+  lock, systemd ordering, health marker gate и отсутствие async systemd overlap.
 
 `shellcheck mazzy-vpn tests/run.sh`, `bash -n`, public-secret audit и полный
 regression suite являются обязательными merge gates этого среза.

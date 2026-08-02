@@ -12,12 +12,10 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
 This branch implements the versioned machine-readable **draft contract**, the
 `agent-transports list|diagnose --json` CLI, package payload checks, security
-policy and the first embedded Desktop ingress. The AI Agents screen discovers
-local Codex and Claude Code installations, displays discovery/catalog status
-for all seven paths, and invokes official experimental Codex Remote Control
-`start|pair|stop` through a
-fixed typed adapter. The manual pairing code lives in UI memory only until its
-expiry; the complete opaque vendor secret never enters the WebView.
+policy and read-only Desktop diagnostics. The AI Agents screen discovers local
+Codex and Claude Code candidates and displays discovery/catalog status for all
+seven paths. It does not execute discovered binaries, and renderer/Tauri IPC
+expose no provider start, pair, stop or pairing state.
 
 This is **not** the first-party Mazzy client-to-client gateway. The Claude
 adapter is discovery-only, while the transport runtimes, broker, Web/Telegram
@@ -61,11 +59,10 @@ credentials stay with the installed provider CLI. Typed app-server/SDK or ACP
 interfaces are preferred; a raw PTY may exist only as an isolated legacy
 adapter and cannot be the authentication, authorization or wire protocol.
 
-The current Desktop adapter is deliberately narrower than the future gateway:
-three enum operations and fixed argument arrays without a shell. Its current
-mechanics are a 12-second direct-child timeout and renderer confirmation for
-start/pair; process-group/job-object termination, bounded reader joins and
-native command-bound approval remain R0 blockers. Pairing is not persisted.
+The current Desktop adapter is deliberately diagnostics-only. Native
+command-bound approval, trusted executable resolution,
+process-group/job-object termination and bounded reader joins remain R0 gates;
+provider lifecycle authority must not return before all of them are proven.
 
 ## Security and channels — target, not runtime
 

@@ -341,7 +341,7 @@
             <p class="eyebrow" data-i18n="agentsCenter">AGENT CONTROL</p>
             <h2 data-i18n="agentsTitle">Доступ к AI-агентам</h2>
             <p class="muted" data-i18n="agentsHint">
-              Локальные адаптеры, сопряжение устройств и готовность каналов управления.
+              Диагностика локальных кандидатов и готовности будущих каналов управления.
             </p>
           </div>
           <button class="compact-action primary" id="agents-refresh-button" type="button"
@@ -363,8 +363,8 @@
           </article>
 
           <aside class="glass card agent-access-card">
-            <p class="eyebrow" data-i18n="remoteAccess">REMOTE ACCESS</p>
-            <h3>Codex Remote Control</h3>
+            <p class="eyebrow" data-i18n="remoteAccess">CONTROL STATUS</p>
+            <h3 data-i18n="diagnosticsOnlyTitle">Только диагностика</h3>
             <dl class="agent-readiness">
               <div><dt data-i18n="embeddedAgentClient">Встроенный клиент</dt>
                 <dd id="embedded-agent-client-state">—</dd></div>
@@ -373,21 +373,8 @@
               <div><dt data-i18n="telegramIngress">Telegram</dt>
                 <dd id="telegram-agent-state">—</dd></div>
             </dl>
-            <div class="agent-actions">
-              <button class="compact-action primary" id="codex-remote-start" type="button"
-                      data-i18n="startRemote">Запустить</button>
-              <button class="compact-action" id="codex-remote-pair" type="button"
-                      data-i18n="createPairing">Создать код</button>
-              <button class="compact-action danger" id="codex-remote-stop" type="button"
-                      data-i18n="stopRemote">Остановить</button>
-            </div>
-            <div class="pairing-grant" id="pairing-grant" aria-live="polite">
-              <span data-i18n="pairingCode">Код сопряжения</span>
-              <output id="codex-pairing-code">—</output>
-              <small id="codex-pairing-expiry" data-i18n="pairingNotCreated">Код не создан</small>
-            </div>
             <p class="safety-note" data-i18n="vendorRemoteBoundary">
-              Этот путь использует официальный relay провайдера. Собственный Mazzy E2EE gateway ещё не готов.
+              Запуск, сопряжение и остановка отключены до native approval, trusted executable resolution и process-tree containment.
             </p>
           </aside>
 

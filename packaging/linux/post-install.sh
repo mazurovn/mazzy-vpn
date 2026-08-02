@@ -120,6 +120,7 @@ activate_services() {
     fi
 
     systemctl daemon-reload
+    systemctl enable mazzy-vpn-api-recovery.service
     systemctl enable mazzy-vpn-api.socket
     systemctl enable vpnctl-test-recovery.service
     systemctl enable vpnctl-health.timer

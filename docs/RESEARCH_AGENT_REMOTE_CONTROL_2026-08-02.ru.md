@@ -125,27 +125,21 @@ privacy, censorship fit, latency и battery cost. Он не выполняет �
 по нескольким путям: параллельно разрешено только probe, а delivery имеет один
 authoritative path и idempotent retry после ACK cursor.
 
-## Реализованный vertical slice
+## Реализованный containment slice
 
 Desktop теперь содержит unreleased first-party экран «AI-агенты» и Rust boundary:
 
-- обнаруживает `codex` и `claude`, проверяет версии и наличие remote-control;
-- проверяет состояние Codex app-server daemon;
+- обнаруживает кандидаты `codex` и `claude`, не запуская их;
 - показывает candidate/runtime readiness для всех семи transport adapters;
-- выполняет только enum-команды официального experimental Codex Remote Control:
-  `codex-remote-start`,
-  `codex-remote-pair`, `codex-remote-stop`;
-- использует фиксированный argv без shell и 12-секундный timeout direct child;
-  process-group/job-object termination и bounded reader join ещё не готовы;
-- использует renderer confirmation для открытия/pairing; native
-  command-bound approval proof остаётся незакрытым R0 blocker;
-- из pairing JSON возвращает WebView только manual code и expiry;
-- держит pairing code только в памяти до expiry и не пишет его в журнал;
+- не регистрирует `run_agent_operation` в Tauri invoke и не показывает
+  renderer controls для start/pair/stop;
+- не хранит pairing state и не возвращает pairing material в WebView;
 - включает unit, UI-contract и package payload regressions.
 
-Этот slice даёт experimental vendor-native путь Codex из VPN-клиента и
-проверяет fixed-argv provider-adapter boundary. Он не реализует собственный Mazzy transport, Web
-client, Telegram bot или управление Claude lifecycle.
+Этот slice сознательно не даёт vendor-native lifecycle path. Native approval,
+trusted executable resolution и process-tree containment должны быть
+реализованы и проверены до возврата authority. Собственный Mazzy transport,
+Web client, Telegram bot и provider lifecycle не реализованы.
 
 ## Следующие задачи
 

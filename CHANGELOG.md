@@ -4,6 +4,39 @@ All notable changes to Mazzy VPN are documented here.
 
 ## Unreleased
 
+- Added explicit credential-free `verify-service` and
+  `tests.verify-service-egress` checks for fixed NotebookLM/OpenAI endpoints.
+  Probes use bounded HEAD requests through the selected VPN interface and emit
+  only strict sanitized egress-eligibility enums; they do not influence health,
+  planning or automatic profile selection.
+- Renamed the generic success label to `Network egress verified` without
+  changing the strict `EgressVerification` v1 result shape, and made speed JSON
+  numeric formatting independent of the caller locale.
+- Bounded watchdog recovery to one restart exactly at the consecutive-failure
+  threshold, followed by a threshold-plus-one pause while OpenVPN native retry
+  continues. Automatic recovery no longer clears systemd failure state; a
+  monotonic startup grace and realistic systemd start budget are covered by
+  source/package parity tests.
+- Added a transitional dual-stack `nftables` output guard around managed
+  connect and reconnect. User traffic is rejected before the old tunnel stops;
+  readiness uses a fixed HTTPS IP-literal probe bound to the new interface, so
+  an unprivileged local DNS resolver is not required or exempted. The response
+  is strictly bounded and parsed before the guard is removed, and guard-install
+  failure cancels the mutation before `systemctl stop`.
+  This closes the confirmed direct-egress window during successful profile
+  switches without claiming the still-planned persistent always-on kill switch
+  or complete rollback proof.
+- Added a root-only boot recovery entrypoint and hardened oneshot unit for
+  interrupted local API actions. It takes the shared mutation lock before
+  reconciliation and is ordered before test recovery, the managed tunnel,
+  health remediation and API socket. Runtime-directory, permission and lock
+  acquisition failures now durably preserve the root-only recovery marker.
+  The tunnel service has an ordered `Requires=` dependency on recovery, so a
+  marker-persistence failure also blocks boot activation; test recovery keeps
+  its deadlock-safe boot path and bounded startup budget.
+- Health remediation now checks that recovery marker while holding the shared
+  lock and waits for the terminal `systemctl` result. It no longer releases
+  mutation authority after an asynchronous `--no-block` request.
 - Added a closed managed-profile v1 for VLESS, Hysteria 2, Mieru, NaiveProxy,
   TUIC, Shadowsocks 2022, Trojan, AnyTLS and ShadowTLS. Validation rejects
   duplicate keys, insecure TLS and user-controlled listeners, paths, marks and
@@ -23,15 +56,12 @@ All notable changes to Mazzy VPN are documented here.
   WebRTC, WebTransport, Tailscale/Headscale and reverse WSS, plus draft schemas
   that declare future signed E2EE envelopes and Desktop/Web/CLI/Telegram
   channel-risk policy. No E2EE runtime is claimed; all seven paths are planned.
-- Added the first embedded Desktop agent-control slice: local Codex/Claude
-  discovery, cataloged provider/transport status, and typed official
-  **experimental** Codex Remote Control start/pair/stop actions. Operations use
-  fixed argv without a shell, a 12-second direct-child timeout and renderer
-  confirmation; process-group termination and native command-bound approval
-  remain R0 blockers. Pairing exposes only a manual code and expiry and keeps
-  them in memory. The unreleased screen has refreshed English and Russian
-  documentation captures. Claude remains discovery-only, and no first-party
-  Mazzy relay or Telegram client is claimed.
+- Contained the unreleased Desktop Agent Control screen to read-only
+  Codex/Claude and transport discovery. The renderer and Tauri invoke surface
+  no longer expose provider start/pair/stop, and diagnostics do not execute a
+  discovered agent binary. Native command-bound approval, trusted executable
+  resolution and process-tree containment remain mandatory before any local
+  provider lifecycle authority can return.
 - Documented the source-level Happy, Claude Bridge, Paseo and Yep Anywhere
   comparison and separated ingress, E2EE transport and provider-adapter
   boundaries. Typed Codex app-server/Claude/ACP adapters are preferred over a

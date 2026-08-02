@@ -54,6 +54,7 @@
         "tests.validate",
         "tests.probe",
         "tests.verify-egress",
+        "tests.verify-service-egress",
         "services.get",
         "doctor.inspect",
         "settings.get"
@@ -294,6 +295,9 @@
           "$ref": "#/$defs/TestRequest"
         },
         {
+          "$ref": "#/$defs/ServiceEgressRequest"
+        },
+        {
           "$ref": "#/$defs/ServiceChange"
         },
         {
@@ -366,6 +370,42 @@
           "then": {
             "properties": {
               "operation": {"const": "planner.evaluate"}
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["operation"],
+            "properties": {
+              "operation": {"const": "tests.verify-service-egress"}
+            }
+          },
+          "then": {
+            "required": ["deadline_ms"],
+            "properties": {
+              "deadline_ms": {
+                "type": "integer",
+                "minimum": 100,
+                "maximum": 32000
+              },
+              "payload": {
+                "$ref": "#/$defs/ServiceEgressRequest"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["payload"],
+            "properties": {
+              "payload": {
+                "$ref": "#/$defs/ServiceEgressRequest"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "operation": {"const": "tests.verify-service-egress"}
             }
           }
         }
@@ -1312,6 +1352,117 @@
         }
       }
     },
+    "ServiceEgressRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "service",
+        "timeout_seconds"
+      ],
+      "properties": {
+        "service": {
+          "enum": [
+            "notebooklm",
+            "openai",
+            "all"
+          ]
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 15
+        }
+      }
+    },
+    "ServiceEgressProbe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "service_id",
+        "probe_version",
+        "reachability",
+        "egress_eligibility",
+        "reason_code",
+        "http_status"
+      ],
+      "properties": {
+        "service_id": {
+          "enum": [
+            "notebooklm",
+            "openai"
+          ]
+        },
+        "probe_version": {
+          "const": 1
+        },
+        "reachability": {
+          "enum": [
+            "reachable",
+            "unreachable"
+          ]
+        },
+        "egress_eligibility": {
+          "enum": [
+            "eligible",
+            "ineligible",
+            "indeterminate"
+          ]
+        },
+        "reason_code": {
+          "enum": [
+            "service.notebooklm.unsupported-location",
+            "service.notebooklm.home-reached",
+            "service.notebooklm.unrecognized-response",
+            "service.openai.auth-boundary-reached",
+            "service.openai.edge-denied",
+            "service.openai.rate-limited",
+            "service.openai.service-unavailable",
+            "service.openai.unrecognized-response",
+            "service.network-unreachable",
+            "service.response-invalid",
+            "service.response-too-large"
+          ]
+        },
+        "http_status": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 100,
+          "maximum": 599
+        }
+      }
+    },
+    "ServiceEgressVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "checked_at",
+        "scope",
+        "results"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "checked_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "scope": {
+          "const": "unauthenticated-egress"
+        },
+        "results": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/ServiceEgressProbe"
+          }
+        }
+      }
+    },
     "ServiceState": {
       "type": "object",
       "additionalProperties": false,
@@ -1573,6 +1724,9 @@
         },
         {
           "$ref": "#/$defs/EgressVerification"
+        },
+        {
+          "$ref": "#/$defs/ServiceEgressVerification"
         },
         {
           "$ref": "#/$defs/ServiceCollection"

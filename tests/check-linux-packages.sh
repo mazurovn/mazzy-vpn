@@ -133,6 +133,7 @@ cp -a "$deb_root/usr/bin/." "$systemd_root/usr/bin/"
 cp -a "$deb_root/usr/lib/systemd/system/." \
     "$systemd_root/usr/lib/systemd/system/"
 systemd_units=(
+    mazzy-vpn-api-recovery.service \
     mazzy-vpn-api.socket \
     mazzy-vpn-api@.service \
     vpnctl.service \
@@ -191,7 +192,7 @@ rpm --dbpath "$rpm_db" -qp --requires "$rpm_package" >"$TMP/rpm-requires"
 rpm --dbpath "$rpm_db" -qp --recommends "$rpm_package" >"$TMP/rpm-recommends"
 
 for dependency in \
-    bash diffutils findutils grep iproute2 jq pkexec procps sed socat systemd \
+    bash diffutils findutils grep iproute2 jq nftables pkexec procps python3 sed socat systemd \
     util-linux; do
     assert_dependency "$dependency" "$TMP/deb-depends"
 done
@@ -199,7 +200,7 @@ for dependency in netcat-openbsd network-manager-l2tp openvpn wireguard-tools; d
     assert_dependency "$dependency" "$TMP/deb-recommends"
 done
 for dependency in \
-    bash diffutils findutils gawk grep iproute jq polkit procps-ng sed socat \
+    bash diffutils findutils gawk grep iproute jq nftables polkit procps-ng python3 sed socat \
     systemd util-linux; do
     assert_dependency "$dependency" "$TMP/rpm-requires"
 done
@@ -249,6 +250,8 @@ for listing in "$TMP/deb-files" "$TMP/rpm-files"; do
         /usr/lib/mazzy-vpn/rust-toolchain.toml \
         /usr/lib/systemd/system/mazzy-vpn-api.socket \
         /usr/lib/systemd/system/mazzy-vpn-api.socket.d/10-package-docs.conf \
+        /usr/lib/systemd/system/mazzy-vpn-api-recovery.service \
+        /usr/lib/systemd/system/mazzy-vpn-api-recovery.service.d/10-package-exec.conf \
         /usr/lib/systemd/system/mazzy-vpn-api@.service \
         /usr/lib/systemd/system/mazzy-vpn-api@.service.d/10-package-exec.conf \
         /usr/lib/systemd/system/vpnctl.service \
@@ -316,6 +319,35 @@ for extracted_root in "$deb_root" "$rpm_root"; do
     cmp -s "$ROOT/packaging/linux/systemd/vpnctl.service.d/10-package-exec.conf" \
         "$extracted_root/usr/lib/systemd/system/vpnctl.service.d/10-package-exec.conf" ||
         fail "package service override differs from source"
+    cmp -s "$ROOT/systemd/vpnctl.service" \
+        "$extracted_root/usr/lib/systemd/system/vpnctl.service" ||
+        fail "package VPN service unit differs from source"
+    grep -Fxq 'RestartPreventExitStatus=77' \
+        "$extracted_root/usr/lib/systemd/system/vpnctl.service" ||
+        fail "package VPN service retries permanent authentication failures"
+    grep -Fxq 'StartLimitIntervalSec=600' \
+        "$extracted_root/usr/lib/systemd/system/vpnctl.service" ||
+        fail "package VPN service has an unexpected start-limit interval"
+    grep -Fxq 'StartLimitBurst=5' \
+        "$extracted_root/usr/lib/systemd/system/vpnctl.service" ||
+        fail "package VPN service has an unexpected start-limit burst"
+    grep -Fxq 'Requires=mazzy-vpn-api-recovery.service' \
+        "$extracted_root/usr/lib/systemd/system/vpnctl.service" ||
+        fail "package VPN service can bypass failed API boot recovery"
+    grep -Fxq \
+        'After=network-online.target NetworkManager.service mazzy-vpn-api-recovery.service' \
+        "$extracted_root/usr/lib/systemd/system/vpnctl.service" ||
+        fail "package VPN service is not ordered after API boot recovery"
+    cmp -s "$ROOT/systemd/mazzy-vpn-api-recovery.service" \
+        "$extracted_root/usr/lib/systemd/system/mazzy-vpn-api-recovery.service" ||
+        fail "package API recovery unit differs from source"
+    grep -Fxq 'RemainAfterExit=yes' \
+        "$extracted_root/usr/lib/systemd/system/mazzy-vpn-api-recovery.service" ||
+        fail "package API recovery unit does not remain active after boot recovery"
+    cmp -s \
+        "$ROOT/packaging/linux/systemd/mazzy-vpn-api-recovery.service.d/10-package-exec.conf" \
+        "$extracted_root/usr/lib/systemd/system/mazzy-vpn-api-recovery.service.d/10-package-exec.conf" ||
+        fail "package API recovery override differs from source"
 done
 
 for relative in \
@@ -354,6 +386,7 @@ for relative in \
     desktop/ui/index.html \
     desktop/ui/mazzy-vpn-logo.svg \
     packaging/linux/post-install.sh \
+    packaging/linux/systemd/mazzy-vpn-api-recovery.service.d/10-package-exec.conf \
     rust-toolchain.toml \
     tests/check-capabilities.py \
     tests/check-glib-backport.py \
@@ -363,6 +396,8 @@ for relative in \
     tests/check-managed-protocol-adapter.py \
     tests/check-runtime-adapter-registry.py \
     tests/run.sh \
+    systemd/mazzy-vpn-api-recovery.service \
+    systemd/vpnctl.service \
     wiki/Desktop-Dashboard-and-Tray.md; do
     [[ -f "$appimage_engine/$relative" ]] ||
         fail "AppImage embedded source is missing: $relative"
@@ -396,6 +431,15 @@ cmp -s "$ROOT/desktop/src-tauri/tauri.conf.json" \
 cmp -s "$ROOT/packaging/linux/post-install.sh" \
     "$appimage_engine/packaging/linux/post-install.sh" ||
     fail "AppImage package lifecycle source differs from source"
+cmp -s "$ROOT/systemd/mazzy-vpn-api-recovery.service" \
+    "$appimage_engine/systemd/mazzy-vpn-api-recovery.service" ||
+    fail "AppImage API recovery unit source differs from source"
+grep -Fxq 'RemainAfterExit=yes' \
+    "$appimage_engine/systemd/mazzy-vpn-api-recovery.service" ||
+    fail "AppImage API recovery source does not remain active after boot recovery"
+cmp -s "$ROOT/systemd/vpnctl.service" \
+    "$appimage_engine/systemd/vpnctl.service" ||
+    fail "AppImage VPN service unit source differs from source"
 cmp -s "$ROOT/tests/check-linux-packages.sh" \
     "$appimage_engine/tests/check-linux-packages.sh" ||
     fail "AppImage release audit differs from source"

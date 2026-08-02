@@ -64,9 +64,10 @@ mazzy-vpn agent-transports diagnose --json
 
 The agent-control catalog is a separate reverse-control layer for Web, CLI and
 Telegram clients. The unreleased Desktop branch adds Codex/Claude discovery and
-typed official but experimental Codex Remote Control `start|pair|stop` with
-memory-only pairing.
-This is vendor-native integration, not the planned first-party `mazzy-agentd`:
+catalog diagnostics only. Provider start/pair/stop is absent from renderer and
+Tauri IPC until native approval, trusted executable resolution and process-tree
+containment exist.
+This is not the planned first-party `mazzy-agentd`:
 all seven cataloged network
 adapters, Web/Telegram clients and `mazzy-agentd` remain non-release-ready, and
 diagnostics report that explicitly.
@@ -169,6 +170,8 @@ mazzy-vpn profiles --api-json      # opaque IDs; no engine filenames
 mazzy-vpn diagnose
 mazzy-vpn verify                       # actual egress, geo, DNS and IPv6
 mazzy-vpn verify --speed               # explicit bounded 5 MB speed sample
+mazzy-vpn verify-service all --timeout 5 --json
+                                      # explicit NotebookLM/OpenAI egress eligibility
 mazzy-vpn validate all
 mazzy-vpn probe all --timeout 3 --jobs 4
 mazzy-vpn probe all --timeout 3 --jobs 4 --json
@@ -185,7 +188,8 @@ mazzy-vpn language de
 
 After installation, CLI/TUI status, list/dashboard and lifecycle commands use
 the protected `/run/mazzy-vpn/api-v1.sock` without `sudo`. The installer adds
-the user to the `mazzy-vpn` group and automatically installs `jq`/`socat`; a new
+the user to the `mazzy-vpn` group and automatically installs `jq`, `socat`,
+`nftables` and `python3` (used for a suspend-safe monotonic health grace); a new
 login session may be required after initial installation. Tests, imports,
 Doctor fixes and other system operations not migrated yet still request root
 explicitly.
@@ -280,6 +284,11 @@ batch run instead of producing a long chain of misleading timeouts.
   DNS route and optionally runs an explicit bounded speed sample. It reports
   `verified`, `warning` or `failed`; it does not confuse a selected profile
   name with the observed location.
+- `verify-service [notebooklm|openai|all]` is a separate, explicit,
+  credential-free HEAD check bound to the selected VPN interface. It reports
+  only sanitized reachability/eligibility enums. It does not follow redirects,
+  accept a caller URL, or test login, account, organization, subscription or
+  content access; it is never used by background health or the planner.
 - `doctor` checks dependencies, AmneziaWG backend, L2TP/IPsec stack, fallback
   handlers, systemd units, profiles and saved state.
 - `self-test` combines validation, endpoint probes and doctor.
@@ -297,12 +306,20 @@ The existing internal unit names remain `vpnctl.service`,
 compatibility. Their descriptions and executable use the Mazzy VPN brand and
 `/usr/local/bin/mazzy-vpn`.
 
-The service restarts after any unexpected process exit. Independently, the
+The service restarts after any unexpected process exit except the deliberate
+policy exit status 77; systemd limits starts to five per ten minutes.
+Independently, the
 health timer checks the desired state, service, VPN interface and real HTTPS
 access through that interface about every 20 seconds. An inactive desired
-service is started immediately; two consecutive traffic failures trigger a
-reconnect. `doctor --fix` enables the monitor and repairs autostart when a valid
-default profile has `DESIRED=up`.
+service is started immediately. A missing OpenVPN interface or an interface
+whose data plane cannot yet pass HTTPS is ignored during a bounded 60-second
+grace measured from systemd's monotonic active age. Two
+consecutive traffic failures trigger exactly one restart without clearing the
+counter or systemd's failure state; the next failed tick caps the counter at
+three and pauses watchdog recovery while OpenVPN's native retry continues.
+Success and explicit connect/reconnect/profile mutation reset the counter.
+`doctor --fix` enables the monitor and repairs autostart when a valid default
+profile has `DESIRED=up`.
 
 The runtime cleans orphan `wg-quick` policy rules only when no WireGuard or
 AmneziaWG interface is active; unrelated IPsec rule 220 is left untouched.

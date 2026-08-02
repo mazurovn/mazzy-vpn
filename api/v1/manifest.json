@@ -170,6 +170,16 @@
       "rollback": "not-applicable"
     },
     {
+      "name": "tests.verify-service-egress",
+      "domain": "tests",
+      "kind": "query",
+      "authorization": "none",
+      "action_id_required": false,
+      "deadline_required": true,
+      "audit_event": false,
+      "rollback": "not-applicable"
+    },
+    {
       "name": "tests.run",
       "domain": "tests",
       "kind": "mutation",

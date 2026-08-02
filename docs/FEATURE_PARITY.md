@@ -76,11 +76,12 @@ gates; censorship/workload fit выводится из trusted catalog/workload,
 назначается агентом. History store, authorized execution/failover и Desktop/mobile
 integration ещё не реализованы.
 
-Agent provider integration также `partial`: unreleased Desktop обнаруживает
-Codex/Claude и управляет официальным experimental Codex Remote Control через три
-типизированные операции с memory-only pairing. Это не готовый
-client-to-client `mazzy-agentd`; семь network paths, Web,
-Telegram и Claude lifecycle остаются `planned`.
+Agent provider integration также `partial`: unreleased Desktop выполняет
+только read-only обнаружение Codex/Claude и catalog diagnostics. Renderer и
+Tauri invoke не предоставляют start/pair/stop; diagnostics не запускает
+обнаруженный executable. Native approval, trusted executable resolution,
+process-tree containment, семь network paths, Web, Telegram и provider
+lifecycle остаются `planned`.
 
 Новая функция считается завершённой не после добавления одной кнопки, а после
 обновления общего API/core, всех применимых интерфейсов, автоматических тестов,
@@ -113,11 +114,12 @@ evaluation with hard gates; censorship/workload fit is derived from the trusted
 catalog/workload rather than assigned by an agent. History storage, authorized execution/failover
 and Desktop/mobile integration are not implemented.
 
-Agent provider integration is also `partial`: the unreleased Desktop discovers
-Codex/Claude and controls official experimental Codex Remote Control through three typed
-operations with memory-only pairing. This is not a complete client-to-client
-`mazzy-agentd`; all seven network paths, Web, Telegram and Claude
-lifecycle remain `planned`.
+Agent provider integration is also `partial`: the unreleased Desktop performs
+read-only Codex/Claude discovery and catalog diagnostics. Renderer and Tauri
+invoke expose no start/pair/stop, and diagnostics do not execute a discovered
+binary. Native approval, trusted executable resolution, process-tree
+containment, all seven network paths, Web, Telegram and provider lifecycle
+remain `planned`.
 
 A feature is complete only after its shared API/core, every applicable
 interface, automated tests, this registry and both Russian and English

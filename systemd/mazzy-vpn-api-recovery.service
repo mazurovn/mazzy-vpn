@@ -1,0 +1,38 @@
+# Copyright (C) 2026 Nik m (@mazurovn)
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[Unit]
+Description=Recover interrupted Mazzy VPN API actions before control services
+Documentation=file:/usr/local/lib/mazzy-vpn/docs/API_CONTRACT.en.md
+After=local-fs.target
+Before=vpnctl-test-recovery.service vpnctl.service vpnctl-health.service mazzy-vpn-api.socket
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/mazzy-vpn _api-recover-interrupted-actions
+User=root
+Group=root
+UMask=0077
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+StateDirectory=vpnctl
+StateDirectoryMode=0700
+RuntimeDirectory=vpnctl
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+TimeoutStartSec=90s
+
+[Install]
+WantedBy=multi-user.target

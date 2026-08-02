@@ -172,11 +172,13 @@ ingress channels above those paths. Standard Telegram Bot access is explicitly
 low-risk and gateway-visible; full control requires a paired first-party Web
 or Mini App channel.
 
-The current implementation includes the draft catalog/schemas, packaging, fail-closed
-diagnostics and a partial first-party Desktop ingress. The AI Agents screen
-discovers Codex/Claude Code and uses a fixed Rust adapter for official
-experimental Codex Remote Control `start|pair|stop`; pairing codes are not
-persisted. This is a vendor-native relay, not a first-party `mazzy-agentd`.
+The current implementation includes the draft catalog/schemas, packaging and
+read-only Desktop diagnostics. The AI Agents screen discovers candidate
+Codex/Claude Code executables and catalog status, but neither executes them nor
+exposes start, pair or stop through renderer IPC. Native command-bound approval,
+trusted executable resolution and process-tree containment are required before
+provider lifecycle authority can return. This is not a first-party
+`mazzy-agentd`.
 None of the seven agent transports is
 release-ready; Web/Telegram and Claude lifecycle remain planned. Provider
 adapters, E2EE, failover and anti-replay are target design, not a working
@@ -360,12 +362,38 @@ There are two independent recovery layers:
    interface and two HTTPS paths. For profiles that declare a full tunnel, its
    automatic policy also compares default and interface-bound IPv4. A desired
    but inactive service starts immediately. A locally active but unusable
-   tunnel, or two confirmed full-tunnel egress mismatches, triggers restart.
-   An unavailable comparison observer does not trigger recovery.
+   tunnel, or two confirmed full-tunnel egress mismatches, triggers one restart
+   exactly at the configured threshold. It neither calls `reset-failed` nor
+   clears the counter first. The next failed tick saturates at threshold plus
+   one, emits one recovery-paused warning and leaves OpenVPN native retry
+   running. Success and explicit connect/reconnect/profile mutation reset the
+   counter. Missing OpenVPN interface state and the interface-present but
+   HTTPS-unavailable data-plane interval have a bounded 60-second startup grace
+   derived from systemd's monotonic activation timestamp and Python's
+   `CLOCK_MONOTONIC`, so suspend time cannot inflate the age. If either bounded
+   timestamp source is unavailable or malformed, no grace is granted.
+3. `mazzy-vpn-api-recovery.service` runs as a hardened root oneshot before test
+   recovery, the managed tunnel, health remediation and API socket. It
+   reconciles interrupted API journals under the shared lock. Directory,
+   permission, lock-acquisition or rollback failure preserves the root-only
+   marker. The managed service has an ordered `Requires=` dependency on this
+   gate, so recovery failure also blocks activation when the marker itself
+   cannot be persisted. Test recovery keeps its deadlock-safe boot path and a
+   60-second unit budget; health remediation refuses to start/restart a tunnel
+   while the marker exists.
+
+Health start/restart holds the shared mutation lock until systemd returns a
+terminal job result; it does not use `--no-block`.
 
 Manual `disconnect` writes `DESIRED=down` before stopping the service, so the
 health monitor does not undo an intentional disconnect. An idle TUI does not
 retain the mutation lock.
+
+Service eligibility probing is an explicit diagnostic branch, not recovery
+input: `verify-service` / `tests.verify-service-egress` sends bounded HEAD-only
+requests to two compiled allowlisted HTTPS endpoints through the selected VPN
+interface. It has no path into the health counter or planner and emits only
+sanitized enum evidence.
 
 ## Transactional live test and rollback
 
@@ -423,6 +451,7 @@ previous connection has been restored successfully.
 | `vpnctl.service` | Owns the active managed tunnel | Long-running, systemd supervised |
 | `vpnctl-health.timer` | Schedules independent health checks | Enabled for unattended recovery |
 | `vpnctl-test-recovery.service` | Repairs interrupted tests after boot | Boot-time oneshot |
+| `mazzy-vpn-api-recovery.service` | Reconciles interrupted API actions before control services | Hardened root boot-time oneshot |
 
 Security invariants:
 
@@ -437,8 +466,9 @@ Security invariants:
 - no private key, credential, personal path or operational profile belongs in
   Git;
 - extended logs conceal private and AmneziaWG obfuscation parameters;
-- Desktop accepts enum actions only and never passes user input to a shell;
-  Rust strictly deserializes both runtime caches, and exact opaque
+- Desktop Agent Control is diagnostics-only and exposes no executable renderer
+  operation;
+- Rust strictly deserializes both runtime caches, and exact opaque
   `profile_id`/basename identity prevents duplicate display names from
   impersonating the active profile; the caches contain no endpoint or profile
   contents;

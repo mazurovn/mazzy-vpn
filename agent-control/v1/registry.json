@@ -88,7 +88,7 @@
       "id": "desktop-first-party",
       "display_name": "Mazzy Desktop",
       "trust_model": "local-user",
-      "risk_ceiling": "high",
+      "risk_ceiling": "low",
       "e2ee_mode": "local-only",
       "support": {
         "contract": "implemented",
@@ -161,6 +161,7 @@
     ],
     "channel_rules": [
       "telegram-bot-is-low-risk-only",
+      "desktop-provider-actions-disabled-until-native-approval-and-process-containment",
       "telegram-bot-must-not-carry-prompts-secrets-or-artifacts",
       "high-risk-actions-require-first-party-confirmation",
       "arbitrary-shell-execution-is-not-a-v1-capability",

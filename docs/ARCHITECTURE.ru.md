@@ -172,11 +172,12 @@ LAN WSS, iroh, libp2p, WebRTC, WebTransport, Tailscale/Headscale и reverse WSS,
 над этими transports. Обычный Telegram Bot явно ограничен low-risk командами и
 не заявляет first-party E2EE; полное управление требует paired Web или Mini App.
 
-Сейчас реализованы draft catalog/schema, package payload, fail-closed diagnostics и
-частичный first-party Desktop ingress. Экран «AI-агенты» обнаруживает
-Codex/Claude Code и через фиксированный Rust adapter выполняет официальный
-experimental Codex Remote Control `start|pair|stop`; pairing code не
-сохраняется. Это vendor-native relay, а не first-party `mazzy-agentd`. Ни один из семи agent
+Сейчас реализованы draft catalog/schema, package payload и read-only Desktop
+diagnostics. Экран «AI-агенты» обнаруживает кандидаты Codex/Claude Code и
+catalog status, но не запускает найденные binaries и не предоставляет renderer
+операции start, pair или stop. Native command-bound approval, trusted
+executable resolution и process-tree containment обязательны до возврата
+lifecycle authority. Это не first-party `mazzy-agentd`. Ни один из семи agent
 transport runtimes ещё не готов к релизу; Web/Telegram и Claude lifecycle
 остаются planned. E2EE envelope, anti-replay и path failover являются целевой
 архитектурой, а не работающим runtime. Provider adapters
@@ -360,12 +361,37 @@ stateDiagram-v2
    VPN-интерфейс и два HTTPS-маршрута. Для профиля, объявляющего full tunnel,
    auto policy также сравнивает default и interface-bound IPv4. Требуемый, но
    остановленный сервис запускается сразу. Не передающий трафик туннель или два
-   подтверждённых full-tunnel egress mismatch вызывают restart. Недоступность
-   observer сама по себе recovery не запускает.
+   подтверждённых full-tunnel egress mismatch вызывают один restart ровно на
+   настроенном пороге. Watchdog не вызывает `reset-failed` и не обнуляет
+   счётчик заранее. Следующий failed tick насыщает счётчик значением threshold+1,
+   один раз сообщает о pause recovery и оставляет native retry OpenVPN.
+   Успех, явные connect/reconnect и profile mutation сбрасывают счётчик. Для
+   отсутствующего OpenVPN interface и интервала, когда interface уже есть, но
+   HTTPS data plane ещё недоступен, действует ограниченный 60-секундный grace
+   по systemd monotonic activation timestamp и Python `CLOCK_MONOTONIC`, поэтому
+   suspend не завышает age. Если любой ограниченный timestamp source недоступен
+   или malformed, grace не предоставляется.
+3. `mazzy-vpn-api-recovery.service` запускается как hardened root oneshot до
+   test recovery, managed tunnel, health remediation и API socket. Он согласует
+   прерванные API journals под общим lock. Ошибка каталога, permissions,
+   получения lock или rollback сохраняет root-only marker. Managed service
+   имеет упорядоченный `Requires=` на этот gate, поэтому его activation
+   блокируется и тогда, когда сам marker сохранить невозможно. Test recovery
+   сохраняет deadlock-safe boot path и unit budget 60 секунд; health remediation
+   не запускает и не перезапускает tunnel, пока marker существует.
+
+Health start/restart удерживает общий mutation lock до terminal результата
+systemd и не использует `--no-block`.
 
 Ручной `disconnect` записывает `DESIRED=down` до остановки сервиса, поэтому
 монитор не отменяет осознанное отключение. Ожидающее ввода TUI не удерживает
 общий mutation lock.
+
+Проверка service eligibility — явная диагностическая ветка, а не recovery
+input: `verify-service` / `tests.verify-service-egress` отправляет ограниченные
+HEAD-only запросы на два встроенных allowlisted HTTPS endpoints через выбранный
+VPN interface. Результат не попадает в health counter или planner и содержит
+только очищенные enum evidence.
 
 ## Транзакционный live-test и rollback
 
@@ -423,6 +449,7 @@ sequenceDiagram
 | `vpnctl.service` | Владеет активным managed-туннелем | Долгоживущий, под контролем systemd |
 | `vpnctl-health.timer` | Планирует независимые health-проверки | Включён для автовосстановления |
 | `vpnctl-test-recovery.service` | Исправляет прерванный тест после загрузки | Boot-time oneshot |
+| `mazzy-vpn-api-recovery.service` | Согласует прерванные API actions до control services | Hardened root boot-time oneshot |
 
 Инварианты безопасности:
 
@@ -437,8 +464,9 @@ sequenceDiagram
 - приватные ключи, credentials, личные пути и рабочие профили не попадают в
   Git;
 - расширенный журнал скрывает приватные и AmneziaWG obfuscation-параметры;
-- Desktop принимает только enum-действия и не передаёт пользовательскую строку
-  в shell; Rust строго десериализует оба runtime cache, а точные opaque
+- Desktop Agent Control остаётся diagnostics-only и не предоставляет renderer
+  исполняемых операций;
+- Rust строго десериализует оба runtime cache, а точные opaque
   `profile_id`/basename не позволяют одинаковым display names подменить
   активный профиль; cache не содержат endpoint или содержимое профиля;
 - внешняя verification запускается явно, ограничена, валидируется и не

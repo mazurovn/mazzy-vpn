@@ -14,12 +14,15 @@
   recovery, health remediation, policy cleanup, `doctor --fix`, autostart и monitor на общий runtime
   `.mutation.lock`; это закрывает split-lock race, но ещё не является
   `mazzy-vpnd` и не доказывает rollback routes/DNS/firewall/leak state;
+- P0 reboot slice добавил hardened root API recovery oneshot до tunnel,
+  health remediation и API socket; health проверяет recovery marker под общим
+  lock и ждёт terminal systemd result;
 - `agent-control/v1/registry.json` синхронизирован с ADR-009: reverse WSS/H2 —
   durable baseline, LAN и iroh — accelerators, поздние paths не блокируют
   первые релизы;
-- Desktop получил partial first-party agent ingress: обнаружение Codex/Claude,
-  catalog status семи paths и фиксированные official experimental Codex Remote Control
-  `start|pair|stop`. Pairing memory-only; `mazzy-agentd`/Web/Telegram не готовы;
+- Desktop Agent Control ограничен read-only обнаружением Codex/Claude и catalog
+  status семи paths. Start/pair/stop удалены из renderer/Tauri invoke до native
+  approval, trusted executable resolution и process-tree containment;
 - draft [PR #43](https://github.com/mazurovn/mazzy-vpn/pull/43) добавляет
   read-only `planner.evaluate` с пятью backend-owned hard gates, versioned
   scoring и стабильным ранжированием opaque profile IDs;
@@ -159,9 +162,10 @@ the split-lock race but does not claim the target `mazzy-vpnd` owner or full
 route/DNS/firewall rollback proof. Agent Control path priority now follows
 ADR-009: reverse WSS/H2 first, then LAN and iroh accelerators.
 The Agent Control files are still draft catalog/schema declarations, not an
-implemented E2EE runtime. The unreleased Desktop has Codex/Claude discovery and
-fixed official experimental Codex Remote Control `start|pair|stop`; native
-command-bound approval and process-group termination remain R0 blockers.
+implemented E2EE runtime. The unreleased Desktop has diagnostics-only
+Codex/Claude discovery and no provider lifecycle authority; native command-bound
+approval, trusted executable resolution and process-tree containment remain R0
+blockers.
 `mazzy-agentd`, relay, Web/Telegram and all seven network runtimes are planned.
 
 Version 1.3.2 / Desktop 0.3.2 fixes legacy profile-cache compatibility and the

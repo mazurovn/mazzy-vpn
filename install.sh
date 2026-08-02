@@ -194,6 +194,7 @@ validate_source_tree() {
         desktop/ui/app.js desktop/ui/index.html \
         packaging/linux/post-install.sh packaging/linux/pre-remove.sh \
         packaging/linux/post-remove.sh \
+        packaging/linux/systemd/mazzy-vpn-api-recovery.service.d/10-package-exec.conf \
         packaging/linux/systemd/mazzy-vpn-api.socket.d/10-package-docs.conf \
         packaging/linux/systemd/mazzy-vpn-api@.service.d/10-package-exec.conf \
         packaging/linux/systemd/vpnctl-health.service.d/10-package-exec.conf \
@@ -209,6 +210,7 @@ validate_source_tree() {
         completions/mazzy-vpn systemd/vpnctl.service \
         systemd/vpnctl-health.service systemd/vpnctl-health.timer \
         systemd/vpnctl-test-recovery.service \
+        systemd/mazzy-vpn-api-recovery.service \
         systemd/mazzy-vpn-api.socket systemd/mazzy-vpn-api@.service \
         systemd/mazzy-vpn-tmpfiles.conf; do
         [[ -e "$SCRIPT_DIR/$required" ]] || {
@@ -247,6 +249,10 @@ run_preflight_tests() {
     bash -n "$SCRIPT_DIR/completions/mazzy-vpn" "$SCRIPT_DIR/completions/vpnctl"
     if ((NO_DEPS)) && ! command -v socat >/dev/null 2>&1; then
         echo "Для CLI/TUI local API нужен socat; уберите --no-deps или установите socat." >&2
+        return 1
+    fi
+    if ((NO_DEPS)) && ! command -v python3 >/dev/null 2>&1; then
+        echo "Для CLOCK_MONOTONIC health grace нужен python3; уберите --no-deps или установите python3." >&2
         return 1
     fi
     if ! command -v jq >/dev/null 2>&1; then
@@ -367,7 +373,8 @@ post_install_checks() {
         /etc/systemd/system/vpnctl.service \
         /etc/systemd/system/vpnctl-health.service \
         /etc/systemd/system/vpnctl-health.timer \
-        /etc/systemd/system/vpnctl-test-recovery.service || failed=1
+        /etc/systemd/system/vpnctl-test-recovery.service \
+        /etc/systemd/system/mazzy-vpn-api-recovery.service || failed=1
     systemctl is-active --quiet mazzy-vpn-api.socket || {
         echo "Local API socket не активен." >&2
         failed=1
@@ -485,9 +492,9 @@ install_amnezia_userspace() {
 }
 
 install_debian_dependencies() {
-    local -a packages=(iproute2 curl ca-certificates openvpn wireguard-tools
+    local -a packages=(iproute2 nftables curl ca-certificates openvpn wireguard-tools
         network-manager network-manager-l2tp strongswan xl2tpd iputils-ping
-        netcat-openbsd jq socat)
+        netcat-openbsd jq python3 socat)
     if ! run apt-get update; then
         echo "Предупреждение: один из APT-репозиториев не обновился." >&2
         echo "Продолжаю с успешно обновлёнными индексами; doctor покажет остаточные проблемы." >&2
@@ -525,8 +532,8 @@ install_debian_dependencies() {
 }
 
 install_fedora_dependencies() {
-    run dnf install -y iproute curl ca-certificates openvpn wireguard-tools \
-        NetworkManager NetworkManager-l2tp strongswan xl2tpd iputils jq socat
+    run dnf install -y iproute nftables curl ca-certificates openvpn wireguard-tools \
+        NetworkManager NetworkManager-l2tp strongswan xl2tpd iputils jq python3 socat
     if ! amnezia_ready && confirm "Включить COPR amneziavpn/amneziawg?"; then
         run dnf install -y dnf-plugins-core
         run dnf copr enable -y amneziavpn/amneziawg
@@ -535,16 +542,16 @@ install_fedora_dependencies() {
 }
 
 install_arch_dependencies() {
-    run pacman -S --needed --noconfirm iproute2 curl ca-certificates openvpn \
-        wireguard-tools networkmanager-l2tp strongswan xl2tpd iputils jq socat
+    run pacman -S --needed --noconfirm iproute2 nftables curl ca-certificates openvpn \
+        wireguard-tools networkmanager-l2tp strongswan xl2tpd iputils jq python socat
     if ! amnezia_ready; then
         echo "AmneziaWG отсутствует. Установите amneziawg-tools и совместимый модуль из AUR вручную."
     fi
 }
 
 install_suse_dependencies() {
-    run zypper --non-interactive install iproute2 curl ca-certificates openvpn \
-        wireguard-tools NetworkManager-l2tp strongswan xl2tpd iputils jq socat
+    run zypper --non-interactive install iproute2 nftables curl ca-certificates openvpn \
+        wireguard-tools NetworkManager-l2tp strongswan xl2tpd iputils jq python3 socat
     if ! amnezia_ready; then
         echo "AmneziaWG отсутствует; автоматическая установка для openSUSE не поддерживается."
     fi
@@ -721,6 +728,8 @@ install_files() {
     run install -m 644 "$SCRIPT_DIR/systemd/vpnctl-health.timer" "$unit_dir/vpnctl-health.timer"
     run install -m 644 "$SCRIPT_DIR/systemd/vpnctl-test-recovery.service" \
         "$unit_dir/vpnctl-test-recovery.service"
+    run install -m 644 "$SCRIPT_DIR/systemd/mazzy-vpn-api-recovery.service" \
+        "$unit_dir/mazzy-vpn-api-recovery.service"
     run install -m 644 "$SCRIPT_DIR/systemd/mazzy-vpn-api.socket" \
         "$unit_dir/mazzy-vpn-api.socket"
     run install -m 644 "$SCRIPT_DIR/systemd/mazzy-vpn-api@.service" \
@@ -765,6 +774,7 @@ install_files() {
             "$unit_dir/vpnctl.service" \
             "$unit_dir/vpnctl-health.service" "$unit_dir/vpnctl-health.timer" \
             "$unit_dir/vpnctl-test-recovery.service" \
+            "$unit_dir/mazzy-vpn-api-recovery.service" \
             "$unit_dir/mazzy-vpn-api.socket" "$unit_dir/mazzy-vpn-api@.service" \
             "$tmpfiles_dir/mazzy-vpn.conf" \
             "$completion_dir/mazzy-vpn"
@@ -802,6 +812,7 @@ fi
 if [[ -z "$DESTDIR" && $DEPS_ONLY -eq 0 ]]; then
     run systemd-tmpfiles --create /usr/lib/tmpfiles.d/mazzy-vpn.conf
     run systemctl daemon-reload
+    run systemctl enable mazzy-vpn-api-recovery.service
     run systemctl enable --now mazzy-vpn-api.socket
     run systemctl enable vpnctl-test-recovery.service
     run systemctl enable --now vpnctl-health.timer

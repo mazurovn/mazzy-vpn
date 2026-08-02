@@ -109,7 +109,12 @@ reduced for constrained systems but must not be disabled.
 
 If crash reconciliation cannot read the pre-action snapshot or cannot restore
 it, the daemon persists a root-only recovery marker and rejects every later API
-mutation. After manually inspecting and repairing the current VPN state, an
+mutation. A hardened root boot oneshot reconciles interrupted actions under the
+shared mutation lock before test recovery, `vpnctl.service`, health remediation
+and the API socket. Failure to prepare its protected directories or acquire the
+lock also persists the marker. Test recovery requires this gate and starts only
+after it succeeds. While the marker exists, managed-service start, test recovery
+and health remediation fail closed. After manually inspecting and repairing the current VPN state, an
 administrator must explicitly acknowledge it with
 `sudo mazzy-vpn _api-clear-recovery --acknowledge-current-state`. The marker is
 never cleared by a timer or an unrelated successful request.
@@ -210,6 +215,21 @@ provider duplication, provider-IP mismatch and unexplained non-verified
 verdicts. The response contains no VPN endpoint, profile path, key or
 configuration. `include_speed=false` is the default; the five-megabyte transfer
 is never implicit.
+
+`tests.verify-service-egress` is a separate read-only query. Its strict payload
+is exactly `service` (`notebooklm`, `openai` or `all`) plus integer
+`timeout_seconds` from 3 through 15. The engine sends credential-free HEAD
+requests only to the built-in HTTPS allowlist, binds them to the selected VPN
+interface, disables redirects and proxy inheritance, and caps response headers.
+The strict result contains only schema/timestamp/scope plus service ID,
+reachability, egress eligibility, reason code and an optional HTTP status.
+NotebookLM trusts only the exact unsupported-location and home redirects.
+OpenAI treats 401, or 405 with exact `Allow: POST`, as the authentication
+boundary; 403 is an edge denial, while 429, 5xx and all unrecognized responses
+remain indeterminate. Network errors are unreachable/indeterminate. No URL,
+header, body, address, account or credential is returned or persisted. This
+query does not feed health recovery or planner evidence and does not prove
+authentication, subscription, organization or content access.
 
 Installed CLI and TUI clients use the socket without `sudo` for status, profile
 listing, batch endpoint probes, egress verification, connect, quick, reconnect

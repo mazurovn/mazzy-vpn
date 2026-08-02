@@ -113,6 +113,8 @@ def main() -> None:
         fail("Desktop agent integration diagnostics regressed")
     if desktop.get("support", {}).get("linux") != "partial":
         fail("Desktop agent integration overclaims or hides its partial Linux slice")
+    if desktop.get("risk_ceiling") != "low":
+        fail("Diagnostics-only Desktop ingress exceeds its current low-risk ceiling")
     telegram = channels_by_id["telegram-bot"]
     if telegram.get("risk_ceiling") != "low":
         fail("Telegram Bot may authorize actions above the low-risk ceiling")
@@ -148,6 +150,11 @@ def main() -> None:
     channel_rules = set(policy.get("channel_rules", []))
     if "arbitrary-shell-execution-is-not-a-v1-capability" not in channel_rules:
         fail("agent-control policy permits an arbitrary shell boundary")
+    if (
+        "desktop-provider-actions-disabled-until-native-approval-and-process-containment"
+        not in channel_rules
+    ):
+        fail("agent-control policy does not contain executable Desktop authority")
 
     capabilities = command.get("properties", {}).get("capability", {}).get("enum", [])
     if any("shell" in item or "exec" in item for item in capabilities):

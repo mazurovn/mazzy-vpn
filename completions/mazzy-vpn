@@ -7,7 +7,7 @@ _mazzy_vpn()
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    commands="api-info protocols agent-transports planner list profiles connect quick disconnect reconnect dashboard status diagnose verify validate probe test test-all emergency self-test doctor autostart monitor import import-files import-dir init-config-dir remove logs language help version"
+    commands="api-info protocols agent-transports planner list profiles connect quick disconnect reconnect dashboard status diagnose verify verify-service validate probe test test-all emergency self-test doctor autostart monitor import import-files import-dir init-config-dir remove logs language help version"
     protocols="amneziawg wireguard openvpn l2tp"
 
     if ((COMP_CWORD == 1)); then
@@ -35,6 +35,10 @@ _mazzy_vpn()
     elif [[ "${COMP_WORDS[1]:-}" == "verify" ||
             "${COMP_WORDS[1]:-}" == "verify-egress" ]]; then
         mapfile -t COMPREPLY < <(compgen -W "--timeout --speed --json" -- "$cur")
+    elif [[ "${COMP_WORDS[1]:-}" == "verify-service" ]]; then
+        mapfile -t COMPREPLY < <(
+            compgen -W "notebooklm openai all --timeout --json" -- "$cur"
+        )
     elif [[ "$prev" == "list" || "$prev" == "connect" || "$prev" == "test" ||
             "$prev" == "test-all" || "$prev" == "validate" ||
             "$prev" == "import" || "$prev" == "remove" ]]; then

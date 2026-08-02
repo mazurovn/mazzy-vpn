@@ -19,10 +19,10 @@ mazzy-vpn agent-transports list --json
 mazzy-vpn agent-transports diagnose --json
 ```
 
-Сейчас реализованы draft contract, diagnostics и partial Desktop ingress. Новый экран
-обнаруживает Codex/Claude, показывает discovery/catalog status и выполняет через фиксированный
-Rust adapter официальный experimental Codex Remote Control `start|pair|stop`. Pairing code
-не сохраняется. Это vendor-native relay, а не first-party Mazzy runtime:
+Сейчас реализованы draft contract, diagnostics и partial Desktop ingress. Новый
+экран только обнаруживает кандидаты Codex/Claude и показывает
+discovery/catalog status; он не запускает binaries, а renderer/Tauri invoke не
+содержат start/pair/stop или pairing state. Это не first-party Mazzy runtime:
 `mazzy-agentd` — каноническое имя будущего per-user daemon, `relay` — серверной
 opaque queue. Отдельный репозиторий `mazzy-agent-control` ещё не создан. Все
 семь transport runtimes, `mazzy-agentd`, Web и Telegram не готовы.
@@ -55,9 +55,9 @@ LAN/iroh после общей conformance suite, остальные не бло
 Текущий preview нельзя использовать как доверенный remote terminal или для
 high-risk unattended actions. В scope первого релиза не входят arbitrary
 `shell.exec`, raw PTY как auth/wire protocol, автоматические LLM approvals и
-синхронизация provider API keys. Пока R0-2 не заменит renderer confirmation на
-native command-bound approval proof, start/pair требуют локального внимания,
-но не считаются достаточной границей для опасных удалённых команд.
+синхронизация provider API keys. Provider lifecycle отключён до native
+command-bound approval proof, trusted executable resolution и process-tree
+containment.
 
 ---
 
@@ -69,13 +69,15 @@ Mazzy keeps provider/corporate egress VPN separate from reverse agent control.
 The target design uses LAN WSS, iroh, libp2p, WebRTC, WebTransport, mesh and
 reverse WSS beneath a future signed E2EE envelope. Current files are draft
 catalog/schema declarations, not an E2EE runtime. Runtime
-support for all seven paths is still planned. The current branch also has a
-partial Desktop provider integration for discovery and typed official experimental Codex
-Remote Control lifecycle/pairing. It is not a first-party `mazzy-agentd`.
+support for all seven paths is still planned. The current branch has
+diagnostics-only Desktop provider discovery; it exposes no lifecycle/pairing
+authority and does not execute discovered agent binaries. It is not a
+first-party `mazzy-agentd`.
 
 The canonical planned components are the per-user `mazzy-agentd` and an opaque
 server `relay` in a future separate `mazzy-agent-control` repository. Reverse
 WSS/H2 is the durable baseline; LAN and iroh are later accelerators. The
 current preview must not be treated as a trusted remote terminal: arbitrary
 shell execution, raw PTY authorization and unattended high-risk approvals are
-out of scope, and native command-bound confirmation is still an open R0 gate.
+out of scope. Native command-bound confirmation, trusted executable resolution
+and process-tree containment are still open R0 gates.

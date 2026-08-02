@@ -63,9 +63,8 @@ service/Wintun backends, подпись кода и platform-specific тесты
 2. **Профили** — безопасный импорт файлов/папок, поиск, протоколы, выбор
    локации/default-профиля, удаление, массовая проверка endpoint с отдельными
    reachability/latency/active и точечный live-test.
-3. **AI-агенты (не опубликован)** — обнаружение Codex/Claude, официальный
-   experimental Codex Remote Control, memory-only pairing и catalog status
-   семи будущих transport paths.
+3. **AI-агенты (не опубликован)** — read-only обнаружение Codex/Claude и
+   catalog status семи будущих transport paths без provider lifecycle authority.
 4. **Диагностика** — validate, DNS/ping probe, транзакционные тесты, `test-all`,
    emergency recovery, полный результат Doctor/self-test и ограниченный журнал
    systemd.
@@ -116,16 +115,13 @@ Versioned protocol registry описывает 13 записей, но этот 
 Desktop import, TUN adapters и умный выбор остаются gated work. См.
 [Оркестрацию протоколов](PROTOCOL_ORCHESTRATION.ru.md).
 
-Unreleased экран «AI-агенты» использует отдельный непривилегированный Rust
-adapter. Он принимает только `codex-remote-start|pair|stop`, запускает
-фиксированные аргументы без shell, использует 12-секундный timeout direct child
-и renderer confirmation для start/pair. Process-group termination, bounded
-reader join и native command-bound approval остаются R0 blockers. В WebView
-попадают только manual pairing code и expiry; они остаются в памяти до
-истечения срока и не журналируются.
+Unreleased экран «AI-агенты» остаётся diagnostics-only. Он показывает
+кандидаты Codex/Claude и catalog status, не запускает обнаруженные binaries, а
+renderer и Tauri invoke не содержат start/pair/stop или pairing state. Native
+command-bound approval, trusted executable resolution и process-tree
+containment остаются R0 prerequisites для будущей lifecycle authority.
 
-Это partial provider integration: официальный experimental vendor-native Codex relay
-можно включить из клиента, Claude пока только обнаруживается. Собственный
+Это partial read-only provider discovery. Собственный
 `mazzy-agentd`, E2EE reverse WSS/iroh, Web и Telegram ещё не реализованы. См.
 [исследование и архитектуру](RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md).
 

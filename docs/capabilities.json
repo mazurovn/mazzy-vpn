@@ -277,8 +277,8 @@
     },
     {
       "id": "agent-provider-integration",
-      "name_en": "Typed local AI-agent discovery and provider-native remote control",
-      "name_ru": "Типизированное обнаружение AI-агентов и provider-native remote control",
+      "name_en": "Read-only local AI-agent and transport diagnostics",
+      "name_ru": "Read-only диагностика локальных AI-агентов и транспортов",
       "owner": "agent-control",
       "surfaces": {
         "cli": "planned",

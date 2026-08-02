@@ -12,11 +12,10 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
 В текущей ветке реализованы versioned machine-readable **draft contract**, CLI
 `agent-transports list|diagnose --json`, package payload, security policy и
-первый embedded Desktop ingress. Экран «AI-агенты» обнаруживает локальные
-Codex/Claude Code, показывает discovery/catalog status семи paths и через
-фиксированный типизированный adapter выполняет официальный experimental Codex Remote Control
-`start|pair|stop`. Pairing code хранится только в памяти UI до expiry; полный
-opaque vendor secret не передаётся в WebView.
+read-only Desktop diagnostics. Экран «AI-агенты» обнаруживает локальные
+кандидаты Codex/Claude Code и показывает discovery/catalog status семи paths.
+Он не запускает обнаруженные binaries, а renderer/Tauri IPC не содержат
+provider start, pair, stop или pairing state.
 
 Это **не** first-party Mazzy client-to-client gateway. Claude adapter пока
 `discovery-only`; transport runtimes, broker, Web/Telegram clients и
@@ -91,12 +90,11 @@ Desktop/Web/Telegram -> command capability -> mazzy-agent policy
 authorization или wire protocol. Credentials агента остаются у provider CLI;
 gateway не копирует API keys.
 
-Текущий Desktop adapter намеренно уже этой архитектуры: он принимает только три
-enum operation и использует фиксированные argv без shell. Текущая механика —
-12-секундный timeout direct child и renderer confirmation для start/pair;
-process-group/job-object termination, bounded reader join и native
-command-bound approval остаются R0 blockers. Pairing не сохраняется. Это
-experimental vendor-native Codex relay, не first-party `mazzy-agentd`.
+Текущий Desktop adapter намеренно остаётся diagnostics-only. Native
+command-bound approval, trusted executable resolution,
+process-group/job-object termination и bounded reader join остаются R0 gates;
+provider lifecycle authority нельзя возвращать до доказательства каждого из
+них. Это не first-party `mazzy-agentd`.
 
 ## Transport adapters v1
 
@@ -195,9 +193,9 @@ LLM не выбирает этот режим.
 
 Порядок vertical slices:
 
-1. **Partial в этой ветке:** embedded Desktop provider discovery, официальный
-   experimental Codex Remote Control lifecycle/pairing и fail-closed catalog
-   diagnostics; trusted approval/process-group gates остаются open.
+1. **Partial в этой ветке:** embedded Desktop read-only provider discovery и
+   fail-closed catalog diagnostics; executable lifecycle удалён до закрытия
+   trusted approval/executable/process-group gates.
 2. Локальный непривилегированный `mazzy-agentd` с Unix-socket API, provider
    adapters Codex app-server/Claude/ACP и read-only `status/list/events`.
 3. Pairing, E2EE reverse WSS, encrypted durable queue, idempotent ACK/resume и

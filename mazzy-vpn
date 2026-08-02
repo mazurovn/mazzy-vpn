@@ -26,11 +26,13 @@ API_ACTION_MAX_RECORDS="${VPNCTL_API_ACTION_MAX_RECORDS:-512}"
 API_AUDIT_MAX_BYTES="${VPNCTL_API_AUDIT_MAX_BYTES:-2097152}"
 API_ROLLBACK_TIMEOUT_SECONDS="${VPNCTL_API_ROLLBACK_TIMEOUT_SECONDS:-30}"
 API_CACHE_REFRESH_TIMEOUT_SECONDS="${VPNCTL_API_CACHE_REFRESH_TIMEOUT_SECONDS:-10}"
+API_RECOVERY_LOCK_WAIT_SECONDS="${VPNCTL_API_RECOVERY_LOCK_WAIT_SECONDS:-30}"
 RUN_DIR="${VPNCTL_RUN_DIR:-/run/vpnctl}"
 MUTATION_LOCK_FILE="$RUN_DIR/.mutation.lock"
 SERVICE_NAME="${VPNCTL_SERVICE_NAME:-vpnctl.service}"
 HEALTH_TIMER="${VPNCTL_HEALTH_TIMER:-vpnctl-health.timer}"
 TEST_RECOVERY_SERVICE="${VPNCTL_TEST_RECOVERY_SERVICE:-vpnctl-test-recovery.service}"
+API_RECOVERY_SERVICE="${VPNCTL_API_RECOVERY_SERVICE:-mazzy-vpn-api-recovery.service}"
 API_SOCKET_UNIT="${VPNCTL_API_SOCKET_UNIT:-mazzy-vpn-api.socket}"
 API_SERVICE_UNIT="${VPNCTL_API_SERVICE_UNIT:-mazzy-vpn-api@.service}"
 RUNTIME_READER_GROUP="${VPNCTL_RUNTIME_READER_GROUP:-mazzy-vpn}"
@@ -39,13 +41,21 @@ API_CLIENT_MAX_RESPONSE_BYTES="${VPNCTL_API_CLIENT_MAX_RESPONSE_BYTES:-65536}"
 API_CLIENT_COMPLETION_GRACE_SECONDS="${VPNCTL_API_CLIENT_COMPLETION_GRACE_SECONDS:-60}"
 HEALTH_FAILURE_LIMIT="${VPNCTL_HEALTH_FAILURE_LIMIT:-2}"
 HEALTH_PROBE_TIMEOUT="${VPNCTL_HEALTH_PROBE_TIMEOUT:-4}"
+HEALTH_STARTUP_GRACE_SECONDS="${VPNCTL_HEALTH_STARTUP_GRACE_SECONDS:-60}"
 HEALTH_REQUIRE_DEFAULT_EGRESS="${VPNCTL_HEALTH_REQUIRE_DEFAULT_EGRESS:-auto}"
 HEALTH_FALLBACK_PROBE_URL="${VPNCTL_HEALTH_FALLBACK_PROBE_URL:-https://1.1.1.1/cdn-cgi/trace}"
+TRANSITION_GUARD_TABLE="mazzy_vpn_transition"
+TRANSITION_READY_TIMEOUT="${VPNCTL_TRANSITION_READY_TIMEOUT:-20}"
+TRANSITION_READY_PROBE_URL="https://1.1.1.1/cdn-cgi/trace"
+TRANSITION_READY_PROBE_MAX_BYTES=4096
 PROBE_URL="${VPNCTL_PROBE_URL:-https://api.ipify.org}"
 PROBE_V6_URL="${VPNCTL_PROBE_V6_URL:-https://api6.ipify.org}"
 VERIFY_GEO_PRIMARY_URL="${VPNCTL_VERIFY_GEO_PRIMARY_URL:-https://ipapi.co/json/}"
 VERIFY_GEO_SECONDARY_URL="${VPNCTL_VERIFY_GEO_SECONDARY_URL:-https://ipwho.is/}"
 VERIFY_SPEED_URL="${VPNCTL_VERIFY_SPEED_URL:-https://speed.cloudflare.com/__down?bytes=5000000}"
+SERVICE_PROBE_NOTEBOOKLM_URL="https://notebooklm.google.com/"
+SERVICE_PROBE_OPENAI_URL="https://chatgpt.com/backend-api/codex/responses"
+SERVICE_PROBE_MAX_HEADER_BYTES=8192
 OPENVPN_FALLBACK_DNS="${VPNCTL_OPENVPN_FALLBACK_DNS:-}"
 DASHBOARD_DIR="${VPNCTL_DASHBOARD_DIR:-/run/mazzy-vpn}"
 DASHBOARD_FILE="$DASHBOARD_DIR/status.json"
@@ -1634,6 +1644,7 @@ Usage:
   mazzy-vpn disconnect | reconnect
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
   mazzy-vpn verify [--timeout SEC] [--speed] [--json]
+  mazzy-vpn verify-service [notebooklm|openai|all] [--timeout SEC] [--json]
   mazzy-vpn list [PROTOCOL] | profiles [--json|--api-json]
   mazzy-vpn validate [PROTOCOL|all]
   mazzy-vpn probe [PROTOCOL|all] [--timeout SEC] [--jobs N] [--json]
@@ -1674,6 +1685,7 @@ Verwendung:
   mazzy-vpn disconnect | reconnect
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
   mazzy-vpn verify [--timeout SEK] [--speed] [--json]
+  mazzy-vpn verify-service [notebooklm|openai|all] [--timeout SEK] [--json]
   mazzy-vpn list [PROTOKOLL] | profiles [--json|--api-json]
   mazzy-vpn validate [PROTOKOLL|all]
   mazzy-vpn probe [PROTOKOLL|all] [--timeout SEK] [--jobs N] [--json]
@@ -1714,6 +1726,7 @@ Mazzy VPN — 安全便捷的 Linux VPN 管理工具
   mazzy-vpn disconnect | reconnect
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
   mazzy-vpn verify [--timeout 秒] [--speed] [--json]
+  mazzy-vpn verify-service [notebooklm|openai|all] [--timeout 秒] [--json]
   mazzy-vpn list [协议] | profiles [--json|--api-json]
   mazzy-vpn validate [协议|all]
   mazzy-vpn probe [协议|all] [--timeout 秒] [--jobs N] [--json]
@@ -1754,6 +1767,7 @@ Mazzy VPN — Linux 向けの安全で使いやすい VPN 管理ツール
   mazzy-vpn disconnect | reconnect
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
   mazzy-vpn verify [--timeout 秒] [--speed] [--json]
+  mazzy-vpn verify-service [notebooklm|openai|all] [--timeout 秒] [--json]
   mazzy-vpn list [プロトコル] | profiles [--json|--api-json]
   mazzy-vpn validate [プロトコル|all]
   mazzy-vpn probe [プロトコル|all] [--timeout 秒] [--jobs N] [--json]
@@ -1794,6 +1808,7 @@ Mazzy VPN — Linux용 안전하고 편리한 VPN 관리 도구
   mazzy-vpn disconnect | reconnect
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
   mazzy-vpn verify [--timeout 초] [--speed] [--json]
+  mazzy-vpn verify-service [notebooklm|openai|all] [--timeout 초] [--json]
   mazzy-vpn list [프로토콜] | profiles [--json|--api-json]
   mazzy-vpn validate [프로토콜|all]
   mazzy-vpn probe [프로토콜|all] [--timeout 초] [--jobs N] [--json]
@@ -1841,6 +1856,7 @@ Mazzy VPN - быстрое и безопасное управление VPN в L
                                     краткое состояние или JSON
   mazzy-vpn diagnose                диагностика активного соединения
   mazzy-vpn verify [--timeout СЕК] [--speed] [--json]
+  mazzy-vpn verify-service [notebooklm|openai|all] [--timeout СЕК] [--json]
                                     фактический egress, локация, DNS и IPv6
   mazzy-vpn validate [ПРОТОКОЛ|all] проверить формат всех профилей
   mazzy-vpn probe [ПРОТОКОЛ|all] [--timeout СЕК] [--jobs N] [--json]
@@ -2838,6 +2854,110 @@ systemctl_quiet() {
     systemctl "$@" >/dev/null 2>&1
 }
 
+transition_guard_remove() {
+    command -v nft >/dev/null 2>&1 || return 0
+    nft delete table inet "$TRANSITION_GUARD_TABLE" >/dev/null 2>&1 || true
+}
+
+transition_guard_install() {
+    command -v nft >/dev/null 2>&1 || {
+        error "Безопасное переключение недоступно: установите nftables"
+        return 1
+    }
+    transition_guard_remove
+    nft -f - >/dev/null <<EOF
+table inet $TRANSITION_GUARD_TABLE {
+    chain output {
+        type filter hook output priority -150; policy accept;
+        oifname "lo" accept
+        meta skuid 0 accept
+        reject with icmpx type admin-prohibited
+    }
+}
+EOF
+}
+
+transition_readiness_probe() {
+    local interface="$1" max_time="${2:-3}" connect_timeout=3 trace probe_ip
+    local octet
+    local -a octets=()
+    [[ -n "$interface" ]] || return 1
+    [[ "$max_time" =~ ^[1-9][0-9]*$ ]] || return 1
+    ((max_time <= 120)) || return 1
+    ((max_time < connect_timeout)) && connect_timeout="$max_time"
+    trace="$(
+        env -u ALL_PROXY -u all_proxy -u HTTP_PROXY -u http_proxy \
+            -u HTTPS_PROXY -u https_proxy -u NO_PROXY -u no_proxy \
+            curl -q -4 -fsS --proto '=https' --max-redirs 0 \
+                --noproxy '*' --proxy '' \
+                --connect-timeout "$connect_timeout" --max-time "$max_time" \
+                --interface "$interface" \
+                --user-agent 'mazzy-vpn-transition/1' \
+                "$TRANSITION_READY_PROBE_URL" 2>/dev/null |
+            head -c "$((TRANSITION_READY_PROBE_MAX_BYTES + 1))"
+    )" || return 1
+    ((${#trace} > 0 && ${#trace} <= TRANSITION_READY_PROBE_MAX_BYTES)) ||
+        return 1
+    probe_ip="$(
+        LC_ALL=C awk '
+            BEGIN { records = 0; ip_count = 0; scheme_count = 0; invalid = 0 }
+            {
+                records++
+                if (records > 32 || length($0) > 512 ||
+                    $0 !~ /^[a-z][a-z0-9_]{0,31}=[ -~]{0,480}$/) {
+                    invalid = 1
+                    next
+                }
+                separator = index($0, "=")
+                key = substr($0, 1, separator - 1)
+                value = substr($0, separator + 1)
+                if (key == "ip") {
+                    ip_count++
+                    ip = value
+                } else if (key == "visit_scheme") {
+                    scheme_count++
+                    scheme = value
+                }
+            }
+            END {
+                if (invalid || records < 2 || ip_count != 1 ||
+                    scheme_count != 1 || scheme != "https") exit 1
+                print ip
+            }
+        ' <<<"$trace"
+    )" || return 1
+    [[ "$probe_ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
+    IFS=. read -r -a octets <<<"$probe_ip"
+    ((${#octets[@]} == 4)) || return 1
+    for octet in "${octets[@]}"; do
+        [[ "$octet" =~ ^[0-9]{1,3}$ ]] || return 1
+        ((10#$octet <= 255)) || return 1
+    done
+}
+
+wait_for_connection_ready() {
+    local protocol="$1" timeout="${2:-$TRANSITION_READY_TIMEOUT}"
+    local deadline remaining interface probe_timeout
+    [[ "$timeout" =~ ^[0-9]+$ ]] && ((timeout >= 3 && timeout <= 120)) ||
+        timeout=20
+    deadline=$((SECONDS + timeout))
+    while ((SECONDS < deadline)); do
+        if service_active && connection_local_ok "$protocol"; then
+            interface="$(interface_for_protocol "$protocol")"
+            remaining=$((deadline - SECONDS))
+            probe_timeout=3
+            ((remaining < probe_timeout)) && probe_timeout="$remaining"
+            if [[ -n "$interface" ]] && ((probe_timeout > 0)) &&
+               transition_readiness_probe "$interface" "$probe_timeout"; then
+                return 0
+            fi
+        fi
+        systemctl_quiet is-failed "$SERVICE_NAME" && return 1
+        sleep 1
+    done
+    return 1
+}
+
 validate_permissions() {
     local file="$1" mode owner directory directory_mode directory_owner
     mode="$(stat -c '%a' "$file" 2>/dev/null || printf '777')"
@@ -3634,6 +3754,12 @@ choose_protocol() {
 cmd_connect() (
     local -a original=("$@")
     local requested_protocol="${1:-}" requested_profile="${2:-}" protocol fallback=""
+    local transition_guard_active=0
+    # shellcheck disable=SC2329  # invoked by the EXIT trap below
+    cleanup_connect_transition_guard() {
+        ((transition_guard_active == 0)) || transition_guard_remove
+    }
+    trap cleanup_connect_transition_guard EXIT
     if api_client_ready; then
         api_client_cmd_connect "${original[@]}"
         return
@@ -3657,12 +3783,17 @@ cmd_connect() (
     info "Выбран $(protocol_title "$protocol"): $(profile_name "$SELECTED_PROFILE")"
     cancel_test_guard
     discard_test_backup
+    transition_guard_install ||
+        die "Переключение отменено: не удалось закрыть прямой выход в интернет"
+    transition_guard_active=1
     systemctl_quiet stop "$SERVICE_NAME" || true
     fallback="$(detect_external_fallback || true)"
     if [[ -n "$fallback" ]]; then
         info "Временно останавливаем внешний VPN: $(external_fallback_title "$fallback")"
         if ! stop_external_fallbacks; then
             error "Не удалось безопасно остановить внешний VPN"
+            transition_guard_remove
+            transition_guard_active=0
             start_external_fallback "$fallback" || true
             return 1
         fi
@@ -3679,12 +3810,28 @@ cmd_connect() (
         journalctl -u "$SERVICE_NAME" -n 30 --no-pager 2>/dev/null || true
         if [[ -n "$fallback" ]]; then
             set_desired_state down || true
+            transition_guard_remove
+            transition_guard_active=0
             start_external_fallback "$fallback" ||
                 error "Не удалось автоматически вернуть $(external_fallback_title "$fallback")"
         fi
         return 1
     fi
-    say "Подключение запущено. Проверка: $CLI_COMMAND diagnose"
+    if ! wait_for_connection_ready "$protocol"; then
+        error "VPN не подтвердил защищённый выход за ${TRANSITION_READY_TIMEOUT}s"
+        systemctl_quiet stop "$SERVICE_NAME" || true
+        if [[ -n "$fallback" ]]; then
+            set_desired_state down || true
+            transition_guard_remove
+            transition_guard_active=0
+            start_external_fallback "$fallback" ||
+                error "Не удалось автоматически вернуть $(external_fallback_title "$fallback")"
+        fi
+        return 1
+    fi
+    transition_guard_remove
+    transition_guard_active=0
+    say "Подключение запущено. Защищённый выход подтверждён. Проверка: $CLI_COMMAND diagnose"
 )
 
 cmd_disconnect() (
@@ -3702,14 +3849,21 @@ cmd_disconnect() (
     fi
     health_reset
     if systemctl_quiet stop "$SERVICE_NAME"; then
+        transition_guard_remove
         say "VPN отключён."
     else
+        transition_guard_remove
         warn "Сервис уже остановлен или не установлен."
     fi
 )
 
 cmd_reconnect() (
-    local fallback=""
+    local fallback="" transition_guard_active=0
+    # shellcheck disable=SC2329  # invoked by the EXIT trap below
+    cleanup_reconnect_transition_guard() {
+        ((transition_guard_active == 0)) || transition_guard_remove
+    }
+    trap cleanup_reconnect_transition_guard EXIT
     if api_client_ready; then
         api_client_cmd_reconnect "$@"
         return
@@ -3721,10 +3875,15 @@ cmd_reconnect() (
     selected_from_state || die "Сначала выберите профиль: $CLI_COMMAND connect"
     validate_profile "$SELECTED_PROTOCOL" "$SELECTED_PROFILE" 1 ||
         die "Выбранный профиль не прошёл проверку"
+    transition_guard_install ||
+        die "Переподключение отменено: не удалось закрыть прямой выход в интернет"
+    transition_guard_active=1
     fallback="$(detect_external_fallback || true)"
     if [[ -n "$fallback" ]]; then
         info "Временно останавливаем внешний VPN: $(external_fallback_title "$fallback")"
         if ! stop_external_fallbacks; then
+            transition_guard_remove
+            transition_guard_active=0
             start_external_fallback "$fallback" || true
             die "Не удалось безопасно остановить внешний VPN"
         fi
@@ -3738,11 +3897,25 @@ cmd_reconnect() (
     if ! systemctl start "$SERVICE_NAME"; then
         if [[ -n "$fallback" ]]; then
             set_desired_state down || true
+            transition_guard_remove
+            transition_guard_active=0
             start_external_fallback "$fallback" || true
         fi
         die "Не удалось перезапустить $SERVICE_NAME"
     fi
-    say "Переподключение запущено."
+    if ! wait_for_connection_ready "$SELECTED_PROTOCOL"; then
+        systemctl_quiet stop "$SERVICE_NAME" || true
+        if [[ -n "$fallback" ]]; then
+            set_desired_state down || true
+            transition_guard_remove
+            transition_guard_active=0
+            start_external_fallback "$fallback" || true
+        fi
+        die "VPN не подтвердил защищённый выход за ${TRANSITION_READY_TIMEOUT}s"
+    fi
+    transition_guard_remove
+    transition_guard_active=0
+    say "Переподключение запущено. Защищённый выход подтверждён."
 )
 
 cmd_quick_connect() {
@@ -3897,6 +4070,8 @@ verify_dns_state() {
 verify_speed_sample() {
     local interface="$1" max_time="$2" raw bytes_per_second first_byte
     local mbps connect_ms
+    local LC_ALL=C
+    export LC_ALL
     [[ -n "$interface" ]] || return 1
     raw="$(
         curl -4 -fsS --interface "$interface" \
@@ -4135,7 +4310,11 @@ render_verify_result() {
     observed="$(jq -r '.geo.observed_country_code // "—"' <<<"$result")"
     country="$(jq -r '.geo.providers[0].country // "—"' <<<"$result")"
     city="$(jq -r '.geo.providers[0].city // "—"' <<<"$result")"
-    printf 'VPN verification: %s\n' "$verdict"
+    if [[ "$verdict" == verified ]]; then
+        printf 'Network egress verified\n'
+    else
+        printf 'Network egress verification: %s\n' "$verdict"
+    fi
     printf 'Tunnel:          %s\n' "$(jq -r '.tunnel.active' <<<"$result")"
     printf 'IPv4 egress:     %s\n' "$(jq -r '.ipv4.same_egress' <<<"$result")"
     printf 'Observed place:  %s — %s, %s\n' "$observed" "$country" "$city"
@@ -4206,6 +4385,302 @@ cmd_verify() {
         render_verify_result "$result"
     fi
     [[ "$(jq -r '.verdict' <<<"$result")" != failed ]]
+}
+
+service_probe_result_json() {
+    local service_id="$1" reachability="$2" eligibility="$3" reason_code="$4"
+    local http_status="${5:-}"
+    if [[ "$http_status" =~ ^[1-5][0-9]{2}$ ]]; then
+        jq -cn \
+            --arg service_id "$service_id" \
+            --arg reachability "$reachability" \
+            --arg eligibility "$eligibility" \
+            --arg reason_code "$reason_code" \
+            --argjson http_status "$http_status" \
+            '{
+                service_id: $service_id,
+                probe_version: 1,
+                reachability: $reachability,
+                egress_eligibility: $eligibility,
+                reason_code: $reason_code,
+                http_status: $http_status
+            }'
+    else
+        jq -cn \
+            --arg service_id "$service_id" \
+            --arg reachability "$reachability" \
+            --arg eligibility "$eligibility" \
+            --arg reason_code "$reason_code" \
+            '{
+                service_id: $service_id,
+                probe_version: 1,
+                reachability: $reachability,
+                egress_eligibility: $eligibility,
+                reason_code: $reason_code,
+                http_status: null
+            }'
+    fi
+}
+
+service_probe_one_json() {
+    local service_id="$1" interface="$2" timeout_seconds="$3" url=""
+    local raw="" raw_bytes=0 parsed="" status="" location="" allow="" rc=0
+    local LC_ALL=C
+    case "$service_id" in
+        notebooklm) url="$SERVICE_PROBE_NOTEBOOKLM_URL" ;;
+        openai) url="$SERVICE_PROBE_OPENAI_URL" ;;
+        *) return 2 ;;
+    esac
+    [[ -n "$interface" ]] || {
+        service_probe_result_json "$service_id" unreachable indeterminate \
+            service.network-unreachable
+        return
+    }
+
+    raw="$(
+        env \
+            -u ALL_PROXY -u all_proxy \
+            -u HTTP_PROXY -u http_proxy \
+            -u HTTPS_PROXY -u https_proxy \
+            -u NO_PROXY -u no_proxy \
+            curl -q --silent --show-error --head \
+                --interface "$interface" \
+                --connect-timeout "$timeout_seconds" \
+                --max-time "$timeout_seconds" \
+                --max-redirs 0 \
+                --proto '=https' \
+                --noproxy '*' --proxy '' \
+                --user-agent 'Mazzy-VPN-Service-Egress/1' \
+                --header 'Accept: */*' \
+                --output /dev/null --dump-header - \
+                --url "$url" 2>/dev/null |
+            head -c "$((SERVICE_PROBE_MAX_HEADER_BYTES + 1))"
+    )" || rc=$?
+    raw_bytes="$(printf '%s' "$raw" | wc -c)" || raw_bytes=0
+    if ((raw_bytes > SERVICE_PROBE_MAX_HEADER_BYTES)); then
+        service_probe_result_json "$service_id" reachable indeterminate \
+            service.response-too-large
+        return
+    fi
+    if ((rc != 0)); then
+        service_probe_result_json "$service_id" unreachable indeterminate \
+            service.network-unreachable
+        return
+    fi
+    if LC_ALL=C grep -q $'[^\r -~]' <<<"$raw"; then
+        service_probe_result_json "$service_id" reachable indeterminate \
+            service.response-invalid
+        return
+    fi
+    parsed="$(
+        awk '
+            {
+                line=$0
+                sub(/\r$/, "", line)
+                if (length(line) > 1024) invalid=1
+                if (line ~ /^HTTP\/[0-9.]+ [1-5][0-9][0-9]([ ]|$)/) {
+                    status=line
+                    sub(/^HTTP\/[0-9.]+[ ]+/, "", status)
+                    sub(/[ ].*$/, "", status)
+                    location=""
+                    location_count=0
+                    allow=""
+                    allow_count=0
+                    seen=1
+                    next
+                }
+                if (seen && line ~ /^[ \t]/) invalid=1
+                lowered=tolower(substr(line, 1, 9))
+                if (seen && lowered == "location:") {
+                    value=substr(line, 10)
+                    sub(/^[ \t]*/, "", value)
+                    location=value
+                    location_count++
+                }
+                lowered_allow=tolower(substr(line, 1, 6))
+                if (seen && lowered_allow == "allow:") {
+                    value=substr(line, 7)
+                    sub(/^[ ]*/, "", value)
+                    allow=value
+                    allow_count++
+                }
+            }
+            END {
+                if (!seen || invalid || location_count > 1 || allow_count > 1 || length(location) > 512 || length(allow) > 128) {
+                    exit 1
+                }
+                printf "%s%c%s%c%s", status, 31, location, 31, allow
+            }
+        ' <<<"$raw"
+    )" || {
+        service_probe_result_json "$service_id" reachable indeterminate \
+            service.response-invalid
+        return
+    }
+    IFS=$'\x1f' read -r status location allow <<<"$parsed"
+
+    case "$service_id" in
+        notebooklm)
+            if [[ "$status" =~ ^30[12378]$ &&
+                  "$location" == "https://notebooklm.google/?location=unsupported" ]]; then
+                service_probe_result_json notebooklm reachable ineligible \
+                    service.notebooklm.unsupported-location "$status"
+            elif [[ "$status" =~ ^30[12378]$ &&
+                    "$location" == "https://notebook.google.com/" ]]; then
+                service_probe_result_json notebooklm reachable eligible \
+                    service.notebooklm.home-reached "$status"
+            else
+                service_probe_result_json notebooklm reachable indeterminate \
+                    service.notebooklm.unrecognized-response "$status"
+            fi
+            ;;
+        openai)
+            case "$status" in
+                401)
+                    service_probe_result_json openai reachable eligible \
+                        service.openai.auth-boundary-reached "$status"
+                    ;;
+                405)
+                    if [[ "$allow" == POST ]]; then
+                        service_probe_result_json openai reachable eligible \
+                            service.openai.auth-boundary-reached "$status"
+                    else
+                        service_probe_result_json openai reachable indeterminate \
+                            service.openai.unrecognized-response "$status"
+                    fi
+                    ;;
+                403)
+                    service_probe_result_json openai reachable ineligible \
+                        service.openai.edge-denied "$status"
+                    ;;
+                429)
+                    service_probe_result_json openai reachable indeterminate \
+                        service.openai.rate-limited "$status"
+                    ;;
+                5??)
+                    service_probe_result_json openai reachable indeterminate \
+                        service.openai.service-unavailable "$status"
+                    ;;
+                *)
+                    service_probe_result_json openai reachable indeterminate \
+                        service.openai.unrecognized-response "$status"
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+verify_service_egress_json() {
+    local requested="$1" timeout_seconds="$2" protocol="" interface=""
+    local service_id result
+    local -a services=() results=()
+    case "$requested" in
+        notebooklm|openai) services=("$requested") ;;
+        all) services=(notebooklm openai) ;;
+        *) return 2 ;;
+    esac
+    if selected_from_state; then
+        protocol="$SELECTED_PROTOCOL"
+        if service_active && connection_local_ok "$protocol"; then
+            interface="$(interface_for_protocol "$protocol")"
+        fi
+    fi
+    for service_id in "${services[@]}"; do
+        result="$(service_probe_one_json \
+            "$service_id" "$interface" "$timeout_seconds")" || return 1
+        results+=("$result")
+    done
+    printf '%s\n' "${results[@]}" |
+        jq -cs \
+            --arg checked_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+                schema_version: 1,
+                checked_at: $checked_at,
+                scope: "unauthenticated-egress",
+                results: .
+            }'
+}
+
+render_service_verify_result() {
+    local result="$1" service_id reachability eligibility reason_code http_status
+    while IFS=$'\t' read -r \
+        service_id reachability eligibility reason_code http_status; do
+        printf '%-10s reachability=%-11s egress_eligibility=%-13s reason=%s status=%s\n' \
+            "$service_id" "$reachability" "$eligibility" "$reason_code" "$http_status"
+    done < <(
+        jq -r '.results[] | [
+            .service_id, .reachability, .egress_eligibility,
+            .reason_code, (.http_status // "unavailable")
+        ] | @tsv' <<<"$result"
+    )
+    say "Account, authentication, organization, subscription and content access were not tested."
+}
+
+cmd_verify_service() {
+    local requested=all scope_seen=false timeout_seconds=5 json_output=false
+    local payload response result
+    local deadline_ms
+    local -a original_args=("$@")
+    while (($#)); do
+        case "$1" in
+            notebooklm|openai|all)
+                [[ "$scope_seen" == false ]] ||
+                    die "Укажите только один service scope"
+                requested="$1"
+                scope_seen=true
+                ;;
+            --timeout)
+                shift
+                [[ $# -gt 0 ]] || die "--timeout требует число секунд"
+                timeout_seconds="$1"
+                ;;
+            --json) json_output=true ;;
+            --help|-h)
+                say "Использование: $CLI_COMMAND verify-service [notebooklm|openai|all] [--timeout 5] [--json]"
+                return 0
+                ;;
+            *) die "Неизвестный параметр verify-service: $1" ;;
+        esac
+        shift
+    done
+    if [[ ! "$timeout_seconds" =~ ^[0-9]+$ ]] ||
+       ((10#$timeout_seconds < 3 || 10#$timeout_seconds > 15)); then
+        die "Таймаут verify-service должен быть от 3 до 15 секунд"
+    fi
+    if [[ "$requested" == all ]]; then
+        deadline_ms=$((timeout_seconds * 2000 + 2000))
+    else
+        deadline_ms=$((timeout_seconds * 1000 + 2000))
+    fi
+
+    if api_client_ready; then
+        payload="$(
+            jq -cn \
+                --arg service "$requested" \
+                --argjson timeout_seconds "$timeout_seconds" \
+                '{service: $service, timeout_seconds: $timeout_seconds}'
+        )"
+        response="$(api_client_query_payload \
+            tests.verify-service-egress "$payload" "$deadline_ms")" || {
+            error "Local API service egress verification is unavailable"
+            return 70
+        }
+        if [[ "$(jq -r '.status' <<<"$response")" != ok ]]; then
+            error "Local API: $(jq -r '.error.code + ": " + .error.message_key' <<<"$response")"
+            return 1
+        fi
+        result="$(jq -c '.result' <<<"$response")"
+    else
+        require_profile_access verify-service "${original_args[@]}"
+        result="$(verify_service_egress_json "$requested" "$timeout_seconds")" ||
+            die "Не удалось завершить service egress verification"
+    fi
+
+    if [[ "$json_output" == true ]]; then
+        jq . <<<"$result"
+    else
+        render_service_verify_result "$result"
+    fi
 }
 
 validate_test_timeout() {
@@ -4742,6 +5217,8 @@ recover_stale_test_state() {
     [[ -e "$TEST_TRANSACTION" ]] || return 0
     acquire_recovery_lock 30 ||
         die "BOOT RECOVERY: не удалось получить блокировку восстановления"
+    [[ ! -e "$API_RECOVERY_MARKER" ]] ||
+        die "BOOT RECOVERY: заблокировано до ручной проверки API rollback"
     mode="$(state_get MODE 2>/dev/null || true)"
     [[ "$mode" == "test" ]] || {
         discard_test_backup
@@ -5597,6 +6074,13 @@ api_cache_refresh_timeout_seconds() {
     printf '%s\n' "$seconds"
 }
 
+api_recovery_lock_wait_seconds() {
+    local seconds="$API_RECOVERY_LOCK_WAIT_SECONDS"
+    [[ "$seconds" =~ ^[0-9]+$ ]] &&
+        ((seconds >= 1 && seconds <= 60)) || seconds=30
+    printf '%s\n' "$seconds"
+}
+
 api_refresh_dashboard_bounded() {
     local requested_ms="${1:-}" seconds configured_ms effective_ms duration
     local refresh_token rc=0
@@ -6312,6 +6796,136 @@ api_verify_result() {
     } 10>"$API_ACTION_DIR/.verify.lock"
 }
 
+api_service_verify_result() {
+    local request="$1" deadline_ms="$2"
+    local service timeout_seconds duration result result_file rc=0
+    mkdir -p -- "$API_ACTION_DIR" || return 1
+    chmod 700 -- "$API_ACTION_DIR" || return 1
+    {
+        flock -n 10 || return 75
+        service="$(jq -r '.payload.service' <<<"$request")"
+        timeout_seconds="$(jq -r '.payload.timeout_seconds' <<<"$request")"
+        duration="$(api_timeout_seconds_from_ms "$deadline_ms")" || return 1
+
+        result_file="$(mktemp "${API_ACTION_DIR}/.service-verify-result.XXXXXX")" ||
+            return 1
+        VPNCTL_API_CLIENT_DISABLE=1 \
+            timeout --kill-after=2s "${duration}s" \
+                "$SELF" _verify-service-egress-json "$service" "$timeout_seconds" \
+                >"$result_file" 10>&- || rc=$?
+        case "$rc" in
+            0) ;;
+            124|137) rm -f -- "$result_file"; return 124 ;;
+            *) rm -f -- "$result_file"; return 1 ;;
+        esac
+        result="$(<"$result_file")"
+        rm -f -- "$result_file"
+        jq -e --arg service "$service" '
+            .schema_version == 1
+            and (.checked_at | type == "string")
+            and .scope == "unauthenticated-egress"
+            and ((keys | sort) == ["checked_at", "results", "schema_version", "scope"])
+            and (.results | type == "array")
+            and (.results | length) >= 1
+            and (.results | length) <= 2
+            and ((.results | map(.service_id) | unique | length) == (.results | length))
+            and (
+                if $service == "all" then
+                    (.results | map(.service_id) | sort) == ["notebooklm", "openai"]
+                else
+                    (.results | length) == 1 and .results[0].service_id == $service
+                end
+            )
+            and all(
+                .results[];
+                ((keys | sort) == [
+                    "egress_eligibility", "http_status", "probe_version",
+                    "reachability", "reason_code", "service_id"
+                ])
+                and (.service_id == "notebooklm" or .service_id == "openai")
+                and .probe_version == 1
+                and (.reachability == "reachable" or .reachability == "unreachable")
+                and (
+                    .egress_eligibility == "eligible"
+                    or .egress_eligibility == "ineligible"
+                    or .egress_eligibility == "indeterminate"
+                )
+                and (
+                    .http_status == null
+                    or (
+                        (.http_status | type == "number")
+                        and (.http_status | floor) == .http_status
+                        and .http_status >= 100
+                        and .http_status <= 599
+                    )
+                )
+                and (
+                    if .reason_code == "service.notebooklm.unsupported-location" then
+                        .service_id == "notebooklm"
+                        and .reachability == "reachable"
+                        and .egress_eligibility == "ineligible"
+                        and (
+                            .http_status == 301 or .http_status == 302
+                            or .http_status == 303 or .http_status == 307
+                            or .http_status == 308
+                        )
+                    elif .reason_code == "service.notebooklm.home-reached" then
+                        .service_id == "notebooklm"
+                        and .reachability == "reachable"
+                        and .egress_eligibility == "eligible"
+                        and (
+                            .http_status == 301 or .http_status == 302
+                            or .http_status == 303 or .http_status == 307
+                            or .http_status == 308
+                        )
+                    elif .reason_code == "service.notebooklm.unrecognized-response" then
+                        .service_id == "notebooklm"
+                        and .reachability == "reachable"
+                        and .egress_eligibility == "indeterminate"
+                    elif .reason_code == "service.openai.auth-boundary-reached" then
+                        .service_id == "openai"
+                        and .reachability == "reachable"
+                        and .egress_eligibility == "eligible"
+                        and (.http_status == 401 or .http_status == 405)
+                    elif .reason_code == "service.openai.edge-denied" then
+                        .service_id == "openai"
+                        and .reachability == "reachable"
+                        and .egress_eligibility == "ineligible"
+                        and .http_status == 403
+                    elif .reason_code == "service.openai.rate-limited" then
+                        .service_id == "openai"
+                        and .reachability == "reachable"
+                        and .egress_eligibility == "indeterminate"
+                        and .http_status == 429
+                    elif .reason_code == "service.openai.service-unavailable" then
+                        .service_id == "openai"
+                        and .reachability == "reachable"
+                        and .egress_eligibility == "indeterminate"
+                        and .http_status >= 500 and .http_status <= 599
+                    elif .reason_code == "service.openai.unrecognized-response" then
+                        .service_id == "openai"
+                        and .reachability == "reachable"
+                        and .egress_eligibility == "indeterminate"
+                    elif .reason_code == "service.network-unreachable" then
+                        .reachability == "unreachable"
+                        and .egress_eligibility == "indeterminate"
+                        and .http_status == null
+                    elif (
+                        .reason_code == "service.response-invalid"
+                        or .reason_code == "service.response-too-large"
+                    ) then
+                        .reachability == "reachable"
+                        and .egress_eligibility == "indeterminate"
+                        and .http_status == null
+                    else false
+                    end
+                )
+            )
+        ' <<<"$result" >/dev/null 2>&1 || return 1
+        printf '%s\n' "$result"
+    } 10>"$API_ACTION_DIR/.verify-service.lock"
+}
+
 api_write_record() {
     local target="$1" content="$2" tmp
     mkdir -p -- "$API_ACTION_DIR" || return 1
@@ -6330,7 +6944,8 @@ api_write_record() {
 }
 
 api_mark_recovery_required() {
-    local action_id="$1" operation="$2" reason="$3" marker tmp content
+    local action_id="$1" operation="$2" reason="$3" marker tmp="" content
+    local old_umask rc=0
     marker="$API_RECOVERY_MARKER"
     mkdir -p -- "$STATE_DIR" || return 1
     chmod 700 -- "$STATE_DIR" || return 1
@@ -6348,17 +6963,25 @@ api_mark_recovery_required() {
                 created_at: $created_at
             }'
     )" || return 1
-    tmp="$(mktemp "$STATE_DIR/.api-recovery.XXXXXX")" || return 1
+    old_umask="$(umask)" || return 1
     umask 077
-    printf '%s\n' "$content" >"$tmp" || {
-        rm -f -- "$tmp"
-        return 1
-    }
-    chmod 600 -- "$tmp" || {
-        rm -f -- "$tmp"
-        return 1
-    }
-    mv -f -- "$tmp" "$marker"
+    tmp="$(mktemp "$STATE_DIR/.api-recovery.XXXXXX")" || rc=1
+    ((rc != 0)) || printf '%s\n' "$content" >"$tmp" || rc=1
+    ((rc != 0)) || chmod 600 -- "$tmp" || rc=1
+    ((rc != 0)) || mv -f -- "$tmp" "$marker" || rc=1
+    ((rc != 0)) || chmod 600 -- "$marker" || rc=1
+    ((rc != 0)) || sync -f "$marker" || rc=1
+    if ((rc != 0)) && [[ -n "$tmp" && -e "$tmp" ]]; then
+        rm -f -- "$tmp" || true
+    fi
+    umask "$old_umask" || return 1
+    return "$rc"
+}
+
+api_mark_boot_recovery_unavailable() {
+    local reason="$1"
+    api_mark_recovery_required \
+        boot-recovery api.interrupted-recovery "$reason"
 }
 
 api_prune_completed_actions() {
@@ -6499,7 +7122,8 @@ api_find_profile() {
 }
 
 api_restore_state() {
-    local snapshot="$1" existed="$2" previous_desired="" tmp rollback_timeout
+    local snapshot="$1" existed="$2" recovery_mode="${3:-runtime}"
+    local previous_desired="" tmp rollback_timeout
     if [[ "$existed" == true ]]; then
         mkdir -p -- "$STATE_DIR" || return 1
         chmod 700 -- "$STATE_DIR" || return 1
@@ -6515,6 +7139,12 @@ api_restore_state() {
     fi
 
     health_reset
+    if [[ "$recovery_mode" == "boot" ]]; then
+        # The boot recovery unit is ordered before vpnctl.service. Waiting for
+        # that queued service job here would create an ordering deadlock; the
+        # restored DESIRED state is consumed by systemd after this unit exits.
+        return 0
+    fi
     rollback_timeout="$(api_rollback_timeout_seconds)"
     timeout --kill-after=5s "${rollback_timeout}s" \
         systemctl reset-failed "$SERVICE_NAME" >/dev/null 2>&1 || true
@@ -6574,6 +7204,7 @@ api_complete_unstarted_timeout() {
 }
 
 api_recover_interrupted_actions() {
+    local recovery_mode="${1:-runtime}"
     local record base action_id fingerprint operation snapshot_existed snapshot
     local legacy_snapshot outcome rollback_state audit_outcome recovery_reason
     local recovery_failed=0
@@ -6585,8 +7216,10 @@ api_recover_interrupted_actions() {
         base="$(basename -- "$record")"
         action_id="${base%.json}"
         if ! api_valid_identifier "$action_id"; then
+            api_mark_recovery_required \
+                recovery-scan api.interrupted-recovery journal-corrupt || true
             recovery_failed=1
-            continue
+            break
         fi
         fingerprint="$(jq -r '.fingerprint // ""' "$record" 2>/dev/null || true)"
         operation="$(jq -r '.operation // ""' "$record" 2>/dev/null || true)"
@@ -6611,7 +7244,7 @@ api_recover_interrupted_actions() {
 
         if [[ "$snapshot_existed" == false ]] ||
            [[ "$snapshot_existed" == true && -r "$snapshot" ]]; then
-            if api_restore_state "$snapshot" "$snapshot_existed"; then
+            if api_restore_state "$snapshot" "$snapshot_existed" "$recovery_mode"; then
                 rollback_state=completed
                 outcome="$(api_action_outcome \
                     "$action_id" rolled-back true true "$rollback_state" \
@@ -6644,8 +7277,13 @@ api_recover_interrupted_actions() {
         if [[ -z "$fingerprint" || -z "$operation" ]] ||
            ! api_store_completed_action \
                "$record" "$fingerprint" "$operation" "$outcome"; then
+            if [[ ! -e "$API_RECOVERY_MARKER" ]]; then
+                api_mark_recovery_required \
+                    "$action_id" "${operation:-api.interrupted-recovery}" \
+                    journal-unavailable || true
+            fi
             recovery_failed=1
-            continue
+            break
         fi
         if ! api_audit_event \
             "$action_id" "$operation" approved "$audit_outcome"; then
@@ -6663,6 +7301,37 @@ api_recover_interrupted_actions() {
     done
     shopt -u nullglob
     ((recovery_failed == 0))
+}
+
+cmd_api_recover_interrupted_actions() {
+    local lock_wait_seconds
+    require_root _api-recover-interrupted-actions "$@"
+    (($# == 0)) ||
+        die "Usage: $CLI_COMMAND _api-recover-interrupted-actions"
+    if ! mkdir -p -- "$API_ACTION_DIR" "$RUN_DIR"; then
+        api_mark_boot_recovery_unavailable \
+            boot-recovery-directory-unavailable ||
+            die "BOOT API RECOVERY: unable to persist the fail-closed recovery marker"
+        die "BOOT API RECOVERY: unable to open protected state directories"
+    fi
+    if ! chmod 700 -- "$STATE_DIR" "$API_ACTION_DIR" "$RUN_DIR"; then
+        api_mark_boot_recovery_unavailable \
+            boot-recovery-permissions-unavailable ||
+            die "BOOT API RECOVERY: unable to persist the fail-closed recovery marker"
+        die "BOOT API RECOVERY: unable to protect state directories"
+    fi
+    lock_wait_seconds="$(api_recovery_lock_wait_seconds)"
+    if ! acquire_recovery_lock "$lock_wait_seconds"; then
+        api_mark_boot_recovery_unavailable \
+            boot-recovery-lock-unavailable ||
+            die "BOOT API RECOVERY: unable to persist the fail-closed recovery marker"
+        die "BOOT API RECOVERY: unable to acquire the shared mutation lock"
+    fi
+    if ! api_recover_interrupted_actions boot; then
+        die "BOOT API RECOVERY: interrupted action rollback requires administrator review"
+    fi
+    api_cleanup_action_temps
+    info "BOOT API RECOVERY: interrupted actions reconciled"
 }
 
 api_run_lifecycle_action() {
@@ -7277,6 +7946,58 @@ api_dispatch() {
                     ;;
             esac
             ;;
+        tests.verify-service-egress)
+            if jq -e 'has("action_id") or has("authorization")' \
+                <<<"$request" >/dev/null 2>&1; then
+                api_error_response "$request_id" invalid-request \
+                    api.query.mutation-fields false false
+                return
+            fi
+            if ! jq -e '
+                has("deadline_ms")
+                and (.deadline_ms | type == "number")
+                and ((.deadline_ms | floor) == .deadline_ms)
+                and .deadline_ms >= 100
+                and .deadline_ms <= 32000
+                and ((.payload | keys | sort) == ["service", "timeout_seconds"])
+                and (
+                    .payload.service == "notebooklm"
+                    or .payload.service == "openai"
+                    or .payload.service == "all"
+                )
+                and (.payload.timeout_seconds | type == "number")
+                and (
+                    (.payload.timeout_seconds | floor)
+                    == .payload.timeout_seconds
+                )
+                and .payload.timeout_seconds >= 3
+                and .payload.timeout_seconds <= 15
+            ' <<<"$request" >/dev/null 2>&1; then
+                api_error_response "$request_id" invalid-request \
+                    api.tests.verify-service-egress.payload-invalid false false
+                return
+            fi
+            deadline_ms="$(jq -r '.deadline_ms' <<<"$request")"
+            result="$(api_service_verify_result "$request" "$deadline_ms")"
+            rc=$?
+            case "$rc" in
+                0)
+                    api_ok_response "$request_id" "$result"
+                    ;;
+                124)
+                    api_error_response "$request_id" deadline-exceeded \
+                        api.tests.verify-service-egress.deadline true false
+                    ;;
+                75)
+                    api_error_response "$request_id" busy \
+                        api.tests.verify-service-egress.busy true false
+                    ;;
+                *)
+                    api_error_response "$request_id" backend-unavailable \
+                        api.tests.verify-service-egress.unavailable true false
+                    ;;
+            esac
+            ;;
         lifecycle.connect|lifecycle.reconnect|lifecycle.disconnect)
             if ! jq -e '
                 (.action_id | type == "string")
@@ -7410,12 +8131,14 @@ cmd_diagnose() {
 doctor_dependency_checks() {
     check_command bash
     check_command ip "iproute2"
+    check_command nft "nftables transition guard"
     check_command systemctl "systemd"
     check_command systemd-run "systemd transient units"
     check_command curl
     check_command timeout
     check_command flock
     check_command jq "JSON API runtime (jq)"
+    check_command python3 "CLOCK_MONOTONIC startup grace"
     check_command socat "local API client transport (socat)"
     check_command sha256sum "opaque profile IDs (sha256sum)"
     check_command getent "DNS resolver (getent)"
@@ -7539,6 +8262,16 @@ doctor_unit_checks() {
         fi
     else
         check_fail "Не установлен $TEST_RECOVERY_SERVICE; запустите install.sh"
+    fi
+    if systemctl cat "$API_RECOVERY_SERVICE" >/dev/null 2>&1; then
+        check_ok "Установлен $API_RECOVERY_SERVICE"
+        if systemctl_quiet is-enabled "$API_RECOVERY_SERVICE"; then
+            check_ok "$API_RECOVERY_SERVICE включён при загрузке"
+        else
+            check_warn "$API_RECOVERY_SERVICE установлен, но не включён"
+        fi
+    else
+        check_fail "Не установлен $API_RECOVERY_SERVICE; запустите install.sh"
     fi
     if systemctl cat "$API_SOCKET_UNIT" >/dev/null 2>&1 &&
        systemctl cat "$API_SERVICE_UNIT" >/dev/null 2>&1; then
@@ -7808,6 +8541,8 @@ cmd_monitor() {
             die "Не удалось включить $HEALTH_TIMER"
         systemctl enable "$TEST_RECOVERY_SERVICE" ||
             die "Не удалось включить $TEST_RECOVERY_SERVICE"
+        systemctl enable "$API_RECOVERY_SERVICE" ||
+            die "Не удалось включить $API_RECOVERY_SERVICE"
         say "Автоматический контроль и recovery включены."
     else
         systemctl disable --now "$HEALTH_TIMER" ||
@@ -7886,6 +8621,7 @@ cmd_import() {
         die "Профиль уже существует: $target (для замены добавьте --force)"
     fi
     install -m 600 -- "$source" "$target" || die "Не удалось скопировать профиль"
+    health_reset
     say "Добавлен профиль: $target"
 }
 
@@ -8023,6 +8759,7 @@ cmd_import_dir() {
         printf '[ OK ] %-12s %s\n' "$(protocol_title "$protocol")" "$target"
         imported=$((imported + 1))
     done
+    ((imported == 0)) || health_reset
     printf '\nИтог import-dir: files=%d detected=%d imported=%d same=%d unknown=%d invalid=%d conflicts=%d\n' \
         "${#files[@]}" "$detected" "$imported" "$unchanged" "$unknown" "$invalid" "$conflicts"
     ((detected > 0 && invalid == 0))
@@ -8062,6 +8799,7 @@ cmd_remove() {
         die "Нельзя удалить выбранный профиль. Сначала переключитесь на другой."
     fi
     rm -- "$SELECTED_PROFILE" || die "Не удалось удалить профиль"
+    health_reset
     say "Удалён профиль: $(basename -- "$SELECTED_PROFILE")"
 }
 
@@ -8248,6 +8986,8 @@ service_run() {
     local desired mode deadline
     ((EUID == 0)) || [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]] ||
         die "_service-run требует root"
+    [[ ! -e "$API_RECOVERY_MARKER" ]] ||
+        die "_service-run заблокирован: требуется ручная проверка API rollback"
     selected_from_state || die "Выбранный профиль отсутствует"
     desired="$(state_get DESIRED 2>/dev/null || true)"
     mode="$(state_get MODE 2>/dev/null || printf 'normal')"
@@ -8288,6 +9028,44 @@ health_limit() {
     else
         printf '2\n'
     fi
+}
+
+health_startup_grace_seconds() {
+    local seconds="$HEALTH_STARTUP_GRACE_SECONDS"
+    [[ "$seconds" =~ ^[0-9]+$ ]] &&
+        ((seconds >= 15 && seconds <= 180)) || seconds=60
+    printf '%s\n' "$seconds"
+}
+
+service_active_age_seconds() {
+    local properties active_enter_usec now_usec
+    properties="$(
+        systemctl show --property=ActiveEnterTimestampMonotonic \
+            "$SERVICE_NAME" 2>/dev/null | head -c 129
+    )" || return 1
+    ((${#properties} > 0 && ${#properties} <= 128)) || return 1
+    [[ "$properties" != *$'\n'* ]] || return 1
+    [[ "$properties" == ActiveEnterTimestampMonotonic=* ]] || return 1
+    active_enter_usec="${properties#ActiveEnterTimestampMonotonic=}"
+    [[ "$active_enter_usec" =~ ^[1-9][0-9]{0,17}$ ]] || return 1
+    # systemd's Unit interface exposes the activation timestamp but no
+    # current-monotonic property; query the same CLOCK_MONOTONIC domain
+    # directly and grant no grace if the bounded helper is unavailable.
+    now_usec="$(
+        python3 -I -c \
+            'import time; print(time.clock_gettime_ns(time.CLOCK_MONOTONIC) // 1000)' \
+            2>/dev/null | head -c 20
+    )" || return 1
+    [[ "$now_usec" =~ ^[1-9][0-9]{0,17}$ ]] || return 1
+    ((now_usec >= active_enter_usec)) || return 1
+    printf '%s\n' "$(((now_usec - active_enter_usec) / 1000000))"
+}
+
+health_in_startup_grace() {
+    local age grace
+    age="$(service_active_age_seconds)" || return 1
+    grace="$(health_startup_grace_seconds)"
+    ((age < grace))
 }
 
 health_profile_requires_default_egress() {
@@ -8378,6 +9156,10 @@ health_recover() {
         warn "Автовосстановление отложено: уже выполняется другая операция $PRODUCT_NAME"
         return 0
     fi
+    if [[ -e "$API_RECOVERY_MARKER" ]]; then
+        error "Автовосстановление заблокировано: требуется ручная проверка API rollback"
+        return 1
+    fi
     fallback="$(detect_external_fallback || true)"
     if [[ -n "$fallback" ]]; then
         warn "Автовосстановление останавливает конфликтующий $(external_fallback_title "$fallback")"
@@ -8387,11 +9169,9 @@ health_recover() {
         }
     fi
     cleanup_stale_quick_policy
-    health_reset
-    reset_service_start_limit
     warn "Автовосстановление: $reason; действие=$action $SERVICE_NAME"
-    if systemctl "$action" --no-block "$SERVICE_NAME"; then
-        info "Команда автовосстановления передана systemd"
+    if systemctl "$action" "$SERVICE_NAME"; then
+        info "Автовосстановление завершено systemd"
         return 0
     fi
     error "systemd отклонил команду автовосстановления"
@@ -8399,16 +9179,26 @@ health_recover() {
 }
 
 health_failure() {
-    local reason="$1" failures=0 limit
+    local reason="$1" failures=0 previous=0 limit ceiling
     limit="$(health_limit)"
+    ceiling=$((limit + 1))
     mkdir -p "$RUN_DIR"
     [[ -r "$RUN_DIR/health.failures" ]] &&
         read -r failures <"$RUN_DIR/health.failures"
     [[ "$failures" =~ ^[0-9]+$ ]] || failures=0
-    failures=$((failures + 1))
+    previous="$failures"
+    if ((failures < ceiling)); then
+        failures=$((failures + 1))
+    else
+        failures="$ceiling"
+    fi
     printf '%s\n' "$failures" >"$RUN_DIR/health.failures"
-    warn "Проверка соединения $failures/$limit: $reason"
-    if ((failures >= limit)); then
+    if ((failures <= limit)); then
+        warn "Проверка соединения $failures/$limit: $reason"
+    elif ((previous <= limit)); then
+        warn "Автовосстановление приостановлено после порогового restart; OpenVPN/systemd продолжает собственный retry"
+    fi
+    if ((failures == limit)); then
         health_recover "$reason после $failures последовательных проверок" restart || true
     fi
 }
@@ -8446,11 +9236,19 @@ health_check() {
         return 0
     fi
     if ! connection_local_ok "$SELECTED_PROTOCOL"; then
+        if health_in_startup_grace; then
+            warn "Проверка соединения отложена на startup grace: VPN-интерфейс ещё создаётся"
+            return 0
+        fi
         health_failure "VPN-интерфейс отсутствует"
         return 0
     fi
     interface="$(interface_for_protocol "$SELECTED_PROTOCOL")"
     if ! health_internet_ok "$interface"; then
+        if [[ "$SELECTED_PROTOCOL" == openvpn ]] && health_in_startup_grace; then
+            warn "Проверка соединения отложена на startup grace: OpenVPN data plane ещё не передаёт HTTPS"
+            return 0
+        fi
         health_failure "${HEALTH_LAST_REASON:-нет доступа в интернет через VPN}"
         return 0
     fi
@@ -8945,6 +9743,7 @@ main() {
         status|show) cmd_status "$@" ;;
         diagnose|diag) cmd_diagnose "$@" ;;
         verify|verify-egress) cmd_verify "$@" ;;
+        verify-service) cmd_verify_service "$@" ;;
         validate|lint) cmd_validate "$@" ;;
         probe|ping) cmd_probe "$@" ;;
         test|check) cmd_test "$@" ;;
@@ -8968,6 +9767,9 @@ main() {
             write_dashboard_cache
             ;;
         _api-dispatch) api_dispatch ;;
+        _api-recover-interrupted-actions)
+            cmd_api_recover_interrupted_actions "$@"
+            ;;
         _api-clear-recovery) cmd_api_clear_recovery "$@" ;;
         _probe-locations-json)
             [[ $# -eq 4 ]] ||
@@ -8996,6 +9798,17 @@ main() {
             [[ "$2" == true || "$2" == false ]] ||
                 die "Internal verify speed flag is invalid"
             verify_connection_json "$1" "$2"
+            ;;
+        _verify-service-egress-json)
+            [[ $# -eq 2 ]] ||
+                die "Internal service verify requires service scope and timeout"
+            [[ "$1" == notebooklm || "$1" == openai || "$1" == all ]] ||
+                die "Internal service verify scope is invalid"
+            if [[ ! "$2" =~ ^[0-9]+$ ]] ||
+               ((10#$2 < 3 || 10#$2 > 15)); then
+                die "Internal service verify timeout is invalid"
+            fi
+            verify_service_egress_json "$1" "$2"
             ;;
         _test-timeout) test_timeout_handler "${1:-}" ;;
         _recover-stale-test) recover_stale_test_state ;;

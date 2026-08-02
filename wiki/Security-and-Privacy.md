@@ -40,10 +40,10 @@ Mazzy VPN не использует обязательный cloud account и н
 paths пока не имеют общего с API action journal, а rollback ещё не доказывает
 восстановление routes, DNS, firewall и отсутствие leak.
 
-Текущий Desktop Agent Control остаётся preview. Fixed enum/argv и отсутствие
-shell уменьшают поверхность атаки, но renderer `window.confirm()` ещё не
-является command-bound proof присутствия пользователя. До закрытия R0-2 нельзя
-использовать этот preview как доверенную границу для high-risk remote actions.
+Текущий Desktop Agent Control остаётся diagnostics-only preview. Renderer и
+Tauri invoke не предоставляют provider lifecycle, а diagnostics не запускает
+обнаруженный executable. Native command-bound approval, trusted executable
+resolution и process-tree containment обязательны до возврата этой authority.
 
 ## Проверки репозитория
 
@@ -89,8 +89,9 @@ longer silently substitutes a public resolver.
 The shared lock is a transitional unreleased R0a boundary, not the target
 `mazzy-vpnd`; direct root paths do not yet share the API action journal and
 rollback does not prove route/DNS/firewall/leak restoration. Desktop Agent
-Control also remains preview-only: its renderer confirmation is not yet a
-native command-bound approval proof for high-risk remote actions.
+Control remains diagnostics-only: renderer/Tauri IPC exposes no provider
+lifecycle and diagnostics do not execute a discovered binary. Native approval,
+trusted executable resolution and process-tree containment remain mandatory.
 
 The repository runs public-tree audit, Gitleaks, npm audit, Rust tests and
 Clippy. GitHub Actions are pinned to full commit SHAs. Do not put a secret in a

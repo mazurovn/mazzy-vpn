@@ -62,9 +62,8 @@ backends, code signing and platform-specific integration tests.
 2. **Profiles** — safe file/folder import, search, protocol and location/default
    selection, removal, a whole-list endpoint check with per-location
    reachability/latency/active state, and per-profile live tests.
-3. **AI Agents (unreleased)** — Codex/Claude discovery, official experimental
-   Codex Remote Control, memory-only pairing and catalog status for seven
-   future transport paths.
+3. **AI Agents (unreleased)** — read-only Codex/Claude discovery and catalog
+   status for seven future transport paths; no provider lifecycle authority.
 4. **Diagnostics** — validation, DNS/ping probes, transactional tests,
    `test-all`, emergency recovery, complete Doctor/self-test output and bounded
    systemd logs.
@@ -114,16 +113,13 @@ provides redacted URI detection, while the unreleased branch also classifies
 bounded JSON. Desktop import, TUN adapters and smart selection remain gated. See
 [Protocol orchestration](PROTOCOL_ORCHESTRATION.en.md).
 
-The unreleased AI Agents screen uses a separate unprivileged Rust adapter. It
-accepts only `codex-remote-start|pair|stop`, invokes fixed argument arrays
-without a shell, uses a 12-second direct-child timeout and renderer
-confirmation for start/pair. Process-group termination, bounded reader joins
-and native command-bound approval remain R0 blockers. The WebView receives only
-the manual pairing code and expiry; both remain in memory until expiry and are
-never logged.
+The unreleased AI Agents screen is diagnostics-only. It reports candidate
+Codex/Claude executables and catalog status without executing those binaries;
+renderer and Tauri invoke expose no start/pair/stop or pairing state. Native
+command-bound approval, trusted executable resolution and process-tree
+containment remain R0 prerequisites for future lifecycle authority.
 
-This is partial provider integration: the official experimental vendor-native Codex relay
-can be enabled from the client, while Claude is discovery-only. First-party
+This is partial read-only provider discovery. First-party
 `mazzy-agentd`, E2EE reverse WSS/iroh, Web and Telegram are not implemented. See
 the [research and architecture (RU)](RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md).
 

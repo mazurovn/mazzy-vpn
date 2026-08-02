@@ -333,7 +333,6 @@ fn main() {
             backend::pick_profile_files,
             backend::pick_profile_folder,
             agent_control::get_agent_integrations,
-            agent_control::run_agent_operation,
             show_main_window,
             hide_main_window,
             get_platform_info
