@@ -4,6 +4,26 @@ All notable changes to Mazzy VPN are documented here.
 
 ## Unreleased
 
+- Added a closed managed-profile v1 for VLESS, Hysteria 2, Mieru, NaiveProxy,
+  TUIC, Shadowsocks 2022, Trojan, AnyTLS and ShadowTLS. Validation rejects
+  duplicate keys, insecure TLS and user-controlled listeners, paths, marks and
+  routing; responses never reflect endpoints or credentials.
+- Added atomic `protocols managed-import` with dry-run, conflict protection,
+  explicit force replacement, symlink rejection and root-only `0700/0600`
+  storage. Modern-protocol import is now truthfully `partial`; connection
+  remains `planned`.
+- Added the packaged, version-pinned `mazzy-sing-box-adapter` foundation. It
+  renders a closed TUN, proxy-routed DoH and final-route graph for six protocols
+  but is not wired into service lifecycle. Mieru/Naive sidecars and the typed
+  ShadowTLS inner chain fail closed.
+- Added `runtime/v1/adapter-registry.json` and `protocols adapters --json` with
+  explicit engine versions, process graphs and supply-chain, rollback, leak and
+  crash-test gates.
+- Added a separate reverse agent-control v1 contract for LAN WSS, iroh, libp2p,
+  WebRTC, WebTransport, Tailscale/Headscale and reverse WSS, plus signed E2EE
+  envelopes and Web/CLI/Telegram channel-risk policy. Runtime support remains
+  planned.
+
 - Added the read-only API v1 `planner.evaluate` operation and
   `mazzy-vpn planner evaluate --stdin --json`. The backend enforces five
   non-overridable runtime/profile/storage/platform gates and applies the

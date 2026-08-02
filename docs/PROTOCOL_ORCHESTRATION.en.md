@@ -9,27 +9,29 @@ URI or listing a protocol does not mean that a tunnel can be established.
 
 ## Thirteen-protocol catalog
 
-| Protocol | Class and role | Linux connect | Detection |
-|---|---|---:|---:|
-| AmneziaWG | obfuscated WireGuard-like VPN | implemented | implemented |
-| WireGuard | standard VPN | implemented | implemented |
-| OpenVPN | TCP/UDP and enterprise VPN | implemented | implemented |
-| L2TP/IPsec | legacy/enterprise VPN | implemented | implemented |
-| VLESS / REALITY | proxy + TUN, TLS/REALITY | planned | URI/JSON implemented |
-| Hysteria 2 | QUIC proxy + TUN, lossy links and HTTP/3 camouflage | planned | URI/JSON implemented |
-| Mieru | proxy + TUN, padding and probe resistance | planned | URI/JSON implemented |
-| NaiveProxy | Chromium HTTP/2/3 proxy + TUN | planned | JSON implemented |
-| TUIC v5 | QUIC proxy + TUN | planned | URI/JSON implemented |
-| Shadowsocks 2022 | AEAD 2022 proxy + TUN | planned | URI/JSON implemented |
-| Trojan | TLS proxy + TUN | planned | URI/JSON implemented |
-| AnyTLS | multiplexed TLS proxy + TUN | planned | URI/JSON implemented |
-| ShadowTLS v3 | TLS camouflage transport | planned | JSON implemented |
+| Protocol | Class and role | Managed import | Linux connect | Detection |
+|---|---|---:|---:|---:|
+| AmneziaWG | obfuscated WireGuard-like VPN | implemented | implemented | implemented |
+| WireGuard | standard VPN | implemented | implemented | implemented |
+| OpenVPN | TCP/UDP and enterprise VPN | implemented | implemented | implemented |
+| L2TP/IPsec | legacy/enterprise VPN | implemented | implemented | implemented |
+| VLESS / REALITY | proxy + TUN, TLS/REALITY | partial | planned | URI/JSON implemented |
+| Hysteria 2 | QUIC proxy + TUN, lossy links and HTTP/3 camouflage | partial | planned | URI/JSON implemented |
+| Mieru | proxy + TUN, padding and probe resistance | partial | planned | URI/JSON implemented |
+| NaiveProxy | Chromium HTTP/2/3 proxy + TUN | partial | planned | JSON implemented |
+| TUIC v5 | QUIC proxy + TUN | partial | planned | URI/JSON implemented |
+| Shadowsocks 2022 | AEAD 2022 proxy + TUN | partial | planned | URI/JSON implemented |
+| Trojan | TLS proxy + TUN | partial | planned | URI/JSON implemented |
+| AnyTLS | multiplexed TLS proxy + TUN | partial | planned | URI/JSON implemented |
+| ShadowTLS v3 | TLS camouflage transport | partial | planned | JSON implemented |
 
-VLESS, Hysteria 2, TUIC, Shadowsocks, Trojan, AnyTLS and Naive are documented
-sing-box outbounds. VLESS must not reach a public server without outer
-transport security. NaiveProxy requires a compatible Chromium/Cronet runtime
-and a normal certificate; self-signed TLS changes its traffic behavior.
-ShadowTLS v3 is a TCP transport, not a standalone L3 VPN.
+VLESS, Hysteria 2, TUIC, Shadowsocks 2022, Trojan and AnyTLS use the pinned
+sing-box adapter target. Mieru 3.32.0 and NaiveProxy 148.0.7778.96-5 require
+separate loopback SOCKS sidecars plus a TUN-to-SOCKS process. VLESS must not
+reach a public server without outer transport security. NaiveProxy requires a
+compatible Chromium runtime and a normal certificate; self-signed TLS changes
+its traffic behavior. ShadowTLS v3 is a TCP transport requiring a typed inner
+proxy chain, not a standalone L3 VPN.
 
 Primary references:
 
@@ -55,6 +57,7 @@ Tor, but are not counted as separate general-purpose Mazzy VPN L3 protocols.
 flowchart LR
     UI[CLI / Desktop / mobile / agent] --> API[Local API v1]
     API --> Registry[Protocol registry]
+    Registry --> RuntimeRegistry[Runtime adapter registry]
     API --> Planner[Policy planner]
     Planner --> Diagnostics[Validation + probes + history]
     Planner --> Adapter[Platform adapter]
@@ -71,6 +74,11 @@ integration tests pass. Arbitrary user-supplied sing-box JSON must not run as
 root: it may declare unexpected listeners, paths or remote rule sets. Runtime
 configuration must be synthesized from an allowlist schema.
 
+[`runtime/v1/adapter-registry.json`](../runtime/v1/adapter-registry.json)
+records the four execution graphs and pinned candidate versions. It explicitly
+keeps lifecycle and integration tests `planned`; packaging the adapter script
+does not bundle or authorize an engine.
+
 ## Detection and custom servers
 
 The current detector accepts a share URI or one JSON object only through stdin
@@ -80,6 +88,7 @@ and returns redacted metadata:
 printf '%s\n' "$SHARE_URI" | mazzy-vpn protocols detect --stdin --json
 mazzy-vpn protocols list --json
 mazzy-vpn protocols diagnose --json
+mazzy-vpn protocols adapters --json
 ```
 
 For URIs, the detector accepts one terminal `LF` or `CRLF`, rejects embedded
@@ -89,18 +98,44 @@ multi-protocol configurations and payloads larger than 64 KiB are rejected.
 It recognizes sing-box/Xray outbounds, the official Mieru shape and NaiveProxy
 `listen`/`proxy`. This classifies a format; it is not full validation.
 
-It never returns the host, user info, UUID, password, query or fragment. Full
-custom-server import is the next backend slice:
+It never returns the host, user info, UUID, password, query or fragment. A
+closed Mazzy-managed custom-server profile can now be validated and stored:
 
-1. The UI passes a file/URI to a write-only import operation and never reads a
-   key itself.
-2. The system parser validates a protocol-specific allowlist schema.
-3. Credentials use mode `600` storage or a platform keystore; only an opaque
-   `profile_id` and safe display name leave the backend.
-4. `inspect-import` causes no network mutation; installation needs
-   authorization and an `action_id`.
-5. Runtime configuration is synthesized, checked by the backend and removed
-   after shutdown.
+```bash
+mazzy-vpn protocols managed-validate --stdin --json < profile.json
+mazzy-vpn protocols managed-import profile.json --dry-run --json
+sudo mazzy-vpn protocols managed-import profile.json --json
+```
+
+The v1 schema covers all nine modern entries. It accepts typed endpoint,
+credentials, TLS, DNS and full-tunnel policy fields only; listeners, file
+paths, arbitrary route rules, dial marks and insecure TLS are impossible in
+the input shape. Import rejects symlink sources and duplicate keys, writes an
+atomic protocol/profile-ID file under `/etc/vpnctl/profiles`, uses directory
+mode `700` and file mode `600`, and never reflects a credential or endpoint.
+This is why registry import status is `partial`, not `implemented`: vendor
+share URI conversion and platform keystores remain.
+
+The packaged `mazzy-sing-box-adapter` can synthesize a fixed, closed TUN/DNS/
+route graph for VLESS, Hysteria 2, TUIC, Shadowsocks 2022, Trojan and AnyTLS.
+Its v1 renderer requires literal IPv4 proxy and DoH bootstrap addresses and
+verified TLS. It cannot yet enter the normal service lifecycle. Mieru and
+NaiveProxy need an atomic two-process sidecar supervisor; ShadowTLS needs a
+typed inner-proxy reference. All three therefore return
+`render_supported:false`.
+
+The remaining production flow is:
+
+1. Convert audited vendor share formats into the neutral managed schema without
+   exposing credentials to UI or agents.
+2. Move credentials from mode `600` Linux files to platform keystores where
+   available; only an opaque `profile_id` and safe display name leave the
+   backend.
+3. Supply checksum-pinned engines with SBOM/provenance and verify their native
+   config parsers before activation.
+4. Add authorized lifecycle, process supervision, egress verification and
+   transactional rollback.
+5. Pass network-namespace DNS/IPv4/IPv6/leak/crash tests on every platform.
 
 ## Selection and diagnostics
 

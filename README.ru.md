@@ -26,14 +26,18 @@ default-branch результатами RustSec, Dependabot и CodeQL.
 backends по-прежнему готовы для AmneziaWG, WireGuard, OpenVPN и L2TP/IPsec.
 VLESS/REALITY, Hysteria 2, Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022,
 Trojan, AnyTLS и ShadowTLS v3 получили проверяемый registry, очищенный API и
-безопасную классификацию однозначных share URI и JSON. Их подключение помечено
-`planned`, пока не готовы TUN/routing/rollback integration tests.
+безопасную классификацию однозначных share URI и JSON. Для всех девяти теперь
+есть закрытая neutral schema и атомарный Linux import без отражения секретов;
+для шести — закрытый sing-box config renderer. Mieru/Naive sidecar и inner chain
+ShadowTLS ещё не готовы. Подключение всех девяти остаётся `planned`, пока не
+закрыты поставка engines, TUN/routing/rollback и leak integration tests.
 
 Основная команда — `mazzy-vpn`. Совместимые aliases: `vpnctl` и `mazzyvpn`.
 
 [Архитектура и схемы работы](docs/ARCHITECTURE.ru.md) ·
 [контракт локального API v1](docs/API_CONTRACT.ru.md) ·
 [протоколы и AI-оркестрация](docs/PROTOCOL_ORCHESTRATION.ru.md) ·
+[обратное управление AI-агентами](docs/AGENT_CONTROL_ARCHITECTURE.ru.md) ·
 [Architecture in English](docs/ARCHITECTURE.en.md)
 
 ## Установка
@@ -99,8 +103,13 @@ mazzy-vpn status --api-json        # сырой envelope local API v1
 mazzy-vpn profiles --api-json      # opaque ID без имён файлов движка
 mazzy-vpn protocols list --json    # каталог и честная готовность
 mazzy-vpn protocols diagnose --json
+mazzy-vpn protocols adapters --json # process graph и release gates
+mazzy-vpn agent-transports list --json
+mazzy-vpn agent-transports diagnose --json
 # share URI передаётся через stdin и не печатается обратно
 printf '%s\n' "$SHARE_URI" | mazzy-vpn protocols detect --stdin --json
+mazzy-vpn protocols managed-validate --stdin --json < profile.json
+mazzy-vpn protocols managed-import profile.json --dry-run --json
 mazzy-vpn diagnose
 mazzy-vpn verify                       # реальный egress, geo, DNS и IPv6
 mazzy-vpn verify --speed               # явный ограниченный sample 5 MB
@@ -116,6 +125,11 @@ mazzy-vpn logs
 mazzy-vpn language
 mazzy-vpn language en
 ```
+
+Agent-control catalog является отдельным слоем обратного управления из Web,
+CLI и Telegram. Семь adapters, включая iroh и его альтернативы, пока имеют
+реализованный contract, но не release-ready runtime; diagnostics не скрывает
+этот blocker.
 
 После установки status, list/dashboard и lifecycle-команды CLI/TUI используют
 защищённый `/run/mazzy-vpn/api-v1.sock` без `sudo`. Установщик добавляет

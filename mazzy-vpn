@@ -12,6 +12,8 @@ SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd -- "$(dirname -- "$SELF")" && pwd)"
 API_DIR="${VPNCTL_API_DIR:-}"
 PROTOCOL_REGISTRY_DIR="${VPNCTL_PROTOCOL_REGISTRY_DIR:-}"
+RUNTIME_ADAPTER_REGISTRY_DIR="${VPNCTL_RUNTIME_ADAPTER_REGISTRY_DIR:-}"
+AGENT_CONTROL_REGISTRY_DIR="${VPNCTL_AGENT_CONTROL_REGISTRY_DIR:-}"
 DEFAULT_CONFIG_DIR="/etc/vpnctl/profiles"
 CONFIG_DIR="${VPNCTL_CONFIG_DIR:-}"
 STATE_DIR="${VPNCTL_STATE_DIR:-/var/lib/vpnctl}"
@@ -786,11 +788,56 @@ protocol_registry_path() {
     return 1
 }
 
+runtime_adapter_registry_path() {
+    local candidate
+    if [[ -n "$RUNTIME_ADAPTER_REGISTRY_DIR" ]]; then
+        candidate="$RUNTIME_ADAPTER_REGISTRY_DIR/adapter-registry.json"
+        [[ -r "$candidate" ]] || return 1
+        printf '%s\n' "$candidate"
+        return 0
+    fi
+    for candidate in \
+        "$SCRIPT_DIR/runtime/v1/adapter-registry.json" \
+        "$SCRIPT_DIR/../lib/mazzy-vpn/runtime/v1/adapter-registry.json"; do
+        if [[ -r "$candidate" ]]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+agent_control_registry_path() {
+    local candidate
+    if [[ -n "$AGENT_CONTROL_REGISTRY_DIR" ]]; then
+        candidate="$AGENT_CONTROL_REGISTRY_DIR/registry.json"
+        [[ -r "$candidate" ]] || return 1
+        printf '%s\n' "$candidate"
+        return 0
+    fi
+    for candidate in \
+        "$SCRIPT_DIR/agent-control/v1/registry.json" \
+        "$SCRIPT_DIR/../lib/mazzy-vpn/agent-control/v1/registry.json"; do
+        if [[ -r "$candidate" ]]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
 cmd_protocols_list() {
     local registry
     registry="$(protocol_registry_path)" ||
         die "Protocol registry не найден; переустановите $PRODUCT_NAME"
     command cat -- "$registry" || die "Не удалось прочитать protocol registry"
+}
+
+cmd_protocols_adapters() {
+    local registry
+    registry="$(runtime_adapter_registry_path)" ||
+        die "Runtime adapter registry не найден; переустановите $PRODUCT_NAME"
+    command cat -- "$registry" || die "Не удалось прочитать runtime adapter registry"
 }
 
 cmd_protocols_diagnose() {
@@ -1024,6 +1071,394 @@ cmd_protocols_detect() {
     protocol_detection_result "$registry" "$protocol" share-uri
 }
 
+cmd_protocols_managed_validate() {
+    local encoded byte_count input protocol profile_id display_name render_supported
+    encoded="$(LC_ALL=C head -c 65537 | base64)" || return 1
+    byte_count="$(printf '%s' "$encoded" | base64 -d | wc -c)" || return 1
+    if ((byte_count == 0 || byte_count > 65536)); then
+        jq -cn '{schema_version: 1, valid: false, reason: "invalid-input"}'
+        return 2
+    fi
+    if printf '%s' "$encoded" | base64 -d | od -An -v -tu1 | awk '
+        {
+            for (i = 1; i <= NF; i++) {
+                if (($i < 32 && $i != 9 && $i != 10 && $i != 13) || $i == 127) {
+                    found = 1
+                }
+            }
+        }
+        END { exit !found }
+    '; then
+        jq -cn '{schema_version: 1, valid: false, reason: "invalid-input"}'
+        return 2
+    fi
+    input="$(printf '%s' "$encoded" | base64 -d)" || return 1
+    if ! jq -s -e 'length == 1 and (.[0] | type == "object")' \
+        <<<"$input" >/dev/null 2>&1; then
+        jq -cn '{schema_version: 1, valid: false, reason: "invalid-json"}'
+        return 2
+    fi
+    if ! api_request_has_unique_schema_keys "$input"; then
+        jq -cn '{schema_version: 1, valid: false, reason: "duplicate-key"}'
+        return 2
+    fi
+    # shellcheck disable=SC2016  # jq variables are intentionally literal here.
+    if ! timeout --kill-after=1s 3s jq -e '
+        def closed($allowed):
+            type == "object" and ((keys - $allowed) | length) == 0;
+        def safe_text($maximum):
+            type == "string" and length > 0 and length <= $maximum
+            and all(explode[]; . >= 32 and . != 127);
+        def host:
+            safe_text(253)
+            and test("^[A-Za-z0-9._:-]+$")
+            and (contains("..") | not);
+        def secret:
+            safe_text(1024);
+        def port:
+            type == "number" and floor == . and . >= 1 and . <= 65535;
+        def network:
+            . == "tcp" or . == "udp" or . == "both";
+        def endpoint_ok:
+            closed(["host", "port"])
+            and (.host | host)
+            and (.port | port);
+        def credentials_ok($protocol):
+            if $protocol == "vless" then
+                closed(["uuid"])
+                and (.uuid | type == "string"
+                    and test("^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"))
+            elif $protocol == "tuic" then
+                closed(["uuid", "password"])
+                and (.uuid | type == "string"
+                    and test("^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"))
+                and (.password | secret)
+            elif $protocol == "mieru" or $protocol == "naive" then
+                closed(["username", "password"])
+                and (.username | secret)
+                and (.password | secret)
+            else
+                closed(["password"]) and (.password | secret)
+            end;
+        def tls_ok($protocol):
+            closed([
+                "enabled", "insecure", "server_name", "alpn",
+                "utls_fingerprint", "reality_public_key", "reality_short_id",
+                "certificate_public_key_sha256"
+            ])
+            and (.enabled | type == "boolean")
+            and (.insecure == false)
+            and (.server_name | type == "string" and length <= 253)
+            and ((.alpn // []) | type == "array" and length <= 4
+                and all(.[]; safe_text(32)))
+            and ((.certificate_public_key_sha256 // []) | type == "array"
+                and length <= 4 and all(.[]; safe_text(128)))
+            and (if $protocol == "shadowsocks2022" or $protocol == "mieru" then
+                    .enabled == false and .server_name == ""
+                    and (has("utls_fingerprint") | not)
+                    and (has("reality_public_key") | not)
+                    and (has("reality_short_id") | not)
+                    and (has("certificate_public_key_sha256") | not)
+                 else
+                    .enabled == true and (.server_name | host)
+                 end)
+            and (if has("reality_public_key") or has("reality_short_id") then
+                    $protocol == "vless"
+                    and (.reality_public_key | safe_text(128))
+                    and (.reality_short_id | type == "string"
+                        and test("^[0-9A-Fa-f]{0,16}$"))
+                 else true end);
+        def options_ok($protocol):
+            . as $options
+            | if $protocol == "vless" then
+                closed(["flow", "network"])
+                and ((.flow // "") == "" or (.flow // "") == "xtls-rprx-vision")
+                and ((.network // "both") | network)
+            elif $protocol == "hysteria2" then
+                closed(["up_mbps", "down_mbps", "obfs_type", "obfs_password", "network"])
+                and all([.up_mbps?, .down_mbps?][];
+                    . == null or (type == "number" and floor == . and . >= 1 and . <= 100000))
+                and ((.network // "both") | network)
+                and (if has("obfs_type") or has("obfs_password") then
+                    .obfs_type == "salamander" and (.obfs_password | secret)
+                    else true end)
+            elif $protocol == "tuic" then
+                closed(["congestion_control", "udp_relay_mode", "heartbeat", "network"])
+                and (["cubic", "new_reno", "bbr"] | index($options.congestion_control // "cubic") != null)
+                and (["native", "quic"] | index($options.udp_relay_mode // "native") != null)
+                and ((.heartbeat // "10s") | test("^[1-9][0-9]{0,3}s$"))
+                and ((.network // "both") | network)
+            elif $protocol == "shadowsocks2022" then
+                closed(["method", "network"])
+                and ([
+                    "2022-blake3-aes-128-gcm",
+                    "2022-blake3-aes-256-gcm",
+                    "2022-blake3-chacha20-poly1305"
+                ] | index($options.method) != null)
+                and ((.network // "both") | network)
+            elif $protocol == "trojan" then
+                closed(["network"])
+                and ((.network // "both") | network)
+            elif $protocol == "anytls" then
+                closed(["idle_session_check_interval", "idle_session_timeout", "min_idle_session"])
+                and ((.idle_session_check_interval // "30s") | test("^[1-9][0-9]{0,3}s$"))
+                and ((.idle_session_timeout // "30s") | test("^[1-9][0-9]{0,3}s$"))
+                and ((.min_idle_session // 0) | type == "number" and floor == . and . >= 0 and . <= 64)
+            elif $protocol == "shadowtls" then
+                closed(["version", "network"])
+                and .version == 3
+                and ((.network // "tcp") == "tcp")
+            elif $protocol == "mieru" then
+                closed(["transport", "mtu", "multiplexing", "handshake_mode"])
+                and (["TCP", "UDP"] | index($options.transport) != null)
+                and ((.mtu // 1400) | type == "number" and floor == . and . >= 1280 and . <= 1400)
+                and ([
+                    "MULTIPLEXING_OFF", "MULTIPLEXING_LOW",
+                    "MULTIPLEXING_MIDDLE", "MULTIPLEXING_HIGH"
+                ] | index($options.multiplexing // "MULTIPLEXING_LOW") != null)
+                and (["HANDSHAKE_STANDARD", "HANDSHAKE_NO_WAIT"]
+                    | index($options.handshake_mode // "HANDSHAKE_STANDARD") != null)
+            elif $protocol == "naive" then
+                closed(["proxy_protocol", "tunnel_timeout", "idle_timeout"])
+                and (["https", "quic"] | index($options.proxy_protocol) != null)
+                and ((.tunnel_timeout // 1800) | type == "number" and floor == . and . >= 60 and . <= 86400)
+                and ((.idle_timeout // 600) | type == "number" and floor == . and . >= 30 and . <= 86400)
+                and ((.idle_timeout // 600) <= (.tunnel_timeout // 1800))
+            else false end;
+        def shadowsocks2022_key_ok($method):
+            if $method == "2022-blake3-aes-128-gcm" then
+                test("^[A-Za-z0-9+/]{22}==$")
+            else
+                test("^[A-Za-z0-9+/]{43}=$")
+            end;
+        def dns_ok:
+            . as $dns
+            | closed(["strategy", "servers"])
+            and (["prefer_ipv4", "prefer_ipv6", "ipv4_only", "ipv6_only"]
+                | index($dns.strategy) != null)
+            and (.servers | type == "array" and length >= 1 and length <= 3)
+            and all(.servers[];
+                closed(["server", "server_port", "server_name", "path"])
+                and (.server | host)
+                and (.server_port | port)
+                and (.server_name | host)
+                and (.path | type == "string" and length >= 1 and length <= 256
+                    and startswith("/") and (test("[?#]") | not))
+            );
+        def routing_ok:
+            closed(["mode", "allow_lan"])
+            and .mode == "full-tunnel"
+            and (.allow_lan | type == "boolean");
+        . as $profile
+        | ($profile | closed([
+            "schema_version", "profile_id", "display_name", "protocol",
+            "endpoint", "credentials", "tls", "options", "dns", "routing"
+          ]))
+        and $profile.schema_version == 1
+        and ($profile.profile_id | type == "string"
+            and test("^[a-z][a-z0-9-]{2,63}$"))
+        and ($profile.display_name | safe_text(128))
+        and (["vless", "hysteria2", "mieru", "naive", "tuic", "shadowsocks2022", "trojan", "anytls", "shadowtls"]
+            | index($profile.protocol) != null)
+        and ($profile.endpoint | endpoint_ok)
+        and ($profile.credentials | credentials_ok($profile.protocol))
+        and (if $profile.protocol == "shadowsocks2022" then
+                ($profile.credentials.password
+                    | shadowsocks2022_key_ok($profile.options.method))
+             else true end)
+        and ($profile.tls | tls_ok($profile.protocol))
+        and ($profile.options | options_ok($profile.protocol))
+        and ($profile.dns | dns_ok)
+        and ($profile.routing | routing_ok)
+    ' <<<"$input" >/dev/null 2>&1; then
+        jq -cn '{schema_version: 1, valid: false, reason: "invalid-managed-profile"}'
+        return 2
+    fi
+    display_name="$(jq -r '.display_name' <<<"$input")" || return 1
+    safe_profile_metadata "$display_name" || {
+        jq -cn '{schema_version: 1, valid: false, reason: "unsafe-display-name"}'
+        return 2
+    }
+    protocol="$(jq -r '.protocol' <<<"$input")" || return 1
+    profile_id="$(jq -r '.profile_id' <<<"$input")" || return 1
+    render_supported=true
+    case "$protocol" in
+        mieru|naive|shadowtls) render_supported=false ;;
+    esac
+    jq -cn --arg protocol "$protocol" --arg profile_id "$profile_id" \
+        --argjson render_supported "$render_supported" '
+        {
+            schema_version: 1,
+            valid: true,
+            protocol: $protocol,
+            profile_id: $profile_id,
+            contains_secrets: true,
+            import_support: "partial",
+            renderer: (if $render_supported then "sing-box-1.13.12" else "planned-sidecar-or-chain" end),
+            render_supported: $render_supported,
+            connection_enabled: false
+        }
+    '
+}
+
+managed_import_path_has_symlink() {
+    local path="$1" current="/" component
+    local -a components=()
+    [[ "$path" == /* ]] || return 0
+    IFS=/ read -r -a components <<<"$path"
+    for component in "${components[@]}"; do
+        [[ -n "$component" ]] || continue
+        current="${current%/}/$component"
+        [[ ! -L "$current" ]] || return 0
+        [[ -e "$current" ]] || break
+    done
+    return 1
+}
+
+managed_import_secure_directory() {
+    local dir="$1" parent owner
+    parent="$(dirname -- "$dir")"
+    [[ "$dir" == /* && "$parent" != / ]] ||
+        die "Недопустимый каталог managed-профилей"
+    ! managed_import_path_has_symlink "$parent" ||
+        die "Каталог managed-профилей содержит символическую ссылку"
+    [[ ! -e "$parent" || -d "$parent" ]] ||
+        die "Родительский путь managed-профилей не является каталогом"
+    install -d -m 700 -- "$parent" ||
+        die "Не удалось создать каталог managed-профилей"
+    [[ ! -L "$parent" && -d "$parent" ]] ||
+        die "Небезопасный родительский каталог managed-профилей"
+    install -d -m 700 -- "$dir" ||
+        die "Не удалось создать каталог протокола"
+    [[ ! -L "$dir" && -d "$dir" ]] ||
+        die "Небезопасный каталог managed-профилей"
+    chmod 700 -- "$parent" "$dir" ||
+        die "Не удалось закрыть права каталога managed-профилей"
+    if ((EUID == 0)) && [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" != 1 ]]; then
+        for path in "$parent" "$dir"; do
+            owner="$(stat -c '%u' -- "$path")" ||
+                die "Не удалось проверить владельца managed-профилей"
+            [[ "$owner" == 0 ]] ||
+                die "Каталог managed-профилей должен принадлежать root"
+        done
+    fi
+}
+
+cmd_protocols_managed_import() {
+    local source="" force=0 force_json=false dry_run=0 json=0 validation protocol profile_id
+    local dir target temporary="" lock_file lock_fd would_replace=false
+    local -a original=("$@")
+    while (($#)); do
+        case "$1" in
+            --force) force=1; force_json=true ;;
+            --dry-run) dry_run=1 ;;
+            --json) json=1 ;;
+            --help|-h)
+                say "Использование: $CLI_COMMAND protocols managed-import ФАЙЛ [--dry-run] [--force] --json"
+                return 0
+                ;;
+            -*) die "Неизвестный параметр managed-import: $1" ;;
+            *)
+                [[ -z "$source" ]] || die "Укажите только один managed-профиль"
+                source="$1"
+                ;;
+        esac
+        shift
+    done
+    [[ -n "$source" && "$json" -eq 1 ]] ||
+        die "Использование: $CLI_COMMAND protocols managed-import ФАЙЛ [--dry-run] [--force] --json"
+    [[ -f "$source" && ! -L "$source" && -r "$source" ]] ||
+        die "Managed-профиль должен быть читаемым обычным файлом без symlink"
+    validation="$(cmd_protocols_managed_validate <"$source")" ||
+        die "Managed-профиль не прошёл проверку закрытой схемы"
+    protocol="$(jq -r '.protocol' <<<"$validation")" || return 1
+    profile_id="$(jq -r '.profile_id' <<<"$validation")" || return 1
+    dir="$(import_target_dir "$protocol")"
+    [[ "$dir" == /* ]] || die "Каталог managed-профилей должен быть абсолютным"
+    target="$dir/$profile_id.json"
+    if [[ -e "$target" || -L "$target" ]]; then
+        would_replace=true
+    fi
+    if ((dry_run)); then
+        jq -cn --arg protocol "$protocol" --arg profile_id "$profile_id" \
+            --argjson would_replace "$would_replace" --argjson force "$force_json" '
+            {
+                schema_version: 1,
+                valid: true,
+                dry_run: true,
+                imported: false,
+                protocol: $protocol,
+                profile_id: $profile_id,
+                would_replace: $would_replace,
+                force: $force,
+                contains_secrets: true,
+                connection_enabled: false
+            }
+        '
+        return
+    fi
+
+    require_root protocols managed-import "${original[@]}"
+    command -v flock >/dev/null 2>&1 || die "flock не найден"
+    managed_import_secure_directory "$dir"
+    umask 077
+    lock_file="$dir/.managed-import.lock"
+    exec {lock_fd}>"$lock_file" || die "Не удалось открыть блокировку импорта"
+    chmod 600 -- "$lock_file" || die "Не удалось закрыть права блокировки импорта"
+    flock -x "$lock_fd" || die "Не удалось заблокировать импорт managed-профиля"
+
+    temporary="$(mktemp "$dir/.${profile_id}.import.XXXXXX")" ||
+        die "Не удалось создать временный managed-профиль"
+    if ! install -m 600 -- "$source" "$temporary"; then
+        rm -f -- "$temporary"
+        die "Не удалось подготовить managed-профиль"
+    fi
+    validation="$(cmd_protocols_managed_validate <"$temporary")" || {
+        rm -f -- "$temporary"
+        die "Managed-профиль изменился или не прошёл повторную проверку"
+    }
+    [[ "$(jq -r '.protocol' <<<"$validation")" == "$protocol" &&
+       "$(jq -r '.profile_id' <<<"$validation")" == "$profile_id" ]] || {
+        rm -f -- "$temporary"
+        die "Идентификатор managed-профиля изменился во время импорта"
+    }
+    if [[ -e "$target" || -L "$target" ]]; then
+        if ((force == 0)); then
+            rm -f -- "$temporary"
+            die "Managed-профиль уже существует; для замены добавьте --force"
+        fi
+        [[ -f "$target" && ! -L "$target" ]] || {
+            rm -f -- "$temporary"
+            die "Существующая цель managed-профиля не является обычным файлом"
+        }
+    fi
+    if ((force)); then
+        mv -fT -- "$temporary" "$target" || {
+            rm -f -- "$temporary"
+            die "Не удалось атомарно заменить managed-профиль"
+        }
+    else
+        ln -- "$temporary" "$target" || {
+            rm -f -- "$temporary"
+            die "Managed-профиль уже существует или не может быть создан"
+        }
+        rm -f -- "$temporary"
+    fi
+    chmod 600 -- "$target" || die "Не удалось закрыть права managed-профиля"
+    jq -cn --arg protocol "$protocol" --arg profile_id "$profile_id" \
+        --argjson replaced "$would_replace" '
+        {
+            schema_version: 1,
+            imported: true,
+            protocol: $protocol,
+            profile_id: $profile_id,
+            replaced: $replaced,
+            contains_secrets: true,
+            connection_enabled: false
+        }
+    '
+}
+
 cmd_protocols() {
     case "${1:-}" in
         list)
@@ -1036,13 +1471,100 @@ cmd_protocols() {
                 die "Использование: $CLI_COMMAND protocols diagnose --json"
             cmd_protocols_diagnose
             ;;
+        adapters)
+            [[ $# -eq 2 && "${2:-}" == --json ]] ||
+                die "Использование: $CLI_COMMAND protocols adapters --json"
+            cmd_protocols_adapters
+            ;;
         detect)
             [[ $# -eq 3 && "${2:-}" == --stdin && "${3:-}" == --json ]] ||
                 die "Использование: $CLI_COMMAND protocols detect --stdin --json"
             cmd_protocols_detect
             ;;
+        managed-validate)
+            [[ $# -eq 3 && "${2:-}" == --stdin && "${3:-}" == --json ]] ||
+                die "Использование: $CLI_COMMAND protocols managed-validate --stdin --json"
+            cmd_protocols_managed_validate
+            ;;
+        managed-import)
+            shift
+            cmd_protocols_managed_import "$@"
+            ;;
         *)
-            die "Использование: $CLI_COMMAND protocols list|diagnose|detect"
+            die "Использование: $CLI_COMMAND protocols list|diagnose|adapters|detect|managed-validate|managed-import"
+            ;;
+    esac
+}
+
+cmd_agent_transports_list() {
+    local registry
+    registry="$(agent_control_registry_path)" ||
+        die "Agent-control registry не найден; переустановите $PRODUCT_NAME"
+    command cat -- "$registry" ||
+        die "Не удалось прочитать agent-control registry"
+}
+
+cmd_agent_transports_diagnose() {
+    local registry runtime available_json='{}'
+    registry="$(agent_control_registry_path)" ||
+        die "Agent-control registry не найден; переустановите $PRODUCT_NAME"
+    while IFS= read -r runtime; do
+        if command -v "$runtime" >/dev/null 2>&1; then
+            available_json="$(jq -c --arg runtime "$runtime" \
+                '. + {($runtime): true}' <<<"$available_json")" || return 1
+        else
+            available_json="$(jq -c --arg runtime "$runtime" \
+                '. + {($runtime): false}' <<<"$available_json")" || return 1
+        fi
+    done < <(jq -r '[.transports[].runtime_probes[]] | unique[]' "$registry")
+    jq -c --arg generated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --argjson available "$available_json" '
+        {
+            schema_version: 1,
+            generated_at: $generated_at,
+            layer,
+            runtimes: ([
+                .transports[].runtime_probes[]
+            ] | unique | map({id: ., available: ($available[.] // false)})),
+            transports: [
+                .transports[] |
+                {
+                    id,
+                    display_name,
+                    family,
+                    implementation_mode,
+                    paths,
+                    support,
+                    contract_ready: (.support.contract == "implemented"),
+                    candidate_runtime_available: any(
+                        .runtime_probes[]; $available[.] // false
+                    ),
+                    runtime_ready: (
+                        .support.linux == "implemented"
+                        and (.runtime_probes | length) > 0
+                        and all(.runtime_probes[]; $available[.] // false)
+                    )
+                }
+            ],
+            ingress_channels
+        }
+    ' "$registry"
+}
+
+cmd_agent_transports() {
+    case "${1:-}" in
+        list)
+            [[ $# -eq 2 && "${2:-}" == --json ]] ||
+                die "Использование: $CLI_COMMAND agent-transports list --json"
+            cmd_agent_transports_list
+            ;;
+        diagnose)
+            [[ $# -eq 2 && "${2:-}" == --json ]] ||
+                die "Использование: $CLI_COMMAND agent-transports diagnose --json"
+            cmd_agent_transports_diagnose
+            ;;
+        *)
+            die "Использование: $CLI_COMMAND agent-transports list|diagnose --json"
             ;;
     esac
 }
@@ -1126,8 +1648,11 @@ Usage:
   mazzy-vpn init-config-dir [FOLDER]
   mazzy-vpn language [ru|en|de|zh|ja|ko]
   mazzy-vpn api-info --json
-  mazzy-vpn protocols list|diagnose --json
+  mazzy-vpn protocols list|diagnose|adapters --json
   mazzy-vpn protocols detect --stdin --json
+  mazzy-vpn protocols managed-validate --stdin --json
+  mazzy-vpn protocols managed-import FILE [--dry-run] [--force] --json
+  mazzy-vpn agent-transports list|diagnose --json
   mazzy-vpn planner evaluate --stdin --json
   mazzy-vpn logs [-f] | version
 
@@ -1163,8 +1688,11 @@ Verwendung:
   mazzy-vpn init-config-dir [ORDNER]
   mazzy-vpn language [ru|en|de|zh|ja|ko]
   mazzy-vpn api-info --json
-  mazzy-vpn protocols list|diagnose --json
+  mazzy-vpn protocols list|diagnose|adapters --json
   mazzy-vpn protocols detect --stdin --json
+  mazzy-vpn protocols managed-validate --stdin --json
+  mazzy-vpn protocols managed-import DATEI [--dry-run] [--force] --json
+  mazzy-vpn agent-transports list|diagnose --json
   mazzy-vpn planner evaluate --stdin --json
   mazzy-vpn logs [-f] | version
 
@@ -1200,8 +1728,11 @@ Mazzy VPN — 安全便捷的 Linux VPN 管理工具
   mazzy-vpn init-config-dir [文件夹]
   mazzy-vpn language [ru|en|de|zh|ja|ko]
   mazzy-vpn api-info --json
-  mazzy-vpn protocols list|diagnose --json
+  mazzy-vpn protocols list|diagnose|adapters --json
   mazzy-vpn protocols detect --stdin --json
+  mazzy-vpn protocols managed-validate --stdin --json
+  mazzy-vpn protocols managed-import FILE [--dry-run] [--force] --json
+  mazzy-vpn agent-transports list|diagnose --json
   mazzy-vpn planner evaluate --stdin --json
   mazzy-vpn logs [-f] | version
 
@@ -1237,8 +1768,11 @@ Mazzy VPN — Linux 向けの安全で使いやすい VPN 管理ツール
   mazzy-vpn init-config-dir [フォルダー]
   mazzy-vpn language [ru|en|de|zh|ja|ko]
   mazzy-vpn api-info --json
-  mazzy-vpn protocols list|diagnose --json
+  mazzy-vpn protocols list|diagnose|adapters --json
   mazzy-vpn protocols detect --stdin --json
+  mazzy-vpn protocols managed-validate --stdin --json
+  mazzy-vpn protocols managed-import FILE [--dry-run] [--force] --json
+  mazzy-vpn agent-transports list|diagnose --json
   mazzy-vpn planner evaluate --stdin --json
   mazzy-vpn logs [-f] | version
 
@@ -1274,8 +1808,11 @@ Mazzy VPN — Linux용 안전하고 편리한 VPN 관리 도구
   mazzy-vpn init-config-dir [폴더]
   mazzy-vpn language [ru|en|de|zh|ja|ko]
   mazzy-vpn api-info --json
-  mazzy-vpn protocols list|diagnose --json
+  mazzy-vpn protocols list|diagnose|adapters --json
   mazzy-vpn protocols detect --stdin --json
+  mazzy-vpn protocols managed-validate --stdin --json
+  mazzy-vpn protocols managed-import FILE [--dry-run] [--force] --json
+  mazzy-vpn agent-transports list|diagnose --json
   mazzy-vpn planner evaluate --stdin --json
   mazzy-vpn logs [-f] | version
 
@@ -1326,6 +1863,14 @@ Mazzy VPN - быстрое и безопасное управление VPN в L
   mazzy-vpn protocols list --json   каталог и готовность 13 протоколов
   mazzy-vpn protocols diagnose --json
                                     наличие runtime без раскрытия путей
+  mazzy-vpn protocols adapters --json
+                                    execution graph и честные release gates
+  ... | mazzy-vpn protocols managed-validate --stdin --json
+                                    проверить закрытый managed-профиль
+  mazzy-vpn protocols managed-import ФАЙЛ [--dry-run] [--force] --json
+                                    атомарно сохранить профиль без подключения
+  mazzy-vpn agent-transports list|diagnose --json
+                                    transport contract обратного управления агентами
   ... | mazzy-vpn protocols detect --stdin --json
                                     безопасно распознать URI без его вывода
   ... | mazzy-vpn planner evaluate --stdin --json
@@ -8318,6 +8863,7 @@ main() {
             ;;
         api-info) cmd_api_info "$@" ;;
         protocols) cmd_protocols "$@" ;;
+        agent-transports) cmd_agent_transports "$@" ;;
         planner) cmd_planner "$@" ;;
         list|ls) cmd_list "$@" ;;
         profiles|profile-list)

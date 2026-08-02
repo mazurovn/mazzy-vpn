@@ -14,6 +14,7 @@ flowchart TB
     Desktop["Tauri control center / tray"]
     API["Protected local API v1"]
     Registry["13-protocol registry + safe detector"]
+    RuntimeRegistry["Runtime adapter registry<br/>versions + hard release gates"]
     Planner["planner.evaluate (draft PR #43)<br/>dry-run gates + score"]
     Cache["Sanitized status + profiles cache"]
     Verify["Endpoint probe + actual egress verification"]
@@ -29,6 +30,7 @@ flowchart TB
     Desktop -->|read| Cache
     Desktop -->|typed query/lifecycle| API
     TUI --> Registry
+    Registry --> RuntimeRegistry
     API --> Registry
     API -. development .-> Planner
     Planner --> Registry
@@ -132,3 +134,7 @@ authorized execution/failover and Desktop/mobile integration remain in issue
 #39.
 Censorship/workload fit is backend-derived from the versioned catalog and
 workload; agents supply only bounded observed health evidence.
+
+Reverse control of remote agents is a separate plane with its own registry,
+E2EE envelope and channel policy. See [[Agent Control Gateway]]. iroh, libp2p,
+WebRTC and reverse WSS are agent transports rather than VPN protocols.

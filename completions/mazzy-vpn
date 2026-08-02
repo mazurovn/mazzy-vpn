@@ -7,7 +7,7 @@ _mazzy_vpn()
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    commands="api-info protocols planner list profiles connect quick disconnect reconnect dashboard status diagnose verify validate probe test test-all emergency self-test doctor autostart monitor import import-files import-dir init-config-dir remove logs language help version"
+    commands="api-info protocols agent-transports planner list profiles connect quick disconnect reconnect dashboard status diagnose verify validate probe test test-all emergency self-test doctor autostart monitor import import-files import-dir init-config-dir remove logs language help version"
     protocols="amneziawg wireguard openvpn l2tp"
 
     if ((COMP_CWORD == 1)); then
@@ -16,7 +16,11 @@ _mazzy_vpn()
         mapfile -t COMPREPLY < <(compgen -W "--json" -- "$cur")
     elif [[ "${COMP_WORDS[1]:-}" == "protocols" ]]; then
         mapfile -t COMPREPLY < <(
-            compgen -W "list diagnose detect --json --stdin" -- "$cur"
+            compgen -W "list diagnose adapters detect managed-validate managed-import --json --stdin --dry-run --force" -- "$cur"
+        )
+    elif [[ "${COMP_WORDS[1]:-}" == "agent-transports" ]]; then
+        mapfile -t COMPREPLY < <(
+            compgen -W "list diagnose --json" -- "$cur"
         )
     elif [[ "${COMP_WORDS[1]:-}" == "planner" ]]; then
         mapfile -t COMPREPLY < <(

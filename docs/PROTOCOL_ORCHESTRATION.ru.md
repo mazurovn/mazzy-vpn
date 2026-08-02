@@ -10,27 +10,29 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
 ## Матрица из 13 протоколов
 
-| Протокол | Класс и назначение | Linux connect | Detection |
-|---|---|---:|---:|
-| AmneziaWG | обфусцированный WireGuard-like VPN | готово | готово |
-| WireGuard | стандартный VPN | готово | готово |
-| OpenVPN | TCP/UDP и enterprise VPN | готово | готово |
-| L2TP/IPsec | legacy/enterprise VPN | готово | готово |
-| VLESS / REALITY | proxy + TUN, TLS/REALITY | план | URI/JSON готово |
-| Hysteria 2 | QUIC proxy + TUN, потери и HTTP/3 camouflage | план | URI/JSON готово |
-| Mieru | proxy + TUN, padding и probe resistance | план | URI/JSON готово |
-| NaiveProxy | Chromium HTTP/2/3 proxy + TUN | план | JSON готово |
-| TUIC v5 | QUIC proxy + TUN | план | URI/JSON готово |
-| Shadowsocks 2022 | AEAD 2022 proxy + TUN | план | URI/JSON готово |
-| Trojan | TLS proxy + TUN | план | URI/JSON готово |
-| AnyTLS | multiplexed TLS proxy + TUN | план | URI/JSON готово |
-| ShadowTLS v3 | TLS camouflage transport | план | JSON готово |
+| Протокол | Класс и назначение | Managed import | Linux connect | Detection |
+|---|---|---:|---:|---:|
+| AmneziaWG | обфусцированный WireGuard-like VPN | готово | готово | готово |
+| WireGuard | стандартный VPN | готово | готово | готово |
+| OpenVPN | TCP/UDP и enterprise VPN | готово | готово | готово |
+| L2TP/IPsec | legacy/enterprise VPN | готово | готово | готово |
+| VLESS / REALITY | proxy + TUN, TLS/REALITY | частично | план | URI/JSON готово |
+| Hysteria 2 | QUIC proxy + TUN, потери и HTTP/3 camouflage | частично | план | URI/JSON готово |
+| Mieru | proxy + TUN, padding и probe resistance | частично | план | URI/JSON готово |
+| NaiveProxy | Chromium HTTP/2/3 proxy + TUN | частично | план | JSON готово |
+| TUIC v5 | QUIC proxy + TUN | частично | план | URI/JSON готово |
+| Shadowsocks 2022 | AEAD 2022 proxy + TUN | частично | план | URI/JSON готово |
+| Trojan | TLS proxy + TUN | частично | план | URI/JSON готово |
+| AnyTLS | multiplexed TLS proxy + TUN | частично | план | URI/JSON готово |
+| ShadowTLS v3 | TLS camouflage transport | частично | план | JSON готово |
 
-VLESS, Hysteria 2, TUIC, Shadowsocks, Trojan, AnyTLS и Naive доступны как
-outbound в документации sing-box. VLESS без внешней transport security нельзя
-применять к публичному серверу. NaiveProxy требует совместимый Chromium/Cronet
-runtime и нормальный сертификат: self-signed TLS меняет профиль трафика.
-ShadowTLS v3 является TCP transport, а не самостоятельным L3 VPN.
+VLESS, Hysteria 2, TUIC, Shadowsocks 2022, Trojan и AnyTLS используют целевой
+адаптер sing-box. Mieru 3.32.0 и NaiveProxy 148.0.7778.96-5 требуют отдельных
+loopback SOCKS sidecar и второго TUN-to-SOCKS процесса. VLESS без внешней
+transport security нельзя применять к публичному серверу. NaiveProxy требует
+совместимый Chromium runtime и нормальный сертификат: self-signed TLS меняет
+профиль трафика. ShadowTLS v3 требует typed inner proxy chain и не является
+самостоятельным L3 VPN.
 
 Первичные источники:
 
@@ -56,6 +58,7 @@ pluggable transports полезны для доступа к Tor, но не сч
 flowchart LR
     UI[CLI / Desktop / mobile / agent] --> API[Local API v1]
     API --> Registry[Protocol registry]
+    Registry --> RuntimeRegistry[Runtime adapter registry]
     API --> Planner[Policy planner]
     Planner --> Diagnostics[Validation + probes + history]
     Planner --> Adapter[Platform adapter]
@@ -72,6 +75,11 @@ supply chain и integration tests. Полный пользовательский
 запускать от root: он может содержать неожиданные listeners, пути и удалённые
 rule sets. Runtime-конфигурация должна синтезироваться из allowlist schema.
 
+[`runtime/v1/adapter-registry.json`](../runtime/v1/adapter-registry.json)
+фиксирует четыре execution graph и версии движков-кандидатов. Lifecycle и
+integration tests в нём намеренно остаются `planned`: наличие adapter script в
+пакете не означает поставку или разрешение engine.
+
 ## Распознавание и свои серверы
 
 Текущий detector принимает share URI или один JSON object только через stdin и
@@ -81,6 +89,7 @@ rule sets. Runtime-конфигурация должна синтезирова�
 printf '%s\n' "$SHARE_URI" | mazzy-vpn protocols detect --stdin --json
 mazzy-vpn protocols list --json
 mazzy-vpn protocols diagnose --json
+mazzy-vpn protocols adapters --json
 ```
 
 Для URI detector принимает один завершающий `LF` или `CRLF`, отклоняет
@@ -90,16 +99,40 @@ mazzy-vpn protocols diagnose --json
 Распознаются sing-box/Xray outbound, официальная структура Mieru и
 NaiveProxy `listen`/`proxy`. Это классификация формата, а не полная валидация.
 
-Он не возвращает host, user info, UUID, password, query или fragment. Полный
-импорт своих серверов является следующим backend-срезом:
+Он не возвращает host, user info, UUID, password, query или fragment. Закрытый
+Mazzy managed-профиль своего сервера теперь можно проверить и сохранить:
 
-1. UI передаёт файл/URI в write-only import operation и не читает ключ.
-2. Системный parser проверяет allowlist schema конкретного протокола.
-3. Credential хранится с mode `600` или в platform keystore; наружу выходит
-   только opaque `profile_id` и безопасное display name.
-4. `inspect-import` не меняет сеть; установка требует authorization и
-   `action_id`.
-5. Runtime-конфиг синтезируется, проверяется backend и удаляется после stop.
+```bash
+mazzy-vpn protocols managed-validate --stdin --json < profile.json
+mazzy-vpn protocols managed-import profile.json --dry-run --json
+sudo mazzy-vpn protocols managed-import profile.json --json
+```
+
+Schema v1 покрывает все девять современных записей. Вход содержит только typed
+endpoint, credentials, TLS, DNS и full-tunnel policy; listeners, пути к файлам,
+произвольные route rules, dial marks и insecure TLS структурно запрещены.
+Import отклоняет symlink и duplicate keys, атомарно пишет файл
+`protocol/profile_id.json` в `/etc/vpnctl/profiles`, задаёт каталогам `700`,
+файлам `600` и не отражает endpoint или credential. Поэтому import имеет статус
+`partial`: conversion vendor share URI и platform keystore ещё не готовы.
+
+Пакетный `mazzy-sing-box-adapter` синтезирует фиксированный TUN/DNS/route graph
+для VLESS, Hysteria 2, TUIC, Shadowsocks 2022, Trojan и AnyTLS. Renderer v1
+требует literal IPv4 для proxy и DoH bootstrap и проверяемый TLS, но пока не
+включён в обычный service lifecycle. Mieru и NaiveProxy требуют атомарный
+двухпроцессный sidecar supervisor, ShadowTLS — typed inner-proxy reference;
+поэтому у всех трёх `render_supported:false`.
+
+Оставшийся production flow:
+
+1. Конвертировать проверенные vendor share formats в нейтральную schema без
+   выдачи credential UI или агенту.
+2. Перенести credential из Linux mode `600` в platform keystore, где он есть;
+   наружу оставлять только opaque `profile_id` и безопасное display name.
+3. Поставлять checksum-pinned engines с SBOM/provenance и запускать их native
+   parser до активации.
+4. Добавить authorized lifecycle, supervision, egress verification и rollback.
+5. Пройти network-namespace DNS/IPv4/IPv6/leak/crash tests на каждой платформе.
 
 ## Умный выбор и диагностика
 

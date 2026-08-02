@@ -142,15 +142,40 @@ OpenVPN использует DNS, переданный сервером/проф
 реализованы только для AmneziaWG, WireGuard, OpenVPN и L2TP/IPsec. Остальные
 девять записей не участвуют в lifecycle selection со статусом `planned`.
 
-`mazzy-vpn protocols list --json` и API `protocols.list` возвращают только
+Все девять modern entries теперь имеют закрытый neutral profile validator и
+атомарный root-only Linux import. Для шести протестирован фиксированный
+sing-box config renderer. Отдельный
+[`runtime/v1/adapter-registry.json`](../runtime/v1/adapter-registry.json)
+фиксирует версии engines и process graphs, но оставляет lifecycle и network
+integration tests в статусе `planned`. Mieru и NaiveProxy требуют
+двухпроцессный sidecar supervisor, ShadowTLS — typed inner proxy chain.
+
+`mazzy-vpn protocols list --json`, `protocols adapters --json` и API
+`protocols.list` возвращают только
 публичные capabilities. `protocols detect --stdin --json` классифицирует
 однозначные share URI и ограниченные JSON-структуры, но не выводит host, user
 info, UUID, password, query или fragment. Классифицированный JSON не считается
-валидированным runtime config. Proxy-протоколам нужен отдельный TUN adapter;
+валидированным runtime config. Validation/import принимает только
+`managed-profile.schema.json` и никогда не превращает распознанный vendor JSON
+непосредственно в root execution. Proxy-протоколам нужен отдельный TUN adapter;
 произвольный пользовательский sing-box JSON никогда не является root execution
 format.
 Полная модель описана в
 [документе об оркестрации](PROTOCOL_ORCHESTRATION.ru.md).
+
+## Контур обратного управления агентами
+
+Для управления AI-агентами выделен отдельный versioned contract.
+[`agent-control/v1/registry.json`](../agent-control/v1/registry.json) содержит
+LAN WSS, iroh, libp2p, WebRTC, WebTransport, Tailscale/Headscale и reverse WSS,
+не выдавая их за VPN-протоколы. Web, CLI и Telegram являются ingress channels
+над этими transports. Обычный Telegram Bot явно ограничен low-risk командами и
+не заявляет first-party E2EE; полное управление требует paired Web или Mini App.
+
+Сейчас реализованы contract, package payload и fail-closed diagnostics. Ни один
+agent transport runtime ещё не готов к релизу. E2EE envelope, anti-replay,
+capability policy, path failover и граница отдельного server repository описаны
+в [архитектуре Agent Control](AGENT_CONTROL_ARCHITECTURE.ru.md).
 
 Реализованный query `planner.evaluate` подчинён вычисляемым backend hard
 constraints: platform backend готов, профиль валиден, секрет доступен только

@@ -2,6 +2,9 @@
 
 ## После 1.3.2 — текущая разработка
 
+- добавлен отдельный `agent-control/v1` contract для LAN WSS, iroh, libp2p,
+  WebRTC, WebTransport, Tailscale/Headscale и reverse WSS; runtime support пока
+  `planned`, подробности в [[Agent Control Gateway]];
 - draft [PR #43](https://github.com/mazurovn/mazzy-vpn/pull/43) добавляет
   read-only `planner.evaluate` с пятью backend-owned hard gates, versioned
   scoring и стабильным ранжированием opaque profile IDs;
@@ -12,6 +15,11 @@
   workload, а не принимает назначенным агентом;
 - detector классифицирует bounded JSON для sing-box/Xray, Mieru и NaiveProxy,
   отклоняет duplicate keys и неоднозначные multi-protocol configs;
+- все девять modern profiles получили closed managed schema и атомарный
+  root-only import; шесть имеют закрытый sing-box renderer, но connection
+  lifecycle всё ещё `planned`;
+- runtime adapter registry фиксирует sing-box 1.13.12, Mieru 3.32.0,
+  NaiveProxy 148.0.7778.96-5, process graphs и обязательные rollback/leak gates;
 - Desktop возвращает безопасный reason code для missing/permission/invalid
   profile cache вместо необъяснимого пустого списка;
 - evaluator всегда возвращает `dry_run: true`; history, authorized
@@ -27,8 +35,9 @@
 - добавлен versioned каталог из 13 протоколов, redacted URI detection,
   runtime diagnostics и безопасная read-only операция API `protocols.list`;
 - VLESS, Hysteria 2, Mieru, NaiveProxy и ещё пять современных направлений пока
-  не объявляются готовыми подключениями: остаются TUN/engine adapters и
-  integration gates, перечисленные в [[Protocol Orchestration]].
+  не объявляются готовыми подключениями: безопасный managed import и часть
+  renderer готовы, но остаются engine supply, TUN/service lifecycle, rollback
+  и leak integration gates из [[Protocol Orchestration]].
 
 ## 1.3.0 / Desktop 0.3.0 — предыдущая baseline
 
@@ -124,13 +133,18 @@ The backend now derives censorship/workload fit from the versioned catalog and
 workload. The detector classifies bounded sing-box/Xray, Mieru and NaiveProxy
 JSON without reflecting secrets, and Desktop preserves redacted profile-cache
 failure reasons instead of silently returning an empty catalog.
+All nine modern entries now have a closed neutral managed-profile validator and
+atomic root-only import. Six have a closed sing-box renderer. The versioned
+runtime adapter registry pins candidate versions and keeps service lifecycle,
+rollback and leak tests explicitly planned.
 
 Version 1.3.2 / Desktop 0.3.2 fixes legacy profile-cache compatibility and the
 mixed `/usr/local` versus package `/usr/bin` upgrade conflict. It adds a
 versioned 13-entry protocol catalog, credential-redacted URI detection, runtime
 diagnostics and the read-only `protocols.list` API operation. The nine modern
 proxy/transport entries remain gated adapter work rather than advertised
-connections; see [[Protocol Orchestration]]. It also keeps the real local API
+connections; the newer managed import/renderer foundation does not change that
+release claim. See [[Protocol Orchestration]]. It also keeps the real local API
 response half open after request EOF and tests that path through a delayed Unix
 socket responder.
 

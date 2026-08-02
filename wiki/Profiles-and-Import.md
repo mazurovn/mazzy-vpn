@@ -36,10 +36,23 @@ mazzy-vpn protocols detect --stdin --json < custom-server.json
 ```
 
 Это только безопасная классификация, не полная validation. Duplicate JSON keys,
-несколько документов и смешанные protocol outbounds отклоняются. Импорт и подключение VLESS, Hysteria 2,
-Mieru, NaiveProxy, TUIC, Shadowsocks 2022, Trojan, AnyTLS и ShadowTLS ещё не
-реализованы. Собственные серверы будут добавляться через typed schema и
-root-only secret store, а не через произвольный JSON для запуска от root.
+несколько документов и смешанные protocol outbounds отклоняются. Для VLESS,
+Hysteria 2, Mieru, NaiveProxy, TUIC, Shadowsocks 2022, Trojan, AnyTLS и
+ShadowTLS реализованы закрытая managed schema и атомарный root-only import:
+
+```bash
+mazzy-vpn protocols managed-validate --stdin --json < profile.json
+mazzy-vpn protocols managed-import profile.json --dry-run --json
+sudo mazzy-vpn protocols managed-import profile.json --json
+```
+
+Managed profile — нейтральный формат Mazzy, а не произвольный engine JSON и не
+автоматический import любого vendor share URI. Источник-symlink, duplicate key,
+insecure TLS, пользовательские listener/path/route/mark отклоняются. Файл
+сохраняется как `/etc/vpnctl/profiles/PROTOCOL/PROFILE_ID.json` с mode `600`,
+каталог — `700`; JSON-ответ не содержит endpoint или credential. Статус import
+поэтому `partial`. Подключение всех девяти пока `planned`: не завершены
+поставка engine, service/TUN/DNS/routes, rollback и leak tests.
 
 Endpoint для ping всегда читается из самого профиля: `remote` у OpenVPN,
 `Endpoint=` у WireGuard/AmneziaWG и `gateway`/`remote` у L2TP. Списка серверов
@@ -93,10 +106,22 @@ mazzy-vpn protocols detect --stdin --json < custom-server.json
 ```
 
 This is classification only, not full validation. Duplicate JSON keys, multiple
-documents and mixed protocol outbounds are rejected. Import and connection for VLESS, Hysteria 2, Mieru,
-NaiveProxy, TUIC, Shadowsocks 2022, Trojan, AnyTLS and ShadowTLS are not yet
-implemented. Custom servers will use a typed schema and root-only secret store,
-not arbitrary engine JSON executed as root.
+documents and mixed protocol outbounds are rejected. VLESS, Hysteria 2, Mieru,
+NaiveProxy, TUIC, Shadowsocks 2022, Trojan, AnyTLS and ShadowTLS now have a
+closed managed schema and atomic root-only import:
+
+```bash
+mazzy-vpn protocols managed-validate --stdin --json < profile.json
+mazzy-vpn protocols managed-import profile.json --dry-run --json
+sudo mazzy-vpn protocols managed-import profile.json --json
+```
+
+A managed profile is Mazzy's neutral format, not arbitrary engine JSON or an
+automatic importer for every vendor share URI. Symlink sources, duplicate keys,
+insecure TLS and user-controlled listeners, paths, routes or marks are rejected.
+The response never contains an endpoint or credential. Import is therefore
+`partial`; connection remains `planned` until engine supply, service/TUN/DNS/
+routing, rollback and leak tests pass.
 
 Ping endpoints always come from the profile itself: OpenVPN `remote`,
 WireGuard/AmneziaWG `Endpoint=`, or L2TP `gateway`/`remote`. There is no

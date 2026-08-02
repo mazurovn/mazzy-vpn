@@ -220,8 +220,16 @@ for listing in "$TMP/deb-files" "$TMP/rpm-files"; do
         /usr/bin/mazzyvpn \
         /usr/bin/vpnctl \
         /usr/lib/mazzy-vpn/api/v1/manifest.json \
+        /usr/lib/mazzy-vpn/agent-control/v1/registry.json \
+        /usr/lib/mazzy-vpn/agent-control/v1/schema.json \
+        /usr/lib/mazzy-vpn/agent-control/v1/envelope.schema.json \
+        /usr/lib/mazzy-vpn/agent-control/v1/command.schema.json \
         /usr/lib/mazzy-vpn/protocols/v1/registry.json \
         /usr/lib/mazzy-vpn/protocols/v1/schema.json \
+        /usr/lib/mazzy-vpn/protocols/v1/managed-profile.schema.json \
+        /usr/lib/mazzy-vpn/runtime/mazzy-sing-box-adapter \
+        /usr/lib/mazzy-vpn/runtime/v1/adapter-registry.json \
+        /usr/lib/mazzy-vpn/runtime/v1/schema.json \
         /usr/lib/mazzy-vpn/deny.toml \
         /usr/lib/mazzy-vpn/desktop/package-lock.json \
         /usr/lib/mazzy-vpn/desktop/package.json \
@@ -267,6 +275,20 @@ for extracted_root in "$deb_root" "$rpm_root"; do
     cmp -s "$ROOT/protocols/v1/registry.json" \
         "$extracted_root/usr/lib/mazzy-vpn/protocols/v1/registry.json" ||
         fail "package protocol registry differs from source"
+    cmp -s "$ROOT/protocols/v1/managed-profile.schema.json" \
+        "$extracted_root/usr/lib/mazzy-vpn/protocols/v1/managed-profile.schema.json" ||
+        fail "package managed profile schema differs from source"
+    cmp -s "$ROOT/runtime/mazzy-sing-box-adapter" \
+        "$extracted_root/usr/lib/mazzy-vpn/runtime/mazzy-sing-box-adapter" ||
+        fail "package sing-box adapter differs from source"
+    [[ "$(stat -c '%a' "$extracted_root/usr/lib/mazzy-vpn/runtime/mazzy-sing-box-adapter")" == 755 ]] ||
+        fail "package sing-box adapter mode is not exactly 0755"
+    cmp -s "$ROOT/runtime/v1/adapter-registry.json" \
+        "$extracted_root/usr/lib/mazzy-vpn/runtime/v1/adapter-registry.json" ||
+        fail "package runtime adapter registry differs from source"
+    cmp -s "$ROOT/agent-control/v1/registry.json" \
+        "$extracted_root/usr/lib/mazzy-vpn/agent-control/v1/registry.json" ||
+        fail "package agent-control registry differs from source"
     cmp -s "$ROOT/desktop/ui/app.css" \
         "$extracted_root/usr/lib/mazzy-vpn/desktop/ui/app.css" ||
         fail "package Desktop CSS differs from source"
@@ -297,8 +319,16 @@ for relative in \
     mazzy-vpn \
     install.sh \
     api/v1/manifest.json \
+    agent-control/v1/registry.json \
+    agent-control/v1/schema.json \
+    agent-control/v1/envelope.schema.json \
+    agent-control/v1/command.schema.json \
     protocols/v1/registry.json \
     protocols/v1/schema.json \
+    protocols/v1/managed-profile.schema.json \
+    runtime/mazzy-sing-box-adapter \
+    runtime/v1/adapter-registry.json \
+    runtime/v1/schema.json \
     deny.toml \
     desktop/package-lock.json \
     desktop/package.json \
@@ -325,6 +355,9 @@ for relative in \
     tests/check-glib-backport.py \
     tests/check-linux-packages.sh \
     tests/check-protocol-registry.py \
+    tests/check-agent-control-registry.py \
+    tests/check-managed-protocol-adapter.py \
+    tests/check-runtime-adapter-registry.py \
     tests/run.sh \
     wiki/Desktop-Dashboard-and-Tray.md; do
     [[ -f "$appimage_engine/$relative" ]] ||

@@ -1,0 +1,154 @@
+{
+  "schema_version": 1,
+  "catalog_version": "2026-08-02",
+  "layer": "reverse-agent-control",
+  "status_values": ["implemented", "partial", "planned"],
+  "platforms": ["linux", "windows", "macos", "android", "web"],
+  "transports": [
+    {
+      "id": "lan-wss",
+      "display_name": "LAN WebSocket over TLS",
+      "family": "local-stream",
+      "implementation_mode": "embedded",
+      "runtime_probes": ["mazzy-agent"],
+      "paths": ["local-direct"],
+      "capabilities": {"direct": true, "relay": false, "nat_traversal": false, "browser_client": true, "self_hosted": true},
+      "support": {"contract": "implemented", "diagnostics": "planned", "linux": "planned", "windows": "planned", "macos": "planned", "android": "planned", "web": "planned"},
+      "source": "https://github.com/HelpFreedom/claude-bridge/blob/main/ARCHITECTURE.md"
+    },
+    {
+      "id": "iroh-quic",
+      "display_name": "iroh QUIC",
+      "family": "p2p-quic",
+      "implementation_mode": "sidecar",
+      "runtime_probes": ["mazzy-agent-transport-iroh"],
+      "paths": ["internet-direct", "managed-relay", "self-hosted-relay"],
+      "capabilities": {"direct": true, "relay": true, "nat_traversal": true, "browser_client": false, "self_hosted": true},
+      "support": {"contract": "implemented", "diagnostics": "planned", "linux": "planned", "windows": "planned", "macos": "planned", "android": "planned", "web": "planned"},
+      "source": "https://docs.iroh.computer/what-is-iroh"
+    },
+    {
+      "id": "libp2p-quic",
+      "display_name": "libp2p QUIC and Circuit Relay",
+      "family": "p2p-quic",
+      "implementation_mode": "sidecar",
+      "runtime_probes": ["mazzy-agent-transport-libp2p"],
+      "paths": ["internet-direct", "self-hosted-relay"],
+      "capabilities": {"direct": true, "relay": true, "nat_traversal": true, "browser_client": true, "self_hosted": true},
+      "support": {"contract": "implemented", "diagnostics": "planned", "linux": "planned", "windows": "planned", "macos": "planned", "android": "planned", "web": "planned"},
+      "source": "https://libp2p.io/docs/standalone-connectivity/"
+    },
+    {
+      "id": "webrtc-datachannel",
+      "display_name": "WebRTC DataChannel",
+      "family": "p2p-ice",
+      "implementation_mode": "embedded",
+      "runtime_probes": ["mazzy-agent"],
+      "paths": ["internet-direct", "managed-relay", "self-hosted-relay"],
+      "capabilities": {"direct": true, "relay": true, "nat_traversal": true, "browser_client": true, "self_hosted": true},
+      "support": {"contract": "implemented", "diagnostics": "planned", "linux": "planned", "windows": "planned", "macos": "planned", "android": "planned", "web": "planned"},
+      "source": "https://webrtc.org/getting-started/peer-connections"
+    },
+    {
+      "id": "webtransport",
+      "display_name": "WebTransport over HTTP/3",
+      "family": "brokered-stream",
+      "implementation_mode": "embedded",
+      "runtime_probes": ["mazzy-agent"],
+      "paths": ["managed-relay", "self-hosted-relay"],
+      "capabilities": {"direct": false, "relay": true, "nat_traversal": false, "browser_client": true, "self_hosted": true},
+      "support": {"contract": "implemented", "diagnostics": "planned", "linux": "planned", "windows": "planned", "macos": "planned", "android": "planned", "web": "planned"},
+      "source": "https://libp2p.io/docs/webtransport/"
+    },
+    {
+      "id": "tailscale-headscale",
+      "display_name": "Tailscale or Headscale mesh",
+      "family": "mesh-overlay",
+      "implementation_mode": "external",
+      "runtime_probes": ["tailscale"],
+      "paths": ["internet-direct", "managed-relay", "self-hosted-relay", "mesh"],
+      "capabilities": {"direct": true, "relay": true, "nat_traversal": true, "browser_client": false, "self_hosted": true},
+      "support": {"contract": "implemented", "diagnostics": "planned", "linux": "planned", "windows": "planned", "macos": "planned", "android": "planned", "web": "planned"},
+      "source": "https://headscale.net/stable/about/features/"
+    },
+    {
+      "id": "reverse-wss-broker",
+      "display_name": "Reverse WSS encrypted broker",
+      "family": "brokered-stream",
+      "implementation_mode": "embedded",
+      "runtime_probes": ["mazzy-agent"],
+      "paths": ["managed-relay", "self-hosted-relay"],
+      "capabilities": {"direct": false, "relay": true, "nat_traversal": false, "browser_client": true, "self_hosted": true},
+      "support": {"contract": "implemented", "diagnostics": "planned", "linux": "planned", "windows": "planned", "macos": "planned", "android": "planned", "web": "planned"},
+      "source": "https://github.com/slopus/happy/blob/main/docs/protocol.md"
+    }
+  ],
+  "ingress_channels": [
+    {
+      "id": "web-first-party",
+      "display_name": "Mazzy Web",
+      "trust_model": "paired-first-party",
+      "risk_ceiling": "high",
+      "e2ee_mode": "mandatory",
+      "support": {"contract": "implemented", "diagnostics": "planned", "linux": "planned", "windows": "planned", "macos": "planned", "android": "planned", "web": "planned"}
+    },
+    {
+      "id": "cli-first-party",
+      "display_name": "Mazzy CLI",
+      "trust_model": "local-user",
+      "risk_ceiling": "high",
+      "e2ee_mode": "local-only",
+      "support": {"contract": "implemented", "diagnostics": "planned", "linux": "planned", "windows": "planned", "macos": "planned", "android": "planned", "web": "planned"}
+    },
+    {
+      "id": "telegram-bot",
+      "display_name": "Telegram Bot",
+      "trust_model": "third-party-gateway",
+      "risk_ceiling": "low",
+      "e2ee_mode": "gateway-visible",
+      "support": {"contract": "implemented", "diagnostics": "planned", "linux": "planned", "windows": "planned", "macos": "planned", "android": "planned", "web": "planned"}
+    },
+    {
+      "id": "telegram-mini-app",
+      "display_name": "Telegram Mini App",
+      "trust_model": "paired-first-party",
+      "risk_ceiling": "high",
+      "e2ee_mode": "mandatory",
+      "support": {"contract": "implemented", "diagnostics": "planned", "linux": "planned", "windows": "planned", "macos": "planned", "android": "planned", "web": "planned"}
+    }
+  ],
+  "orchestration": {
+    "policy_version": 1,
+    "path_priority": ["lan-wss", "iroh-quic", "libp2p-quic", "webrtc-datachannel", "tailscale-headscale", "webtransport", "reverse-wss-broker"],
+    "hard_constraints": [
+      "runtime-ready",
+      "paired-peer-authorized",
+      "e2ee-envelope-valid",
+      "anti-replay-valid",
+      "channel-risk-policy-valid",
+      "no-vpn-route-loop"
+    ],
+    "score_factors": [
+      {"id": "route-health", "weight": 30},
+      {"id": "privacy", "weight": 25},
+      {"id": "censorship-fit", "weight": 20},
+      {"id": "latency", "weight": 15},
+      {"id": "battery-cost", "weight": 10}
+    ],
+    "fallback_rules": [
+      "prefer-local-direct",
+      "race-at-most-two-eligible-paths",
+      "keep-one-warm-broker-path",
+      "deduplicate-by-message-id",
+      "resume-from-acknowledged-sequence",
+      "never-downgrade-e2ee"
+    ],
+    "channel_rules": [
+      "telegram-bot-is-low-risk-only",
+      "telegram-bot-must-not-carry-prompts-secrets-or-artifacts",
+      "high-risk-actions-require-first-party-confirmation",
+      "arbitrary-shell-execution-is-not-a-v1-capability",
+      "broker-stores-opaque-ciphertext-only"
+    ]
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mazurovn/mazzy-vpn/agent-control/v1/command.schema.json",
+  "title": "Mazzy agent-control command v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "command_id", "session_id", "actor_id", "source_channel", "capability", "target_id", "issued_at", "expires_at", "risk", "confirmation", "arguments"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "command_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{16,128}$"},
+    "session_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{16,128}$"},
+    "actor_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{3,128}$"},
+    "source_channel": {"enum": ["web-first-party", "cli-first-party", "telegram-bot", "telegram-mini-app"]},
+    "capability": {"enum": ["agent.status", "agent.list", "session.list", "session.create", "session.prompt", "session.pause", "session.cancel", "permission.respond", "artifact.list", "artifact.get"]},
+    "target_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$"},
+    "issued_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "risk": {"enum": ["read-only", "low", "medium", "high"]},
+    "confirmation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "method"],
+      "properties": {
+        "required": {"type": "boolean"},
+        "method": {"enum": ["none", "local-ui", "paired-device", "webauthn", "totp"]},
+        "confirmation_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{16,128}$"}
+      }
+    },
+    "arguments": {"type": "object", "maxProperties": 32}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"risk": {"const": "high"}}, "required": ["risk"]},
+      "then": {
+        "properties": {
+          "confirmation": {
+            "properties": {
+              "required": {"const": true},
+              "method": {"enum": ["local-ui", "paired-device", "webauthn", "totp"]}
+            },
+            "required": ["confirmation_id"]
+          }
+        }
+      }
+    }
+  ]
+}

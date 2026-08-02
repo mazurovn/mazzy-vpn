@@ -1,0 +1,298 @@
+#!/usr/bin/env bash
+# Copyright (C) 2026 Nik m (@mazurovn)
+# SPDX-License-Identifier: AGPL-3.0-or-later
+set -Eeuo pipefail
+
+REQUIRED_VERSION="${MAZZY_SING_BOX_REQUIRED_VERSION:-1.13.12}"
+RUN_ROOT="${VPNCTL_RUN_DIR:-/run/vpnctl}/sing-box"
+
+fail() {
+    printf 'mazzy-sing-box-adapter: %s\n' "$*" >&2
+    exit 1
+}
+
+find_cli() {
+    local script_dir candidate
+    [[ -z "${MAZZY_VPN_CLI:-}" ]] || {
+        printf '%s\n' "$MAZZY_VPN_CLI"
+        return
+    }
+    script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+    for candidate in "$script_dir/../mazzy-vpn" /usr/bin/mazzy-vpn \
+        /usr/local/bin/mazzy-vpn; do
+        [[ -x "$candidate" ]] || continue
+        printf '%s\n' "$candidate"
+        return
+    done
+    return 1
+}
+
+require_privileged_context() {
+    if ((EUID != 0)) && [[ "${MAZZY_ADAPTER_ALLOW_UNPRIVILEGED:-0}" != 1 ]]; then
+        fail "render/check/run requires root"
+    fi
+}
+
+validate_source_file() {
+    local profile="$1" mode owner
+    [[ -f "$profile" && ! -L "$profile" ]] ||
+        fail "profile must be a regular non-symlink file"
+    if ((EUID == 0)) && [[ "${MAZZY_ADAPTER_ALLOW_UNPRIVILEGED:-0}" != 1 ]]; then
+        owner="$(stat -c '%u' -- "$profile")"
+        mode="$(stat -c '%a' -- "$profile")"
+        [[ "$owner" == 0 ]] || fail "profile must be owned by root"
+        ((8#$mode & 077 == 0)) || fail "profile permissions must be 0600 or stricter"
+    fi
+}
+
+validate_profile() {
+    local profile="$1" cli
+    cli="$(find_cli)" || fail "mazzy-vpn CLI not found"
+    "$cli" protocols managed-validate --stdin --json <"$profile"
+}
+
+is_ipv4() {
+    local value="$1" part
+    local -a parts
+    IFS=. read -r -a parts <<<"$value"
+    ((${#parts[@]} == 4)) || return 1
+    for part in "${parts[@]}"; do
+        [[ "$part" =~ ^(0|[1-9][0-9]{0,2})$ ]] || return 1
+        ((10#$part <= 255)) || return 1
+    done
+}
+
+require_leak_safe_bootstrap() {
+    local profile="$1" endpoint dns_server
+    endpoint="$(jq -r '.endpoint.host' "$profile")"
+    is_ipv4 "$endpoint" ||
+        fail "v1 renderer requires an IPv4 proxy endpoint to avoid bootstrap DNS leakage"
+    while IFS= read -r dns_server; do
+        is_ipv4 "$dns_server" ||
+            fail "v1 renderer requires IPv4 DoH server addresses"
+    done < <(jq -r '.dns.servers[].server' "$profile")
+}
+
+render_config() {
+    local profile="$1" output="$2" output_parent temporary
+    validate_source_file "$profile"
+    validate_profile "$profile" >/dev/null || fail "managed profile validation failed"
+    case "$(jq -r '.protocol' "$profile")" in
+        shadowtls)
+            fail "ShadowTLS is a transport and requires an audited typed inner-proxy chain"
+            ;;
+        mieru|naive)
+            fail "Mieru and NaiveProxy require a separate audited sidecar and TUN supervisor"
+            ;;
+    esac
+    require_leak_safe_bootstrap "$profile"
+    output_parent="$(dirname -- "$output")"
+    install -d -m 700 -- "$output_parent"
+    temporary="$(mktemp "$output_parent/.managed-config.XXXXXX")"
+    chmod 600 "$temporary"
+    jq -S --arg log_path "$RUN_ROOT/engine.log" '
+        def network:
+            (.options.network // "both") as $network
+            | if $network == "both" then null else $network end;
+        def tls:
+            .tls as $tls
+            | {
+                enabled: true,
+                server_name: $tls.server_name,
+                insecure: false
+              }
+              + (if ($tls.alpn // [] | length) > 0 then {alpn: $tls.alpn} else {} end)
+              + (if ($tls.utls_fingerprint // "") != "" then {
+                    utls: {enabled: true, fingerprint: $tls.utls_fingerprint}
+                 } else {} end)
+              + (if ($tls.reality_public_key // "") != "" then {
+                    reality: {
+                        enabled: true,
+                        public_key: $tls.reality_public_key,
+                        short_id: $tls.reality_short_id
+                    }
+                 } else {} end)
+              + (if ($tls.certificate_public_key_sha256 // [] | length) > 0 then {
+                    certificate_public_key_sha256: $tls.certificate_public_key_sha256
+                 } else {} end);
+        def outbound:
+            . as $profile
+            | {
+                type: (
+                    if .protocol == "shadowsocks2022" then "shadowsocks"
+                    else .protocol end
+                ),
+                tag: "proxy-out",
+                server: .endpoint.host,
+                server_port: .endpoint.port
+              }
+              + (if .protocol == "vless" then {
+                    uuid: .credentials.uuid,
+                    flow: (.options.flow // ""),
+                    tls: tls
+                 }
+                 elif .protocol == "hysteria2" then {
+                    password: .credentials.password,
+                    up_mbps: (.options.up_mbps // 100),
+                    down_mbps: (.options.down_mbps // 100),
+                    tls: tls
+                 }
+                 + (if (.options.obfs_type // "") != "" then {
+                        obfs: {
+                            type: .options.obfs_type,
+                            password: .options.obfs_password
+                        }
+                    } else {} end)
+                 elif .protocol == "tuic" then {
+                    uuid: .credentials.uuid,
+                    password: .credentials.password,
+                    congestion_control: (.options.congestion_control // "cubic"),
+                    udp_relay_mode: (.options.udp_relay_mode // "native"),
+                    zero_rtt_handshake: false,
+                    heartbeat: (.options.heartbeat // "10s"),
+                    tls: tls
+                 }
+                 elif .protocol == "shadowsocks2022" then {
+                    method: .options.method,
+                    password: .credentials.password
+                 }
+                 elif .protocol == "trojan" then {
+                    password: .credentials.password,
+                    tls: tls
+                 }
+                 elif .protocol == "anytls" then {
+                    password: .credentials.password,
+                    idle_session_check_interval: (.options.idle_session_check_interval // "30s"),
+                    idle_session_timeout: (.options.idle_session_timeout // "30s"),
+                    min_idle_session: (.options.min_idle_session // 0),
+                    tls: tls
+                 }
+                 else error("unsupported managed protocol") end)
+              + (network as $network | if $network == null then {} else {network: $network} end);
+        . as $profile
+        | {
+            log: {level: "warn", output: $log_path, timestamp: true},
+            dns: {
+                servers: [
+                    range(0; ($profile.dns.servers | length)) as $index
+                    | $profile.dns.servers[$index]
+                    | {
+                        type: "https",
+                        tag: ("remote-dns-" + ($index | tostring)),
+                        server: .server,
+                        server_port: .server_port,
+                        path: .path,
+                        detour: "proxy-out",
+                        tls: {
+                            enabled: true,
+                            server_name: .server_name,
+                            insecure: false
+                        }
+                      }
+                ],
+                final: "remote-dns-0",
+                strategy: $profile.dns.strategy,
+                independent_cache: true
+            },
+            inbounds: [{
+                type: "tun",
+                tag: "tun-in",
+                interface_name: "mazzytun0",
+                address: ["172.19.0.1/30", "fdfe:dcba:9876::1/126"],
+                mtu: 1500,
+                auto_route: true,
+                auto_redirect: true,
+                strict_route: true,
+                stack: "system"
+            } + (if $profile.routing.allow_lan then {
+                route_exclude_address: [
+                    "10.0.0.0/8",
+                    "172.16.0.0/12",
+                    "192.168.0.0/16",
+                    "169.254.0.0/16",
+                    "fc00::/7",
+                    "fe80::/10"
+                ]
+            } else {} end)],
+            outbounds: [$profile | outbound],
+            route: {
+                rules: [{protocol: "dns", action: "hijack-dns"}],
+                final: "proxy-out",
+                auto_detect_interface: true
+            }
+        }
+    ' "$profile" >"$temporary" || {
+        rm -f -- "$temporary"
+        fail "managed runtime config generation failed"
+    }
+    mv -f -- "$temporary" "$output"
+    chmod 600 -- "$output"
+}
+
+check_runtime_version() {
+    local actual
+    command -v sing-box >/dev/null 2>&1 || fail "sing-box runtime not found"
+    actual="$(sing-box version 2>/dev/null | awk 'NR == 1 {print $3}')"
+    [[ "$actual" == "$REQUIRED_VERSION" ]] ||
+        fail "sing-box $REQUIRED_VERSION is required; found ${actual:-unknown}"
+}
+
+run_checked() {
+    local profile="$1" config cleanup_trap child=0 result=0
+    check_runtime_version
+    install -d -m 700 -- "$RUN_ROOT"
+    config="$(mktemp "$RUN_ROOT/config.XXXXXX.json")"
+    printf -v cleanup_trap 'rm -f -- %q' "$config"
+    # shellcheck disable=SC2064  # The escaped concrete path must expand now.
+    trap "$cleanup_trap" EXIT
+    render_config "$profile" "$config"
+    sing-box check -c "$config" || fail "sing-box rejected generated config"
+    sing-box run -c "$config" &
+    child=$!
+    trap '[[ "$child" -eq 0 ]] || kill -TERM "$child" 2>/dev/null || true' TERM INT
+    wait "$child" || result=$?
+    child=0
+    trap - EXIT TERM INT
+    rm -f -- "$config"
+    return "$result"
+}
+
+main() {
+    local command="${1:-}" profile="${2:-}" output="${3:-}" cleanup_trap
+    case "$command" in
+        validate)
+            [[ $# -eq 2 ]] || fail "usage: validate PROFILE"
+            validate_source_file "$profile"
+            validate_profile "$profile"
+            ;;
+        render)
+            [[ $# -eq 3 ]] || fail "usage: render PROFILE OUTPUT"
+            require_privileged_context
+            render_config "$profile" "$output"
+            ;;
+        check)
+            [[ $# -eq 2 ]] || fail "usage: check PROFILE"
+            require_privileged_context
+            check_runtime_version
+            install -d -m 700 -- "$RUN_ROOT"
+            output="$(mktemp "$RUN_ROOT/check.XXXXXX.json")"
+            printf -v cleanup_trap 'rm -f -- %q' "$output"
+            # shellcheck disable=SC2064  # The escaped concrete path must expand now.
+            trap "$cleanup_trap" EXIT
+            render_config "$profile" "$output"
+            sing-box check -c "$output"
+            trap - EXIT
+            rm -f -- "$output"
+            ;;
+        run)
+            [[ $# -eq 2 ]] || fail "usage: run PROFILE"
+            require_privileged_context
+            run_checked "$profile"
+            ;;
+        *)
+            fail "usage: validate|render|check|run"
+            ;;
+    esac
+}
+
+main "$@"

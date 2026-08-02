@@ -10,7 +10,10 @@ Mazzy VPN은 AmneziaWG, WireGuard, OpenVPN 및 NetworkManager L2TP/IPsec을
 검증된 카탈로그는 이제 13개 프로토콜을 포함합니다. 실제 Linux 연결 백엔드는
 위 네 가지에 한정됩니다. VLESS/REALITY, Hysteria 2, Mieru, NaiveProxy,
 TUIC v5, Shadowsocks 2022, Trojan, AnyTLS 및 ShadowTLS v3은 등록되었지만
-연결 상태는 명확히 `planned`입니다. 자세한 내용:
+연결 상태는 명확히 `planned`입니다. 9개 모두 폐쇄형 managed profile
+schema와 원자적 Linux import를 제공하며, 그중 6개는 폐쇄형 sing-box config
+renderer를 제공합니다. 하지만 연결 lifecycle 통합은 아직 완료되지 않았습니다.
+자세한 내용:
 [Protocol orchestration](docs/PROTOCOL_ORCHESTRATION.en.md).
 
 [영문 아키텍처 및 동작 다이어그램](docs/ARCHITECTURE.en.md) ·

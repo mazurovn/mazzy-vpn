@@ -2581,12 +2581,17 @@ stage="$TMP/stage"
    -f "$stage/usr/local/lib/mazzy-vpn/docs/AUDIT_2026-07-28.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/AUDIT_2026-08-01.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/AUDIT_2026-08-01_PROTOCOLS.ru.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/AUDIT_2026-08-02_RUNTIME_AND_AGENTS.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.en.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/api/v1/manifest.json" &&
    -f "$stage/usr/local/lib/mazzy-vpn/api/v1/schema.json" &&
    -f "$stage/usr/local/lib/mazzy-vpn/protocols/v1/registry.json" &&
    -f "$stage/usr/local/lib/mazzy-vpn/protocols/v1/schema.json" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/protocols/v1/managed-profile.schema.json" &&
+   -x "$stage/usr/local/lib/mazzy-vpn/runtime/mazzy-sing-box-adapter" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/runtime/v1/adapter-registry.json" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/runtime/v1/schema.json" &&
    -f "$stage/usr/local/lib/mazzy-vpn/LICENSE" &&
    -f "$stage/usr/local/lib/mazzy-vpn/AUTHORS.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/PRIVACY.md" ]] ||
@@ -2600,6 +2605,15 @@ cmp -s "$ROOT/api/v1/schema.json" \
 cmp -s "$ROOT/protocols/v1/registry.json" \
     "$stage/usr/local/lib/mazzy-vpn/protocols/v1/registry.json" ||
     fail "staged protocol registry differs from the source contract"
+cmp -s "$ROOT/protocols/v1/managed-profile.schema.json" \
+    "$stage/usr/local/lib/mazzy-vpn/protocols/v1/managed-profile.schema.json" ||
+    fail "staged managed profile schema differs from the source contract"
+cmp -s "$ROOT/runtime/mazzy-sing-box-adapter" \
+    "$stage/usr/local/lib/mazzy-vpn/runtime/mazzy-sing-box-adapter" ||
+    fail "staged sing-box adapter differs from source"
+cmp -s "$ROOT/runtime/v1/adapter-registry.json" \
+    "$stage/usr/local/lib/mazzy-vpn/runtime/v1/adapter-registry.json" ||
+    fail "staged runtime adapter registry differs from source"
 "$stage/usr/local/bin/mazzy-vpn" api-info --json |
     cmp -s - "$ROOT/api/v1/manifest.json" ||
     fail "staged CLI does not expose the installed API manifest"
@@ -2950,6 +2964,18 @@ ok "versioned local API contract"
 python3 "$ROOT/tests/check-protocol-registry.py" >/dev/null ||
     fail "protocol registry and orchestration policy are inconsistent"
 ok "protocol registry and AI orchestration policy"
+
+python3 "$ROOT/tests/check-agent-control-registry.py" >/dev/null ||
+    fail "agent-control transport registry and security policy are inconsistent"
+ok "reverse agent-control transports and ingress policy"
+
+python3 "$ROOT/tests/check-managed-protocol-adapter.py" >/dev/null ||
+    fail "managed proxy profile and sing-box renderer boundary are inconsistent"
+ok "managed proxy profiles generate a closed sing-box TUN graph"
+
+python3 "$ROOT/tests/check-runtime-adapter-registry.py" >/dev/null ||
+    fail "runtime adapter registry overclaims an unverified lifecycle"
+ok "modern protocol runtime adapters have explicit execution and release gates"
 
 python3 "$ROOT/tests/check-planner-examples.py" >/dev/null ||
     fail "planner SDK examples do not enforce strict bounded JSON"

@@ -143,14 +143,40 @@ L2TP/IPsec currently have implemented Linux connection adapters. The remaining
 nine entries cannot enter lifecycle selection while their platform state is
 `planned`.
 
-`mazzy-vpn protocols list --json` and API `protocols.list` expose only public
+All nine modern entries now have a closed neutral profile validator and atomic
+root-only Linux import. Six have a tested fixed sing-box config renderer. The
+separate [`runtime/v1/adapter-registry.json`](../runtime/v1/adapter-registry.json)
+pins candidate engines and process graphs while keeping lifecycle and network
+integration tests `planned`. Mieru and NaiveProxy require two-process sidecar
+supervision; ShadowTLS requires a typed inner proxy chain.
+
+`mazzy-vpn protocols list --json`, `protocols adapters --json` and API
+`protocols.list` expose only public
 capabilities. `protocols detect --stdin --json` classifies unambiguous share
 URIs and bounded JSON shapes but returns no host, user info, UUID, password,
 query or fragment. Classified JSON is not a validated runtime configuration.
+Validation/import accepts only `managed-profile.schema.json`; it never promotes
+the detected vendor JSON directly into root execution.
 Proxy protocols require an explicit TUN adapter; arbitrary user-provided
 sing-box JSON is never a root execution format. See
 [Protocol orchestration](PROTOCOL_ORCHESTRATION.en.md) for scoring, custom
 server storage and agent constraints.
+
+## Reverse agent-control plane
+
+Mazzy has a separate versioned contract for reverse control of AI agents.
+[`agent-control/v1/registry.json`](../agent-control/v1/registry.json) catalogs
+LAN WSS, iroh, libp2p, WebRTC, WebTransport, Tailscale/Headscale and reverse
+WSS paths without mislabeling them as VPN protocols. Web, CLI and Telegram are
+ingress channels above those paths. Standard Telegram Bot access is explicitly
+low-risk and gateway-visible; full control requires a paired first-party Web
+or Mini App channel.
+
+The current implementation is contract, packaging and fail-closed diagnostics
+only. No agent transport runtime is release-ready. The E2EE envelope, path
+failover, anti-replay, capability policy and separate gateway repository
+boundary are specified in
+[Reverse agent control](AGENT_CONTROL_ARCHITECTURE.en.md).
 
 The implemented `planner.evaluate` query is subordinate to hard constraints
 computed by the backend: platform backend ready, profile valid, backend-only

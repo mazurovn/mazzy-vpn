@@ -171,12 +171,21 @@ validate_source_tree() {
         docs/PLATFORM_ROADMAP.en.md docs/PLATFORM_ROADMAP.ru.md \
         docs/PROTOCOL_ORCHESTRATION.en.md \
         docs/PROTOCOL_ORCHESTRATION.ru.md \
+        docs/AGENT_CONTROL_ARCHITECTURE.en.md \
+        docs/AGENT_CONTROL_ARCHITECTURE.ru.md \
         docs/FEATURE_PARITY.md docs/capabilities.json \
         docs/API_CONTRACT.en.md docs/API_CONTRACT.ru.md docs/PROJECT_STATUS.md \
         docs/AUDIT_2026-07-28.ru.md docs/AUDIT_2026-08-01.ru.md \
         docs/AUDIT_2026-08-01_PROTOCOLS.ru.md \
+        docs/AUDIT_2026-08-02_RUNTIME_AND_AGENTS.ru.md \
         api/v1/manifest.json api/v1/schema.json \
         protocols/v1/registry.json protocols/v1/schema.json \
+        protocols/v1/managed-profile.schema.json \
+        agent-control/v1/registry.json agent-control/v1/schema.json \
+        agent-control/v1/envelope.schema.json \
+        agent-control/v1/command.schema.json \
+        runtime/mazzy-sing-box-adapter \
+        runtime/v1/adapter-registry.json runtime/v1/schema.json \
         desktop/README.md desktop/src-tauri/tauri.conf.json \
         desktop/src-tauri/src/backend.rs desktop/src-tauri/src/main.rs \
         desktop/ui/app.js desktop/ui/index.html \
@@ -189,6 +198,9 @@ validate_source_tree() {
         packaging/linux/systemd/vpnctl.service.d/10-package-exec.conf \
         tests/run.sh tests/audit-public.sh tests/check-capabilities.py \
         tests/check-api-contract.py tests/check-protocol-registry.py \
+        tests/check-agent-control-registry.py \
+        tests/check-managed-protocol-adapter.py \
+        tests/check-runtime-adapter-registry.py \
         tests/check-linux-packages.sh \
         wiki/Desktop-Dashboard-and-Tray.md wiki/Diagnostics-and-Recovery.md \
         completions/mazzy-vpn systemd/vpnctl.service \
@@ -291,16 +303,27 @@ post_install_checks() {
        -r /usr/local/lib/mazzy-vpn/docs/PLATFORM_ROADMAP.ru.md &&
        -r /usr/local/lib/mazzy-vpn/docs/PROTOCOL_ORCHESTRATION.en.md &&
        -r /usr/local/lib/mazzy-vpn/docs/PROTOCOL_ORCHESTRATION.ru.md &&
+       -r /usr/local/lib/mazzy-vpn/docs/AGENT_CONTROL_ARCHITECTURE.en.md &&
+       -r /usr/local/lib/mazzy-vpn/docs/AGENT_CONTROL_ARCHITECTURE.ru.md &&
        -r /usr/local/lib/mazzy-vpn/docs/API_CONTRACT.en.md &&
        -r /usr/local/lib/mazzy-vpn/docs/API_CONTRACT.ru.md &&
        -r /usr/local/lib/mazzy-vpn/docs/PROJECT_STATUS.md &&
        -r /usr/local/lib/mazzy-vpn/docs/AUDIT_2026-07-28.ru.md &&
        -r /usr/local/lib/mazzy-vpn/docs/AUDIT_2026-08-01.ru.md &&
        -r /usr/local/lib/mazzy-vpn/docs/AUDIT_2026-08-01_PROTOCOLS.ru.md &&
+       -r /usr/local/lib/mazzy-vpn/docs/AUDIT_2026-08-02_RUNTIME_AND_AGENTS.ru.md &&
        -r /usr/local/lib/mazzy-vpn/api/v1/manifest.json &&
        -r /usr/local/lib/mazzy-vpn/api/v1/schema.json &&
        -r /usr/local/lib/mazzy-vpn/protocols/v1/registry.json &&
        -r /usr/local/lib/mazzy-vpn/protocols/v1/schema.json &&
+       -r /usr/local/lib/mazzy-vpn/protocols/v1/managed-profile.schema.json &&
+       -x /usr/local/lib/mazzy-vpn/runtime/mazzy-sing-box-adapter &&
+       -r /usr/local/lib/mazzy-vpn/runtime/v1/adapter-registry.json &&
+       -r /usr/local/lib/mazzy-vpn/runtime/v1/schema.json &&
+       -r /usr/local/lib/mazzy-vpn/agent-control/v1/registry.json &&
+       -r /usr/local/lib/mazzy-vpn/agent-control/v1/schema.json &&
+       -r /usr/local/lib/mazzy-vpn/agent-control/v1/envelope.schema.json &&
+       -r /usr/local/lib/mazzy-vpn/agent-control/v1/command.schema.json &&
        -r /usr/local/lib/mazzy-vpn/LICENSE &&
        -r /usr/local/lib/mazzy-vpn/AUTHORS.md &&
        -r /usr/local/lib/mazzy-vpn/PRIVACY.md &&
@@ -316,6 +339,16 @@ post_install_checks() {
     "$bin" protocols list --json |
         cmp -s - /usr/local/lib/mazzy-vpn/protocols/v1/registry.json || {
         echo "CLI protocol registry не совпадает с установленным catalog." >&2
+        failed=1
+    }
+    "$bin" protocols adapters --json |
+        cmp -s - /usr/local/lib/mazzy-vpn/runtime/v1/adapter-registry.json || {
+        echo "CLI runtime adapter registry не совпадает с установленным catalog." >&2
+        failed=1
+    }
+    "$bin" agent-transports list --json |
+        cmp -s - /usr/local/lib/mazzy-vpn/agent-control/v1/registry.json || {
+        echo "CLI agent-control registry не совпадает с установленным catalog." >&2
         failed=1
     }
     "$bin" status --json | grep -q '"schema_version":1' || {
@@ -569,13 +602,17 @@ install_files() {
     local docs_dir="$lib_dir/docs"
     local api_dir="$lib_dir/api/v1"
     local protocol_dir="$lib_dir/protocols/v1"
+    local agent_control_dir="$lib_dir/agent-control/v1"
+    local runtime_dir="$lib_dir/runtime"
+    local runtime_contract_dir="$runtime_dir/v1"
     local config_dir="$DESTDIR/etc/vpnctl/profiles"
     local unit_dir="$DESTDIR/etc/systemd/system"
     local tmpfiles_dir="$DESTDIR/usr/lib/tmpfiles.d"
     local completion_dir="$DESTDIR/usr/local/share/bash-completion/completions"
 
     run install -d -m 755 "$bin_dir" "$lib_dir" "$docs_dir" "$api_dir" \
-        "$protocol_dir" \
+        "$protocol_dir" "$agent_control_dir" "$runtime_dir" \
+        "$runtime_contract_dir" \
         "$unit_dir" "$tmpfiles_dir" "$completion_dir"
     run install -d -m 700 "$DESTDIR/etc/vpnctl" "$config_dir" \
         "$config_dir/amneziawg" "$config_dir/wireguard" \
@@ -616,6 +653,10 @@ install_files() {
         "$docs_dir/PROTOCOL_ORCHESTRATION.en.md"
     run install -m 644 "$SCRIPT_DIR/docs/PROTOCOL_ORCHESTRATION.ru.md" \
         "$docs_dir/PROTOCOL_ORCHESTRATION.ru.md"
+    run install -m 644 "$SCRIPT_DIR/docs/AGENT_CONTROL_ARCHITECTURE.en.md" \
+        "$docs_dir/AGENT_CONTROL_ARCHITECTURE.en.md"
+    run install -m 644 "$SCRIPT_DIR/docs/AGENT_CONTROL_ARCHITECTURE.ru.md" \
+        "$docs_dir/AGENT_CONTROL_ARCHITECTURE.ru.md"
     run install -m 644 "$SCRIPT_DIR/docs/FEATURE_PARITY.md" \
         "$docs_dir/FEATURE_PARITY.md"
     run install -m 644 "$SCRIPT_DIR/docs/capabilities.json" \
@@ -632,6 +673,8 @@ install_files() {
         "$docs_dir/AUDIT_2026-08-01.ru.md"
     run install -m 644 "$SCRIPT_DIR/docs/AUDIT_2026-08-01_PROTOCOLS.ru.md" \
         "$docs_dir/AUDIT_2026-08-01_PROTOCOLS.ru.md"
+    run install -m 644 "$SCRIPT_DIR/docs/AUDIT_2026-08-02_RUNTIME_AND_AGENTS.ru.md" \
+        "$docs_dir/AUDIT_2026-08-02_RUNTIME_AND_AGENTS.ru.md"
     run install -m 644 "$SCRIPT_DIR/api/v1/manifest.json" \
         "$api_dir/manifest.json"
     run install -m 644 "$SCRIPT_DIR/api/v1/schema.json" \
@@ -640,6 +683,22 @@ install_files() {
         "$protocol_dir/registry.json"
     run install -m 644 "$SCRIPT_DIR/protocols/v1/schema.json" \
         "$protocol_dir/schema.json"
+    run install -m 644 "$SCRIPT_DIR/protocols/v1/managed-profile.schema.json" \
+        "$protocol_dir/managed-profile.schema.json"
+    run install -m 755 "$SCRIPT_DIR/runtime/mazzy-sing-box-adapter" \
+        "$runtime_dir/mazzy-sing-box-adapter"
+    run install -m 644 "$SCRIPT_DIR/runtime/v1/adapter-registry.json" \
+        "$runtime_contract_dir/adapter-registry.json"
+    run install -m 644 "$SCRIPT_DIR/runtime/v1/schema.json" \
+        "$runtime_contract_dir/schema.json"
+    run install -m 644 "$SCRIPT_DIR/agent-control/v1/registry.json" \
+        "$agent_control_dir/registry.json"
+    run install -m 644 "$SCRIPT_DIR/agent-control/v1/schema.json" \
+        "$agent_control_dir/schema.json"
+    run install -m 644 "$SCRIPT_DIR/agent-control/v1/envelope.schema.json" \
+        "$agent_control_dir/envelope.schema.json"
+    run install -m 644 "$SCRIPT_DIR/agent-control/v1/command.schema.json" \
+        "$agent_control_dir/command.schema.json"
     run install -m 644 "$SCRIPT_DIR/LICENSE" "$lib_dir/LICENSE"
     run install -m 644 "$SCRIPT_DIR/AUTHORS.md" "$lib_dir/AUTHORS.md"
     run install -m 644 "$SCRIPT_DIR/CHANGELOG.md" "$lib_dir/CHANGELOG.md"

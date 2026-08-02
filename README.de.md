@@ -12,7 +12,10 @@ Der geprüfte Katalog umfasst jetzt 13 Protokolle. Funktionale Linux-Backends
 gibt es weiterhin für die vier oben genannten Protokolle. VLESS/REALITY,
 Hysteria 2, Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS und
 ShadowTLS v3 sind registriert, bleiben für Verbindungen aber ausdrücklich
-`planned`. Details: [Protocol orchestration](docs/PROTOCOL_ORCHESTRATION.en.md).
+`planned`. Für alle neun gibt es jetzt ein geschlossenes verwaltetes
+Profilschema und einen atomaren Linux-Import; sechs besitzen einen geschlossenen
+sing-box-Konfigurationsrenderer. Details:
+[Protocol orchestration](docs/PROTOCOL_ORCHESTRATION.en.md).
 
 [Architekturdiagramme auf Englisch](docs/ARCHITECTURE.en.md) ·
 [Architektur auf Russisch](docs/ARCHITECTURE.ru.md)

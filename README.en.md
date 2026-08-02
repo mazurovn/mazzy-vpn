@@ -26,8 +26,11 @@ The versioned catalog now contains 13 protocols. Functional Linux connection
 backends remain AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec. VLESS/REALITY,
 Hysteria 2, Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS and
 ShadowTLS v3 now have a validated registry, redacted capability API and safe
-share URI/JSON classification where unambiguous. Their connection adapters remain
-explicitly `planned` until TUN/routing/rollback integration tests pass.
+share URI/JSON classification where unambiguous. All nine also have a closed
+neutral profile validator and atomic secret-safe Linux import. Six have a
+closed sing-box config renderer, while Mieru/Naive sidecars and the ShadowTLS
+inner chain remain planned. Connection adapters remain explicitly `planned`
+until engine supply and TUN/routing/rollback/leak integration tests pass.
 
 The primary command is `mazzy-vpn`. The installer also creates the compatibility
 aliases `vpnctl` and `mazzyvpn`.
@@ -35,6 +38,7 @@ aliases `vpnctl` and `mazzyvpn`.
 [Architecture and operation diagrams](docs/ARCHITECTURE.en.md) ·
 [local API v1 contract](docs/API_CONTRACT.en.md) ·
 [protocol and AI orchestration](docs/PROTOCOL_ORCHESTRATION.en.md) ·
+[reverse agent-control architecture](docs/AGENT_CONTROL_ARCHITECTURE.en.md) ·
 [Архитектура на русском](docs/ARCHITECTURE.ru.md)
 
 Agent-safe protocol inventory and detection:
@@ -42,8 +46,18 @@ Agent-safe protocol inventory and detection:
 ```bash
 mazzy-vpn protocols list --json
 mazzy-vpn protocols diagnose --json
+mazzy-vpn protocols adapters --json
 printf '%s\n' "$SHARE_URI" | mazzy-vpn protocols detect --stdin --json
+mazzy-vpn protocols managed-validate --stdin --json < profile.json
+mazzy-vpn protocols managed-import profile.json --dry-run --json
+mazzy-vpn agent-transports list --json
+mazzy-vpn agent-transports diagnose --json
 ```
+
+The agent-control catalog is a separate reverse-control layer for Web, CLI and
+Telegram clients. Its seven transport adapters, including iroh and alternatives,
+are contract-only in this branch; diagnostics intentionally report no
+release-ready runtime.
 
 ## Install
 

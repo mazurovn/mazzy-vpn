@@ -17,6 +17,7 @@ PLATFORMS = {"linux", "windows", "android"}
 CURRENT = {"amneziawg", "wireguard", "openvpn", "l2tp"}
 REQUESTED = {"vless", "hysteria2", "mieru", "naive"}
 ANTI_CENSORSHIP = {"tuic", "shadowsocks2022", "trojan", "anytls", "shadowtls"}
+MANAGED_IMPORT = REQUESTED | ANTI_CENSORSHIP
 HARD_CONSTRAINTS = [
     "backend-ready",
     "profile-valid",
@@ -86,6 +87,8 @@ def main() -> None:
             fail(f"{protocol_id}: released Linux backend lost implemented status")
         if protocol_id not in CURRENT and support["linux"] == "implemented":
             fail(f"{protocol_id}: catalog overclaims an unverified Linux backend")
+        if protocol_id in MANAGED_IMPORT and support["import"] != "partial":
+            fail(f"{protocol_id}: managed import contract lost partial status")
         if protocol.get("kind") in {"proxy", "transport"} and protocol_id not in CURRENT:
             if support["windows"] == "implemented" or support["android"] == "implemented":
                 fail(f"{protocol_id}: unreleased native backend is marked implemented")

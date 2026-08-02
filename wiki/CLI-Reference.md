@@ -10,7 +10,13 @@
 | `mazzy-vpn profiles --api-json` | каталог с opaque ID без engine filenames |
 | `mazzy-vpn protocols list --json` | versioned каталог 13 протоколов и readiness |
 | `mazzy-vpn protocols diagnose --json` | candidate runtimes и готовность backend |
+| `mazzy-vpn protocols adapters --json` | versioned execution graphs и release gates |
 | `... \| mazzy-vpn protocols detect --stdin --json` | redacted классификация share URI/JSON |
+| `... \| mazzy-vpn protocols managed-validate --stdin --json` | строгая проверка neutral managed profile |
+| `mazzy-vpn protocols managed-import FILE --dry-run --json` | безопасный план импорта без записи |
+| `sudo mazzy-vpn protocols managed-import FILE --json` | атомарный root-only import без подключения |
+| `mazzy-vpn agent-transports list --json` | contract transport-слоя обратного управления агентами |
+| `mazzy-vpn agent-transports diagnose --json` | fail-closed проверка candidate runtimes без секретов |
 | `... \| mazzy-vpn planner evaluate --stdin --json` | draft PR #43: deterministic dry-run rank; ещё не в stable 1.3.2 |
 | `mazzy-vpn quick` | подключить сохранённый default через local API |
 | `mazzy-vpn connect PROTOCOL PROFILE` | выбрать и подключить профиль |
@@ -51,7 +57,13 @@
 | `mazzy-vpn profiles --api-json` | opaque-ID catalog without engine filenames |
 | `mazzy-vpn protocols list --json` | versioned 13-protocol catalog and readiness |
 | `mazzy-vpn protocols diagnose --json` | candidate runtimes and backend readiness |
+| `mazzy-vpn protocols adapters --json` | versioned execution graphs and release gates |
+| `... \| mazzy-vpn protocols managed-validate --stdin --json` | strict neutral managed-profile validation |
+| `mazzy-vpn protocols managed-import FILE --dry-run --json` | import plan without a write |
+| `sudo mazzy-vpn protocols managed-import FILE --json` | atomic root-only import without connection |
 | `... \| mazzy-vpn protocols detect --stdin --json` | redacted share URI/JSON classification |
+| `mazzy-vpn agent-transports list --json` | reverse agent-control transport contract |
+| `mazzy-vpn agent-transports diagnose --json` | fail-closed candidate runtime diagnostics |
 | `... \| mazzy-vpn planner evaluate --stdin --json` | draft PR #43: deterministic dry-run rank; not in stable 1.3.2 yet |
 | `mazzy-vpn quick` | connect the saved default through the local API |
 | `mazzy-vpn connect PROTOCOL PROFILE` | select and connect a profile |

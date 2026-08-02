@@ -35,6 +35,15 @@ authoritative backlog; this page records the verified resumption point.
   [`AUDIT_2026-08-01_PROTOCOLS.ru.md`](AUDIT_2026-08-01_PROTOCOLS.ru.md).
 - The repeat planner, architecture, secret and release-state review is
   [`AUDIT_2026-08-02_PLANNER.ru.md`](AUDIT_2026-08-02_PLANNER.ru.md).
+- The reverse agent-control plane is specified separately in
+  [`AGENT_CONTROL_ARCHITECTURE.ru.md`](AGENT_CONTROL_ARCHITECTURE.ru.md).
+  The v1 contract catalogs seven paths and four ingress channels; all platform
+  runtimes remain planned and are not part of the published releases.
+- The repeat managed-runtime and agent-control audit is
+  [`AUDIT_2026-08-02_RUNTIME_AND_AGENTS.ru.md`](AUDIT_2026-08-02_RUNTIME_AND_AGENTS.ru.md).
+  All nine modern entries now have closed validation and atomic secret-safe
+  Linux import. Six also have a tested closed sing-box config renderer. No new
+  connection lifecycle or platform backend is claimed.
 
 Published release links:
 
@@ -52,21 +61,26 @@ Published release links:
 
 ## Active backlog order
 
-1. [#36 custom-server import](https://github.com/mazurovn/mazzy-vpn/issues/36),
+1. Bootstrap the separate `mazzy-agent-gateway` repository: unprivileged agent,
+   encrypted durable gateway, Web/CLI/Telegram ingress, LAN/reverse-WSS first,
+   then iroh and alternative transport adapters. The contract lives under
+   `agent-control/v1`; a production runtime does not yet exist.
+2. Finish [#36 custom-server import](https://github.com/mazurovn/mazzy-vpn/issues/36)
+   beyond the implemented neutral profile/import foundation,
    [#37 sing-box/TUN adapters](https://github.com/mazurovn/mazzy-vpn/issues/37),
    [#38 Mieru/Naive adapters](https://github.com/mazurovn/mazzy-vpn/issues/38)
    and [#39 AI planner](https://github.com/mazurovn/mazzy-vpn/issues/39)
-2. [#4 Linux Desktop package lifecycle](https://github.com/mazurovn/mazzy-vpn/issues/4)
-3. [#5 shared core and versioned local API](https://github.com/mazurovn/mazzy-vpn/issues/5)
-4. [#12 CLI/TUI parity and automation contract](https://github.com/mazurovn/mazzy-vpn/issues/12)
-5. [#6 profiles](https://github.com/mazurovn/mazzy-vpn/issues/6),
+3. [#4 Linux Desktop package lifecycle](https://github.com/mazurovn/mazzy-vpn/issues/4)
+4. [#5 shared core and versioned local API](https://github.com/mazurovn/mazzy-vpn/issues/5)
+5. [#12 CLI/TUI parity and automation contract](https://github.com/mazurovn/mazzy-vpn/issues/12)
+6. [#6 profiles](https://github.com/mazurovn/mazzy-vpn/issues/6),
    [#8 services/recovery](https://github.com/mazurovn/mazzy-vpn/issues/8) and
    [#9 connection modes](https://github.com/mazurovn/mazzy-vpn/issues/9)
-6. [#7 Windows](https://github.com/mazurovn/mazzy-vpn/issues/7) and
+7. [#7 Windows](https://github.com/mazurovn/mazzy-vpn/issues/7) and
    [#10 macOS](https://github.com/mazurovn/mazzy-vpn/issues/10)
-7. [#13 Android](https://github.com/mazurovn/mazzy-vpn/issues/13) and
+8. [#13 Android](https://github.com/mazurovn/mazzy-vpn/issues/13) and
    [#14 iOS](https://github.com/mazurovn/mazzy-vpn/issues/14)
-8. [#11 cross-platform production gates](https://github.com/mazurovn/mazzy-vpn/issues/11)
+9. [#11 cross-platform production gates](https://github.com/mazurovn/mazzy-vpn/issues/11)
 
 ## Protocol-orchestration work after 1.3.2
 
@@ -86,6 +100,14 @@ read-only planner slice; it is not part of the published 1.3.2 packages:
   redacted catalog, runtime-diagnostic and URI-detection data. Connection stays
   truthfully limited to the four existing Linux backends until audited adapters
   and TUN integration pass their gates.
+- All nine modern protocols now accept only the closed
+  `managed-profile.schema.json` and can be atomically imported under a
+  protocol/profile ID with root-only permissions. This is `partial` import,
+  not vendor-format conversion or connection support.
+- The packaged adapter renders a fixed sing-box 1.13.12 TUN/DNS/routing graph
+  for six protocols. `runtime/v1/adapter-registry.json` keeps lifecycle and
+  integration tests planned. Mieru/Naive need sidecar supervisors; ShadowTLS
+  needs a typed inner proxy chain.
 - Stable API v1 has 27 operations and 14 stable error codes. Draft PR #43 adds
   `planner.evaluate` as operation 28 without changing the API version.
 - The real `socat` client preserves its response half after request EOF. A
@@ -103,7 +125,8 @@ read-only planner slice; it is not part of the published 1.3.2 packages:
   Android `VpnService`; and real integration, rollback and leak tests.
 - The unreleased detector also classifies bounded sing-box/Xray, official Mieru
   and NaiveProxy JSON shapes. It rejects duplicate keys, ambiguous mixed
-  protocols and secret reflection; classification is not import or execution.
+  protocols and secret reflection; classification alone is not import or
+  execution. Managed import is a separate closed-format operation.
 - The capability matrix tracks macOS separately, but strict protocol registry
   v1 has only Linux, Windows and Android fields. Adding per-protocol macOS
   status requires a versioned registry v2; mutating the published v1 shape
@@ -115,10 +138,12 @@ read-only planner slice; it is not part of the published 1.3.2 packages:
 - The regression suite now pins its API socket inside the temporary test root;
   an active installed daemon can no longer replace fixture profiles with the
   host's live profile catalog during a local run.
-- Local patch verification is green: 81 Bash/end-to-end tests, 25 Rust tests,
-  Clippy, ShellCheck, npm audit, cargo-deny, public leak audit and the unpacked
-  AppImage/DEB/RPM lifecycle/source/GUI audit. All 12 documentation screenshots
-  were regenerated at 1680×951 from the localhost-only RFC 5737 fixture.
+- Local patch verification is green: 84 Bash/end-to-end tests, 25 Rust tests,
+  Clippy, ShellCheck, npm audit, public leak audit and the unpacked
+  AppImage/DEB/RPM lifecycle/source/GUI audit. `cargo-deny` was unavailable on
+  this host; the Rust dependency graph is unchanged from the prior clean gate.
+  All 12 documentation screenshots were regenerated at 1680×951 from the
+  localhost-only RFC 5737 fixture.
 
 ## Current implementation slice
 

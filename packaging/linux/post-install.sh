@@ -134,11 +134,18 @@ activate_services() {
 }
 
 verify_payload() {
+    test -x /usr/lib/mazzy-vpn/runtime/mazzy-sing-box-adapter
+    test -r /usr/lib/mazzy-vpn/protocols/v1/managed-profile.schema.json
+    test -r /usr/lib/mazzy-vpn/runtime/v1/adapter-registry.json
     /usr/bin/mazzy-vpn version
     /usr/bin/mazzy-vpn api-info --json |
         cmp -s - /usr/lib/mazzy-vpn/api/v1/manifest.json
     /usr/bin/mazzy-vpn protocols list --json |
         cmp -s - /usr/lib/mazzy-vpn/protocols/v1/registry.json
+    /usr/bin/mazzy-vpn protocols adapters --json |
+        cmp -s - /usr/lib/mazzy-vpn/runtime/v1/adapter-registry.json
+    /usr/bin/mazzy-vpn agent-transports list --json |
+        cmp -s - /usr/lib/mazzy-vpn/agent-control/v1/registry.json
 }
 
 ensure_access_group
