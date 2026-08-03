@@ -145,6 +145,15 @@ def main() -> None:
     for authority in forbidden_agent_authority:
         if authority in javascript or authority in html:
             fail(f"Desktop renderer retains executable Agent Control authority: {authority}")
+    if "const readyProviders = 0;" in javascript:
+        fail("Desktop provider-readiness badge is hard-coded")
+    if (
+        "provider.installed" not in javascript
+        or "provider.remote_control_supported" not in javascript
+        or 'provider.adapter_status === "ready"' not in javascript
+        or 'provider.connection_model !== "diagnostics-only"' not in javascript
+    ):
+        fail("Desktop provider-readiness badge does not enforce runtime readiness")
     if 'previewParameters.get("preview") === "docs"' not in javascript:
         fail("Desktop documentation preview is missing")
     if (

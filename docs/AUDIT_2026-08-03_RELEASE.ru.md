@@ -100,6 +100,10 @@ route/DNS/firewall ресурсов остаются задачами целев
 - Unix candidate обязан быть executable;
 - Windows разрешает только фиксированные `.com`/`.exe`/`.bat`/`.cmd` suffixes
   и не доверяет mutable `PATHEXT`; bare extensionless candidate не принимается.
+- `_service-run` возвращает permanent stop status `77` при API/transition
+  recovery marker, исключая restart loop systemd;
+- Desktop badge считает только installed, remote-capable и runtime-ready
+  provider adapters; hard-coded `0` удалён.
 
 Это не готовое remote agent management. `mazzy-agentd`, pairing, signed E2EE
 envelope, ACK/idempotency runtime, relay, Web/Telegram client и transport

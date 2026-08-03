@@ -1349,7 +1349,12 @@ function renderAgentIntegrations(report) {
     return row;
   }));
 
-  const readyProviders = 0;
+  const readyProviders = providers.filter((provider) =>
+    provider.installed
+      && provider.remote_control_supported
+      && provider.adapter_status === "ready"
+      && provider.connection_model !== "diagnostics-only"
+  ).length;
   const providerBadge = $("#agent-provider-badge");
   providerBadge.textContent = `${readyProviders}/${providers.length}`;
   providerBadge.className = `health-badge ${readyProviders ? "ok" : "bad"}`;

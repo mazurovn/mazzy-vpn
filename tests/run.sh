@@ -2716,9 +2716,10 @@ if grep -Eq 'ip6?[[:space:]]+daddr|oifname "(eth0|adguard0|vpnwg0|vpnovpn0)" acc
     "$FAKE_NFT_RULES_LOG"; then
     fail "boot recovery restored an unverified egress exception"
 fi
-if "$CLI" _service-run >/dev/null 2>&1; then
-    fail "managed service bypassed the transition recovery marker"
-fi
+transition_service_rc=0
+"$CLI" _service-run >/dev/null 2>&1 || transition_service_rc=$?
+[[ "$transition_service_rc" -eq 77 ]] ||
+    fail "managed service did not stop retries behind the transition recovery marker"
 : >"$FAKE_SYSTEMCTL_LOG"
 FAKE_SYSTEMCTL_INACTIVE=1 "$CLI" _health-check >/dev/null 2>&1 || true
 if grep -Eq '^(start|restart) vpnctl\.service$' "$FAKE_SYSTEMCTL_LOG"; then
@@ -2881,9 +2882,10 @@ jq -e '
     fail "shared-lock timeout did not persist the API recovery marker"
 [[ "$(stat -c %a "$VPNCTL_STATE_DIR/api-recovery-required.json")" == "600" ]] ||
     fail "boot infrastructure failure marker is not root-only"
-if "$CLI" _service-run >/dev/null 2>&1; then
-    fail "managed tunnel started after boot recovery lock failure"
-fi
+api_marker_service_rc=0
+"$CLI" _service-run >/dev/null 2>&1 || api_marker_service_rc=$?
+[[ "$api_marker_service_rc" -eq 77 ]] ||
+    fail "managed service did not stop retries behind the API recovery marker"
 : >"$FAKE_SYSTEMCTL_LOG"
 FAKE_SYSTEMCTL_INACTIVE=1 "$CLI" _health-check >/dev/null 2>&1 || true
 if grep -Eq '^(start|restart) vpnctl\.service$' "$FAKE_SYSTEMCTL_LOG"; then
@@ -2909,10 +2911,10 @@ jq -e '
 ok "boot API infrastructure failures persist a fail-closed marker"
 
 assert_recovery_marker_blocks_runtime() {
-    local request_id="$1" blocked_response
-    if "$CLI" _service-run >/dev/null 2>&1; then
-        fail "managed service bypassed recovery marker $request_id"
-    fi
+    local request_id="$1" blocked_response blocked_service_rc=0
+    "$CLI" _service-run >/dev/null 2>&1 || blocked_service_rc=$?
+    [[ "$blocked_service_rc" -eq 77 ]] ||
+        fail "managed service did not stop retries behind recovery marker $request_id"
     : >"$FAKE_SYSTEMCTL_LOG"
     FAKE_SYSTEMCTL_INACTIVE=1 "$CLI" _health-check >/dev/null 2>&1 || true
     if grep -Eq '^(start|restart) vpnctl\.service$' "$FAKE_SYSTEMCTL_LOG"; then

@@ -9574,10 +9574,14 @@ service_run() {
     local desired mode deadline
     ((EUID == 0)) || [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]] ||
         die "_service-run требует root"
-    [[ ! -e "$API_RECOVERY_MARKER" ]] ||
-        die "_service-run заблокирован: требуется ручная проверка API rollback"
-    [[ ! -e "$TRANSITION_RECOVERY_MARKER" ]] ||
-        die "_service-run заблокирован: требуется проверка transition rollback"
+    if [[ -e "$API_RECOVERY_MARKER" ]]; then
+        error "_service-run заблокирован: требуется ручная проверка API rollback"
+        return 77
+    fi
+    if [[ -e "$TRANSITION_RECOVERY_MARKER" ]]; then
+        error "_service-run заблокирован: требуется проверка transition rollback"
+        return 77
+    fi
     selected_from_state || die "Выбранный профиль отсутствует"
     desired="$(state_get DESIRED 2>/dev/null || true)"
     mode="$(state_get MODE 2>/dev/null || printf 'normal')"

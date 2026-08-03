@@ -76,6 +76,10 @@ All notable changes to Mazzy VPN are documented here.
   candidates must be executable; Windows accepts only the fixed
   `.com`/`.exe`/`.bat`/`.cmd` suffix set. Mutable `PATH`, `HOME` and `PATHEXT`
   values cannot redirect diagnostics to an arbitrary file.
+- Recovery markers make `_service-run` return systemd's permanent stop status
+  `77`, preventing `Restart=always` from looping during manual recovery. The
+  Agent Control provider badge is derived from installed, authorized runtime
+  readiness instead of a fixed value.
 - Documented the source-level Happy, Claude Bridge, Paseo and Yep Anywhere
   comparison and separated ingress, E2EE transport and provider-adapter
   boundaries. Typed Codex app-server/Claude/ACP adapters are preferred over a

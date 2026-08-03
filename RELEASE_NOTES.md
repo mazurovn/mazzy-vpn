@@ -51,6 +51,10 @@ package is produced.
   enforced without trusting `PATH`, `HOME` or `PATHEXT`.
 - CI now syntax-checks and shellchecks the runtime adapter and verifies the API
   recovery unit together with the other systemd units.
+- Recovery-marker startup blocks return systemd stop status `77`, so
+  `Restart=always` does not loop while manual recovery is required. Desktop
+  provider readiness is computed from reported adapter state instead of a
+  fixed badge value.
 
 ### Platform status
 
@@ -133,6 +137,9 @@ Mazzy VPN 1.4.0 развивает проверенный Linux control plane д
   и `PATHEXT` не управляют файловым поиском.
 - CI проверяет runtime adapter через `bash -n`/ShellCheck и валидирует API
   recovery unit вместе с остальными systemd unit.
+- Блокировка запуска recovery marker возвращает systemd stop status `77`,
+  поэтому `Restart=always` не создаёт цикл до ручного восстановления. Desktop
+  вычисляет badge provider readiness из состояния adapter, а не из hardcode.
 
 ### Статус платформ
 
