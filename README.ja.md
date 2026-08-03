@@ -66,7 +66,7 @@ Tauri Desktop は Quick Connect、Reconnect、Disconnect、Refresh、
 Self-diagnostics をウィンドウとシステムトレイから提供します。Linux 版は
 インストール済み CLI と連携して動作し、AppImage、DEB、RPM を用意します。
 macOS と Windows はネイティブ VPN バックエンド実装前の UI プレビューです。
-Desktop 0.3 は未署名 preview として公開済みです。Issue #31 はレビュー済みの
+Desktop 0.4 は未署名 preview として公開済みです。Issue #31 はレビュー済みの
 upstream `glib` backport、厳密な source provenance 検証、成功した RustSec、
 Dependabot、CodeQL checks により解決済みです。GUI はプロファイルや鍵を読みません。詳細:
 [Desktop guide (English)](docs/DESKTOP.en.md)。

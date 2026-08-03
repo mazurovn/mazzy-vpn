@@ -14,6 +14,7 @@ fail() {
 filter_safe_system_config() {
     grep -Fvx \
         -e 'systemd/mazzy-vpn-tmpfiles.conf' \
+        -e 'packaging/linux/systemd/mazzy-vpn-api-recovery.service.d/10-package-exec.conf' \
         -e 'packaging/linux/systemd/mazzy-vpn-api.socket.d/10-package-docs.conf' \
         -e 'packaging/linux/systemd/mazzy-vpn-api@.service.d/10-package-exec.conf' \
         -e 'packaging/linux/systemd/vpnctl-health.service.d/10-package-exec.conf' \

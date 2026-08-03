@@ -15,8 +15,9 @@ L2TP/IPsec, безопасно импортирует профили, измер
 профили своего VPN-провайдера или организации; учётная запись Mazzy VPN и
 телеметрия не требуются.
 
-Текущая опубликованная линия — [CLI/TUI 1.3.2](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.2)
-и неподписанный [Desktop 0.3.2 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.2).
+Текущая release-source линия — [CLI/TUI 1.4.0](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.0)
+и неподписанный [Desktop 0.4.0 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.0).
+Версия опубликована только тогда, когда существуют её tag и GitHub Release page.
 Linux Desktop является функциональным control center; Windows и macOS artifacts
 остаются UI preview без native VPN backend. Issue #31 закрыт проверенным
 upstream backport `glib`, точной проверкой source provenance и чистыми
@@ -42,7 +43,7 @@ ShadowTLS ещё не готовы. Подключение всех девяти
 [техническая спецификация R0a](docs/R0_MUTATION_SINGLE_FLIGHT.ru.md) ·
 [Architecture in English](docs/ARCHITECTURE.en.md)
 
-В текущей непубликованной ветке первый срез R0a переводит API lifecycle,
+Релиз 1.4.0 переводит API lifecycle,
 прямой CLI, recovery, health remediation и service-policy команды на общий
 `/run/vpnctl/.mutation.lock`. Это устраняет обнаруженную split-lock гонку, но
 ещё не является целевым `mazzy-vpnd`: общий action journal для всех root paths
@@ -137,7 +138,7 @@ mazzy-vpn language en
 ```
 
 Agent-control catalog является отдельным слоем обратного управления из Web,
-CLI, Desktop и Telegram. В unreleased Desktop уже есть обнаружение Codex/Claude
+CLI, Desktop и Telegram. В Desktop 0.4 есть обнаружение Codex/Claude
 и catalog diagnostics без исполняемых действий. Provider start/pair/stop
 отсутствует в renderer и Tauri IPC до реализации native approval, trusted
 executable resolution и process-tree containment. Это не планируемый first-party
@@ -184,7 +185,7 @@ ping серверов, emergency recovery, doctor, автозапуск и жу�
 
 ![Mazzy VPN Desktop Dashboard на русском](docs/images/dashboard-ru.png)
 
-Tauri Desktop 0.3 для Linux содержит экраны Dashboard, Profiles, Diagnostics,
+Tauri Desktop 0.4 для Linux содержит экраны Dashboard, Profiles, Diagnostics,
 Settings и «О программе», а также системный tray. DEB/RPM устанавливают
 совместимый engine, systemd units и базовые runtime-зависимости через package
 manager; AppImage сохраняет явно разрешённый embedded installer. Клиент
@@ -198,7 +199,7 @@ manager; AppImage сохраняет явно разрешённый embedded in
 Linux-пакеты выпускаются как AppImage, DEB и RPM.
 
 Upgrade и remove DEB/RPM намеренно сохраняют профили `/etc/vpnctl` и state
-`/var/lib/vpnctl`. В опубликованном preview 0.3 issue #31 исправлен точным
+`/var/lib/vpnctl`. В release source preview 0.4 сохранено исправление issue #31 с точным
 upstream backport `glib` с проверкой checksum и всей source delta до cargo-deny;
 advisory ignore list остаётся пустым. До production также нужны clean-device
 install/upgrade/remove, rollback/fault и signing gates на каждом
@@ -207,7 +208,7 @@ install/upgrade/remove, rollback/fault и signing gates на каждом
 «О программе» показывает версии Desktop/engine/platform, автора, copyright,
 лицензию AGPL, принципы приватности и правила безопасной работы.
 
-Desktop 0.3 — полноценный центр управления Linux в статусе preview, но ещё не
+Desktop 0.4 — полноценный центр управления Linux в статусе preview, но ещё не
 финальный самостоятельный Desktop 1.0. Язык-независимая схема API v1,
 защищённый Linux service и lifecycle-клиенты CLI/TUI/Desktop уже реализованы,
 но остальные operation domains ещё не переведены на единый dispatcher. Для

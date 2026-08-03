@@ -4,7 +4,7 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
 [Русская версия](ARCHITECTURE.ru.md) · [Project README](../README.md)
 
-This document describes the current CLI/TUI and Desktop 0.3 architecture. See
+This document describes the current CLI/TUI 1.4 and Desktop 0.4 architecture. See
 the [Desktop 1.0 plan](DESKTOP_ROADMAP.en.md) for the target standalone
 architecture with a shared core and versioned API. The
 [feature-parity matrix](FEATURE_PARITY.md) prevents a preview from being
@@ -445,23 +445,31 @@ previous connection has been restored successfully.
 | `/var/lib/vpnctl/api-actions` | Completed/running action IDs, rollback snapshots and sanitized outcomes | Persistent, directory `700`, records `600`; newest 512 completed outcomes by default |
 | `/var/lib/vpnctl/api-audit.jsonl{,.1}` | Operation, authorization decision and outcome | Persistent, mode `600`; no payload/backend output; 2 MiB rotation with one archive |
 | `/var/lib/vpnctl/api-recovery-required.json` | Failed/missing rollback snapshot marker | Persistent mode `600`; blocks API mutations until explicit administrator acknowledgement |
+| `/var/lib/vpnctl/transition-recovery-required.json` | Unverified tunnel/fallback restoration marker | Persistent mode `600`; records why the nftables transition guard remains fail-closed |
+| `/var/lib/vpnctl/transition-fallback.rules` | Exact external-fallback endpoint allowlist | Persistent mode `600` only while safe fallback restoration may be needed |
 | `/run/vpnctl` | Shared `.mutation.lock`, singleton `.health.lock`, health counter and sanitized runtime log | Cleared at boot |
 | `/run/mazzy-vpn/status.json` | Sanitized Desktop status | Recreated by root, `0640 root:mazzy-vpn`, without keys or endpoint |
 | `/run/mazzy-vpn/api-v1.sock` | Versioned local API transport | Socket `0660 root:mazzy-vpn`, systemd activated |
 | `vpnctl.service` | Owns the active managed tunnel | Long-running, systemd supervised |
 | `vpnctl-health.timer` | Schedules independent health checks | Enabled for unattended recovery |
 | `vpnctl-test-recovery.service` | Repairs interrupted tests after boot | Boot-time oneshot |
+| `mazzy-vpn-api-recovery.service` | Reconciles API actions and restores a minimal nftables deny guard for unresolved transitions | Hardened root boot-time oneshot with `CAP_NET_ADMIN` |
 | `mazzy-vpn-api-recovery.service` | Reconciles interrupted API actions before control services | Hardened root boot-time oneshot |
 
 Security invariants:
 
-- in the current unreleased branch, one managed tunnel and one state-changing
+- in release 1.4, one managed tunnel and one state-changing
   operation are serialized by the shared `.mutation.lock` across API, direct
   CLI, recovery, health remediation and service-policy paths;
 - this is a transitional R0a process lock: the API journal still covers API
   lifecycle only, and the target single `mazzy-vpnd` owner is not implemented;
 - an interrupted API action is reconciled from its pre-action snapshot before
   another mutation starts;
+- lifecycle journal/audit records and snapshots are synchronized before API
+  mutations, and terminal snapshot deletion is synchronized before success;
+- connect, reconnect, tests, emergency selection and health recovery install
+  an output/forward nftables guard before stopping a protected path; it is
+  removed only after the new path or rollback is interface-bound and verified;
 - profile type is detected from content, then validated before import;
 - no private key, credential, personal path or operational profile belongs in
   Git;

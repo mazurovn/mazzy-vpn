@@ -295,6 +295,30 @@ def main() -> None:
         if status != 2 or response.get("reason") != "invalid-managed-profile":
             fail("managed validator accepted insecure TLS")
 
+        invalid_tls_profiles = []
+        arbitrary_utls = profile_for("vless")
+        arbitrary_utls["tls"]["utls_fingerprint"] = "custom-client"  # type: ignore[index]
+        invalid_tls_profiles.append(("arbitrary uTLS fingerprint", arbitrary_utls))
+        numeric_utls = profile_for("vless")
+        numeric_utls["tls"]["utls_fingerprint"] = 7  # type: ignore[index]
+        invalid_tls_profiles.append(("non-string uTLS fingerprint", numeric_utls))
+        duplicate_alpn = profile_for("trojan")
+        duplicate_alpn["tls"]["alpn"] = ["h2", "h2"]  # type: ignore[index]
+        invalid_tls_profiles.append(("duplicate ALPN", duplicate_alpn))
+        short_pin = profile_for("trojan")
+        short_pin["tls"]["certificate_public_key_sha256"] = ["x"]  # type: ignore[index]
+        invalid_tls_profiles.append(("short certificate pin", short_pin))
+        duplicate_pin = profile_for("trojan")
+        duplicate_pin["tls"]["certificate_public_key_sha256"] = [  # type: ignore[index]
+            "A" * 43,
+            "A" * 43,
+        ]
+        invalid_tls_profiles.append(("duplicate certificate pin", duplicate_pin))
+        for label, invalid_profile in invalid_tls_profiles:
+            status, response = validate(invalid_profile)
+            if status != 2 or response.get("reason") != "invalid-managed-profile":
+                fail(f"managed validator accepted {label}")
+
         duplicate = json.dumps(profile_for("vless"))
         duplicate = duplicate.replace(
             '"schema_version": 1,',
@@ -341,7 +365,7 @@ def main() -> None:
         imported_profile = profile_for("vless")
         import_source.write_text(json.dumps(imported_profile), encoding="utf-8")
         import_environment = {
-            **os.environ,
+            **environment,
             "VPNCTL_ALLOW_UNPRIVILEGED": "1",
             "VPNCTL_CONFIG_DIR": str(directory / "profiles"),
         }

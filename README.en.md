@@ -15,8 +15,9 @@ It is a client and control plane rather than a hosted VPN subscription. Use
 profiles from your VPN provider or organization; Mazzy VPN requires no project
 account and collects no telemetry.
 
-The current published line is [CLI/TUI 1.3.2](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.2)
-and the unsigned [Desktop 0.3.2 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.2).
+The current release source line is [CLI/TUI 1.4.0](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.0)
+and the unsigned [Desktop 0.4.0 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.0).
+A version is published only when its linked tag and GitHub Release page exist.
 Linux Desktop is a functional control center; Windows and macOS artifacts are
 UI previews without native VPN backends. Issue #31 is closed with the reviewed
 upstream `glib` backport, exact source-provenance verification and clean
@@ -43,7 +44,7 @@ aliases `vpnctl` and `mazzyvpn`.
 [R0a mutation single-flight specification (RU)](docs/R0_MUTATION_SINGLE_FLIGHT.ru.md) ·
 [Архитектура на русском](docs/ARCHITECTURE.ru.md)
 
-The current unreleased R0a slice moves API lifecycle, direct CLI, recovery,
+Release 1.4.0 moves API lifecycle, direct CLI, recovery,
 health remediation and service-policy commands onto the shared
 `/run/vpnctl/.mutation.lock`. This removes the confirmed split-lock race but is
 not the target `mazzy-vpnd`: a common journal for every root path and proof of
@@ -63,7 +64,7 @@ mazzy-vpn agent-transports diagnose --json
 ```
 
 The agent-control catalog is a separate reverse-control layer for Web, CLI and
-Telegram clients. The unreleased Desktop branch adds Codex/Claude discovery and
+Telegram clients. Desktop 0.4 adds Codex/Claude discovery and
 catalog diagnostics only. Provider start/pair/stop is absent from renderer and
 Tauri IPC until native approval, trusted executable resolution and process-tree
 containment exist.
@@ -208,7 +209,7 @@ Change the language immediately with menu item 16 or
 
 ![Mazzy VPN Desktop Dashboard in English](docs/images/dashboard-en.png)
 
-The Tauri Desktop 0.3 Linux preview provides Dashboard, Profiles, Diagnostics,
+The Tauri Desktop 0.4 Linux preview provides Dashboard, Profiles, Diagnostics,
 Settings and About screens plus a system tray. DEB/RPM own the compatible
 engine, systemd units and base runtime dependencies through the package
 manager; AppImage retains the explicitly authorized embedded installer.
@@ -222,7 +223,7 @@ without first installing the CLI by hand. Packages are available as AppImage,
 DEB and RPM.
 
 DEB/RPM upgrade and removal deliberately preserve `/etc/vpnctl` profiles and
-`/var/lib/vpnctl` state. The published 0.3 preview resolves issue #31 with the
+`/var/lib/vpnctl` state. The 0.4 release source retains the issue #31 fix with the
 exact upstream `glib` backport and verifies the crate checksum and complete
 source delta before cargo-deny; the advisory ignore list remains empty.
 Production status also requires clean-device install/upgrade/remove,
@@ -231,7 +232,7 @@ rollback/fault and signing gates on every supported distribution.
 About records the Desktop/engine/platform versions, author, copyright, AGPL
 license, privacy principles and safe-operation rules.
 
-Desktop 0.3 is a functional Linux control-center preview, not the final
+Desktop 0.4 is a functional Linux control-center preview, not the final
 standalone Desktop 1.0 product. The language-neutral API v1 schema, protected
 Linux service and CLI/TUI/Desktop lifecycle clients are implemented, while
 remaining operation domains have not yet moved to the shared dispatcher.

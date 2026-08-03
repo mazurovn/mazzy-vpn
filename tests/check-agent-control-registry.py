@@ -159,6 +159,49 @@ def main() -> None:
     capabilities = command.get("properties", {}).get("capability", {}).get("enum", [])
     if any("shell" in item or "exec" in item for item in capabilities):
         fail("agent-control v1 exposes arbitrary process execution")
+    command_rules = command.get("allOf")
+    if not isinstance(command_rules, list):
+        fail("agent-control command policy is missing")
+    serialized_rules = json.dumps(command_rules, sort_keys=True)
+    for capability, required_risk in {
+        "agent.status": "read-only",
+        "agent.list": "read-only",
+        "session.list": "read-only",
+        "artifact.list": "read-only",
+        "session.pause": "low",
+        "session.cancel": "low",
+        "session.create": "medium",
+        "session.prompt": "medium",
+        "artifact.get": "medium",
+        "permission.respond": "high",
+    }.items():
+        if capability not in serialized_rules or required_risk not in serialized_rules:
+            fail(f"{capability}: command schema does not pin its risk")
+    telegram_rule = next(
+        (
+            rule.get("then", {}).get("properties", {})
+            for rule in command_rules
+            if rule.get("if", {})
+            .get("properties", {})
+            .get("source_channel", {})
+            .get("const")
+            == "telegram-bot"
+        ),
+        None,
+    )
+    if not isinstance(telegram_rule, dict):
+        fail("Telegram Bot command policy is missing")
+    telegram_capabilities = set(telegram_rule.get("capability", {}).get("enum", []))
+    if telegram_capabilities != {
+        "agent.status",
+        "agent.list",
+        "session.list",
+        "session.pause",
+        "session.cancel",
+    }:
+        fail("Telegram Bot command capabilities exceed the low-risk allowlist")
+    if telegram_rule.get("arguments", {}).get("maxProperties") != 0:
+        fail("Telegram Bot may carry command arguments")
     if "iroh" in {
         item.get("id")
         for item in load(ROOT / "protocols" / "v1" / "registry.json").get(

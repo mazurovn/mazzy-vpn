@@ -40,9 +40,9 @@ Desktop работает без отдельной установки CLI, по�
 client/core. CLI и TUI остаются доступными отдельно и могут управлять тем же
 core, даже когда GUI закрыт.
 
-## Что готово в Desktop 0.3 Linux preview
+## Что готово в Desktop 0.4 Linux preview
 
-В опубликованном preview issue #31 исправлен точным upstream backport `glib`
+В release source preview 0.4 issue #31 исправлен точным upstream backport `glib`
 0.18 с проверенным source provenance и пустым cargo-deny ignore list. PR,
 default-branch security checks и tagged release artifacts прошли.
 
@@ -73,7 +73,7 @@ default-branch security checks и tagged release artifacts прошли.
 - security, accessibility, failure-injection и длительные soak gates.
 
 До закрытия применимых production gates пакеты Desktop имеют статус **preview**.
-Issue #31 и gate публикации Desktop 0.3 закрыты; перечисленные ниже пункты всё
+Issue #31 и gate публикации Desktop 0.4 закрыты; перечисленные ниже пункты всё
 ещё блокируют статус Desktop 1.0.
 
 ## Целевые компоненты

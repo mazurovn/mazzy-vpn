@@ -9,12 +9,12 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 ![Mazzy VPN Desktop Dashboard — English documentation data](images/dashboard-en.png)
 
 Mazzy VPN Desktop is a Tauri 2 application using the shared `mazzy-vpn`
-engine. The Linux 0.3 bundle includes a compatible engine installer, so a
+engine. The Linux 0.4 bundle includes a compatible engine installer, so a
 separate CLI installation is no longer a prerequisite. CLI and TUI remain
 independent clients of the same engine and state.
 
-> **0.3 status:** the Linux control center now covers the main workflow, but it
-> is published as an unsigned preview and remains preview until the
+> **0.4 status:** the Linux control center now covers the main workflow. Its
+> release source is an unsigned preview and remains preview until the
 > [production gates](FEATURE_PARITY.md) pass. Issue #31 is closed with the exact
 > upstream `glib` 0.18 soundness backport, verified source provenance and an
 > empty cargo-deny ignore list. Desktop 1.0 still needs a native shared service,
@@ -22,9 +22,9 @@ independent clients of the same engine and state.
 > updates, clean-device integration tests and migration of the remaining typed
 > `pkexec` operations to the partial versioned local API.
 
-> **Version boundary:** published `desktop-v0.3.2` contains Dashboard,
-> Profiles, Diagnostics, Settings and About. The AI Agents screen and its
-> screenshot below exist only in the current unreleased branch.
+> **Version boundary:** the `desktop-v0.4.0` release source contains Dashboard,
+> Profiles, Diagnostics, Settings, About and diagnostics-only Agent Control.
+> Agent Control does not execute or pair provider processes.
 
 ## Visual tour
 
@@ -39,7 +39,7 @@ banner. They contain no operational profile, endpoint or user IP.
 |---|---|
 | ![Dependencies and service controls](images/settings-en.png) | [English](images/dashboard-en.png) · [Русский](images/dashboard-ru.png) · [Deutsch](images/dashboard-de.png) · [中文](images/dashboard-zh.png) · [日本語](images/dashboard-ja.png) · [한국어](images/dashboard-ko.png) |
 
-| AI-agent control — current unreleased branch only |
+| AI-agent control diagnostics — Desktop 0.4 |
 |---|
 | ![Provider adapters and catalog status](images/agents-en.png) |
 
@@ -55,14 +55,14 @@ Do not use the macOS or Windows previews as traffic-protection tools. Complete
 support requires native Network Extension/launchd and Windows service/Wintun
 backends, code signing and platform-specific integration tests.
 
-## Published 0.3.2 screens and current branch
+## Desktop 0.4.0 screens
 
 1. **Dashboard** — tunnel, Internet, IP, handshake, health, recovery, actual
    egress verification and tray.
 2. **Profiles** — safe file/folder import, search, protocol and location/default
    selection, removal, a whole-list endpoint check with per-location
    reachability/latency/active state, and per-profile live tests.
-3. **AI Agents (unreleased)** — read-only Codex/Claude discovery and catalog
+3. **AI Agents (diagnostics-only)** — read-only Codex/Claude discovery and catalog
    status for seven future transport paths; no provider lifecycle authority.
 4. **Diagnostics** — validation, DNS/ping probes, transactional tests,
    `test-all`, emergency recovery, complete Doctor/self-test output and bounded
@@ -101,19 +101,19 @@ invariants before exposing data to the WebView. The active row is matched by
 opaque `profile_id` or exact config basename; a legacy display-name fallback is
 accepted only when exactly one profile matches.
 
-Desktop 0.3.2 also accepts the legacy 0.2 cache schema, where `profile_id` was
+Desktop 0.4.0 also accepts the legacy 0.2 cache schema, where `profile_id` was
 absent, and derives the same opaque ID as the current CLI. It treats an
 unreadable or invalid cache as unavailable instead of displaying the misleading
 empty-library message. This fixes the observed state where Dashboard counted
 24 profiles while the Profiles screen said none were found.
 
 The versioned protocol registry catalogs 13 entries, but this screen currently
-imports and connects only the four implemented Linux backends. Stable 1.3.2
-provides redacted URI detection, while the unreleased branch also classifies
-bounded JSON. Desktop import, TUN adapters and smart selection remain gated. See
+imports and connects only the four implemented Linux backends. Stable 1.4.0
+provides redacted URI and bounded JSON detection. Desktop modern-profile
+import, TUN adapters and smart selection remain gated. See
 [Protocol orchestration](PROTOCOL_ORCHESTRATION.en.md).
 
-The unreleased AI Agents screen is diagnostics-only. It reports candidate
+The AI Agents screen is diagnostics-only. It reports candidate
 Codex/Claude executables and catalog status without executing those binaries;
 renderer and Tauri invoke expose no start/pair/stop or pairing state. Native
 command-bound approval, trusted executable resolution and process-tree
@@ -227,24 +227,24 @@ manual 1.2 engine from shadowing the newer Desktop package.
 
 DEB:
 
-The commands below use the exact dot-normalized filenames published on the
-`desktop-v0.3.2` GitHub Release page. A local `npm run build:release` output may
+The commands below use the exact dot-normalized filenames intended for the
+`desktop-v0.4.0` GitHub Release page. A local `npm run build:release` output may
 retain spaces from the Tauri product name instead.
 
 ```bash
-sudo apt install ./Mazzy.VPN.Desktop_0.3.2_amd64.deb
+sudo apt install ./Mazzy.VPN.Desktop_0.4.0_amd64.deb
 ```
 
 RPM:
 
 ```bash
-sudo dnf install ./Mazzy.VPN.Desktop-0.3.2-1.x86_64.rpm
+sudo dnf install ./Mazzy.VPN.Desktop-0.4.0-1.x86_64.rpm
 ```
 
 For DEB/RPM, **Settings → Install / update / repair** runs package-safe
 `mazzy-vpn doctor --fix`: it repairs supported missing protocol dependencies
 and service state without copying package files into `/usr/local`. This slice is
-still preview. The published 0.3 artifacts carry the verified issue #31 `glib`
+still preview. The 0.4 release artifacts carry the verified issue #31 `glib`
 backport and a clean RustSec graph.
 Clean-device install/upgrade/remove tests across every supported distribution,
 package rollback/fault injection, AmneziaWG distribution and signing also remain
@@ -253,9 +253,9 @@ open release gates.
 AppImage:
 
 ```bash
-sha256sum -c --ignore-missing Mazzy.VPN.Desktop_0.3.2_SHA256SUMS
-chmod +x ./Mazzy.VPN.Desktop_0.3.2_amd64.AppImage
-./Mazzy.VPN.Desktop_0.3.2_amd64.AppImage
+sha256sum -c --ignore-missing Mazzy.VPN.Desktop_0.4.0_SHA256SUMS
+chmod +x ./Mazzy.VPN.Desktop_0.4.0_amd64.AppImage
+./Mazzy.VPN.Desktop_0.4.0_amd64.AppImage
 ```
 
 AppImage cannot install its own privilege helper. Check `command -v pkexec`

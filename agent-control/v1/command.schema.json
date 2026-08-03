@@ -30,6 +30,47 @@
   },
   "allOf": [
     {
+      "if": {
+        "properties": {"capability": {"enum": ["agent.status", "agent.list", "session.list", "artifact.list"]}},
+        "required": ["capability"]
+      },
+      "then": {"properties": {"risk": {"const": "read-only"}}}
+    },
+    {
+      "if": {
+        "properties": {"capability": {"enum": ["session.pause", "session.cancel"]}},
+        "required": ["capability"]
+      },
+      "then": {"properties": {"risk": {"const": "low"}}}
+    },
+    {
+      "if": {
+        "properties": {"capability": {"enum": ["session.create", "session.prompt", "artifact.get"]}},
+        "required": ["capability"]
+      },
+      "then": {"properties": {"risk": {"const": "medium"}}}
+    },
+    {
+      "if": {
+        "properties": {"capability": {"const": "permission.respond"}},
+        "required": ["capability"]
+      },
+      "then": {"properties": {"risk": {"const": "high"}}}
+    },
+    {
+      "if": {
+        "properties": {"source_channel": {"const": "telegram-bot"}},
+        "required": ["source_channel"]
+      },
+      "then": {
+        "properties": {
+          "capability": {"enum": ["agent.status", "agent.list", "session.list", "session.pause", "session.cancel"]},
+          "risk": {"enum": ["read-only", "low"]},
+          "arguments": {"maxProperties": 0}
+        }
+      }
+    },
+    {
       "if": {"properties": {"risk": {"const": "high"}}, "required": ["risk"]},
       "then": {
         "properties": {

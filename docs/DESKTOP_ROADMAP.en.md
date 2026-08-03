@@ -40,9 +40,9 @@ Desktop works without a separate CLI installation because it bundles a
 compatible client/core. CLI and TUI remain independently installable and can
 control the same core while the GUI is closed.
 
-## Delivered in the Desktop 0.3 Linux preview
+## Delivered in the Desktop 0.4 Linux preview
 
-The published preview resolves issue #31 with an exact upstream `glib` 0.18
+The 0.4 release source resolves issue #31 with an exact upstream `glib` 0.18
 backport, verified source provenance and an empty cargo-deny ignore list. PR,
 default-branch security checks and tagged release artifacts all passed.
 
@@ -73,7 +73,7 @@ default-branch security checks and tagged release artifacts all passed.
 - security, accessibility, failure-injection and long-running soak gates.
 
 Desktop packages remain **preview** until the applicable production gates are
-complete. Issue #31 and the Desktop 0.3 publication gate are complete; the
+complete. Issue #31 and the Desktop 0.4 publication gate are complete; the
 remaining items below still block Desktop 1.0 status.
 
 ## Target components

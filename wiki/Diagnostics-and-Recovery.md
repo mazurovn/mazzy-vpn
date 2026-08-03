@@ -33,7 +33,7 @@ stateDiagram-v2
     HealthTick --> Start: DESIRED=up, service inactive
     HealthTick --> Count1: interface или интернет не работает
     Count1 --> Recover: вторая последовательная ошибка
-    Recover --> Service: reset limit + restart
+    Recover --> Service: один restart без reset start limit
     HealthTick --> Healthy: interface и HTTPS работают
     Healthy --> Service: сброс счётчика
 ```
@@ -45,6 +45,10 @@ stateDiagram-v2
 Транзакционные `test` и `test-all` имеют основной rollback, независимый
 systemd timeout guard и boot recovery. Предыдущее managed или внешнее
 соединение восстанавливается после ошибки, timeout, сигнала или перезагрузки.
+Connect/reconnect/test/emergency/health recovery сначала устанавливают
+dual-stack nftables output/forward guard. Если новый tunnel и rollback не
+подтверждены, guard и
+`/var/lib/vpnctl/transition-recovery-required.json` сохраняются fail-closed.
 
 Hardened root oneshot `mazzy-vpn-api-recovery.service` запускается при загрузке
 до test recovery, managed tunnel, health remediation и local API socket. Test
@@ -54,7 +58,10 @@ oneshot согласует прерванные actions под общим mutati
 имеет упорядоченный `Requires=` на этот gate, поэтому failed recovery блокирует
 activation даже при невозможности записать marker. Health remediation проверяет
 marker под тем же lock и ждёт terminal результат start/restart от systemd, не
-используя `--no-block`.
+используя `--no-block`. Если после перезагрузки существует transition marker,
+oneshot с `CAP_NET_ADMIN` сначала восстанавливает минимальный output/forward
+deny guard. Без test transaction API socket, health и managed service остаются
+заблокированными до ручной проверки.
 
 ## Recovery-required marker
 
@@ -121,11 +128,19 @@ directory, permission or lock failures preserve the fail-closed marker. The
 managed tunnel has an ordered `Requires=` dependency on this gate, so failed
 recovery blocks activation even when the marker cannot be written. Health
 remediation checks the marker while holding the shared lock and waits for
-systemd's terminal start/restart result; it does not use `--no-block`.
+systemd's terminal start/restart result; it does not use `--no-block`. If a
+transition marker survives reboot, the oneshot uses `CAP_NET_ADMIN` to restore
+a minimal output/forward deny guard first. Without a test transaction, the API
+socket, health remediation and managed service remain blocked for administrator
+review.
 
 Manual disconnect writes `DESIRED=down` first, so the watchdog never undoes an
 intentional disconnect. Transactional tests add a main rollback, independent
 systemd timeout guard and boot recovery.
+Connect/reconnect/test/emergency/health recovery install a dual-stack nftables
+output/forward guard first. If neither the new tunnel nor rollback is verified,
+the guard and `/var/lib/vpnctl/transition-recovery-required.json` remain
+fail-closed.
 
 If `/var/lib/vpnctl/api-recovery-required.json` exists, further API mutations
 are blocked. Run `sudo mazzy-vpn doctor`, `sudo mazzy-vpn diagnose`,

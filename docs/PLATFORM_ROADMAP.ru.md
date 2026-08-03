@@ -108,7 +108,7 @@ flowchart LR
 
 ## Linux
 
-Desktop 0.3 опубликован как функциональный preview: он включает
+Desktop 0.4 подготовлен как функциональный preview source: он включает
 engine/bootstrap, профили, тесты, Doctor, журнал и системные настройки. Issue
 #31 закрыт provenance-verified upstream backport `glib`, release checks чистые.
 До Linux Desktop 1.0 остаются versioned service API, полный
@@ -186,7 +186,7 @@ entitlements, сертификаты и macOS runner; их нельзя заме
 
 ## Порядок продвижения релизов
 
-1. Поддерживать опубликованную Linux Desktop 0.3 исправлениями и regression tests.
+1. Поддерживать Linux Desktop 0.4 source line исправлениями и regression tests.
 2. Завершить общий API, protocol adapters и Linux Desktop 1.0.
 3. Выпускать Windows и macOS preview независимо; production только по своему
    gate, без ожидания другой платформы.

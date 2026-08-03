@@ -23,7 +23,11 @@ Mazzy VPN не использует обязательный cloud account и н
 - повторная проверка профиля внутри root service;
 - запрет executable hooks/includes/plugins;
 - один managed tunnel и одна изменяющая операция через общий runtime
-  `.mutation.lock` в текущей непубликованной ветке;
+  `.mutation.lock` в release 1.4;
+- dual-stack nftables transition guard для output/forward остаётся fail-closed,
+  пока не подтверждены новый tunnel или rollback;
+- boot recovery восстанавливает минимальный deny guard при persistent
+  transition marker до запуска управляющих services;
 - атомарное desired state;
 - транзакционный rollback;
 - redaction приватных параметров в расширенных журналах;
@@ -85,8 +89,10 @@ redaction. Desktop uses a restrictive CSP, enum action allowlist, no shell and
 a strictly validated cache with no endpoint, path or config content. OpenVPN
 uses server-provided DNS or an explicit `VPNCTL_OPENVPN_FALLBACK_DNS`; it no
 longer silently substitutes a public resolver.
+An unresolved transition marker restores a minimal output/forward deny guard
+at boot before control services start.
 
-The shared lock is a transitional unreleased R0a boundary, not the target
+The shared lock is the transitional R0a boundary shipped in 1.4, not the target
 `mazzy-vpnd`; direct root paths do not yet share the API action journal and
 rollback does not prove route/DNS/firewall/leak restoration. Desktop Agent
 Control remains diagnostics-only: renderer/Tauri IPC exposes no provider

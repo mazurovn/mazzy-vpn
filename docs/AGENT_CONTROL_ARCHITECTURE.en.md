@@ -67,7 +67,9 @@ provider lifecycle authority must not return before all of them are proven.
 ## Security and channels — target, not runtime
 
 The closed command schema exposes specific capabilities and deliberately has
-no arbitrary `shell.exec`. The draft envelope schema only declares future HPKE
+no arbitrary `shell.exec`. Every capability is bound to one fixed risk class;
+a caller cannot downgrade risk. Telegram Bot accepts only argument-free
+status/list/pause/cancel commands. The draft envelope schema only declares future HPKE
 and Ed25519 identifiers; canonical inputs, vectors, key lifecycle and an E2EE
 runtime do not exist yet. In the target design, a broker stores ciphertext and
 minimal routing metadata, while the endpoint rechecks authorization.

@@ -106,7 +106,7 @@ flowchart LR
 
 ## Linux
 
-Desktop 0.3 is a published functional preview with engine/bootstrap, profiles,
+Desktop 0.4 is a functional preview source with engine/bootstrap, profiles,
 tests, Doctor, logs and system settings. Issue #31 is closed with a
 provenance-verified upstream `glib` backport and clean release checks. Linux
 Desktop 1.0 still requires the versioned service API,
@@ -186,7 +186,7 @@ those requirements.
 
 ## Release promotion order
 
-1. Keep the published Linux Desktop 0.3 line patched and regression-tested.
+1. Keep the Linux Desktop 0.4 source line patched and regression-tested.
 2. Complete the shared API, protocol adapters and Linux Desktop 1.0.
 3. Ship Windows and macOS previews independently; promote each platform only
    when its own gate passes.

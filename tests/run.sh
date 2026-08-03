@@ -53,6 +53,8 @@ cat >"$TMP/fakebin/systemctl" <<'EOF'
 printf '%s\n' "$*" >>"${FAKE_SYSTEMCTL_LOG:?}"
 [[ -z "${FAKE_TRANSITION_LOG:-}" ]] ||
     printf 'systemctl %s\n' "$*" >>"$FAKE_TRANSITION_LOG"
+[[ -z "${FAKE_DURABILITY_LOG:-}" ]] ||
+    printf 'systemctl %s\n' "$*" >>"$FAKE_DURABILITY_LOG"
 
 fake_activate_api_recovery() {
     printf 'activate mazzy-vpn-api-recovery.service\n' \
@@ -124,12 +126,18 @@ case "$*" in
             printf '%s\n' openvpn-too-many-connections \
                 >"${VPNCTL_RUN_DIR:?}/test.failure"
         fi
+        [[ -z "${FAKE_SYSTEMCTL_ACTIVATE_FILE:-}" ]] ||
+            : >"$FAKE_SYSTEMCTL_ACTIVATE_FILE"
         ;;
     "stop vpnctl.service")
         [[ "${FAKE_SYSTEMCTL_STOP_FAIL:-0}" == "1" ]] && exit 1
         ;;
     "is-active vpnctl.service")
-        [[ "${FAKE_SYSTEMCTL_INACTIVE:-0}" == "1" ]] && exit 3
+        if [[ "${FAKE_SYSTEMCTL_INACTIVE:-0}" == "1" &&
+              ( -z "${FAKE_SYSTEMCTL_ACTIVATE_FILE:-}" ||
+                ! -e "$FAKE_SYSTEMCTL_ACTIVATE_FILE" ) ]]; then
+            exit 3
+        fi
         exit 0
         ;;
     *is-active*) exit 0 ;;
@@ -198,6 +206,16 @@ for argument in "$@"; do
     url="$argument"
 done
 case "$url" in
+    *\[2606:4700:4700::1111\]/cdn-cgi/trace*)
+        [[ -z "${FAKE_TRANSITION_CURL_LOG:-}" ]] ||
+            printf '%s\n' "$*" >>"$FAKE_TRANSITION_CURL_LOG"
+        [[ -z "${FAKE_TRANSITION_LOG:-}" ]] ||
+            printf 'curl transition probe v6\n' >>"$FAKE_TRANSITION_LOG"
+        printf 'fl=test\nh=2606:4700:4700::1111\nip=%s\nvisit_scheme=https\nwarp=off\n' \
+            "${FAKE_BOUND_IPV6:-2001:db8::7}"
+        [[ "${FAKE_TRANSITION_PROBE_DUP_IP:-0}" != "1" ]] ||
+            printf 'ip=2001:db8::9\n'
+        ;;
     *1.1.1.1/cdn-cgi/trace*)
         [[ -z "${FAKE_TRANSITION_CURL_LOG:-}" ]] ||
             printf '%s\n' "$*" >>"$FAKE_TRANSITION_CURL_LOG"
@@ -319,6 +337,9 @@ EOF
 cat >"$TMP/fakebin/sync" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"${FAKE_SYNC_LOG:?}"
+[[ -z "${FAKE_DURABILITY_LOG:-}" ]] ||
+    printf 'sync %s\n' "$*" >>"$FAKE_DURABILITY_LOG"
+[[ "${FAKE_SYNC_FAIL_TARGET:-}" != "${*: -1}" ]] || exit 1
 exec /usr/bin/sync "$@"
 EOF
 
@@ -393,18 +414,46 @@ case "$*" in
         exit 1
         ;;
     "link show vpnwg0") exit 0 ;;
+    "link show adguard0") exit 0 ;;
     "link show vpnovpn0")
         [[ "${FAKE_OPENVPN_INTERFACE_MISSING:-0}" != "1" ]]
         exit $?
         ;;
+    "-o -4 address show dev "*" scope global")
+        [[ "${FAKE_IPV6_ONLY:-0}" != "1" ]] || exit 0
+        ;;
+    "-o -6 address show dev "*" scope global")
+        if [[ "${FAKE_IPV6_ONLY:-0}" == "1" ]]; then
+            printf '7: vpnovpn0 inet6 2001:db8::2/64 scope global\n'
+        fi
+        exit 0
+        ;;
     "route show default") printf 'default via 192.0.2.1 dev eth0\n'; exit 0 ;;
+    "-o route get 1.1.1.1") printf '1.1.1.1 dev adguard0 src 10.0.0.2\n'; exit 0 ;;
+    "-o route get 192.0.2.40") printf '192.0.2.40 dev eth0 src 198.51.100.2\n'; exit 0 ;;
 esac
 /usr/sbin/ip "$@"
+EOF
+
+cat >"$TMP/fakebin/ss" <<'EOF'
+#!/usr/bin/env bash
+pid_file="${VPNCTL_ADGUARD_PID_FILE:-}"
+if [[ "$*" == "-H -n -t -u -p" && -n "$pid_file" && -r "$pid_file" ]]; then
+    read -r pid <"$pid_file"
+    if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+        printf 'udp ESTAB 0 0 10.0.0.2:51820 192.0.2.40:443 users:(("adguardvpn-cli",pid=%s,fd=3))\n' \
+            "$pid"
+    fi
+fi
 EOF
 
 cat >"$TMP/fakebin/awg" <<'EOF'
 #!/usr/bin/env bash
 [[ "$*" == "show interfaces" ]] && exit 0
+if [[ "$*" == "show wg0 endpoints" ]]; then
+    printf 'test-peer 192.0.2.41:51820\n'
+    exit 0
+fi
 exit 0
 EOF
 
@@ -482,6 +531,7 @@ export FAKE_SYSTEMD_RUN_LOG="$TMP/systemd-run.log"
 export FAKE_SERVICE_CURL_LOG="$TMP/service-curl.log"
 export FAKE_SERVICE_PID_FILE="$TMP/service-curl.pid"
 export FAKE_SYNC_LOG="$TMP/sync.log"
+export FAKE_DURABILITY_LOG="$TMP/durability.log"
 export FAKE_OPENVPN_LOG="$TMP/openvpn.log"
 export FAKE_RESOLVECTL_LOG="$TMP/resolvectl.log"
 export FAKE_SOCAT_DISPATCH="$CLI"
@@ -510,8 +560,8 @@ export VPNCTL_LEGACY_START="$TMP/fallback-start"
 export VPNCTL_LEGACY_STOP="$TMP/fallback-stop"
 export NO_COLOR=1
 
-"$CLI" version | grep -q '^Mazzy VPN 1\.3\.2 (mazzy-vpn; alias: vpnctl)$'
-"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.3\.2 ' ||
+"$CLI" version | grep -q '^Mazzy VPN 1\.4\.0 (mazzy-vpn; alias: vpnctl)$'
+"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.4\.0 ' ||
     fail "vpnctl compatibility wrapper is broken"
 ok "Mazzy VPN branding and compatibility alias"
 
@@ -829,8 +879,14 @@ guard_remove_line="$(grep -n '^guard remove$' "$FAKE_TRANSITION_LOG" | tail -n1 
    "$guard_install_line" -lt "$service_stop_line" &&
    "$service_start_line" -lt "$guard_remove_line" ]] ||
     fail "connect did not retain the leak guard across the tunnel transition"
-grep -q 'meta skuid 0 accept' "$FAKE_NFT_RULES_LOG" ||
-    fail "transition guard does not allow the privileged VPN transport"
+grep -q 'ip daddr 192.0.2.10 udp dport 1194 accept' \
+    "$FAKE_NFT_RULES_LOG" ||
+    fail "transition guard does not allow the selected VPN endpoint"
+if grep -q 'meta skuid 0 accept' "$FAKE_NFT_RULES_LOG"; then
+    fail "transition guard permits unrestricted privileged egress"
+fi
+grep -q 'chain forward' "$FAKE_NFT_RULES_LOG" ||
+    fail "transition guard does not cover forwarded traffic"
 grep -q 'reject with icmpx type admin-prohibited' "$FAKE_NFT_RULES_LOG" ||
     fail "transition guard does not reject direct IPv4/IPv6 user traffic"
 grep -Eq -- '--interface vpnovpn0 .*https://1\.1\.1\.1/cdn-cgi/trace$' \
@@ -844,11 +900,22 @@ awk '
     END { exit !(fixed_probe && !hostname_probe) }
 ' "$FAKE_TRANSITION_LOG" ||
     fail "guarded transition readiness still depends on local DNS"
-if grep -Eq 'dport[[:space:]]+53' "$FAKE_NFT_RULES_LOG"; then
-    fail "transition guard permits blanket DNS egress"
+if awk '
+    /dport[[:space:]]+53/ &&
+        $0 !~ /(^|[[:space:]])ip6?[[:space:]]+daddr/ { unsafe = 1 }
+    END { exit !unsafe }
+' "$FAKE_NFT_RULES_LOG"; then
+    fail "transition guard permits DNS egress without a resolver address"
 fi
 rm -f "$FAKE_IP_RULES"
 ok "connect persists profile and prevents direct traffic during the transition"
+
+: >"$FAKE_TRANSITION_CURL_LOG"
+FAKE_IPV6_ONLY=1 "$CLI" reconnect >/dev/null
+grep -Eq -- '-6 .*--interface vpnovpn0 .*https://\[2606:4700:4700::1111\]/cdn-cgi/trace$' \
+    "$FAKE_TRANSITION_CURL_LOG" ||
+    fail "transition readiness did not verify an IPv6-only tunnel"
+ok "transition readiness supports IPv6-only protected egress"
 
 : >"$FAKE_TRANSITION_LOG"
 if FAKE_TRANSITION_PROBE_DUP_IP=1 VPNCTL_TRANSITION_READY_TIMEOUT=3 \
@@ -857,9 +924,18 @@ if FAKE_TRANSITION_PROBE_DUP_IP=1 VPNCTL_TRANSITION_READY_TIMEOUT=3 \
 fi
 grep -q '^systemctl stop vpnctl.service$' "$FAKE_TRANSITION_LOG" ||
     fail "failed transition readiness did not stop the unverified tunnel"
-[[ "$(grep -c '^guard remove$' "$FAKE_TRANSITION_LOG")" -ge 1 ]] ||
-    fail "failed transition readiness left the traffic guard installed"
-ok "transition readiness uses bounded strict IP-literal response parsing"
+if grep -q '^guard remove$' "$FAKE_TRANSITION_LOG"; then
+    fail "failed primary and rollback readiness removed the traffic guard"
+fi
+jq -e '
+    .state == "recovery-required" and
+    .reason == "managed-vpn-restore-failed"
+' "$TMP/state/transition-recovery-required.json" >/dev/null ||
+    fail "failed rollback did not persist transition recovery state"
+"$CLI" reconnect >/dev/null
+[[ ! -e "$TMP/state/transition-recovery-required.json" ]] ||
+    fail "successful reconnect did not clear transition recovery state"
+ok "transition readiness fails closed on ambiguous responses and recovers cleanly"
 
 : >"$FAKE_SYSTEMCTL_LOG"
 : >"$FAKE_TRANSITION_LOG"
@@ -2181,7 +2257,10 @@ jq -e '
     and .outcome.action_id == "action-terminal-audit-0001"
     and .outcome.state == "succeeded"
 ' "$VPNCTL_API_ACTION_DIR/action-terminal-audit-0001.json" >/dev/null ||
-    fail "terminal audit fault lost the idempotent action outcome"
+    {
+        jq . "$VPNCTL_API_ACTION_DIR/action-terminal-audit-0001.json" >&2 || true
+        fail "terminal audit fault lost the idempotent action outcome"
+    }
 rmdir "$api_audit_archive_blocker" "$VPNCTL_API_AUDIT_FILE.1"
 "$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
 api_terminal_audit_retry="$(
@@ -2195,8 +2274,18 @@ jq -e '
     fail "acknowledged terminal audit fault lost its stored action result"
 [[ "$(wc -l <"$FAKE_SYSTEMCTL_LOG")" == "$api_terminal_audit_after" ]] ||
     fail "terminal audit retry executed the completed mutation twice"
+jq -s -e '
+    map(select(
+        .event_type == "audit.recorded"
+        and .action_id == "action-terminal-audit-0001"
+        and .payload.operation == "lifecycle.reconnect"
+        and .payload.outcome == "succeeded"
+    ))
+    | length == 1
+' "$VPNCTL_API_AUDIT_FILE" >/dev/null ||
+    fail "idempotent retry did not repair exactly one missing terminal audit event"
 rm -f -- "$VPNCTL_API_AUDIT_FILE"
-ok "local API preserves idempotency when terminal audit persistence fails"
+ok "local API repairs terminal audit persistence without repeating a mutation"
 
 api_connect_request="$(
     jq -cn --arg profile_id "$profile_id" '{
@@ -2210,6 +2299,7 @@ api_connect_request="$(
     }'
 )"
 : >"$FAKE_SYSTEMCTL_LOG"
+: >"$FAKE_DURABILITY_LOG"
 api_connect_response="$(printf '%s\n' "$api_connect_request" | "$CLI" _api-dispatch)"
 jq -e '
     .status == "ok"
@@ -2218,6 +2308,28 @@ jq -e '
     and .result.rollback.state == "not-needed"
 ' <<<"$api_connect_response" >/dev/null ||
     fail "local API lifecycle.connect did not succeed"
+awk -v action="$VPNCTL_API_ACTION_DIR/action-connect-0001.json" \
+    -v audit="$VPNCTL_API_AUDIT_FILE" \
+    -v state="$VPNCTL_STATE_DIR/active" '
+    $0 == "sync -f " action && !running_sync { running_sync = NR }
+    $0 == "sync -f " action {
+        action_sync_count++
+        if (action_sync_count == 2) completed_sync = NR
+    }
+    $0 == "sync -f " audit && !start_audit_sync { start_audit_sync = NR }
+    $0 == "sync -f " state && !state_sync { state_sync = NR }
+    /^systemctl (start|stop|restart) vpnctl[.]service$/ && !mutation { mutation = NR }
+    END {
+        exit !(running_sync && start_audit_sync && mutation &&
+            state_sync && completed_sync &&
+            running_sync < mutation && start_audit_sync < mutation &&
+            state_sync < completed_sync)
+    }
+' "$FAKE_DURABILITY_LOG" ||
+    {
+        sed -n '1,120p' "$FAKE_DURABILITY_LOG" >&2
+        fail "local API mutation started before its journal and audit were durable"
+    }
 api_start_count="$(grep -c '^start vpnctl.service$' "$FAKE_SYSTEMCTL_LOG")"
 api_replay_request="$(
     jq -c '.request_id = "request-connect-replay-0001"' <<<"$api_connect_request"
@@ -2429,7 +2541,7 @@ api_deadline_request="$(
         operation: "lifecycle.reconnect",
         action_id: "action-deadline-0001",
         authorization: "system-mutate",
-        deadline_ms: 500,
+        deadline_ms: 5000,
         payload: {}
     }'
 )"
@@ -2452,9 +2564,9 @@ jq -e '
 ' <<<"$api_deadline_response" >/dev/null ||
     fail "local API did not time out and roll back a sub-second mutation"
 grep -Eq -- \
-    '--kill-after=5s 0\.[0-9]{3}s .*/mazzy-vpn reconnect' \
+    '--kill-after=5s [0-4]\.[0-9]{3}s .*/mazzy-vpn reconnect' \
     "$FAKE_TIMEOUT_LOG" ||
-    fail "local API rounded a millisecond deadline up to a full second"
+    fail "local API did not account for preflight time in the mutation deadline"
 api_delayed_systemctl_pid="$(cat "$api_delayed_systemctl_pid_file")"
 for _ in {1..20}; do
     api_delayed_systemctl_state="$(
@@ -2473,7 +2585,7 @@ if kill -0 "$api_delayed_systemctl_pid" 2>/dev/null &&
    [[ "$api_delayed_systemctl_state" != Z* ]]; then
     fail "timed-out local API mutation left a systemctl descendant running"
 fi
-ok "local API accounts preflight time and preserves millisecond deadlines"
+ok "local API accounts preflight time and terminates timed-out descendants"
 
 sed -i 's/^DESIRED=up$/DESIRED=down/' "$VPNCTL_STATE_DIR/active"
 api_stop_rollback_request="$(
@@ -2508,6 +2620,11 @@ grep -Fq -- \
     fail "rollback timeout exceeded the client completion grace contract"
 "$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
 sed -i 's/^DESIRED=down$/DESIRED=up/' "$VPNCTL_STATE_DIR/active"
+[[ -s "$VPNCTL_STATE_DIR/transition-recovery-required.json" ]] ||
+    fail "failed stop rollback did not preserve the transition recovery marker"
+"$CLI" reconnect >/dev/null
+[[ ! -e "$VPNCTL_STATE_DIR/transition-recovery-required.json" ]] ||
+    fail "explicit verified reconnect did not clear transition recovery state"
 ok "local API fails closed when rollback cannot stop the service"
 
 api_retention_request="$(
@@ -2575,6 +2692,57 @@ if grep -Eq '^(start|stop|restart) vpnctl\.service$' "$FAKE_SYSTEMCTL_LOG"; then
     fail "boot API recovery recursively waited on an ordered vpnctl.service job"
 fi
 ok "boot API recovery reconciles interrupted actions without an ordering deadlock"
+
+transition_boot_marker="$VPNCTL_STATE_DIR/transition-recovery-required.json"
+jq -cn '{
+    state: "recovery-required",
+    reason: "simulated-power-loss",
+    created_at: "2026-08-03T00:00:00Z",
+    guard_table: "mazzy_vpn_transition"
+}' >"$transition_boot_marker"
+rm -f -- "$VPNCTL_STATE_DIR/test.transaction"
+: >"$FAKE_NFT_RULES_LOG"
+if "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1; then
+    fail "boot recovery accepted an unresolved transition marker"
+fi
+grep -q 'oifname "lo" accept' "$FAKE_NFT_RULES_LOG" ||
+    fail "boot recovery did not restore loopback access in the fail-closed guard"
+grep -q 'chain forward' "$FAKE_NFT_RULES_LOG" ||
+    fail "boot recovery did not restore the forwarded-traffic guard"
+[[ "$(grep -c 'reject with icmpx type admin-prohibited' \
+    "$FAKE_NFT_RULES_LOG")" -ge 2 ]] ||
+    fail "boot recovery did not reject both local and forwarded direct egress"
+if grep -Eq 'ip6?[[:space:]]+daddr|oifname "(eth0|adguard0|vpnwg0|vpnovpn0)" accept' \
+    "$FAKE_NFT_RULES_LOG"; then
+    fail "boot recovery restored an unverified egress exception"
+fi
+if "$CLI" _service-run >/dev/null 2>&1; then
+    fail "managed service bypassed the transition recovery marker"
+fi
+: >"$FAKE_SYSTEMCTL_LOG"
+FAKE_SYSTEMCTL_INACTIVE=1 "$CLI" _health-check >/dev/null 2>&1 || true
+if grep -Eq '^(start|restart) vpnctl\.service$' "$FAKE_SYSTEMCTL_LOG"; then
+    fail "health remediation bypassed the transition recovery marker"
+fi
+transition_blocked_response="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-transition-blocked-0001",
+        operation: "lifecycle.reconnect",
+        action_id: "action-transition-blocked-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {}
+    }' | "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.message_key == "api.action.recovery-required"
+    and .error.user_action_required == true
+' <<<"$transition_blocked_response" >/dev/null ||
+    fail "local API lifecycle bypassed the transition recovery marker"
+rm -f -- "$transition_boot_marker"
+ok "boot transition recovery restores a process-wide fail-closed guard"
 
 umask_probe_env="$TMP/api-recovery-umask-env"
 umask_probe_file="$TMP/api-recovery-umask-probe"
@@ -3075,6 +3243,9 @@ grep -q '^MODE=normal$' "$TMP/state/active" || fail "test did not restore previo
 grep -q -- '--on-active=2s' "$TMP/systemd-run.log" || fail "timeout guard was not armed"
 ok "successful test rolls back"
 
+(exec -a "/opt/adguardvpn_cli/adguardvpn-cli connect" sleep 30) &
+fake_adguard_transport_pid=$!
+printf '%s\n' "$fake_adguard_transport_pid" >"$VPNCTL_ADGUARD_PID_FILE"
 touch "$FAKE_ADGUARD_ACTIVE"
 : >"$FAKE_ADGUARD_LOG"
 export FAKE_ADGUARD_FORK=1
@@ -3088,12 +3259,24 @@ grep -q '^connect --no-progress -y$' "$FAKE_ADGUARD_LOG" ||
     fail "AdGuard fallback was not reconnected after rollback"
 grep -q '^DESIRED=down$' "$TMP/state/active" ||
     fail "managed watchdog remained armed over restored AdGuard fallback"
-rm -f "$FAKE_ADGUARD_ACTIVE"
+grep -q 'ip daddr 192.0.2.40 udp dport 443 accept' \
+    "$FAKE_NFT_RULES_LOG" ||
+    fail "AdGuard transition guard did not preserve the exact transport endpoint"
+grep -q 'oifname "adguard0" accept' "$FAKE_NFT_RULES_LOG" ||
+    fail "AdGuard transition guard did not preserve the proven tunnel interface"
+if grep -q 'oifname "eth0" accept' "$FAKE_NFT_RULES_LOG"; then
+    fail "AdGuard transition guard permitted unrestricted physical-interface egress"
+fi
+wait "$fake_adguard_transport_pid" 2>/dev/null || true
+rm -f "$FAKE_ADGUARD_ACTIVE" "$VPNCTL_ADGUARD_PID_FILE"
 if ! "$CLI" connect openvpn "Test Server" >/dev/null; then
     fail "daemonized AdGuard fallback inherited the vpnctl mutation lock"
 fi
 
 "$CLI" disconnect >/dev/null
+(exec -a "/opt/adguardvpn_cli/adguardvpn-cli connect" sleep 30) &
+fake_adguard_transport_pid=$!
+printf '%s\n' "$fake_adguard_transport_pid" >"$VPNCTL_ADGUARD_PID_FILE"
 touch "$FAKE_ADGUARD_ACTIVE"
 export FAKE_SYSTEMCTL_START_FAIL=1
 api_fallback_fd_request="$(
@@ -3117,7 +3300,8 @@ jq -e '
     and .result.rollback.state == "completed"
 ' <<<"$api_fallback_fd_response" >/dev/null ||
     fail "API fallback fd regression did not complete a rollback"
-rm -f "$FAKE_ADGUARD_ACTIVE"
+wait "$fake_adguard_transport_pid" 2>/dev/null || true
+rm -f "$FAKE_ADGUARD_ACTIVE" "$VPNCTL_ADGUARD_PID_FILE"
 exec 6>"$TMP/run/.mutation.lock"
 flock -n 6 || fail "daemonized API fallback retained inherited mutation fd 7"
 flock -u 6
@@ -3226,13 +3410,23 @@ rm -f "$FAKE_LEGACY_ACTIVE"
 ok "boot recovery restores external fallback"
 
 export FAKE_CURL_FAIL=1
-if "$CLI" test openvpn "Test Server" --timeout 2 >/dev/null 2>&1; then
-    fail "failed tunnel test returned success"
-fi
+failed_test_rc=0
+"$CLI" test openvpn "Test Server" --timeout 2 >/dev/null 2>&1 ||
+    failed_test_rc=$?
+[[ "$failed_test_rc" -eq 2 ]] ||
+    fail "unverified test rollback did not return the critical status"
 unset FAKE_CURL_FAIL
-grep -q '^MODE=normal$' "$TMP/state/active" || fail "timeout did not restore previous state"
-[[ ! -e "$TMP/state/test.transaction" ]] || fail "failed test transaction was not cleaned"
-ok "test timeout rolls back"
+[[ -e "$TMP/state/test.transaction" ]] ||
+    fail "unverified test rollback discarded its recovery transaction"
+jq -e '.reason == "test-managed-restore-failed"' \
+    "$TMP/state/transition-recovery-required.json" >/dev/null ||
+    fail "unverified test rollback did not preserve fail-closed recovery state"
+"$CLI" _recover-stale-test >/dev/null
+grep -q '^MODE=normal$' "$TMP/state/active" ||
+    fail "recovery did not restore the previous test state"
+[[ ! -e "$TMP/state/test.transaction" ]] ||
+    fail "verified test recovery did not clean its transaction"
+ok "test timeout fails closed until rollback is independently verified"
 
 export FAKE_SYSTEMCTL_START_FAIL=1
 rollback_rc=0
@@ -3264,12 +3458,17 @@ rm -f "$FAKE_LEGACY_ACTIVE"
 "$CLI" connect openvpn "Test Server" >/dev/null
 ok "failed connect restores legacy fallback"
 
+(exec -a "/opt/adguardvpn_cli/adguardvpn-cli connect" sleep 30) &
+fake_adguard_transport_pid=$!
+printf '%s\n' "$fake_adguard_transport_pid" >"$VPNCTL_ADGUARD_PID_FILE"
 touch "$FAKE_ADGUARD_ACTIVE"
 "$CLI" test openvpn "Test Server" --timeout 2 --keep >/dev/null
 grep -q '^MODE=normal$' "$TMP/state/active" || fail "--keep did not finalize normal state"
 grep -q '^DESIRED=up$' "$TMP/state/active" || fail "--keep did not retain connection"
 [[ ! -e "$FAKE_ADGUARD_ACTIVE" ]] ||
     fail "--keep restored conflicting AdGuard fallback over managed VPN"
+wait "$fake_adguard_transport_pid" 2>/dev/null || true
+rm -f "$VPNCTL_ADGUARD_PID_FILE"
 ok "test keep leaves external fallback stopped"
 
 "$CLI" emergency --protocol openvpn --timeout 2 >/dev/null
@@ -3285,6 +3484,12 @@ fi
 unset FAKE_CURL_FAIL
 cmp -s "$TMP/emergency-before" "$TMP/state/active" ||
     fail "failed emergency did not restore previous state"
+[[ -e "$TMP/state/test.transaction" &&
+   -e "$TMP/state/transition-recovery-required.json" ]] ||
+    fail "unverified emergency rollback did not preserve recoverable state"
+"$CLI" _recover-stale-test >/dev/null
+[[ ! -e "$TMP/state/transition-recovery-required.json" ]] ||
+    fail "verified emergency recovery did not clear transition recovery state"
 ok "emergency failure rolls back"
 
 if "$CLI" connect wireguard Unsafe >/dev/null 2>&1; then
@@ -3410,9 +3615,10 @@ grep -q '^reset-failed vpnctl.service$' "$TMP/systemctl.log" ||
 ok "watchdog caps automatic recovery and explicit recovery resets its counter"
 
 : >"$TMP/systemctl.log"
-export FAKE_SYSTEMCTL_INACTIVE=1
-"$CLI" _health-check >/dev/null
-unset FAKE_SYSTEMCTL_INACTIVE
+health_active_file="$TMP/health-systemctl.active"
+rm -f -- "$health_active_file"
+FAKE_SYSTEMCTL_INACTIVE=1 FAKE_SYSTEMCTL_ACTIVATE_FILE="$health_active_file" \
+    "$CLI" _health-check >/dev/null
 grep -q '^start vpnctl.service$' "$TMP/systemctl.log" ||
     fail "watchdog did not immediately start an inactive desired service"
 ok "watchdog immediately restores an inactive desired service"
@@ -3429,7 +3635,9 @@ ok "health remediation fails closed behind the recovery marker"
 : >"$TMP/systemctl.log"
 health_systemctl_delay_marker="$TMP/health-systemctl-delay-once"
 health_systemctl_pid_file="$TMP/health-systemctl-delay.pid"
+rm -f -- "$health_active_file"
 FAKE_SYSTEMCTL_INACTIVE=1 \
+FAKE_SYSTEMCTL_ACTIVATE_FILE="$health_active_file" \
 FAKE_SYSTEMCTL_DELAY_ACTION="start vpnctl.service" \
 FAKE_SYSTEMCTL_DELAY_ONCE_FILE="$health_systemctl_delay_marker" \
 FAKE_SYSTEMCTL_DELAY_PID_FILE="$health_systemctl_pid_file" \
@@ -3631,9 +3839,9 @@ grep -Fxq 'RemainAfterExit=yes' \
 grep -q '^ProtectSystem=strict$' \
     "$stage/etc/systemd/system/mazzy-vpn-api-recovery.service" ||
     fail "API recovery unit does not use strict filesystem protection"
-grep -q '^CapabilityBoundingSet=$' \
+grep -q '^CapabilityBoundingSet=CAP_NET_ADMIN$' \
     "$stage/etc/systemd/system/mazzy-vpn-api-recovery.service" ||
-    fail "API recovery unit retains ambient Linux capabilities"
+    fail "API recovery unit cannot restore the nftables transition guard"
 [[ -f "$stage/etc/systemd/system/mazzy-vpn-api.socket" &&
    -f "$stage/etc/systemd/system/mazzy-vpn-api@.service" ]] ||
     fail "local API systemd units were not staged"
@@ -3899,6 +4107,9 @@ grep -q '^Before=vpnctl-test-recovery.service vpnctl.service vpnctl-health.servi
 grep -Fxq 'RemainAfterExit=yes' \
     "$ROOT/systemd/mazzy-vpn-api-recovery.service" ||
     fail "successful boot API recovery is not retained for the boot"
+grep -q '^CapabilityBoundingSet=CAP_NET_ADMIN$' \
+    "$ROOT/systemd/mazzy-vpn-api-recovery.service" ||
+    fail "boot API recovery cannot restore the nftables transition guard"
 grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
     "$ROOT/systemd/vpnctl-test-recovery.service" ||
     fail "test boot recovery no longer requires API boot recovery"

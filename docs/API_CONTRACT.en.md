@@ -101,6 +101,9 @@ Interrupted refreshes clean their private temporary files. Mutations are seriali
 deadline-bounded and recorded by action ID under root-only state. The audit log
 contains operation IDs and outcomes only, never request payloads or backend
 output. A mutation is not started unless its initial audit event is durable.
+The snapshot, running action record and initial audit are synchronized together
+with their parent directories before the lifecycle child starts. Completed
+records and snapshot deletion are synchronized before terminal success.
 If a terminal audit event cannot be stored after state changed, the completed
 action remains idempotent but the API enters recovery-only mode for explicit
 administrator inspection. Completed outcomes are bounded to 512 records by default. The audit

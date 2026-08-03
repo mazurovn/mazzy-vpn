@@ -4,7 +4,7 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
 [English version](ARCHITECTURE.en.md) · [Главная страница](../README.md)
 
-Этот документ описывает действующую архитектуру CLI/TUI и Desktop 0.3.
+Этот документ описывает действующую архитектуру CLI/TUI 1.4 и Desktop 0.4.
 Целевая архитектура самостоятельного Desktop 1.0 с общим core и versioned API:
 [план Desktop 1.0](DESKTOP_ROADMAP.ru.md). Матрица
 [паритета функций](FEATURE_PARITY.md) не позволяет выдать preview за готовое
@@ -443,23 +443,30 @@ sequenceDiagram
 | `/var/lib/vpnctl/api-actions` | Action IDs, rollback snapshots и очищенные outcomes | Постоянно, каталог `700`, records `600`; по умолчанию 512 последних завершённых outcomes |
 | `/var/lib/vpnctl/api-audit.jsonl{,.1}` | Operation, решение авторизации и outcome | Постоянно, `600`; без payload/backend output; ротация 2 МиБ с одним архивом |
 | `/var/lib/vpnctl/api-recovery-required.json` | Marker отсутствующего/неудачного rollback snapshot | Постоянно, `600`; блокирует API mutations до явного подтверждения администратора |
+| `/var/lib/vpnctl/transition-recovery-required.json` | Marker неподтверждённого восстановления tunnel/fallback | Постоянно, `600`; хранит причину сохранения fail-closed nftables guard |
+| `/var/lib/vpnctl/transition-fallback.rules` | Точный allowlist endpoint внешнего fallback | Постоянно, `600`, только пока может понадобиться безопасное восстановление fallback |
 | `/run/vpnctl` | Общий `.mutation.lock`, singleton `.health.lock`, health-счётчик и очищенный runtime log | Очищается при загрузке |
 | `/run/mazzy-vpn/status.json` | Очищенный статус для Desktop | Пересоздаётся root, `0640 root:mazzy-vpn`, без ключей и endpoint |
 | `/run/mazzy-vpn/api-v1.sock` | Versioned local API transport | Socket `0660 root:mazzy-vpn`, активируется systemd |
 | `vpnctl.service` | Владеет активным managed-туннелем | Долгоживущий, под контролем systemd |
 | `vpnctl-health.timer` | Планирует независимые health-проверки | Включён для автовосстановления |
 | `vpnctl-test-recovery.service` | Исправляет прерванный тест после загрузки | Boot-time oneshot |
-| `mazzy-vpn-api-recovery.service` | Согласует прерванные API actions до control services | Hardened root boot-time oneshot |
+| `mazzy-vpn-api-recovery.service` | Согласует API actions и восстанавливает минимальный nftables deny guard для unresolved transition | Hardened root boot-time oneshot с `CAP_NET_ADMIN` |
 
 Инварианты безопасности:
 
-- в текущей непубликованной ветке один managed-туннель и одна изменяющая
+- в релизе 1.4 один managed-туннель и одна изменяющая
   состояние операция одновременно защищены общим `.mutation.lock` для API,
   direct CLI, recovery, health remediation и service-policy paths;
 - это переходный R0a process lock: API journal всё ещё покрывает только API
   lifecycle, а целевой единственный владелец `mazzy-vpnd` не реализован;
 - прерванная API mutation согласуется по pre-action snapshot до запуска
   следующей изменяющей операции;
+- API journal/audit и snapshot синхронизируются до mutation, а удаление
+  terminal snapshot фиксируется до ответа об успехе;
+- connect, reconnect, test, emergency и health recovery устанавливают
+  output/forward nftables guard до остановки защищённого пути; guard снимается
+  только после interface-bound проверки нового пути или rollback;
 - тип профиля определяется по содержимому, затем проверяется до импорта;
 - приватные ключи, credentials, личные пути и рабочие профили не попадают в
   Git;

@@ -2610,7 +2610,7 @@ mod tests {
             "schema_version": 1,
             "generated_at": 1,
             "product": "Mazzy VPN",
-            "version": "1.3.2",
+            "version": "1.4.0",
             "language": "en",
             "selected": true,
             "service_state": "active",

@@ -116,7 +116,9 @@ provider lifecycle authority нельзя возвращать до доказа
 ## Message и security boundary — target, не runtime
 
 [`command.schema.json`](../agent-control/v1/command.schema.json) задаёт закрытый
-v1 capability list. В нём намеренно нет произвольного `shell.exec`. Draft
+v1 capability list. В нём намеренно нет произвольного `shell.exec`. Каждый
+capability связан с фиксированным risk class: caller не может понизить risk.
+Telegram Bot принимает только argument-free status/list/pause/cancel. Draft
 [`envelope.schema.json`](../agent-control/v1/envelope.schema.json) только
 объявляет целевой набор алгоритмов; готового E2EE runtime и canonical vectors
 пока нет. В целевой реализации:

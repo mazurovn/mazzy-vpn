@@ -2,7 +2,7 @@
 
 All notable changes to Mazzy VPN are documented here.
 
-## Unreleased
+## 1.4.0 / Desktop 0.4.0 - 2026-08-03
 
 - Added explicit credential-free `verify-service` and
   `tests.verify-service-egress` checks for fixed NotebookLM/OpenAI endpoints.
@@ -17,15 +17,15 @@ All notable changes to Mazzy VPN are documented here.
   continues. Automatic recovery no longer clears systemd failure state; a
   monotonic startup grace and realistic systemd start budget are covered by
   source/package parity tests.
-- Added a transitional dual-stack `nftables` output guard around managed
-  connect and reconnect. User traffic is rejected before the old tunnel stops;
-  readiness uses a fixed HTTPS IP-literal probe bound to the new interface, so
-  an unprivileged local DNS resolver is not required or exempted. The response
-  is strictly bounded and parsed before the guard is removed, and guard-install
-  failure cancels the mutation before `systemctl stop`.
-  This closes the confirmed direct-egress window during successful profile
-  switches without claiming the still-planned persistent always-on kill switch
-  or complete rollback proof.
+- Added a dual-stack `nftables` output/forward transition guard around managed
+  connect, reconnect, live test, emergency selection and health recovery.
+  Direct egress is rejected before the old tunnel stops; only exact managed or
+  fallback transport endpoints and exact resolver addresses are allowlisted.
+  Readiness is bound to the selected interface and supports IPv4- and
+  IPv6-only protected paths. If neither the new path nor rollback can be
+  verified, the guard and a root-only recovery marker remain fail-closed.
+  This closes the confirmed transition leak without claiming the still-planned
+  persistent always-on kill switch.
 - Added a root-only boot recovery entrypoint and hardened oneshot unit for
   interrupted local API actions. It takes the shared mutation lock before
   reconciliation and is ordered before test recovery, the managed tunnel,
@@ -34,6 +34,10 @@ All notable changes to Mazzy VPN are documented here.
   The tunnel service has an ordered `Requires=` dependency on recovery, so a
   marker-persistence failure also blocks boot activation; test recovery keeps
   its deadlock-safe boot path and bounded startup budget.
+- Made API snapshots, running/completed action records, audit events and
+  recovery markers durable with file and parent-directory synchronization
+  before lifecycle mutation. Snapshot deletion is also persisted before a
+  terminal response is acknowledged.
 - Health remediation now checks that recovery marker while holding the shared
   lock and waits for the terminal `systemctl` result. It no longer releases
   mutation authority after an asynchronous `--no-block` request.
@@ -41,6 +45,8 @@ All notable changes to Mazzy VPN are documented here.
   TUIC, Shadowsocks 2022, Trojan, AnyTLS and ShadowTLS. Validation rejects
   duplicate keys, insecure TLS and user-controlled listeners, paths, marks and
   routing; responses never reflect endpoints or credentials.
+- Tightened managed TLS validation with a closed uTLS fingerprint enum,
+  unique ALPN and certificate-pin sets, and a minimum certificate-pin length.
 - Added atomic `protocols managed-import` with dry-run, conflict protection,
   explicit force replacement, symlink rejection and root-only `0700/0600`
   storage. Modern-protocol import is now truthfully `partial`; connection
@@ -56,12 +62,18 @@ All notable changes to Mazzy VPN are documented here.
   WebRTC, WebTransport, Tailscale/Headscale and reverse WSS, plus draft schemas
   that declare future signed E2EE envelopes and Desktop/Web/CLI/Telegram
   channel-risk policy. No E2EE runtime is claimed; all seven paths are planned.
+- Bound every agent-control capability to a fixed risk class and restricted
+  Telegram Bot commands to an argument-free low-risk allowlist, preventing a
+  caller from downgrading command risk or bypassing channel policy.
 - Contained the unreleased Desktop Agent Control screen to read-only
   Codex/Claude and transport discovery. The renderer and Tauri invoke surface
   no longer expose provider start/pair/stop, and diagnostics do not execute a
   discovered agent binary. Native command-bound approval, trusted executable
   resolution and process-tree containment remain mandatory before any local
   provider lifecycle authority can return.
+- Hardened Desktop executable discovery: Unix candidates must be executable;
+  Windows discovery uses canonical absolute paths and `PATHEXT`, including
+  `.cmd` and `.bat`, instead of accepting arbitrary files named like a tool.
 - Documented the source-level Happy, Claude Bridge, Paseo and Yep Anywhere
   comparison and separated ingress, E2EE transport and provider-adapter
   boundaries. Typed Codex app-server/Claude/ACP adapters are preferred over a

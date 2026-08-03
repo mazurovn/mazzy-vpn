@@ -102,7 +102,10 @@ top-level JSON object; повторные object keys на любой глуби
 сериализованы, ограничены deadline и сохраняются по action ID в root-only
 state. Audit содержит только operation ID и результат — без payload и raw
 backend output. Mutation не запускается, пока её начальное audit event не
-сохранено. Если terminal audit event нельзя записать уже после изменения
+сохранено. Pre-action snapshot, running record и initial audit синхронизируются
+вместе с parent directories до запуска lifecycle child. Completed record и
+удаление snapshot также синхронизируются до terminal success. Если terminal
+audit event нельзя записать уже после изменения
 state, завершённый action сохраняет idempotency, но API переходит в
 recovery-only mode для явной проверки администратором. По умолчанию журнал
 ограничен 512 завершёнными outcomes, а

@@ -12,17 +12,18 @@
 [GitHub Releases](https://github.com/mazurovn/mazzy-vpn/releases). Версия в
 `main`, changelog или draft PR ещё не является релизом.
 
-Опубликованная release line — CLI/TUI 1.3.2 и unsigned Desktop 0.3.2 preview.
-Linux Desktop функционален; Windows и macOS остаются UI preview без native VPN
+Текущая release-source line — CLI/TUI 1.4.0 и unsigned Desktop 0.4.0 preview.
+Публикацию подтверждайте по странице Releases. Linux Desktop функционален;
+Windows и macOS остаются UI preview без native VPN
 backend. Issue #31 закрыт provenance-verified backport `glib` и чистыми
 release checks RustSec, Dependabot и CodeQL.
 
 ## Desktop требует отдельной установки CLI?
 
-Linux Desktop 0.3 содержит совместимый engine и installer, поэтому
+Linux Desktop 0.4 содержит совместимый engine и installer, поэтому
 предварительная ручная установка CLI не требуется. Системные изменения
 выполняются только
-после стандартной авторизации ОС. Устанавливайте Desktop 0.3 только со страницы
+после стандартной авторизации ОС. Устанавливайте Desktop 0.4 только со страницы
 GitHub Release после публикации оставшихся PR/default-branch checks и audited
 artifacts.
 
@@ -38,7 +39,7 @@ interface-bound/default IPv4, валидирует два geo providers имен
 ## Означает ли успешная сборка рабочий VPN на любой ОС?
 
 Нет. CI подтверждает, что UI собирается на Linux, macOS и Windows, но не
-подменяет проверку VPN backend. Linux Desktop 0.3 — функциональный control-center
+подменяет проверку VPN backend. Linux Desktop 0.4 — функциональный control-center
 preview. Windows/macOS artifacts остаются UI preview до появления нативных
 backend, подписанных installers и platform integration tests.
 
@@ -57,7 +58,7 @@ Windows, macOS или mobile.
 ## Что проверяет Doctor?
 
 Версии, зависимости, профили, systemd, desired state, VPN-интерфейс и
-соединение. Desktop 0.3 показывает полный результат и ограниченный журнал.
+соединение. Desktop 0.4 показывает полный результат и ограниченный журнал.
 Исправление запускается отдельно, объясняет системные изменения и требует
 подтверждения.
 

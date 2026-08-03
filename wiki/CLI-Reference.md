@@ -17,7 +17,7 @@
 | `sudo mazzy-vpn protocols managed-import FILE --json` | атомарный root-only import без подключения |
 | `mazzy-vpn agent-transports list --json` | contract transport-слоя обратного управления агентами |
 | `mazzy-vpn agent-transports diagnose --json` | fail-closed проверка candidate runtimes без секретов |
-| `... \| mazzy-vpn planner evaluate --stdin --json` | draft PR #43: deterministic dry-run rank; ещё не в stable 1.3.2 |
+| `... \| mazzy-vpn planner evaluate --stdin --json` | deterministic read-only dry-run rank из stable 1.4.0 |
 | `mazzy-vpn quick` | подключить сохранённый default через local API |
 | `mazzy-vpn connect PROTOCOL PROFILE` | выбрать и подключить профиль |
 | `mazzy-vpn reconnect` | безопасно перезапустить выбранный туннель |
@@ -64,7 +64,7 @@
 | `... \| mazzy-vpn protocols detect --stdin --json` | redacted share URI/JSON classification |
 | `mazzy-vpn agent-transports list --json` | reverse agent-control transport contract |
 | `mazzy-vpn agent-transports diagnose --json` | fail-closed candidate runtime diagnostics |
-| `... \| mazzy-vpn planner evaluate --stdin --json` | draft PR #43: deterministic dry-run rank; not in stable 1.3.2 yet |
+| `... \| mazzy-vpn planner evaluate --stdin --json` | deterministic read-only dry-run rank in stable 1.4.0 |
 | `mazzy-vpn quick` | connect the saved default through the local API |
 | `mazzy-vpn connect PROTOCOL PROFILE` | select and connect a profile |
 | `mazzy-vpn reconnect` | safely restart the selected tunnel |

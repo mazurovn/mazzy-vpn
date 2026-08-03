@@ -30,10 +30,10 @@ endpoint-scoped route/DNS exception.
 
 Текущий код ещё не реализует эту целевую модель:
 
-- egress работает на Linux; непубликованный R0a уже свёл Bash/API/direct CLI и
+- egress работает на Linux; release 1.4 R0a свёл Bash/API/direct CLI и
   health remediation на общий lock, но единого daemon owner/journal ещё нет;
-- Desktop Agent Control является ограниченным launcher для официального Codex
-  experimental Remote Control, а не first-party `mazzy-agentd`;
+- Desktop Agent Control является diagnostics-only обнаружением Codex/Claude,
+  а не launcher или first-party `mazzy-agentd`;
 - `agent-control/v1` содержит registry, его `schema.json` meta-schema и два
   protocol draft schema (`command`, `envelope`), но ещё не задаёт исполнимый
   wire protocol;
@@ -78,7 +78,7 @@ soak tests до GA.
 запускал или перезапускал service. API snapshot/journal поэтому не исключал
 параллельную прямую CLI-операцию.
 
-В текущей непубликованной ветке реализован первый срез **R0a**:
+В release 1.4 реализован первый срез **R0a**:
 
 - API, прямой CLI lifecycle, обычный/managed profile import/remove,
   timeout/boot recovery, health remediation, internal policy cleanup,

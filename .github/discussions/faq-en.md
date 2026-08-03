@@ -12,16 +12,17 @@ A version is published only when it has a tag and a page in
 [GitHub Releases](https://github.com/mazurovn/mazzy-vpn/releases). A version in
 `main`, the changelog or a draft PR is not a release.
 
-The published release line is CLI/TUI 1.3.2 and the unsigned Desktop 0.3.2
-preview. Linux Desktop is functional; Windows and macOS remain UI previews
+The current release source line is CLI/TUI 1.4.0 and the unsigned Desktop 0.4.0
+preview. Follow the links on the Releases page to confirm publication. Linux
+Desktop is functional; Windows and macOS remain UI previews
 without native VPN backends. Issue #31 is closed with a provenance-verified
 `glib` backport and clean RustSec, Dependabot and CodeQL release checks.
 
 ## Does Desktop require a separate CLI install?
 
-Linux Desktop 0.3 bundles a compatible engine and installer, so no prior manual
+Linux Desktop 0.4 bundles a compatible engine and installer, so no prior manual
 CLI install is required. System changes run only after standard OS
-authorization. Install Desktop 0.3 only from its GitHub Release after the
+authorization. Install Desktop 0.4 only from its GitHub Release after the
 remaining PR/default-branch checks and audited artifacts are published.
 
 ## How do I verify the VPN uses the expected route and location?
@@ -36,7 +37,7 @@ device location may still affect a site.
 ## Does a successful build mean the VPN works on every OS?
 
 No. CI proves that the UI builds on Linux, macOS and Windows; it does not prove
-that a platform VPN backend works. Linux Desktop 0.3 is a functional
+that a platform VPN backend works. Linux Desktop 0.4 is a functional
 control-center preview. Windows/macOS artifacts remain UI previews until native
 backends, signed installers and platform integration tests are complete.
 
@@ -55,7 +56,7 @@ publish a working profile, private key, password, PSK, endpoint or complete log.
 ## What does Doctor check?
 
 Versions, dependencies, profiles, systemd, desired state, VPN interface and
-connectivity. Desktop 0.3 shows the complete result and bounded logs. Repair is
+connectivity. Desktop 0.4 shows the complete result and bounded logs. Repair is
 a separate action that explains system changes and requires confirmation.
 
 ## Are live tests safe?

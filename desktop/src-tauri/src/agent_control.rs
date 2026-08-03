@@ -5,9 +5,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
     env,
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
+
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 const AGENT_CONTROL_REGISTRY: &str = include_str!("../../../agent-control/v1/registry.json");
 
@@ -63,6 +66,52 @@ fn generated_at() -> u64 {
         .as_secs()
 }
 
+#[cfg(unix)]
+fn executable_file(path: &Path) -> bool {
+    path.metadata()
+        .map(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
+        .unwrap_or(false)
+}
+
+#[cfg(windows)]
+fn executable_file(path: &Path) -> bool {
+    path.is_file()
+}
+
+#[cfg(unix)]
+fn command_candidates(name: &str) -> Vec<String> {
+    vec![name.to_owned()]
+}
+
+#[cfg(windows)]
+fn windows_command_candidates(name: &str, pathext: Option<&str>) -> Vec<String> {
+    let mut extensions: Vec<String> = pathext
+        .unwrap_or(".COM;.EXE;.BAT;.CMD")
+        .split(';')
+        .filter_map(|extension| {
+            let extension = extension.trim();
+            let suffix = extension.strip_prefix('.')?;
+            if suffix.is_empty() || !suffix.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+                None
+            } else {
+                Some(format!(".{}", suffix.to_ascii_lowercase()))
+            }
+        })
+        .collect();
+    extensions.sort();
+    extensions.dedup();
+    extensions
+        .into_iter()
+        .map(|extension| format!("{name}{extension}"))
+        .collect()
+}
+
+#[cfg(windows)]
+fn command_candidates(name: &str) -> Vec<String> {
+    let pathext = env::var("PATHEXT").ok();
+    windows_command_candidates(name, pathext.as_deref())
+}
+
 fn command_path(name: &str) -> Option<PathBuf> {
     if name.is_empty()
         || name.contains('/')
@@ -97,17 +146,17 @@ fn command_path(name: &str) -> Option<PathBuf> {
         );
     }
 
-    let candidates = if cfg!(target_os = "windows") {
-        vec![name.to_owned(), format!("{name}.exe")]
-    } else {
-        vec![name.to_owned()]
-    };
-    directories.into_iter().find_map(|directory| {
-        candidates
-            .iter()
-            .map(|candidate| directory.join(candidate))
-            .find(|candidate| candidate.is_file())
-    })
+    let candidates = command_candidates(name);
+    directories
+        .into_iter()
+        .filter(|directory| directory.is_absolute())
+        .find_map(|directory| {
+            candidates
+                .iter()
+                .map(|candidate| directory.join(candidate))
+                .find(|candidate| executable_file(candidate))
+                .and_then(|candidate| candidate.canonicalize().ok())
+        })
 }
 
 fn provider_state(id: &'static str, display_name: &'static str, command: &str) -> ProviderState {
@@ -179,6 +228,8 @@ pub async fn get_agent_integrations() -> Result<AgentIntegrationReport, String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::fs;
 
     #[test]
     fn provider_discovery_never_exposes_actions_or_runtime_readiness() {
@@ -193,5 +244,33 @@ mod tests {
         let transports = transport_states().expect("embedded registry");
         assert_eq!(transports.len(), 7);
         assert!(transports.iter().all(|transport| !transport.runtime_ready));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_discovery_requires_an_executable_regular_file() {
+        let root = env::temp_dir().join(format!(
+            "mazzy-agent-discovery-{}-{}",
+            std::process::id(),
+            generated_at()
+        ));
+        fs::create_dir_all(&root).expect("temporary directory");
+        let candidate = root.join("agent");
+        fs::write(&candidate, b"#!/bin/sh\n").expect("temporary executable");
+        fs::set_permissions(&candidate, fs::Permissions::from_mode(0o600))
+            .expect("non-executable mode");
+        assert!(!executable_file(&candidate));
+        fs::set_permissions(&candidate, fs::Permissions::from_mode(0o700))
+            .expect("executable mode");
+        assert!(executable_file(&candidate));
+        fs::remove_dir_all(root).expect("remove temporary directory");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_discovery_requires_a_valid_pathext_suffix() {
+        let candidates = windows_command_candidates("codex", Some(".EXE;.CMD;bad;.;.CMD"));
+        assert_eq!(candidates, vec!["codex.cmd", "codex.exe"]);
+        assert!(!candidates.iter().any(|candidate| candidate == "codex"));
     }
 }

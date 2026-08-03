@@ -62,7 +62,7 @@ mazzy-vpn quick
 Tauri 桌面应用在现代窗口和系统托盘中提供快速连接、重新连接、断开、
 刷新和自我诊断。Linux 版本可与已安装的 CLI 正常配合，并提供 AppImage、
 DEB 和 RPM。macOS 与 Windows 目前仅为界面预览，原生 VPN 后端尚未实现。
-Desktop 0.3 已作为未签名 preview 发布。Issue #31 已通过审核的 upstream
+Desktop 0.4 已作为未签名 preview 发布。Issue #31 已通过审核的 upstream
 `glib` backport、精确源码来源验证以及通过的 RustSec、Dependabot 和 CodeQL
 检查关闭。GUI 不读取配置文件或密钥。详情见
 [Desktop guide (English)](docs/DESKTOP.en.md)。

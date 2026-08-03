@@ -2,7 +2,7 @@
 
 Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
-Last synchronized: 2026-08-02.
+Last synchronized: 2026-08-03.
 
 This file is the persistent handoff after interrupted Codex sessions. GitHub
 issues and release gates in [`capabilities.json`](capabilities.json) remain the
@@ -13,12 +13,11 @@ This page records the verified resumption point.
 
 ## Verified release baseline
 
-- Release tags `v1.3.2` and `desktop-v0.3.2` resolve to audited commit
-  `80fe281f7a8791b83d9f7d13cb58c84a6e06f2a5`, after PR #40 and PR #42 were
-  merged with all required default-branch checks green.
-- The published stable release is CLI/TUI `v1.3.2`. The published Desktop
-  prerelease is `desktop-v0.3.2`; its Linux AppImage, DEB and RPM plus macOS
-  and Windows previews are covered by the published SHA-256 manifest.
+- The current release source is CLI/TUI `v1.4.0` and Desktop `0.4.0` from
+  PR #43. Publication targets are tags `v1.4.0` and `desktop-v0.4.0` after all
+  default-branch checks pass.
+- Linux CLI/TUI is functional. Linux Desktop remains an unsigned preview;
+  AppImage, DEB and RPM are functional control-center bundles.
 - Issue #31 is closed. The release carries the provenance-verified upstream
   `glib` backport, `event-listener` 5.4.2 and `serde_with` 3.21.0; current
   RustSec, Dependabot and CodeQL release scans have no open alerts.
@@ -27,7 +26,7 @@ This page records the verified resumption point.
   proc-macro and `unic` transitive graph. They are maintenance debt, not proof
   of an exploitable issue; migration off the legacy GTK3 graph remains a
   Desktop production gate.
-- Windows and macOS 0.3.2 artifacts are unsigned UI previews without native
+- Windows and macOS 0.4.0 artifacts are unsigned UI previews without native
   VPN backends. They must not be described as functional VPN clients.
 - Android and iOS clients are planned and have no application source or
   release artifacts.
@@ -43,10 +42,12 @@ This page records the verified resumption point.
   [`AUDIT_2026-08-01_PROTOCOLS.ru.md`](AUDIT_2026-08-01_PROTOCOLS.ru.md).
 - The repeat planner, architecture, secret and release-state review is
   [`AUDIT_2026-08-02_PLANNER.ru.md`](AUDIT_2026-08-02_PLANNER.ru.md).
+- The independent Claude/Codex/Qwen/Kimi release audit and remediation map is
+  [`AUDIT_2026-08-03_RELEASE.ru.md`](AUDIT_2026-08-03_RELEASE.ru.md).
 - The reverse agent-control plane is specified separately in
   [`AGENT_CONTROL_ARCHITECTURE.ru.md`](AGENT_CONTROL_ARCHITECTURE.ru.md).
   The v1 draft contract catalogs seven paths and five ingress channels. The
-  unreleased Desktop branch now implements diagnostics-only Codex/Claude
+  Desktop 0.4 implements diagnostics-only Codex/Claude
   discovery and catalog status. Provider start/pair/stop was removed from both
   renderer and Tauri invoke after the P0 review; native command-bound approval,
   trusted executable resolution and process-tree containment are prerequisites
@@ -59,7 +60,7 @@ This page records the verified resumption point.
   authorization, crypto, ACK and key-lifecycle contracts in Agent Control. The
   plan uses reverse HTTPS/WSS first, LAN and iroh as measured accelerators, and
   a release-gated delivery DAG instead of a seven-transport rollout.
-- The unreleased R0a slice converges API lifecycle, direct CLI, profile
+- Release 1.4 R0a converges API lifecycle, direct CLI, profile
   import/remove, recovery, health remediation, policy cleanup, `doctor --fix`, autostart and monitor on
   `$RUN_DIR/.mutation.lock`. API children validate the inherited lock inode and
   fail closed on an invalid descriptor. This removes the confirmed split-lock
@@ -69,9 +70,10 @@ This page records the verified resumption point.
   [`R0_MUTATION_SINGLE_FLIGHT.ru.md`](R0_MUTATION_SINGLE_FLIGHT.ru.md).
 - The P0 reboot slice adds a hardened root oneshot before `vpnctl.service`,
   health remediation and the API socket. It reconciles interrupted API actions
-  under the same lock; rollback failure keeps the root-only marker, while
-  health checks refuse remediation behind that marker and retain the lock until
-  systemd reports a terminal result.
+  under the same lock and restores a minimal nftables output/forward deny guard
+  when a transition marker survived reboot. Rollback failure keeps the
+  root-only marker, while API/service/health paths refuse mutation behind that
+  marker and health retains the lock until systemd reports a terminal result.
 - The source-level comparison and implementation decision is recorded in
   [`RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md`](RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md).
 - The repeat managed-runtime and agent-control audit is
@@ -80,10 +82,10 @@ This page records the verified resumption point.
   Linux import. Six also have a tested closed sing-box config renderer. No new
   connection lifecycle or platform backend is claimed.
 
-Published release links:
+Release target links (publication is valid only when both tag pages exist):
 
-- <https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.2>
-- <https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.2>
+- <https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.0>
+- <https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.0>
 
 ## Community and documentation baseline
 
@@ -140,11 +142,10 @@ R0 status synchronized with the target architecture:
    [#14 iOS](https://github.com/mazurovn/mazzy-vpn/issues/14)
 11. [#11 cross-platform production gates](https://github.com/mazurovn/mazzy-vpn/issues/11)
 
-## Protocol-orchestration work after 1.3.2
+## Protocol-orchestration release 1.4.0
 
-The 1.3.2 patch fixes three blockers found on an installed 0.2/1.2 system and
-ships the protocol registry/detection foundation. Draft PR #43 adds the first
-read-only planner slice; it is not part of the published 1.3.2 packages:
+Release 1.4.0 preserves the 1.3.2 installed-system fixes and ships the first
+read-only planner, managed-profile and runtime-adapter foundation:
 
 - Desktop accepts legacy profile-cache entries without `profile_id`, derives
   the same opaque ID as the CLI and distinguishes an unavailable cache from a
@@ -166,12 +167,12 @@ read-only planner slice; it is not part of the published 1.3.2 packages:
   for six protocols. `runtime/v1/adapter-registry.json` keeps lifecycle and
   integration tests planned. Mieru/Naive need sidecar supervisors; ShadowTLS
   needs a typed inner proxy chain.
-- Stable API v1 has 27 operations and 14 stable error codes. Draft PR #43 adds
-  `planner.evaluate` as operation 28 without changing the API version.
+- Stable API v1 has 29 operations and 14 stable error codes, including
+  `planner.evaluate`, without changing the API version.
 - The real `socat` client preserves its response half after request EOF. A
   delayed Unix-socket integration test covers the installed systemd transport,
   which the previous fake dispatcher test did not model.
-- The draft deterministic read-only planner applies backend-owned hard gates
+- The deterministic read-only planner applies backend-owned hard gates
   and versioned scoring to opaque profile IDs. Censorship/workload fit is now
   derived from the trusted catalog and workload instead of caller assertions.
   Its OpenVPN parser shares the request deadline, stale observed health is
@@ -181,7 +182,7 @@ read-only planner slice; it is not part of the published 1.3.2 packages:
   includes pinned sing-box-family, Mieru and Naive/Cronet adapters;
   custom-server secret import; Linux TUN lifecycle; Windows service/Wintun;
   Android `VpnService`; and real integration, rollback and leak tests.
-- The unreleased detector also classifies bounded sing-box/Xray, official Mieru
+- The release detector also classifies bounded sing-box/Xray, official Mieru
   and NaiveProxy JSON shapes. It rejects duplicate keys, ambiguous mixed
   protocols and secret reflection; classification alone is not import or
   execution. Managed import is a separate closed-format operation.
@@ -196,10 +197,10 @@ read-only planner slice; it is not part of the published 1.3.2 packages:
 - The regression suite now pins its API socket inside the temporary test root;
   an active installed daemon can no longer replace fixture profiles with the
   host's live profile catalog during a local run.
-- Local patch verification is green: 86 Bash/end-to-end tests, 30 Rust tests,
-  Clippy, ShellCheck, npm audit, public leak audit and the unpacked
-  AppImage/DEB/RPM lifecycle/source/GUI audit. `cargo-deny` was unavailable on
-  this host; the Rust dependency graph is unchanged from the prior clean gate.
+- Local release verification includes 100 Bash/end-to-end tests plus the
+  managed adapter, Agent Control, Rust, ShellCheck, package and UI gates.
+  GitHub CI remains authoritative for Clippy, cargo-deny, npm audit, CodeQL and
+  the cross-platform Desktop build matrix.
   The existing 12 documentation screenshots remain at 1680×951; the two new
   Agent Control captures are 1680×975. All 14 use the localhost-only RFC 5737
   fixture.

@@ -10,7 +10,7 @@ Licensed under `AGPL-3.0-or-later`.
 Mazzy VPN Desktop is a Tauri 2 Linux control center and system-tray client for
 the shared Mazzy VPN engine.
 
-- **Current status:** 0.3 Linux preview. It bundles the compatible engine
+- **Current status:** 0.4 Linux preview. It bundles the compatible 1.4 engine
   installer, checks versions and dependencies, and no longer requires the user
   to install the CLI first.
 - Linux: dashboard, profile/file/folder import, location selection and
@@ -57,7 +57,7 @@ architecture and parity gates are in
 Mazzy VPN Desktop — Linux Control Center и системный tray на Tauri 2,
 работающие с общим движком Mazzy VPN.
 
-- **Текущий статус:** Linux preview 0.3. В пакет включён совместимый installer
+- **Текущий статус:** Linux preview 0.4. В пакет включён совместимый installer
   движка; предварительно устанавливать CLI пользователю больше не нужно.
 - Linux: Dashboard, импорт файлов/папок, выбор локации, массовая проверка
   reachability/latency/active, подключение, диагностика активного соединения,

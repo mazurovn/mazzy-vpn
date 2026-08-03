@@ -8,11 +8,10 @@ test/document reference and release gate remains consistent.
 
 Status: **I** implemented · **P** partial · **R** planned · **—** not applicable.
 
-Matrix scope: **current unreleased worktree**. Published
-`desktop-v0.3.2` does not contain the AI Agents screen or
-`agent-provider-integration`; `P` below describes source in this branch, not a
-shipped artifact. That capability is an explicit Desktop 1.0 gate on Linux,
-macOS and Windows.
+Matrix scope: **CLI/TUI 1.4.0 and Desktop 0.4.0 release source**. Agent Control
+is diagnostics-only; `P` does not claim provider lifecycle, E2EE networking or
+remote execution. That capability remains an explicit Desktop 1.0 gate on
+Linux, macOS and Windows.
 
 | Capability ID | CLI | TUI | Linux | macOS | Windows | Android | iOS |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -39,7 +38,7 @@ macOS and Windows.
 
 | Gate | Declared ready | Meaning |
 |---|---:|---|
-| `cli-tui-1.3` | yes | Current Linux CLI/TUI release gate |
+| `cli-tui-1.4` | yes | Current Linux CLI/TUI release gate |
 | `desktop-linux-1.0` | **no** | Standalone Linux application; no separate CLI install |
 | `desktop-macos-1.0` | **no** | Standalone signed macOS application with native backend |
 | `desktop-windows-1.0` | **no** | Standalone signed Windows application with native backend |
@@ -52,10 +51,10 @@ ready while any required capability is `partial`, `planned` or
 
 ## Русский
 
-Desktop 0.3 — Linux control-center preview. Он уже включает установщик общего
+Desktop 0.4 — Linux control-center preview. Он уже включает установщик общего
 движка, импорт и выбор профилей, validate/probe/live-test, Doctor с полным
 выводом, фактическую проверку egress/DNS/IPv6/локации, сортировку локаций,
-расширенный tray, журнал и управление службами. Desktop 0.3 опубликован как
+расширенный tray, журнал и управление службами. Desktop 0.4 подготовлен как
 unsigned preview, а gate Desktop 1.0 всё ещё закрыт: issue #31 закрыт точным
 provenance-verified backport `glib`, но не завершены fallback-policy UI, полный перевод новых экранов на шесть языков и
 переход всех typed `pkexec`-операций к локальному versioned daemon API.
@@ -76,7 +75,7 @@ gates; censorship/workload fit выводится из trusted catalog/workload,
 назначается агентом. History store, authorized execution/failover и Desktop/mobile
 integration ещё не реализованы.
 
-Agent provider integration также `partial`: unreleased Desktop выполняет
+Agent provider integration также `partial`: Desktop 0.4 выполняет
 только read-only обнаружение Codex/Claude и catalog diagnostics. Renderer и
 Tauri invoke не предоставляют start/pair/stop; diagnostics не запускает
 обнаруженный executable. Native approval, trusted executable resolution,
@@ -89,11 +88,11 @@ lifecycle остаются `planned`.
 
 ## English
 
-Desktop 0.3 is a Linux control-center preview. It bundles the shared-engine
+Desktop 0.4 is a Linux control-center preview. It bundles the shared-engine
 installer and now exposes profile import/selection, validation, probes, live
 tests, actual egress/DNS/IPv6/location verification, location sorting,
-an expanded tray, full Doctor output, logs and service controls. Desktop 0.3 is
-published as an unsigned preview, while the Desktop 1.0 gate remains closed:
+an expanded tray, full Doctor output, logs and service controls. Desktop 0.4 is
+prepared as an unsigned preview, while the Desktop 1.0 gate remains closed:
 issue #31 is closed with a provenance-verified `glib` backport, but fallback-policy UI, full six-language coverage for the new screens and
 the versioned local daemon API still need to replace every typed `pkexec`
 operation. The API `1.0` contract, manifest, frontend-safe envelopes and a
@@ -114,7 +113,7 @@ evaluation with hard gates; censorship/workload fit is derived from the trusted
 catalog/workload rather than assigned by an agent. History storage, authorized execution/failover
 and Desktop/mobile integration are not implemented.
 
-Agent provider integration is also `partial`: the unreleased Desktop performs
+Agent provider integration is also `partial`: Desktop 0.4 performs
 read-only Codex/Claude discovery and catalog diagnostics. Renderer and Tauri
 invoke expose no start/pair/stop, and diagnostics do not execute a discovered
 binary. Native approval, trusted executable resolution, process-tree

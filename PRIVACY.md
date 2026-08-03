@@ -38,9 +38,10 @@ Mazzy VPN не содержит телеметрии, рекламных SDK, а
   enum-классификация и ограниченный HTTP status; URL, headers, IP, account и
   body не сохраняются. Проверка не запускается в фоне, не влияет на
   health/planner и не доказывает доступ учётной записи или к контенту.
-- URL диагностических сервисов задаются открытыми переменными окружения и
-  видны в исходном коде. Организация может заменить их собственными
-  совместимыми endpoints.
+- URL общих geo/speed-проверок видны в исходном коде и могут быть явно
+  переопределены оператором. Security-классификатор `verify-service` намеренно
+  использует только фиксированные allowlisted NotebookLM/OpenAI endpoints:
+  окружение не может перенаправить эту проверку на произвольный адрес.
 - Systemd journal может содержать технические имена профилей и сообщения VPN
   runtime. Журнал остаётся в системном хранилище устройства.
 - Привилегированные изменения выполняются только после стандартного разрешения
@@ -86,8 +87,10 @@ device.
   addresses, accounts and bodies are not persisted. It never runs in the
   background, affects neither health nor planner, and does not prove account or
   content access.
-- Diagnostic URLs are visible as environment-overridable settings in the open
-  source. An organization can replace them with compatible internal endpoints.
+- General geo/speed diagnostic URLs are visible in the source and may be
+  explicitly overridden by an operator. The `verify-service` security
+  classifier intentionally uses fixed allowlisted NotebookLM/OpenAI endpoints;
+  the environment cannot redirect those probes to an arbitrary destination.
 - The systemd journal may contain technical profile labels and VPN runtime
   messages. It remains in the device's system log store.
 - Privileged changes run only after standard OS authorization through

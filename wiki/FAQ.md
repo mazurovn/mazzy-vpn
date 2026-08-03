@@ -15,7 +15,7 @@ Copyright © 2026 Nik m. Код распространяется по GNU AGPL-3
 
 ## Какие версии сейчас рабочие?
 
-- Опубликованная release line: CLI/TUI 1.3.2 и unsigned Linux Desktop 0.3.2
+- Текущая release-source line: CLI/TUI 1.4.0 и unsigned Linux Desktop 0.4.0
   preview. Issue #31 закрыт проверенным `glib` backport и чистыми release checks.
 - Windows и macOS: только UI preview, нативные VPN backend ещё не готовы.
 - Android и iOS: planned native clients; готовых мобильных пакетов пока нет.
@@ -26,10 +26,11 @@ Copyright © 2026 Nik m. Код распространяется по GNU AGPL-3
 
 ## Desktop самодостаточен?
 
-Linux Desktop 0.3 содержит совместимый engine и installer. Предварительная
+Linux Desktop 0.4 содержит совместимый engine и installer. Предварительная
 ручная установка CLI не нужна. Для системного VPN backend и зависимостей
 приложение использует стандартное разрешение ОС и после установки повторяет
-проверку. Релиз 0.3 опубликован; проверяйте приложенный SHA-256 manifest. До
+проверку. Release 0.4 считается опубликованным только при наличии tag и Release
+page; проверяйте приложенный SHA-256 manifest. До
 закрытия `desktop-linux-1.0` пакет остаётся preview.
 
 ## Почему `preview-release` пропущен в обычном PR?
@@ -46,8 +47,9 @@ AmneziaWG, WireGuard, OpenVPN и NetworkManager L2TP/IPsec. Поддержка �
 
 Versioned каталог дополнительно описывает VLESS/REALITY, Hysteria 2, Mieru,
 NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS и ShadowTLS v3. Сейчас для
-них реализовано безопасное catalog/URI detection, а unreleased ветка также
-классифицирует ограниченный JSON; import/connect ещё не реализованы. Многие из
+них реализованы безопасные catalog/URI/JSON detection и атомарный import
+закрытого managed-profile формата. Import имеет статус `partial`;
+connect/lifecycle ещё не реализован. Многие из
 них являются proxy/transport и требуют отдельного TUN adapter. Точная
 матрица: [[Protocol Orchestration]].
 
@@ -146,7 +148,7 @@ and preserving authorship.
 
 ## Which versions work today?
 
-- Published release line: CLI/TUI 1.3.2 and the unsigned Linux Desktop 0.3.2
+- Current release source line: CLI/TUI 1.4.0 and the unsigned Linux Desktop 0.4.0
   preview. Issue #31 is closed with a verified `glib` backport and clean release
   checks.
 - Windows and macOS: UI preview only; native VPN backends are not complete.
@@ -159,11 +161,11 @@ changelog entry alone, to determine readiness.
 
 ## Is Desktop self-contained?
 
-Linux Desktop 0.3 bundles a compatible engine and installer, so no prior manual
+Linux Desktop 0.4 bundles a compatible engine and installer, so no prior manual
 CLI install is required. System VPN backends and dependencies use standard OS
 authorization and are checked again afterwards. The package remains preview
-until `desktop-linux-1.0` passes. Release 0.3 is published; verify downloads
-with its attached SHA-256 manifest.
+until `desktop-linux-1.0` passes. Release 0.4 is published only when its tag and
+Release page exist; verify downloads with its attached SHA-256 manifest.
 
 ## Why is `preview-release` skipped on an ordinary PR?
 
@@ -179,8 +181,8 @@ functional on Windows, macOS or mobile.
 
 The versioned catalog additionally describes VLESS/REALITY, Hysteria 2, Mieru,
 NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS and ShadowTLS v3. Safe
-catalog/URI detection exists now, and the unreleased branch also classifies
-bounded JSON; import/connect does not. Many entries are proxy/transport
+catalog/URI/JSON detection and atomic closed managed-profile import exist now.
+Import is `partial`; connect/lifecycle is not implemented. Many entries are proxy/transport
 protocols and require a separate TUN adapter. See
 [[Protocol Orchestration]] for the exact matrix.
 

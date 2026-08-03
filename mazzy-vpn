@@ -6,7 +6,7 @@ set -uo pipefail
 PRODUCT_NAME="Mazzy VPN"
 CLI_COMMAND="mazzy-vpn"
 COMPAT_COMMAND="vpnctl"
-VERSION="1.3.2"
+VERSION="1.4.0"
 
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd -- "$(dirname -- "$SELF")" && pwd)"
@@ -21,6 +21,8 @@ STATE_FILE="$STATE_DIR/active"
 API_ACTION_DIR="${VPNCTL_API_ACTION_DIR:-$STATE_DIR/api-actions}"
 API_AUDIT_FILE="${VPNCTL_API_AUDIT_FILE:-$STATE_DIR/api-audit.jsonl}"
 API_RECOVERY_MARKER="$STATE_DIR/api-recovery-required.json"
+TRANSITION_RECOVERY_MARKER="$STATE_DIR/transition-recovery-required.json"
+TRANSITION_FALLBACK_RULES="$STATE_DIR/transition-fallback.rules"
 API_MAX_REQUEST_BYTES="${VPNCTL_API_MAX_REQUEST_BYTES:-65536}"
 API_ACTION_MAX_RECORDS="${VPNCTL_API_ACTION_MAX_RECORDS:-512}"
 API_AUDIT_MAX_BYTES="${VPNCTL_API_AUDIT_MAX_BYTES:-2097152}"
@@ -47,6 +49,7 @@ HEALTH_FALLBACK_PROBE_URL="${VPNCTL_HEALTH_FALLBACK_PROBE_URL:-https://1.1.1.1/c
 TRANSITION_GUARD_TABLE="mazzy_vpn_transition"
 TRANSITION_READY_TIMEOUT="${VPNCTL_TRANSITION_READY_TIMEOUT:-20}"
 TRANSITION_READY_PROBE_URL="https://1.1.1.1/cdn-cgi/trace"
+TRANSITION_READY_PROBE_URL_V6="https://[2606:4700:4700::1111]/cdn-cgi/trace"
 TRANSITION_READY_PROBE_MAX_BYTES=4096
 PROBE_URL="${VPNCTL_PROBE_URL:-https://api.ipify.org}"
 PROBE_V6_URL="${VPNCTL_PROBE_V6_URL:-https://api6.ipify.org}"
@@ -64,6 +67,7 @@ TEST_BACKUP="$STATE_DIR/test.previous"
 TEST_BACKUP_EXISTS="$STATE_DIR/test.previous.exists"
 TEST_BACKUP_ACTIVE="$STATE_DIR/test.previous.active"
 TEST_BACKUP_FALLBACK="$STATE_DIR/test.previous.fallback"
+TEST_BACKUP_FALLBACK_INTERFACE="$STATE_DIR/test.previous.fallback-interface"
 TEST_TRANSACTION="$STATE_DIR/test.transaction"
 TEST_FAILURE_MARKER="$RUN_DIR/test.failure"
 TEST_GUARD_UNIT="${VPNCTL_TEST_GUARD_UNIT:-vpnctl-test-guard}"
@@ -1161,9 +1165,18 @@ cmd_protocols_managed_validate() {
             and (.insecure == false)
             and (.server_name | type == "string" and length <= 253)
             and ((.alpn // []) | type == "array" and length <= 4
+                and length == (unique | length)
                 and all(.[]; safe_text(32)))
             and ((.certificate_public_key_sha256 // []) | type == "array"
-                and length <= 4 and all(.[]; safe_text(128)))
+                and length <= 4 and length == (unique | length)
+                and all(.[]; type == "string" and length >= 32
+                    and safe_text(128)))
+            and (if has("utls_fingerprint") then
+                    .utls_fingerprint as $fingerprint
+                    | ($fingerprint | type == "string")
+                    and (["chrome", "firefox", "safari", "edge", "randomized"]
+                        | index($fingerprint) != null)
+                 else true end)
             and (if $protocol == "shadowsocks2022" or $protocol == "mieru" then
                     .enabled == false and .server_name == ""
                     and (has("utls_fingerprint") | not)
@@ -2276,16 +2289,20 @@ print_profile_list() {
     done
 }
 
-state_get() {
-    local key="$1"
-    [[ -r "$STATE_FILE" ]] || return 1
+state_get_from_file() {
+    local file="$1" key="$2"
+    [[ -r "$file" ]] || return 1
     awk -F= -v wanted="$key" '
         $1 == wanted {
             sub(/^[^=]*=/, "")
             print
             exit
         }
-    ' "$STATE_FILE"
+    ' "$file"
+}
+
+state_get() {
+    state_get_from_file "$STATE_FILE" "$1"
 }
 
 write_state() {
@@ -2306,7 +2323,9 @@ write_state() {
         fi
     } >"$tmp"
     chmod 600 "$tmp"
-    mv -f "$tmp" "$STATE_FILE"
+    mv -f "$tmp" "$STATE_FILE" || return 1
+    sync -f "$STATE_FILE" || return 1
+    sync -f "$STATE_DIR"
 }
 
 set_desired_state() {
@@ -2854,33 +2873,332 @@ systemctl_quiet() {
     systemctl "$@" >/dev/null 2>&1
 }
 
+transition_guard_installed() {
+    command -v nft >/dev/null 2>&1 &&
+        nft list table inet "$TRANSITION_GUARD_TABLE" >/dev/null 2>&1
+}
+
 transition_guard_remove() {
     command -v nft >/dev/null 2>&1 || return 0
-    nft delete table inet "$TRANSITION_GUARD_TABLE" >/dev/null 2>&1 || true
+    transition_guard_installed || return 0
+    nft delete table inet "$TRANSITION_GUARD_TABLE" >/dev/null 2>&1
+}
+
+transition_guard_restore_fail_closed() {
+    local definition
+    command -v nft >/dev/null 2>&1 || return 1
+    definition="$({
+        if transition_guard_installed; then
+            printf 'delete table inet %s\n' "$TRANSITION_GUARD_TABLE"
+        fi
+        printf 'table inet %s {\n' "$TRANSITION_GUARD_TABLE"
+        printf '    chain output {\n'
+        printf '        type filter hook output priority -150; policy accept;\n'
+        printf '        oifname "lo" accept\n'
+        printf '        reject with icmpx type admin-prohibited\n'
+        printf '    }\n'
+        printf '    chain forward {\n'
+        printf '        type filter hook forward priority -150; policy accept;\n'
+        printf '        reject with icmpx type admin-prohibited\n'
+        printf '    }\n'
+        printf '}\n'
+    })"
+    printf '%s' "$definition" | nft -f - >/dev/null
+}
+
+transition_clear_recovery_marker() {
+    [[ -e "$TRANSITION_RECOVERY_MARKER" ]] || return 0
+    rm -f -- "$TRANSITION_RECOVERY_MARKER" || return 1
+    sync -f "$STATE_DIR"
+}
+
+transition_mark_recovery_required() {
+    local reason="$1" tmp="" content old_umask rc=0
+    mkdir -p -- "$STATE_DIR" || return 1
+    chmod 700 -- "$STATE_DIR" || return 1
+    content="$(
+        jq -cn \
+            --arg reason "$reason" \
+            --arg created_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+                state: "recovery-required",
+                reason: $reason,
+                created_at: $created_at,
+                guard_table: "mazzy_vpn_transition"
+            }'
+    )" || return 1
+    old_umask="$(umask)" || return 1
+    umask 077
+    tmp="$(mktemp "$STATE_DIR/.transition-recovery.XXXXXX")" || rc=1
+    ((rc != 0)) || printf '%s\n' "$content" >"$tmp" || rc=1
+    ((rc != 0)) || chmod 600 -- "$tmp" || rc=1
+    ((rc != 0)) || mv -f -- "$tmp" "$TRANSITION_RECOVERY_MARKER" || rc=1
+    ((rc != 0)) || sync -f "$TRANSITION_RECOVERY_MARKER" || rc=1
+    ((rc != 0)) || sync -f "$STATE_DIR" || rc=1
+    if ((rc != 0)) && [[ -n "$tmp" && -e "$tmp" ]]; then
+        rm -f -- "$tmp" || true
+    fi
+    umask "$old_umask" || return 1
+    return "$rc"
+}
+
+transition_guard_hold() {
+    local reason="$1"
+    if [[ ! -e "$TRANSITION_RECOVERY_MARKER" ]]; then
+        transition_mark_recovery_required "$reason" ||
+            error "Не удалось сохранить marker аварийного transition recovery"
+    fi
+    error "Прямой egress остаётся заблокированным до подтверждённого восстановления"
+    return 1
+}
+
+transition_guard_release() {
+    rm -f -- "$TRANSITION_FALLBACK_RULES" || return 1
+    sync -f "$STATE_DIR" || return 1
+    transition_clear_recovery_marker || return 1
+    transition_guard_remove
+}
+
+transition_resolve_host() {
+    local host="$1"
+    timeout --foreground --kill-after=1s 6s python3 - "$host" <<'PY'
+import ipaddress
+import socket
+import sys
+
+host = sys.argv[1]
+addresses = set()
+for family, _, _, _, sockaddr in socket.getaddrinfo(host, None, type=socket.SOCK_STREAM):
+    if family not in (socket.AF_INET, socket.AF_INET6):
+        continue
+    address = ipaddress.ip_address(sockaddr[0].split("%", 1)[0])
+    addresses.add((address.version, str(address)))
+for version, address in sorted(addresses):
+    print(version, address)
+PY
+}
+
+transition_endpoint_rules() {
+    local protocol="$1" file="$2" endpoint host port transport family address
+    local -a ports=()
+    [[ -n "$protocol" && -r "$file" ]] || return 0
+    validate_endpoint "$protocol" "$file" || return 1
+    endpoint="$(profile_endpoint "$protocol" "$file")"
+    host="$(endpoint_host "$endpoint")"
+    port="$(endpoint_port "$endpoint")"
+    transport="$(profile_transport "$protocol" "$file")"
+    if [[ "$protocol" == l2tp ]]; then
+        transport=udp
+        ports=(500 4500 1701)
+    else
+        ports=("$port")
+    fi
+    while read -r family address; do
+        [[ "$family" == 4 || "$family" == 6 ]] || return 1
+        for port in "${ports[@]}"; do
+            if [[ "$family" == 4 ]]; then
+                printf '        ip daddr %s %s dport %s accept\n' \
+                    "$address" "$transport" "$port"
+            else
+                printf '        ip6 daddr %s %s dport %s accept\n' \
+                    "$address" "$transport" "$port"
+            fi
+        done
+    done < <(transition_resolve_host "$host")
+}
+
+transition_dns_rules() {
+    local nameserver family address
+    while read -r _ nameserver _; do
+        [[ -n "$nameserver" ]] || continue
+        while read -r family address; do
+            if [[ "$family" == 4 ]]; then
+                printf '        ip daddr %s udp dport 53 accept\n' "$address"
+                printf '        ip daddr %s tcp dport 53 accept\n' "$address"
+            elif [[ "$family" == 6 ]]; then
+                printf '        ip6 daddr %s udp dport 53 accept\n' "$address"
+                printf '        ip6 daddr %s tcp dport 53 accept\n' "$address"
+            fi
+        done < <(transition_resolve_host "$nameserver" 2>/dev/null || true)
+    done < <(awk '$1 == "nameserver" { print $1, $2, "" }' /etc/resolv.conf 2>/dev/null)
+}
+
+transition_live_adguard_endpoints() {
+    local pid line transport endpoint host port family address found=0
+    pid="$(adguard_fallback_process_pid)" || return 1
+    while IFS= read -r line; do
+        [[ "$line" == *"pid=$pid,"* ]] || continue
+        transport="$(awk '{ print tolower($1) }' <<<"$line")"
+        endpoint="$(awk '{ print $6 }' <<<"$line")"
+        [[ "$transport" == tcp || "$transport" == udp ]] || continue
+        host="$(endpoint_host "$endpoint")"
+        port="$(endpoint_port "$endpoint")"
+        [[ "$port" =~ ^[0-9]+$ ]] || continue
+        while read -r family address; do
+            [[ "$family" == 4 || "$family" == 6 ]] || continue
+            found=1
+            printf '%s %s %s %s\n' "$family" "$address" "$transport" "$port"
+        done < <(transition_resolve_host "$host")
+    done < <(ss -H -n -t -u -p 2>/dev/null)
+    ((found == 1))
+}
+
+transition_route_interface() {
+    local address="$1" interface
+    interface="$(
+        ip -o route get "$address" 2>/dev/null |
+            awk '{ for (i=1; i<=NF; i++) if ($i == "dev") { print $(i+1); exit } }'
+    )"
+    [[ "$interface" =~ ^[A-Za-z0-9_.:-]{1,64}$ ]] || return 1
+    printf '%s\n' "$interface"
+}
+
+transition_live_fallback_endpoint_rules() {
+    local fallback="$1" tool endpoint host port family address transport
+    local found=0
+    [[ -n "$fallback" ]] || return 0
+    case "$fallback" in
+        legacy)
+            if command -v awg >/dev/null 2>&1; then
+                tool=awg
+            elif command -v wg >/dev/null 2>&1; then
+                tool=wg
+            else
+                return 1
+            fi
+            while read -r _ endpoint; do
+                [[ -n "$endpoint" && "$endpoint" != '(none)' ]] || continue
+                host="$(endpoint_host "$endpoint")"
+                port="$(endpoint_port "$endpoint")"
+                [[ "$port" =~ ^[0-9]+$ ]] || continue
+                while read -r family address; do
+                    found=1
+                    if [[ "$family" == 4 ]]; then
+                        printf '        ip daddr %s udp dport %s accept\n' "$address" "$port"
+                    elif [[ "$family" == 6 ]]; then
+                        printf '        ip6 daddr %s udp dport %s accept\n' "$address" "$port"
+                    fi
+                done < <(transition_resolve_host "$host")
+            done < <("$tool" show "$LEGACY_FALLBACK_INTERFACE" endpoints 2>/dev/null)
+            ;;
+        adguard)
+            while read -r family address transport port; do
+                found=1
+                if [[ "$family" == 4 ]]; then
+                    printf '        ip daddr %s %s dport %s accept\n' \
+                        "$address" "$transport" "$port"
+                elif [[ "$family" == 6 ]]; then
+                    printf '        ip6 daddr %s %s dport %s accept\n' \
+                        "$address" "$transport" "$port"
+                fi
+            done < <(transition_live_adguard_endpoints)
+            ;;
+        *) return 1 ;;
+    esac
+    ((found == 1))
+}
+
+transition_cached_fallback_endpoint_rules() {
+    [[ -r "$TRANSITION_FALLBACK_RULES" ]] || return 1
+    awk '
+        NF == 7 && $1 == "ip" && $2 == "daddr" &&
+            $3 ~ /^([0-9]{1,3}\.){3}[0-9]{1,3}$/ &&
+            ($4 == "tcp" || $4 == "udp") && $5 == "dport" &&
+            $6 ~ /^[0-9]{1,5}$/ && $7 == "accept" { print; next }
+        NF == 7 && $1 == "ip6" && $2 == "daddr" &&
+            $3 ~ /^[0-9A-Fa-f:]+$/ &&
+            ($4 == "tcp" || $4 == "udp") && $5 == "dport" &&
+            $6 ~ /^[0-9]{1,5}$/ && $7 == "accept" { print; next }
+        { invalid = 1 }
+        END { exit invalid }
+    ' "$TRANSITION_FALLBACK_RULES"
 }
 
 transition_guard_install() {
+    local protocol="${1:-}" file="${2:-}" fallback="${3:-}"
+    local previous_protocol="${4:-}" previous_file="${5:-}"
+    local target_interface="" previous_interface="" fallback_interface=""
+    local rules="" definition=""
+    local fallback_rules="" tmp_rules=""
     command -v nft >/dev/null 2>&1 || {
         error "Безопасное переключение недоступно: установите nftables"
         return 1
     }
-    transition_guard_remove
-    nft -f - >/dev/null <<EOF
-table inet $TRANSITION_GUARD_TABLE {
-    chain output {
-        type filter hook output priority -150; policy accept;
-        oifname "lo" accept
-        meta skuid 0 accept
-        reject with icmpx type admin-prohibited
+    command -v python3 >/dev/null 2>&1 || {
+        error "Безопасное переключение недоступно: установите python3"
+        return 1
     }
-}
-EOF
+    target_interface="$(interface_for_protocol "$protocol" 2>/dev/null || true)"
+    previous_interface="$(interface_for_protocol "$previous_protocol" 2>/dev/null || true)"
+    fallback_interface="$(transition_external_interface "$fallback" 2>/dev/null || true)"
+    if [[ -n "$fallback" ]]; then
+        fallback_rules="$(transition_live_fallback_endpoint_rules "$fallback")" ||
+            fallback_rules="$(transition_cached_fallback_endpoint_rules)" || {
+                error "Не удалось получить точный allowlist fallback endpoint"
+                return 1
+            }
+        mkdir -p -- "$STATE_DIR" || return 1
+        chmod 700 -- "$STATE_DIR" || return 1
+        tmp_rules="$(mktemp "$STATE_DIR/.transition-rules.XXXXXX")" || return 1
+        printf '%s\n' "$fallback_rules" >"$tmp_rules" || {
+            rm -f -- "$tmp_rules"
+            return 1
+        }
+        chmod 600 -- "$tmp_rules" || {
+            rm -f -- "$tmp_rules"
+            return 1
+        }
+        mv -f -- "$tmp_rules" "$TRANSITION_FALLBACK_RULES" || return 1
+        sync -f "$TRANSITION_FALLBACK_RULES" || return 1
+        sync -f "$STATE_DIR" || return 1
+    fi
+    rules="$({
+        transition_endpoint_rules "$protocol" "$file"
+        transition_endpoint_rules "$previous_protocol" "$previous_file"
+        transition_dns_rules
+        [[ -z "$fallback_rules" ]] || printf '%s\n' "$fallback_rules"
+    } | LC_ALL=C sort -u)" || {
+        error "Не удалось получить точный allowlist transport endpoint"
+        return 1
+    }
+    definition="$({
+        printf 'table inet %s {\n' "$TRANSITION_GUARD_TABLE"
+        printf '    chain output {\n'
+        printf '        type filter hook output priority -150; policy accept;\n'
+        printf '        oifname "lo" accept\n'
+        [[ -z "$target_interface" ]] || printf '        oifname "%s" accept\n' "$target_interface"
+        [[ -z "$previous_interface" ]] || printf '        oifname "%s" accept\n' "$previous_interface"
+        [[ -z "$fallback_interface" ]] || printf '        oifname "%s" accept\n' "$fallback_interface"
+        [[ "$protocol" != l2tp && "$previous_protocol" != l2tp ]] ||
+            printf '        oifname "ppp*" accept\n'
+        printf '%s\n' "$rules"
+        printf '        reject with icmpx type admin-prohibited\n'
+        printf '    }\n'
+        printf '    chain forward {\n'
+        printf '        type filter hook forward priority -150; policy accept;\n'
+        [[ -z "$target_interface" ]] || printf '        oifname "%s" accept\n' "$target_interface"
+        [[ -z "$previous_interface" ]] || printf '        oifname "%s" accept\n' "$previous_interface"
+        [[ -z "$fallback_interface" ]] || printf '        oifname "%s" accept\n' "$fallback_interface"
+        [[ "$protocol" != l2tp && "$previous_protocol" != l2tp ]] ||
+            printf '        oifname "ppp*" accept\n'
+        printf '        reject with icmpx type admin-prohibited\n'
+        printf '    }\n'
+        printf '}\n'
+    })"
+    if transition_guard_installed; then
+        {
+            printf 'delete table inet %s\n' "$TRANSITION_GUARD_TABLE"
+            printf '%s' "$definition"
+        } | nft -f - >/dev/null || return 1
+    else
+        printf '%s' "$definition" | nft -f - >/dev/null || return 1
+    fi
+    transition_clear_recovery_marker
 }
 
-transition_readiness_probe() {
-    local interface="$1" max_time="${2:-3}" connect_timeout=3 trace probe_ip
-    local octet
-    local -a octets=()
+transition_readiness_probe_family() {
+    local interface="$1" max_time="$2" family="$3" url="$4"
+    local connect_timeout=3 trace probe_ip
     [[ -n "$interface" ]] || return 1
     [[ "$max_time" =~ ^[1-9][0-9]*$ ]] || return 1
     ((max_time <= 120)) || return 1
@@ -2888,12 +3206,12 @@ transition_readiness_probe() {
     trace="$(
         env -u ALL_PROXY -u all_proxy -u HTTP_PROXY -u http_proxy \
             -u HTTPS_PROXY -u https_proxy -u NO_PROXY -u no_proxy \
-            curl -q -4 -fsS --proto '=https' --max-redirs 0 \
+            curl -q "-$family" -fsS --proto '=https' --max-redirs 0 \
                 --noproxy '*' --proxy '' \
                 --connect-timeout "$connect_timeout" --max-time "$max_time" \
                 --interface "$interface" \
                 --user-agent 'mazzy-vpn-transition/1' \
-                "$TRANSITION_READY_PROBE_URL" 2>/dev/null |
+                "$url" 2>/dev/null |
             head -c "$((TRANSITION_READY_PROBE_MAX_BYTES + 1))"
     )" || return 1
     ((${#trace} > 0 && ${#trace} <= TRANSITION_READY_PROBE_MAX_BYTES)) ||
@@ -2926,13 +3244,37 @@ transition_readiness_probe() {
             }
         ' <<<"$trace"
     )" || return 1
-    [[ "$probe_ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
-    IFS=. read -r -a octets <<<"$probe_ip"
-    ((${#octets[@]} == 4)) || return 1
-    for octet in "${octets[@]}"; do
-        [[ "$octet" =~ ^[0-9]{1,3}$ ]] || return 1
-        ((10#$octet <= 255)) || return 1
-    done
+    python3 - "$probe_ip" "$family" <<'PY' >/dev/null
+import ipaddress
+import sys
+
+address = ipaddress.ip_address(sys.argv[1])
+expected = int(sys.argv[2])
+raise SystemExit(0 if address.version == expected else 1)
+PY
+}
+
+transition_readiness_probe() {
+    local interface="$1" max_time="${2:-3}" attempted=0
+    if ip -o -4 address show dev "$interface" scope global 2>/dev/null |
+       grep -q .; then
+        attempted=1
+        transition_readiness_probe_family \
+            "$interface" "$max_time" 4 "$TRANSITION_READY_PROBE_URL" && return 0
+    fi
+    if ip -o -6 address show dev "$interface" scope global 2>/dev/null |
+       grep -q .; then
+        attempted=1
+        transition_readiness_probe_family \
+            "$interface" "$max_time" 6 "$TRANSITION_READY_PROBE_URL_V6" && return 0
+    fi
+    ((attempted == 1)) || {
+        transition_readiness_probe_family \
+            "$interface" "$max_time" 4 "$TRANSITION_READY_PROBE_URL" && return 0
+        transition_readiness_probe_family \
+            "$interface" "$max_time" 6 "$TRANSITION_READY_PROBE_URL_V6" && return 0
+    }
+    return 1
 }
 
 wait_for_connection_ready() {
@@ -3751,13 +4093,105 @@ choose_protocol() {
     esac
 }
 
+transition_external_interface() {
+    local candidate="" family address transport port endpoint_interface="" found=0
+    case "$1" in
+        legacy) printf '%s\n' "$LEGACY_FALLBACK_INTERFACE" ;;
+        adguard)
+            candidate="$(transition_route_interface 1.1.1.1)" || return 1
+            while read -r family address transport port; do
+                endpoint_interface="$(transition_route_interface "$address")" || return 1
+                [[ "$candidate" != "$endpoint_interface" ]] || return 1
+                found=1
+            done < <(transition_live_adguard_endpoints)
+            ((found == 1)) || return 1
+            printf '%s\n' "$candidate"
+            ;;
+    esac
+}
+
+transition_wait_external_ready() {
+    local fallback="$1" preferred_interface="${2:-}" interface deadline
+    deadline=$((SECONDS + TRANSITION_READY_TIMEOUT))
+    while ((SECONDS < deadline)); do
+        interface="$preferred_interface"
+        [[ -n "$interface" ]] || interface="$(transition_external_interface "$fallback")"
+        if [[ -n "$interface" ]] && ip link show "$interface" >/dev/null 2>&1 &&
+           transition_readiness_probe "$interface" 3; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+transition_restore_previous() {
+    local previous_active="$1" previous_protocol="$2" previous_profile="$3"
+    local previous_state_backup="$4" fallback="$5" fallback_interface="$6"
+    stop_service_bounded 15 || true
+    cleanup_stale_quick_policy
+    if [[ -n "$previous_state_backup" && -r "$previous_state_backup" ]]; then
+        install -m 600 -- "$previous_state_backup" "$STATE_FILE" || {
+            transition_guard_hold state-restore-failed
+            return 1
+        }
+        if ! sync -f "$STATE_FILE" || ! sync -f "$STATE_DIR"; then
+            transition_guard_hold state-restore-sync-failed
+            return 1
+        fi
+    else
+        rm -f -- "$STATE_FILE" || {
+            transition_guard_hold state-restore-failed
+            return 1
+        }
+        sync -f "$STATE_DIR" || {
+            transition_guard_hold state-restore-sync-failed
+            return 1
+        }
+    fi
+    health_reset
+
+    if [[ -n "$fallback" ]]; then
+        if [[ -r "$STATE_FILE" ]]; then
+            set_desired_state down || {
+                transition_guard_hold state-restore-failed
+                return 1
+            }
+        fi
+        if start_external_fallback "$fallback" &&
+           transition_wait_external_ready "$fallback" "$fallback_interface"; then
+            transition_guard_release || return 1
+            info "Предыдущий внешний VPN восстановлен и проверен"
+            return 0
+        fi
+        transition_guard_hold external-fallback-restore-failed
+        return 1
+    fi
+    if ((previous_active)); then
+        reset_service_start_limit
+        if systemctl start "$SERVICE_NAME" &&
+           wait_for_connection_ready "$previous_protocol"; then
+            transition_guard_release || return 1
+            info "Предыдущее managed VPN-соединение восстановлено и проверено"
+            return 0
+        fi
+        transition_guard_hold managed-vpn-restore-failed
+        return 1
+    fi
+    transition_guard_release
+}
+
 cmd_connect() (
     local -a original=("$@")
     local requested_protocol="${1:-}" requested_profile="${2:-}" protocol fallback=""
-    local transition_guard_active=0
+    local transition_guard_active=0 previous_active=0 previous_protocol=""
+    local previous_profile="" previous_state_backup="" fallback_interface=""
     # shellcheck disable=SC2329  # invoked by the EXIT trap below
     cleanup_connect_transition_guard() {
-        ((transition_guard_active == 0)) || transition_guard_remove
+        if ((transition_guard_active)); then
+            transition_guard_hold interrupted-connect >/dev/null 2>&1 || true
+        fi
+        [[ -z "$previous_state_backup" ]] || rm -f -- "$previous_state_backup"
     }
     trap cleanup_connect_transition_guard EXIT
     if api_client_ready; then
@@ -3765,6 +4199,10 @@ cmd_connect() (
         return
     fi
     require_profile_access connect "${original[@]}"
+    if selected_from_state; then
+        previous_protocol="$SELECTED_PROTOCOL"
+        previous_profile="$SELECTED_PROFILE"
+    fi
     if [[ -z "$requested_protocol" ]]; then
         protocol="$(choose_protocol)" || return 1
     else
@@ -3783,18 +4221,31 @@ cmd_connect() (
     info "Выбран $(protocol_title "$protocol"): $(profile_name "$SELECTED_PROFILE")"
     cancel_test_guard
     discard_test_backup
-    transition_guard_install ||
+    mkdir -p -- "$RUN_DIR" || die "Не удалось открыть runtime directory"
+    chmod 700 -- "$RUN_DIR" || die "Не удалось защитить runtime directory"
+    if [[ -r "$STATE_FILE" ]]; then
+        previous_state_backup="$(mktemp "$RUN_DIR/.transition-state.XXXXXX")" ||
+            die "Не удалось сохранить предыдущее состояние"
+        install -m 600 -- "$STATE_FILE" "$previous_state_backup" ||
+            die "Не удалось сохранить предыдущее состояние"
+    fi
+    service_active && previous_active=1
+    fallback="$(detect_external_fallback || true)"
+    fallback_interface="$(transition_external_interface "$fallback")"
+    transition_guard_install "$protocol" "$SELECTED_PROFILE" "$fallback" \
+        "$previous_protocol" "$previous_profile" ||
         die "Переключение отменено: не удалось закрыть прямой выход в интернет"
     transition_guard_active=1
     systemctl_quiet stop "$SERVICE_NAME" || true
-    fallback="$(detect_external_fallback || true)"
     if [[ -n "$fallback" ]]; then
         info "Временно останавливаем внешний VPN: $(external_fallback_title "$fallback")"
         if ! stop_external_fallbacks; then
             error "Не удалось безопасно остановить внешний VPN"
-            transition_guard_remove
-            transition_guard_active=0
-            start_external_fallback "$fallback" || true
+            if transition_restore_previous "$previous_active" "$previous_protocol" \
+                "$previous_profile" "$previous_state_backup" "$fallback" \
+                "$fallback_interface"; then
+                transition_guard_active=0
+            fi
             return 1
         fi
     fi
@@ -3808,28 +4259,24 @@ cmd_connect() (
     if ! systemctl start "$SERVICE_NAME"; then
         error "Сервис VPN не запустился. Последние сообщения:"
         journalctl -u "$SERVICE_NAME" -n 30 --no-pager 2>/dev/null || true
-        if [[ -n "$fallback" ]]; then
-            set_desired_state down || true
-            transition_guard_remove
+        if transition_restore_previous "$previous_active" "$previous_protocol" \
+            "$previous_profile" "$previous_state_backup" "$fallback" \
+            "$fallback_interface"; then
             transition_guard_active=0
-            start_external_fallback "$fallback" ||
-                error "Не удалось автоматически вернуть $(external_fallback_title "$fallback")"
         fi
         return 1
     fi
     if ! wait_for_connection_ready "$protocol"; then
         error "VPN не подтвердил защищённый выход за ${TRANSITION_READY_TIMEOUT}s"
         systemctl_quiet stop "$SERVICE_NAME" || true
-        if [[ -n "$fallback" ]]; then
-            set_desired_state down || true
-            transition_guard_remove
+        if transition_restore_previous "$previous_active" "$previous_protocol" \
+            "$previous_profile" "$previous_state_backup" "$fallback" \
+            "$fallback_interface"; then
             transition_guard_active=0
-            start_external_fallback "$fallback" ||
-                error "Не удалось автоматически вернуть $(external_fallback_title "$fallback")"
         fi
         return 1
     fi
-    transition_guard_remove
+    transition_guard_release || die "Не удалось снять transition guard"
     transition_guard_active=0
     say "Подключение запущено. Защищённый выход подтверждён. Проверка: $CLI_COMMAND diagnose"
 )
@@ -3849,19 +4296,24 @@ cmd_disconnect() (
     fi
     health_reset
     if systemctl_quiet stop "$SERVICE_NAME"; then
-        transition_guard_remove
+        transition_guard_release || warn "Не удалось полностью снять transition guard"
         say "VPN отключён."
     else
-        transition_guard_remove
+        transition_guard_release || warn "Не удалось полностью снять transition guard"
         warn "Сервис уже остановлен или не установлен."
     fi
 )
 
 cmd_reconnect() (
-    local fallback="" transition_guard_active=0
+    local fallback="" transition_guard_active=0 previous_active=0
+    local previous_protocol="" previous_profile="" previous_state_backup=""
+    local fallback_interface=""
     # shellcheck disable=SC2329  # invoked by the EXIT trap below
     cleanup_reconnect_transition_guard() {
-        ((transition_guard_active == 0)) || transition_guard_remove
+        if ((transition_guard_active)); then
+            transition_guard_hold interrupted-reconnect >/dev/null 2>&1 || true
+        fi
+        [[ -z "$previous_state_backup" ]] || rm -f -- "$previous_state_backup"
     }
     trap cleanup_reconnect_transition_guard EXIT
     if api_client_ready; then
@@ -3873,18 +4325,33 @@ cmd_reconnect() (
     cancel_test_guard
     discard_test_backup
     selected_from_state || die "Сначала выберите профиль: $CLI_COMMAND connect"
+    previous_protocol="$SELECTED_PROTOCOL"
+    previous_profile="$SELECTED_PROFILE"
     validate_profile "$SELECTED_PROTOCOL" "$SELECTED_PROFILE" 1 ||
         die "Выбранный профиль не прошёл проверку"
-    transition_guard_install ||
+    mkdir -p -- "$RUN_DIR" || die "Не удалось открыть runtime directory"
+    chmod 700 -- "$RUN_DIR" || die "Не удалось защитить runtime directory"
+    if [[ -r "$STATE_FILE" ]]; then
+        previous_state_backup="$(mktemp "$RUN_DIR/.transition-state.XXXXXX")" ||
+            die "Не удалось сохранить предыдущее состояние"
+        install -m 600 -- "$STATE_FILE" "$previous_state_backup" ||
+            die "Не удалось сохранить предыдущее состояние"
+    fi
+    service_active && previous_active=1
+    fallback="$(detect_external_fallback || true)"
+    fallback_interface="$(transition_external_interface "$fallback")"
+    transition_guard_install "$SELECTED_PROTOCOL" "$SELECTED_PROFILE" "$fallback" \
+        "$previous_protocol" "$previous_profile" ||
         die "Переподключение отменено: не удалось закрыть прямой выход в интернет"
     transition_guard_active=1
-    fallback="$(detect_external_fallback || true)"
     if [[ -n "$fallback" ]]; then
         info "Временно останавливаем внешний VPN: $(external_fallback_title "$fallback")"
         if ! stop_external_fallbacks; then
-            transition_guard_remove
-            transition_guard_active=0
-            start_external_fallback "$fallback" || true
+            if transition_restore_previous "$previous_active" "$previous_protocol" \
+                "$previous_profile" "$previous_state_backup" "$fallback" \
+                "$fallback_interface"; then
+                transition_guard_active=0
+            fi
             die "Не удалось безопасно остановить внешний VPN"
         fi
     fi
@@ -3895,25 +4362,23 @@ cmd_reconnect() (
     health_reset
     reset_service_start_limit
     if ! systemctl start "$SERVICE_NAME"; then
-        if [[ -n "$fallback" ]]; then
-            set_desired_state down || true
-            transition_guard_remove
+        if transition_restore_previous "$previous_active" "$previous_protocol" \
+            "$previous_profile" "$previous_state_backup" "$fallback" \
+            "$fallback_interface"; then
             transition_guard_active=0
-            start_external_fallback "$fallback" || true
         fi
         die "Не удалось перезапустить $SERVICE_NAME"
     fi
     if ! wait_for_connection_ready "$SELECTED_PROTOCOL"; then
         systemctl_quiet stop "$SERVICE_NAME" || true
-        if [[ -n "$fallback" ]]; then
-            set_desired_state down || true
-            transition_guard_remove
+        if transition_restore_previous "$previous_active" "$previous_protocol" \
+            "$previous_profile" "$previous_state_backup" "$fallback" \
+            "$fallback_interface"; then
             transition_guard_active=0
-            start_external_fallback "$fallback" || true
         fi
         die "VPN не подтвердил защищённый выход за ${TRANSITION_READY_TIMEOUT}s"
     fi
-    transition_guard_remove
+    transition_guard_release || die "Не удалось снять transition guard"
     transition_guard_active=0
     say "Переподключение запущено. Защищённый выход подтверждён."
 )
@@ -4728,14 +5193,16 @@ acquire_recovery_lock() {
 }
 
 stop_service_bounded() {
-    local limit="${1:-15}"
+    local limit="${1:-15}" reset_failed="${2:-yes}"
     if timeout "$limit" systemctl stop "$SERVICE_NAME"; then
-        systemctl_quiet reset-failed "$SERVICE_NAME" || true
+        [[ "$reset_failed" != yes ]] ||
+            systemctl_quiet reset-failed "$SERVICE_NAME" || true
         return 0
     fi
     warn "$SERVICE_NAME не остановился за ${limit}s; принудительное завершение"
     systemctl kill --kill-who=all --signal=SIGKILL "$SERVICE_NAME" 2>/dev/null || true
-    systemctl_quiet reset-failed "$SERVICE_NAME" || true
+    [[ "$reset_failed" != yes ]] ||
+        systemctl_quiet reset-failed "$SERVICE_NAME" || true
     return 1
 }
 
@@ -5100,7 +5567,8 @@ start_external_fallback() {
 
 discard_test_backup() {
     rm -f "$TEST_BACKUP" "$TEST_BACKUP_EXISTS" "$TEST_BACKUP_ACTIVE" \
-        "$TEST_BACKUP_FALLBACK" "$TEST_TRANSACTION" "$TEST_FAILURE_MARKER"
+        "$TEST_BACKUP_FALLBACK" "$TEST_BACKUP_FALLBACK_INTERFACE" \
+        "$TEST_TRANSACTION" "$TEST_FAILURE_MARKER"
 }
 
 save_test_backup() {
@@ -5126,15 +5594,6 @@ save_test_backup() {
     fi
     chmod 600 "$TEST_TRANSACTION" "$TEST_BACKUP_EXISTS" "$TEST_BACKUP_ACTIVE" \
         "$TEST_BACKUP_FALLBACK" 2>/dev/null || true
-    if [[ -n "$fallback" ]]; then
-        info "TEST: останавливаем внешний VPN без потери rollback: $(external_fallback_title "$fallback")"
-        if ! stop_external_fallbacks; then
-            error "Не удалось безопасно остановить внешний VPN"
-            start_external_fallback "$fallback" || true
-            discard_test_backup
-            return 1
-        fi
-    fi
 }
 
 cancel_test_guard() {
@@ -5166,6 +5625,8 @@ arm_test_guard() {
 
 restore_test_backup() {
     local reason="${1:-rollback}" had_previous=0 was_active=0 token fallback=""
+    local fallback_interface="" previous_protocol="" previous_profile=""
+    local current_protocol="" current_profile=""
     [[ -e "$TEST_TRANSACTION" ]] || return 0
     [[ -e "$TEST_BACKUP_EXISTS" && -r "$TEST_BACKUP" ]] && had_previous=1
     [[ -e "$TEST_BACKUP_ACTIVE" ]] && was_active=1
@@ -5173,45 +5634,81 @@ restore_test_backup() {
         read -r fallback <"$TEST_BACKUP_FALLBACK"
         [[ "$fallback" == "legacy" || "$fallback" == "adguard" ]] || fallback=""
     fi
+    if [[ -r "$TEST_BACKUP_FALLBACK_INTERFACE" ]]; then
+        read -r fallback_interface <"$TEST_BACKUP_FALLBACK_INTERFACE"
+        [[ "$fallback_interface" =~ ^[A-Za-z0-9_.:-]{1,64}$ ]] || fallback_interface=""
+    fi
+    if selected_from_state; then
+        current_protocol="$SELECTED_PROTOCOL"
+        current_profile="$SELECTED_PROFILE"
+    fi
+    if ((had_previous)); then
+        previous_protocol="$(state_get_from_file "$TEST_BACKUP" PROTOCOL 2>/dev/null || true)"
+        previous_profile="$(state_get_from_file "$TEST_BACKUP" PROFILE 2>/dev/null || true)"
+        if [[ -n "$previous_profile" && "$previous_profile" != /* ]]; then
+            previous_profile="$(effective_config_dir)/$previous_protocol/$previous_profile"
+        fi
+    fi
     token="$(state_get TEST_TOKEN 2>/dev/null || true)"
 
     warn "TEST rollback: $reason"
+    if ! transition_guard_installed; then
+        transition_guard_install "$current_protocol" "$current_profile" "$fallback" \
+            "$previous_protocol" "$previous_profile" || {
+            transition_guard_hold test-rollback-guard-unavailable
+            return 1
+        }
+    fi
     stop_service_bounded 15 || true
     cleanup_stale_quick_policy
     cancel_test_guard "$token"
     if ((had_previous)); then
         install -m 600 -- "$TEST_BACKUP" "$STATE_FILE" ||
             die "Не удалось восстановить предыдущее состояние"
+        if ! sync -f "$STATE_FILE" || ! sync -f "$STATE_DIR"; then
+            transition_guard_hold test-state-restore-sync-failed
+            return 1
+        fi
         if [[ -n "$fallback" ]]; then
             set_desired_state down ||
                 warn "Не удалось отметить managed VPN отключённым при возврате fallback"
         fi
     else
-        rm -f "$STATE_FILE"
+        rm -f "$STATE_FILE" || return 1
+        sync -f "$STATE_DIR" || {
+            transition_guard_hold test-state-restore-sync-failed
+            return 1
+        }
     fi
     health_reset
 
     if ((was_active)); then
         reset_service_start_limit
-        if timeout 20 systemctl start "$SERVICE_NAME"; then
-            info "Предыдущее VPN-соединение восстановлено"
+        if timeout 20 systemctl start "$SERVICE_NAME" &&
+           wait_for_connection_ready "$previous_protocol"; then
+            transition_guard_release || return 1
+            info "Предыдущее VPN-соединение восстановлено и проверено"
         else
             error "Не удалось перезапустить предыдущее VPN-соединение"
+            transition_guard_hold test-managed-restore-failed
             return 1
         fi
     elif [[ -n "$fallback" ]]; then
-        start_external_fallback "$fallback" || {
+        if ! start_external_fallback "$fallback" ||
+           ! transition_wait_external_ready "$fallback" "$fallback_interface"; then
             error "Не удалось восстановить $(external_fallback_title "$fallback"); транзакция сохранена"
+            transition_guard_hold test-fallback-restore-failed
             return 1
-        }
+        fi
+        transition_guard_release || return 1
     else
+        transition_guard_release || return 1
         info "Восстановлено состояние без активного VPN"
     fi
     discard_test_backup
 }
 
 recover_stale_test_state() {
-    local mode token fallback="" was_active=0
     ((EUID == 0)) || [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]] ||
         die "_recover-stale-test требует root"
     [[ -e "$TEST_TRANSACTION" ]] || return 0
@@ -5219,42 +5716,10 @@ recover_stale_test_state() {
         die "BOOT RECOVERY: не удалось получить блокировку восстановления"
     [[ ! -e "$API_RECOVERY_MARKER" ]] ||
         die "BOOT RECOVERY: заблокировано до ручной проверки API rollback"
-    mode="$(state_get MODE 2>/dev/null || true)"
-    [[ "$mode" == "test" ]] || {
-        discard_test_backup
-        return 0
-    }
 
     warn "BOOT RECOVERY: найден незавершённый тестовый туннель"
-    token="$(state_get TEST_TOKEN 2>/dev/null || true)"
-    cancel_test_guard "$token"
-    stop_service_bounded 15 || true
-    cleanup_stale_quick_policy
-    if [[ -e "$TEST_BACKUP_EXISTS" && -r "$TEST_BACKUP" ]]; then
-        install -m 600 -- "$TEST_BACKUP" "$STATE_FILE" ||
-            die "Не удалось восстановить state после незавершённого теста"
-    else
-        rm -f "$STATE_FILE"
-    fi
-    [[ -e "$TEST_BACKUP_ACTIVE" ]] && was_active=1
-    if [[ -r "$TEST_BACKUP_FALLBACK" ]]; then
-        read -r fallback <"$TEST_BACKUP_FALLBACK"
-        [[ "$fallback" == "legacy" || "$fallback" == "adguard" ]] || fallback=""
-    fi
-    if [[ -n "$fallback" && -r "$STATE_FILE" ]]; then
-        set_desired_state down ||
-            warn "BOOT RECOVERY: не удалось отметить managed VPN отключённым"
-    fi
-    health_reset
-    if ((was_active)); then
-        reset_service_start_limit
-        timeout 20 systemctl start "$SERVICE_NAME" ||
-            die "BOOT RECOVERY: не удалось восстановить managed VPN"
-    elif [[ -n "$fallback" ]]; then
-        start_external_fallback "$fallback" ||
-            die "BOOT RECOVERY: не удалось восстановить $(external_fallback_title "$fallback")"
-    fi
-    discard_test_backup
+    restore_test_backup "boot recovery после незавершённого теста" ||
+        die "BOOT RECOVERY: предыдущее VPN-состояние не восстановлено"
     info "BOOT RECOVERY: предыдущее состояние восстановлено"
 }
 
@@ -5265,6 +5730,8 @@ finalize_test_connection() {
         die "Не удалось зафиксировать рабочее соединение"
     discard_test_backup
     health_reset
+    transition_guard_release ||
+        die "Не удалось снять transition guard после успешного теста"
 }
 
 new_test_token() {
@@ -5273,14 +5740,37 @@ new_test_token() {
 
 start_test_attempt() {
     local protocol="$1" profile="$2" timeout="$3"
-    local token deadline
+    local token deadline previous_protocol="" previous_profile="" fallback=""
+    local fallback_interface=""
     token="$(new_test_token)"
     ACTIVE_TEST_TOKEN="$token"
-    deadline=$(($(date +%s) + timeout))
     cancel_test_guard
+    if [[ -r "$TEST_BACKUP" ]]; then
+        previous_protocol="$(state_get_from_file "$TEST_BACKUP" PROTOCOL 2>/dev/null || true)"
+        previous_profile="$(state_get_from_file "$TEST_BACKUP" PROFILE 2>/dev/null || true)"
+        if [[ -n "$previous_profile" && "$previous_profile" != /* ]]; then
+            previous_profile="$(effective_config_dir)/$previous_protocol/$previous_profile"
+        fi
+    fi
+    if [[ -r "$TEST_BACKUP_FALLBACK" ]]; then
+        read -r fallback <"$TEST_BACKUP_FALLBACK"
+        [[ "$fallback" == legacy || "$fallback" == adguard ]] || fallback=""
+    fi
+    fallback_interface="$(transition_external_interface "$fallback")"
+    if [[ -n "$fallback_interface" ]]; then
+        printf '%s\n' "$fallback_interface" >"$TEST_BACKUP_FALLBACK_INTERFACE"
+        chmod 600 -- "$TEST_BACKUP_FALLBACK_INTERFACE"
+    fi
+    transition_guard_install "$protocol" "$profile" "$fallback" \
+        "$previous_protocol" "$previous_profile" || return 1
     stop_service_bounded 15 || true
+    if [[ -n "$fallback" ]]; then
+        info "TEST: останавливаем внешний VPN без потери rollback: $(external_fallback_title "$fallback")"
+        stop_external_fallbacks || return 1
+    fi
     cleanup_stale_quick_policy
     rm -f "$TEST_FAILURE_MARKER"
+    deadline=$(($(date +%s) + timeout))
     write_state "$protocol" "$profile" up test "$token" "$deadline" ||
         die "Не удалось записать тестовое состояние"
     health_reset
@@ -5319,7 +5809,7 @@ wait_for_test_connection() {
            service_active &&
            connection_local_ok "$SELECTED_PROTOCOL"; then
             interface="$(interface_for_protocol "$SELECTED_PROTOCOL")"
-            if public_ip "$interface" "$remaining" >/dev/null; then
+            if transition_readiness_probe "$interface" "$remaining"; then
                 printf '\n'
                 return 0
             fi
@@ -6926,6 +7416,17 @@ api_service_verify_result() {
     } 10>"$API_ACTION_DIR/.verify-service.lock"
 }
 
+api_sync_file_and_parent() {
+    local path="$1" parent
+    parent="$(dirname -- "$path")" || return 1
+    sync -f "$path" || return 1
+    sync -f "$parent"
+}
+
+api_sync_parent() {
+    sync -f "$(dirname -- "$1")"
+}
+
 api_write_record() {
     local target="$1" content="$2" tmp
     mkdir -p -- "$API_ACTION_DIR" || return 1
@@ -6940,7 +7441,8 @@ api_write_record() {
         rm -f -- "$tmp"
         return 1
     }
-    mv -f -- "$tmp" "$target"
+    mv -f -- "$tmp" "$target" || return 1
+    api_sync_file_and_parent "$target"
 }
 
 api_mark_recovery_required() {
@@ -6970,7 +7472,7 @@ api_mark_recovery_required() {
     ((rc != 0)) || chmod 600 -- "$tmp" || rc=1
     ((rc != 0)) || mv -f -- "$tmp" "$marker" || rc=1
     ((rc != 0)) || chmod 600 -- "$marker" || rc=1
-    ((rc != 0)) || sync -f "$marker" || rc=1
+    ((rc != 0)) || api_sync_file_and_parent "$marker" || rc=1
     if ((rc != 0)) && [[ -n "$tmp" && -e "$tmp" ]]; then
         rm -f -- "$tmp" || true
     fi
@@ -7084,7 +7586,35 @@ api_audit_event() {
     umask 077
     api_rotate_audit_if_needed || return 1
     printf '%s\n' "$event" >>"$API_AUDIT_FILE" || return 1
-    chmod 600 -- "$API_AUDIT_FILE"
+    chmod 600 -- "$API_AUDIT_FILE" || return 1
+    api_sync_file_and_parent "$API_AUDIT_FILE"
+}
+
+api_terminal_audit_recorded() {
+    local action_id="$1" operation="$2" outcome="$3"
+    local -a audit_files=()
+    [[ -r "$API_AUDIT_FILE.1" ]] && audit_files+=("$API_AUDIT_FILE.1")
+    [[ -r "$API_AUDIT_FILE" ]] && audit_files+=("$API_AUDIT_FILE")
+    ((${#audit_files[@]} > 0)) || return 1
+    jq -s -e \
+        --arg action_id "$action_id" \
+        --arg operation "$operation" \
+        --arg outcome "$outcome" '
+            any(
+                .[];
+                .event_type == "audit.recorded"
+                and .action_id == $action_id
+                and .payload.operation == $operation
+                and .payload.decision == "approved"
+                and .payload.outcome == $outcome
+            )
+        ' "${audit_files[@]}" >/dev/null 2>&1
+}
+
+api_ensure_terminal_audit() {
+    local action_id="$1" operation="$2" outcome="$3"
+    api_terminal_audit_recorded "$action_id" "$operation" "$outcome" ||
+        api_audit_event "$action_id" "$operation" approved "$outcome"
 }
 
 api_action_outcome() {
@@ -7130,12 +7660,15 @@ api_restore_state() {
         tmp="$STATE_DIR/.active.api-rollback.$$"
         install -m 600 "$snapshot" "$tmp" || return 1
         mv -f -- "$tmp" "$STATE_FILE" || return 1
+        sync -f "$STATE_FILE" || return 1
+        sync -f "$STATE_DIR" || return 1
         previous_desired="$(
             awk -F= '$1 == "DESIRED" { print substr($0, index($0, "=") + 1); exit }' \
                 "$snapshot"
         )"
     else
         rm -f -- "$STATE_FILE" || return 1
+        sync -f "$STATE_DIR" || return 1
     fi
 
     health_reset
@@ -7327,6 +7860,12 @@ cmd_api_recover_interrupted_actions() {
             die "BOOT API RECOVERY: unable to persist the fail-closed recovery marker"
         die "BOOT API RECOVERY: unable to acquire the shared mutation lock"
     fi
+    if [[ -e "$TRANSITION_RECOVERY_MARKER" ]]; then
+        transition_guard_restore_fail_closed ||
+            die "BOOT API RECOVERY: unable to restore the fail-closed transition guard"
+        [[ -e "$TEST_TRANSACTION" ]] ||
+            die "BOOT API RECOVERY: transition rollback requires administrator review"
+    fi
     if ! api_recover_interrupted_actions boot; then
         die "BOOT API RECOVERY: interrupted action rollback requires administrator review"
     fi
@@ -7364,6 +7903,11 @@ api_run_lifecycle_action() {
         return
     fi
     export VPNCTL_MUTATION_LOCK_FD=7
+    if [[ -e "$TRANSITION_RECOVERY_MARKER" ]]; then
+        api_error_response "$request_id" internal-error \
+            api.action.recovery-required false true
+        return
+    fi
     if ! api_recover_interrupted_actions; then
         api_error_response "$request_id" internal-error \
             api.action.recovery-required false true
@@ -7390,6 +7934,28 @@ api_run_lifecycle_action() {
                 api_error_response "$request_id" internal-error api.journal.corrupt false true
                 return
             }
+            audit_outcome="$(
+                jq -er '
+                    .state
+                    | select(
+                        . == "succeeded"
+                        or . == "timed-out"
+                        or . == "rolled-back"
+                        or . == "rollback-failed"
+                    )
+                ' <<<"$outcome" 2>/dev/null
+            )" || {
+                api_error_response "$request_id" internal-error api.journal.corrupt false true
+                return
+            }
+            if ! api_ensure_terminal_audit \
+                "$action_id" "$operation" "$audit_outcome"; then
+                api_mark_recovery_required \
+                    "$action_id" "$operation" audit-unavailable || true
+                api_error_response "$request_id" internal-error \
+                    api.audit.unavailable false true
+                return
+            fi
             api_ok_response "$request_id" "$outcome"
             return
         fi
@@ -7466,6 +8032,11 @@ api_run_lifecycle_action() {
         }
         chmod 600 -- "$snapshot"
     fi
+    api_sync_file_and_parent "$snapshot" || {
+        rm -f -- "$snapshot"
+        api_error_response "$request_id" internal-error api.snapshot.failed true true
+        return
+    }
 
     running_record="$(
         jq -cn \
@@ -7502,6 +8073,7 @@ api_run_lifecycle_action() {
         if api_complete_unstarted_timeout \
             "$request_id" "$action_id" "$operation" "$record_file" "$fingerprint"; then
             rm -f -- "$snapshot"
+            api_sync_parent "$snapshot" || true
         fi
         return
     fi
@@ -7568,8 +8140,18 @@ api_run_lifecycle_action() {
         api_error_response "$request_id" internal-error api.journal.unavailable true true
         return
     }
-    rm -f -- "$snapshot"
-    if ! api_audit_event "$action_id" "$operation" approved "$audit_outcome"; then
+    rm -f -- "$snapshot" || {
+        api_mark_recovery_required "$action_id" "$operation" snapshot-cleanup-failed || true
+        api_error_response "$request_id" internal-error api.journal.unavailable true true
+        return
+    }
+    api_sync_parent "$snapshot" || {
+        api_mark_recovery_required "$action_id" "$operation" snapshot-cleanup-sync-failed || true
+        api_error_response "$request_id" internal-error api.journal.unavailable true true
+        return
+    }
+    if ! api_ensure_terminal_audit \
+        "$action_id" "$operation" "$audit_outcome"; then
         if api_mark_recovery_required \
             "$action_id" "$operation" audit-unavailable; then
             api_error_response "$request_id" internal-error \
@@ -7593,7 +8175,7 @@ api_dispatch() {
         return
     }
     export VPNCTL_API_SERVER_CONTEXT=1
-    for command in awk jq sha256sum flock timeout install stat; do
+    for command in awk jq sha256sum flock timeout install stat sync; do
         command -v "$command" >/dev/null 2>&1 || {
             api_error_response "$(api_server_request_id)" backend-unavailable \
                 api.runtime.missing-dependency false true
@@ -8445,6 +9027,12 @@ cmd_doctor() {
             say "После ручной проверки состояния: sudo $CLI_COMMAND _api-clear-recovery --acknowledge-current-state"
         fi
     fi
+    if [[ -e "$TRANSITION_RECOVERY_MARKER" ]]; then
+        check_fail "Transition recovery marker is active; direct egress may still be blocked"
+        if ((EUID == 0)); then
+            say "После проверки VPN выполните sudo $CLI_COMMAND disconnect для явного возврата в состояние без VPN."
+        fi
+    fi
     if [[ -r "$STATE_FILE" ]]; then
         if selected_from_state; then
             check_ok "Сохранённый выбор корректен"
@@ -8988,6 +9576,8 @@ service_run() {
         die "_service-run требует root"
     [[ ! -e "$API_RECOVERY_MARKER" ]] ||
         die "_service-run заблокирован: требуется ручная проверка API rollback"
+    [[ ! -e "$TRANSITION_RECOVERY_MARKER" ]] ||
+        die "_service-run заблокирован: требуется проверка transition rollback"
     selected_from_state || die "Выбранный профиль отсутствует"
     desired="$(state_get DESIRED 2>/dev/null || true)"
     mode="$(state_get MODE 2>/dev/null || printf 'normal')"
@@ -9151,7 +9741,7 @@ health_acquire_action_lock() {
 }
 
 health_recover() {
-    local reason="$1" action="${2:-restart}" fallback=""
+    local reason="$1" action="${2:-restart}" fallback="" fallback_interface=""
     if ! health_acquire_action_lock; then
         warn "Автовосстановление отложено: уже выполняется другая операция $PRODUCT_NAME"
         return 0
@@ -9160,21 +9750,53 @@ health_recover() {
         error "Автовосстановление заблокировано: требуется ручная проверка API rollback"
         return 1
     fi
+    if [[ -e "$TRANSITION_RECOVERY_MARKER" ]]; then
+        error "Автовосстановление заблокировано: требуется проверка transition rollback"
+        return 1
+    fi
+    selected_from_state || {
+        error "Автовосстановление не нашло безопасный выбранный профиль"
+        return 1
+    }
     fallback="$(detect_external_fallback || true)"
+    fallback_interface="$(transition_external_interface "$fallback")"
+    transition_guard_install "$SELECTED_PROTOCOL" "$SELECTED_PROFILE" "$fallback" \
+        "$SELECTED_PROTOCOL" "$SELECTED_PROFILE" || {
+        error "Автовосстановление отменено: transition guard недоступен"
+        return 1
+    }
     if [[ -n "$fallback" ]]; then
         warn "Автовосстановление останавливает конфликтующий $(external_fallback_title "$fallback")"
         stop_external_fallbacks || {
             error "Автовосстановление не смогло остановить внешний VPN"
+            if transition_wait_external_ready "$fallback" "$fallback_interface"; then
+                transition_guard_release || true
+            else
+                transition_guard_hold health-fallback-stop-failed || true
+            fi
             return 1
         }
     fi
     cleanup_stale_quick_policy
     warn "Автовосстановление: $reason; действие=$action $SERVICE_NAME"
-    if systemctl "$action" "$SERVICE_NAME"; then
-        info "Автовосстановление завершено systemd"
+    if systemctl "$action" "$SERVICE_NAME" &&
+       wait_for_connection_ready "$SELECTED_PROTOCOL"; then
+        transition_guard_release || {
+            error "Автовосстановление не смогло снять transition guard"
+            return 1
+        }
+        info "Автовосстановление завершено и защищённый выход подтверждён"
         return 0
     fi
     error "systemd отклонил команду автовосстановления"
+    stop_service_bounded 15 no-reset || true
+    if [[ -n "$fallback" ]] && start_external_fallback "$fallback" &&
+       transition_wait_external_ready "$fallback" "$fallback_interface"; then
+        transition_guard_release || return 1
+        error "Автовосстановление не удалось; внешний VPN восстановлен"
+        return 1
+    fi
+    transition_guard_hold health-recovery-failed || true
     return 1
 }
 
