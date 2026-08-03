@@ -148,3 +148,14 @@ Tag и GitHub Release разрешены только после:
 Релиз нельзя описывать как поддержку 13 работающих VPN backend или готовое
 управление агентами: фактический connection lifecycle реализован для четырёх
 Linux backend.
+
+## Результат публикации
+
+- PR #43 squash-merged в `main` как
+  `2faebdb4ac2f88ba7dd7467b0dd2485afba65ed3`;
+- annotated tags `v1.4.0` и `desktop-v0.4.0` указывают на этот commit;
+- CLI/Linux release `v1.4.0` опубликован как latest с source, DEB, RPM,
+  AppImage и SHA-256 manifests;
+- Desktop `desktop-v0.4.0` опубликован как unsigned prerelease с Linux,
+  Windows и macOS preview assets и общим SHA-256 manifest;
+- PR, tag и default-branch CI/CodeQL/Desktop gates завершились успешно.
