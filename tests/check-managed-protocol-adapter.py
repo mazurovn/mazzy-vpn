@@ -163,7 +163,10 @@ def recursive_keys(value: object) -> set[str]:
 
 
 def main() -> None:
-    sing_box_binary = os.environ.get("MAZZY_TEST_SING_BOX", "")
+    requested_sing_box = os.environ.get("MAZZY_TEST_SING_BOX", "")
+    if requested_sing_box not in {"", "sing-box"}:
+        fail("MAZZY_TEST_SING_BOX may only enable the literal sing-box command")
+    check_with_sing_box = requested_sing_box == "sing-box"
     protocols = [
         "vless",
         "hysteria2",
@@ -268,9 +271,9 @@ def main() -> None:
                 fail(f"{protocol}: generated config contains forbidden keys: {leaked}")
             if stat.S_IMODE(output_path.stat().st_mode) != 0o600:
                 fail(f"{protocol}: generated secret config is not mode 0600")
-            if sing_box_binary:
+            if check_with_sing_box:
                 engine_check = subprocess.run(
-                    [sing_box_binary, "check", "-c", str(output_path)],
+                    ["sing-box", "check", "-c", str(output_path)],
                     cwd=ROOT,
                     capture_output=True,
                     text=True,

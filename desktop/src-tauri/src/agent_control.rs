@@ -108,59 +108,50 @@ fn windows_command_candidates(name: &str, pathext: Option<&str>) -> Vec<String> 
 
 #[cfg(windows)]
 fn command_candidates(name: &str) -> Vec<String> {
-    let pathext = env::var("PATHEXT").ok();
-    windows_command_candidates(name, pathext.as_deref())
+    windows_command_candidates(name, None)
 }
 
-fn command_path(name: &str) -> Option<PathBuf> {
-    if name.is_empty()
-        || name.contains('/')
-        || name.contains('\\')
-        || !name
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
-    {
-        return None;
+fn trusted_command_name(name: &str) -> Option<&'static str> {
+    match name {
+        "claude" => Some("claude"),
+        "codex" => Some("codex"),
+        "mazzy-agent" => Some("mazzy-agent"),
+        "mazzy-agent-transport-iroh" => Some("mazzy-agent-transport-iroh"),
+        "mazzy-agent-transport-libp2p" => Some("mazzy-agent-transport-libp2p"),
+        "tailscale" => Some("tailscale"),
+        _ => None,
     }
+}
 
-    let mut directories: Vec<PathBuf> = env::var_os("PATH")
-        .map(|path| env::split_paths(&path).collect())
-        .unwrap_or_default();
+fn trusted_command_directories() -> Vec<PathBuf> {
     if cfg!(target_os = "windows") {
-        directories.extend(
-            [r"C:\\Program Files\\nodejs", r"C:\\Program Files\\Codex"]
-                .into_iter()
-                .map(PathBuf::from),
-        );
-    } else {
-        if let Some(home) = env::var_os("HOME")
+        [r"C:\Program Files\nodejs", r"C:\Program Files\Codex"]
+            .into_iter()
             .map(PathBuf::from)
-            .filter(|home| home.is_absolute())
-        {
-            directories.extend([home.join(".local/bin"), home.join(".linuxbrew/bin")]);
-        }
-        directories.extend(
-            ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"]
-                .into_iter()
-                .map(PathBuf::from),
-        );
+            .collect()
+    } else {
+        ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"]
+            .into_iter()
+            .map(PathBuf::from)
+            .collect()
     }
+}
 
+fn command_available(name: &str) -> bool {
+    let Some(name) = trusted_command_name(name) else {
+        return false;
+    };
     let candidates = command_candidates(name);
-    directories
-        .into_iter()
-        .filter(|directory| directory.is_absolute())
-        .find_map(|directory| {
-            candidates
-                .iter()
-                .map(|candidate| directory.join(candidate))
-                .find(|candidate| executable_file(candidate))
-                .and_then(|candidate| candidate.canonicalize().ok())
-        })
+    trusted_command_directories().into_iter().any(|directory| {
+        candidates
+            .iter()
+            .map(|candidate| directory.join(candidate))
+            .any(|candidate| executable_file(&candidate))
+    })
 }
 
 fn provider_state(id: &'static str, display_name: &'static str, command: &str) -> ProviderState {
-    let installed = command_path(command).is_some();
+    let installed = command_available(command);
     ProviderState {
         id,
         display_name,
@@ -190,7 +181,7 @@ fn transport_states() -> Result<Vec<TransportState>, String> {
                 && transport
                     .runtime_probes
                     .iter()
-                    .all(|probe| command_path(probe).is_some());
+                    .all(|probe| command_available(probe));
             let platform_implemented =
                 transport.support.get(platform).and_then(Value::as_str) == Some("implemented");
             TransportState {
@@ -228,8 +219,6 @@ pub async fn get_agent_integrations() -> Result<AgentIntegrationReport, String> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(unix)]
-    use std::fs;
 
     #[test]
     fn provider_discovery_never_exposes_actions_or_runtime_readiness() {
@@ -249,21 +238,15 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn unix_discovery_requires_an_executable_regular_file() {
-        let root = env::temp_dir().join(format!(
-            "mazzy-agent-discovery-{}-{}",
-            std::process::id(),
-            generated_at()
-        ));
-        fs::create_dir_all(&root).expect("temporary directory");
-        let candidate = root.join("agent");
-        fs::write(&candidate, b"#!/bin/sh\n").expect("temporary executable");
-        fs::set_permissions(&candidate, fs::Permissions::from_mode(0o600))
-            .expect("non-executable mode");
-        assert!(!executable_file(&candidate));
-        fs::set_permissions(&candidate, fs::Permissions::from_mode(0o700))
-            .expect("executable mode");
-        assert!(executable_file(&candidate));
-        fs::remove_dir_all(root).expect("remove temporary directory");
+        assert!(executable_file(Path::new("/bin/sh")));
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+        assert!(!executable_file(&manifest));
+    }
+
+    #[test]
+    fn discovery_rejects_commands_outside_the_static_allowlist() {
+        assert!(!command_available("../codex"));
+        assert!(!command_available("unregistered-agent"));
     }
 
     #[cfg(windows)]
