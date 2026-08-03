@@ -71,9 +71,11 @@ All notable changes to Mazzy VPN are documented here.
   discovered agent binary. Native command-bound approval, trusted executable
   resolution and process-tree containment remain mandatory before any local
   provider lifecycle authority can return.
-- Hardened Desktop executable discovery: Unix candidates must be executable;
-  Windows discovery uses canonical absolute paths and `PATHEXT`, including
-  `.cmd` and `.bat`, instead of accepting arbitrary files named like a tool.
+- Hardened Desktop executable discovery: provider/probe names pass through a
+  static allowlist and only fixed system directories are inspected. Unix
+  candidates must be executable; Windows accepts only the fixed
+  `.com`/`.exe`/`.bat`/`.cmd` suffix set. Mutable `PATH`, `HOME` and `PATHEXT`
+  values cannot redirect diagnostics to an arbitrary file.
 - Documented the source-level Happy, Claude Bridge, Paseo and Yep Anywhere
   comparison and separated ingress, E2EE transport and provider-adapter
   boundaries. Typed Codex app-server/Claude/ACP adapters are preferred over a

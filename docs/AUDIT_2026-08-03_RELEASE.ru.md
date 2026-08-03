@@ -33,8 +33,9 @@ coordinator, ShellCheck, schema checks и полный regression suite.
 5. Agent Control позволял caller назначить заниженный risk;
 6. managed TLS validator был слабее опубликованной schema;
 7. readiness фактически предпочитал IPv4 и не доказывал IPv6-only path;
-8. Windows executable discovery не учитывал `PATHEXT`, а Unix принимал
-   неисполняемые файлы;
+8. Windows executable discovery принимал extensionless candidate, Unix
+   принимал неисполняемые файлы, а mutable search paths расширяли границу
+   доверия;
 9. sub-second lifecycle test был timing-dependent.
 
 ## Исправления
@@ -94,9 +95,11 @@ route/DNS/firewall ресурсов остаются задачами целев
 - Telegram Bot принимает только argument-free status/list/pause/cancel;
 - high-risk permission response требует first-party confirmation;
 - Desktop discovery не запускает provider binary;
+- provider/probe names проходят через статический allowlist, поиск ограничен
+  фиксированными системными каталогами и не зависит от `PATH`/`HOME`;
 - Unix candidate обязан быть executable;
-- Windows использует canonical absolute candidate и `PATHEXT`, включая
-  `.cmd`/`.bat`; bare extensionless candidate на Windows больше не принимается.
+- Windows разрешает только фиксированные `.com`/`.exe`/`.bat`/`.cmd` suffixes
+  и не доверяет mutable `PATHEXT`; bare extensionless candidate не принимается.
 
 Это не готовое remote agent management. `mazzy-agentd`, pairing, signed E2EE
 envelope, ACK/idempotency runtime, relay, Web/Telegram client и transport

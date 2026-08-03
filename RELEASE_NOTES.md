@@ -46,7 +46,9 @@ package is produced.
   diagnostics, not a remote-control or E2EE runtime claim.
 - Desktop preserves explicit profile-cache failure reasons, reads legacy caches
   with opaque derived IDs, and discovers Codex/Claude executables without
-  running them. Unix executable permissions and Windows `PATHEXT` are enforced.
+  running them. Discovery uses allowlisted names and fixed system directories;
+  Unix executable permissions and a fixed Windows executable suffix set are
+  enforced without trusting `PATH`, `HOME` or `PATHEXT`.
 - CI now syntax-checks and shellchecks the runtime adapter and verifies the API
   recovery unit together with the other systemd units.
 
@@ -126,7 +128,9 @@ Mazzy VPN 1.4.0 развивает проверенный Linux control plane д
   диагностика, а не заявление о готовом remote-control/E2EE runtime.
 - Desktop сохраняет причины ошибки profile cache, читает legacy cache через
   производные opaque ID и обнаруживает Codex/Claude без запуска. На Unix
-  проверяются executable permissions, на Windows учитывается `PATHEXT`.
+  проверяются executable permissions, на Windows разрешён фиксированный набор
+  executable suffixes. Имена и каталоги ограничены allowlist, а `PATH`, `HOME`
+  и `PATHEXT` не управляют файловым поиском.
 - CI проверяет runtime adapter через `bash -n`/ShellCheck и валидирует API
   recovery unit вместе с остальными systemd unit.
 
