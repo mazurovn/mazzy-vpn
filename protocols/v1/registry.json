@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "catalog_version": "2026-08-01",
+  "catalog_version": "2026-08-02",
   "status_values": [
     "implemented",
     "partial",
@@ -79,7 +79,7 @@
       "transports": ["tcp", "udp", "quic"],
       "censorship_resistance": "high",
       "active_probe_resistance": "high",
-      "support": {"detection": "implemented", "import": "planned", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
+      "support": {"detection": "implemented", "import": "partial", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
       "source": "https://xtls.github.io/en/config/outbounds/vless.html"
     },
     {
@@ -93,7 +93,7 @@
       "transports": ["quic", "udp"],
       "censorship_resistance": "high",
       "active_probe_resistance": "high",
-      "support": {"detection": "implemented", "import": "planned", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
+      "support": {"detection": "implemented", "import": "partial", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
       "source": "https://v2.hysteria.network/docs/developers/Protocol/"
     },
     {
@@ -107,7 +107,7 @@
       "transports": ["tcp", "udp"],
       "censorship_resistance": "high",
       "active_probe_resistance": "high",
-      "support": {"detection": "implemented", "import": "planned", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
+      "support": {"detection": "implemented", "import": "partial", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
       "source": "https://github.com/enfein/mieru/blob/main/docs/client-install.md"
     },
     {
@@ -121,7 +121,7 @@
       "transports": ["http2", "http3", "quic"],
       "censorship_resistance": "high",
       "active_probe_resistance": "high",
-      "support": {"detection": "planned", "import": "planned", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
+      "support": {"detection": "implemented", "import": "partial", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
       "source": "https://github.com/klzgrad/naiveproxy"
     },
     {
@@ -135,7 +135,7 @@
       "transports": ["quic", "udp"],
       "censorship_resistance": "medium",
       "active_probe_resistance": "medium",
-      "support": {"detection": "implemented", "import": "planned", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
+      "support": {"detection": "implemented", "import": "partial", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
       "source": "https://sing-box.sagernet.org/configuration/outbound/tuic/"
     },
     {
@@ -149,7 +149,7 @@
       "transports": ["tcp", "udp"],
       "censorship_resistance": "medium",
       "active_probe_resistance": "medium",
-      "support": {"detection": "implemented", "import": "planned", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
+      "support": {"detection": "implemented", "import": "partial", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
       "source": "https://sing-box.sagernet.org/manual/proxy-protocol/shadowsocks/"
     },
     {
@@ -163,7 +163,7 @@
       "transports": ["tcp", "udp"],
       "censorship_resistance": "medium",
       "active_probe_resistance": "medium",
-      "support": {"detection": "implemented", "import": "planned", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
+      "support": {"detection": "implemented", "import": "partial", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
       "source": "https://sing-box.sagernet.org/configuration/outbound/trojan/"
     },
     {
@@ -177,7 +177,7 @@
       "transports": ["tcp", "tls"],
       "censorship_resistance": "high",
       "active_probe_resistance": "medium",
-      "support": {"detection": "implemented", "import": "planned", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
+      "support": {"detection": "implemented", "import": "partial", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
       "source": "https://sing-box.sagernet.org/configuration/outbound/anytls/"
     },
     {
@@ -191,7 +191,7 @@
       "transports": ["tcp", "tls"],
       "censorship_resistance": "high",
       "active_probe_resistance": "high",
-      "support": {"detection": "planned", "import": "planned", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
+      "support": {"detection": "implemented", "import": "partial", "diagnostics": "partial", "linux": "planned", "windows": "planned", "android": "planned"},
       "source": "https://github.com/ihciah/shadow-tls/blob/master/docs/protocol-v3-en.md"
     }
   ],
@@ -201,7 +201,7 @@
       "backend-ready",
       "profile-valid",
       "secrets-readable-only-by-backend",
-      "rollback-available",
+      "rollback-storage-ready",
       "platform-supported"
     ],
     "score_factors": [

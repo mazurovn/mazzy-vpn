@@ -4,7 +4,7 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
 [Русская версия](ARCHITECTURE.ru.md) · [Project README](../README.md)
 
-This document describes the current CLI/TUI and Desktop 0.3 architecture. See
+This document describes the current CLI/TUI 1.4 and Desktop 0.4 architecture. See
 the [Desktop 1.0 plan](DESKTOP_ROADMAP.en.md) for the target standalone
 architecture with a shared core and versioned API. The
 [feature-parity matrix](FEATURE_PARITY.md) prevents a preview from being
@@ -33,13 +33,15 @@ flowchart TB
 
     subgraph Control["Validated control plane"]
         Validation["Profile parser and security validation"]
-        ActionLock["Exclusive action lock"]
+        ActionLock["Shared fail-closed mutation lock"]
         State["Desired state and selected default<br/>/var/lib/vpnctl/active"]
         Runtime["Ephemeral counters, locks and test data<br/>/run/vpnctl"]
         ActionJournal["Idempotency and sanitized audit<br/>/var/lib/vpnctl/api-*"]
         StatusCache["Sanitized status without keys or endpoint<br/>/run/mazzy-vpn/status.json"]
         ProfileCache["Sanitized profile catalog without paths/endpoints<br/>/run/mazzy-vpn/profiles.json"]
         Verification["Bounded endpoint and egress verification<br/>tests.probe / tests.verify-egress"]
+        Registry["Versioned protocol registry<br/>capabilities + policy"]
+        Planner["Read-only planner<br/>backend gates + advisory score"]
     end
 
     subgraph Supervisor["systemd supervision"]
@@ -80,6 +82,11 @@ flowchart TB
     Desktop --> ApiSocket
     ApiSocket --> Entry
     ApiSocket --> ActionJournal
+    Entry --> Registry
+    Entry --> Planner
+    Planner --> Registry
+    Planner --> ProfileCache
+    Planner --> Validation
     Desktop -. remaining fixed operations through pkexec .-> Entry
     Commands --> Validation
     Validation --> Profiles
@@ -136,18 +143,75 @@ L2TP/IPsec currently have implemented Linux connection adapters. The remaining
 nine entries cannot enter lifecycle selection while their platform state is
 `planned`.
 
-`mazzy-vpn protocols list --json` and API `protocols.list` expose only public
-capabilities. `protocols detect --stdin --json` recognizes unambiguous share
-schemes but returns no host, user info, UUID, password, query or fragment.
+All nine modern entries now have a closed neutral profile validator and atomic
+root-only Linux import. Six have a tested fixed sing-box config renderer. The
+separate [`runtime/v1/adapter-registry.json`](../runtime/v1/adapter-registry.json)
+pins candidate engines and process graphs while keeping lifecycle and network
+integration tests `planned`. Mieru and NaiveProxy require two-process sidecar
+supervision; ShadowTLS requires a typed inner proxy chain.
+
+`mazzy-vpn protocols list --json`, `protocols adapters --json` and API
+`protocols.list` expose only public
+capabilities. `protocols detect --stdin --json` classifies unambiguous share
+URIs and bounded JSON shapes but returns no host, user info, UUID, password,
+query or fragment. Classified JSON is not a validated runtime configuration.
+Validation/import accepts only `managed-profile.schema.json`; it never promotes
+the detected vendor JSON directly into root execution.
 Proxy protocols require an explicit TUN adapter; arbitrary user-provided
 sing-box JSON is never a root execution format. See
 [Protocol orchestration](PROTOCOL_ORCHESTRATION.en.md) for scoring, custom
 server storage and agent constraints.
 
-The future planner is deterministic and subordinate to hard constraints:
-platform backend ready, profile valid, backend-only secret access and rollback
-available. LLM output can propose a dry-run plan but cannot construct a shell
-command, backend configuration or bypass authorization/action-ID boundaries.
+## Reverse agent-control plane
+
+Mazzy has a separate versioned draft contract for reverse control of AI agents.
+[`agent-control/v1/registry.json`](../agent-control/v1/registry.json) catalogs
+LAN WSS, iroh, libp2p, WebRTC, WebTransport, Tailscale/Headscale and reverse
+WSS paths without mislabeling them as VPN protocols. Web, CLI and Telegram are
+ingress channels above those paths. Standard Telegram Bot access is explicitly
+low-risk and gateway-visible; full control requires a paired first-party Web
+or Mini App channel.
+
+The current implementation includes the draft catalog/schemas, packaging and
+read-only Desktop diagnostics. The AI Agents screen discovers candidate
+Codex/Claude Code executables and catalog status, but neither executes them nor
+exposes start, pair or stop through renderer IPC. Native command-bound approval,
+trusted executable resolution and process-tree containment are required before
+provider lifecycle authority can return. This is not a first-party
+`mazzy-agentd`.
+None of the seven agent transports is
+release-ready; Web/Telegram and Claude lifecycle remain planned. Provider
+adapters, E2EE, failover and anti-replay are target design, not a working
+runtime; they and the separate gateway boundary are
+specified in [Reverse agent control](AGENT_CONTROL_ARCHITECTURE.en.md).
+The deeper normative review, including state ownership, protocol gaps,
+transport policy and the delivery DAG, is in the
+[target architecture (RU)](TARGET_ARCHITECTURE_2026-08-02.ru.md).
+
+The implemented `planner.evaluate` query is subordinate to hard constraints
+computed by the backend: platform backend ready, profile valid, backend-only
+secret access, protected rollback storage ready and platform support
+implemented. The storage gate proves that secure journal/snapshot storage is
+available; it does not prove a candidate-specific rollback. The planner returns
+a scored dry-run evaluation using opaque IDs and reason codes. LLM output cannot
+construct a shell command, backend configuration or bypass a gate. The
+operation does not connect or fail over; future execution remains behind
+authorization/action-ID, audit and rollback boundaries.
+
+The trust boundary is explicit:
+
+| Input/state | Owner | Planner use |
+|---|---|---|
+| Runtime presence, current profile parse, file permissions, rollback storage and platform support | backend | eligibility gates; the caller cannot override them |
+| Recent outcome, reachability, latency/loss and measurement age | caller in the current slice | health score only; evidence older than 900 seconds scores zero |
+| Censorship fit and workload fit | backend catalog + workload | score; the caller cannot assign these values |
+| Free-form model output | untrusted | never parsed as a shell command, profile or backend configuration |
+
+For the same local snapshot and evidence, rank and reason codes are
+deterministic; `evaluated_at` intentionally changes. One absolute monotonic
+deadline is passed through candidate validation and the OpenVPN parser. A
+parser timeout therefore becomes `deadline-exceeded` instead of silently
+running beyond the API budget.
 
 The CLI/TUI client reaches the Unix socket through automatically installed
 `socat`. It bounds response size and time, validates envelope identity and
@@ -298,12 +362,38 @@ There are two independent recovery layers:
    interface and two HTTPS paths. For profiles that declare a full tunnel, its
    automatic policy also compares default and interface-bound IPv4. A desired
    but inactive service starts immediately. A locally active but unusable
-   tunnel, or two confirmed full-tunnel egress mismatches, triggers restart.
-   An unavailable comparison observer does not trigger recovery.
+   tunnel, or two confirmed full-tunnel egress mismatches, triggers one restart
+   exactly at the configured threshold. It neither calls `reset-failed` nor
+   clears the counter first. The next failed tick saturates at threshold plus
+   one, emits one recovery-paused warning and leaves OpenVPN native retry
+   running. Success and explicit connect/reconnect/profile mutation reset the
+   counter. Missing OpenVPN interface state and the interface-present but
+   HTTPS-unavailable data-plane interval have a bounded 60-second startup grace
+   derived from systemd's monotonic activation timestamp and Python's
+   `CLOCK_MONOTONIC`, so suspend time cannot inflate the age. If either bounded
+   timestamp source is unavailable or malformed, no grace is granted.
+3. `mazzy-vpn-api-recovery.service` runs as a hardened root oneshot before test
+   recovery, the managed tunnel, health remediation and API socket. It
+   reconciles interrupted API journals under the shared lock. Directory,
+   permission, lock-acquisition or rollback failure preserves the root-only
+   marker. The managed service has an ordered `Requires=` dependency on this
+   gate, so recovery failure also blocks activation when the marker itself
+   cannot be persisted. Test recovery keeps its deadlock-safe boot path and a
+   60-second unit budget; health remediation refuses to start/restart a tunnel
+   while the marker exists.
+
+Health start/restart holds the shared mutation lock until systemd returns a
+terminal job result; it does not use `--no-block`.
 
 Manual `disconnect` writes `DESIRED=down` before stopping the service, so the
 health monitor does not undo an intentional disconnect. An idle TUI does not
-retain the action lock.
+retain the mutation lock.
+
+Service eligibility probing is an explicit diagnostic branch, not recovery
+input: `verify-service` / `tests.verify-service-egress` sends bounded HEAD-only
+requests to two compiled allowlisted HTTPS endpoints through the selected VPN
+interface. It has no path into the health counter or planner and emits only
+sanitized enum evidence.
 
 ## Transactional live test and rollback
 
@@ -355,24 +445,38 @@ previous connection has been restored successfully.
 | `/var/lib/vpnctl/api-actions` | Completed/running action IDs, rollback snapshots and sanitized outcomes | Persistent, directory `700`, records `600`; newest 512 completed outcomes by default |
 | `/var/lib/vpnctl/api-audit.jsonl{,.1}` | Operation, authorization decision and outcome | Persistent, mode `600`; no payload/backend output; 2 MiB rotation with one archive |
 | `/var/lib/vpnctl/api-recovery-required.json` | Failed/missing rollback snapshot marker | Persistent mode `600`; blocks API mutations until explicit administrator acknowledgement |
-| `/run/vpnctl` | Locks, health counter and sanitized runtime log | Cleared at boot |
+| `/var/lib/vpnctl/transition-recovery-required.json` | Unverified tunnel/fallback restoration marker | Persistent mode `600`; records why the nftables transition guard remains fail-closed |
+| `/var/lib/vpnctl/transition-fallback.rules` | Exact external-fallback endpoint allowlist | Persistent mode `600` only while safe fallback restoration may be needed |
+| `/run/vpnctl` | Shared `.mutation.lock`, singleton `.health.lock`, health counter and sanitized runtime log | Cleared at boot |
 | `/run/mazzy-vpn/status.json` | Sanitized Desktop status | Recreated by root, `0640 root:mazzy-vpn`, without keys or endpoint |
 | `/run/mazzy-vpn/api-v1.sock` | Versioned local API transport | Socket `0660 root:mazzy-vpn`, systemd activated |
 | `vpnctl.service` | Owns the active managed tunnel | Long-running, systemd supervised |
 | `vpnctl-health.timer` | Schedules independent health checks | Enabled for unattended recovery |
 | `vpnctl-test-recovery.service` | Repairs interrupted tests after boot | Boot-time oneshot |
+| `mazzy-vpn-api-recovery.service` | Reconciles API actions and restores a minimal nftables deny guard for unresolved transitions | Hardened root boot-time oneshot with `CAP_NET_ADMIN` |
+| `mazzy-vpn-api-recovery.service` | Reconciles interrupted API actions before control services | Hardened root boot-time oneshot |
 
 Security invariants:
 
-- one managed tunnel and one serialized state-changing operation;
+- in release 1.4, one managed tunnel and one state-changing
+  operation are serialized by the shared `.mutation.lock` across API, direct
+  CLI, recovery, health remediation and service-policy paths;
+- this is a transitional R0a process lock: the API journal still covers API
+  lifecycle only, and the target single `mazzy-vpnd` owner is not implemented;
 - an interrupted API action is reconciled from its pre-action snapshot before
   another mutation starts;
+- lifecycle journal/audit records and snapshots are synchronized before API
+  mutations, and terminal snapshot deletion is synchronized before success;
+- connect, reconnect, tests, emergency selection and health recovery install
+  an output/forward nftables guard before stopping a protected path; it is
+  removed only after the new path or rollback is interface-bound and verified;
 - profile type is detected from content, then validated before import;
 - no private key, credential, personal path or operational profile belongs in
   Git;
 - extended logs conceal private and AmneziaWG obfuscation parameters;
-- Desktop accepts enum actions only and never passes user input to a shell;
-  Rust strictly deserializes both runtime caches, and exact opaque
+- Desktop Agent Control is diagnostics-only and exposes no executable renderer
+  operation;
+- Rust strictly deserializes both runtime caches, and exact opaque
   `profile_id`/basename identity prevents duplicate display names from
   impersonating the active profile; the caches contain no endpoint or profile
   contents;

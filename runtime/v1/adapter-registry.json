@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "catalog_version": "2026-08-02",
+  "status_values": ["implemented", "partial", "planned"],
+  "hard_release_gates": [
+    "version-pinned-runtime-assets-with-checksums-and-sbom",
+    "root-owned-0600-input-and-generated-config",
+    "no-user-controlled-listeners-paths-route-rules-or-marks",
+    "engine-endpoint-route-excluded-from-tun",
+    "dns-bootstrap-and-application-dns-cannot-bypass-policy",
+    "two-process-failure-is-atomic-for-sidecar-bridges",
+    "rollback-restores-route-dns-firewall-and-previous-tunnel",
+    "network-namespace-ipv4-ipv6-dns-and-process-crash-tests-pass"
+  ],
+  "adapters": [
+    {
+      "id": "sing-box-managed-v1",
+      "kind": "single-engine",
+      "runtime": "sing-box",
+      "required_version": "1.13.12",
+      "engine_bundled": false,
+      "protocols": ["vless", "hysteria2", "tuic", "shadowsocks2022", "trojan", "anytls"],
+      "process_graph": ["mazzy-lifecycle", "sing-box-tun"],
+      "support": {
+        "profile_validation": "implemented",
+        "secret_safe_import": "implemented",
+        "engine_config_render": "implemented",
+        "lifecycle": "planned",
+        "integration_tests": "planned"
+      },
+      "security_boundaries": [
+        "fixed-loop-free-tun-route-and-dns-graph",
+        "ipv4-literal-engine-and-doh-bootstrap-in-v1",
+        "tls-verification-cannot-be-disabled",
+        "generated-runtime-config-is-ephemeral"
+      ],
+      "source": "https://github.com/SagerNet/sing-box/releases/tag/v1.13.12"
+    },
+    {
+      "id": "mieru-sidecar-v1",
+      "kind": "sidecar-bridge",
+      "runtime": "mieru",
+      "required_version": "3.32.0",
+      "engine_bundled": false,
+      "protocols": ["mieru"],
+      "process_graph": ["mazzy-lifecycle", "mieru-run-loopback-socks5", "sing-box-tun-to-socks5"],
+      "support": {
+        "profile_validation": "implemented",
+        "secret_safe_import": "implemented",
+        "engine_config_render": "planned",
+        "lifecycle": "planned",
+        "integration_tests": "planned"
+      },
+      "security_boundaries": [
+        "mieru-config-isolated-with-mieru-config-json-file",
+        "foreground-mieru-run-only",
+        "fixed-loopback-socks5-listener",
+        "both-processes-fail-and-rollback-as-one-unit"
+      ],
+      "source": "https://github.com/enfein/mieru/releases/tag/v3.32.0"
+    },
+    {
+      "id": "naive-sidecar-v1",
+      "kind": "sidecar-bridge",
+      "runtime": "naive",
+      "required_version": "148.0.7778.96-5",
+      "engine_bundled": false,
+      "protocols": ["naive"],
+      "process_graph": ["mazzy-lifecycle", "naive-loopback-socks5", "sing-box-tun-to-socks5"],
+      "support": {
+        "profile_validation": "implemented",
+        "secret_safe_import": "implemented",
+        "engine_config_render": "planned",
+        "lifecycle": "planned",
+        "integration_tests": "planned"
+      },
+      "security_boundaries": [
+        "fixed-loopback-socks5-listener",
+        "proxy-uri-built-from-typed-fields-not-accepted-raw",
+        "tls-verification-cannot-be-disabled",
+        "both-processes-fail-and-rollback-as-one-unit"
+      ],
+      "source": "https://github.com/klzgrad/naiveproxy/releases/tag/v148.0.7778.96-5"
+    },
+    {
+      "id": "shadowtls-chain-v1",
+      "kind": "transport-chain",
+      "runtime": "sing-box",
+      "required_version": "1.13.12",
+      "engine_bundled": false,
+      "protocols": ["shadowtls"],
+      "process_graph": ["mazzy-lifecycle", "typed-inner-proxy", "shadowtls-v3-transport", "sing-box-tun"],
+      "support": {
+        "profile_validation": "implemented",
+        "secret_safe_import": "implemented",
+        "engine_config_render": "planned",
+        "lifecycle": "planned",
+        "integration_tests": "planned"
+      },
+      "security_boundaries": [
+        "shadowtls-is-never-rendered-as-standalone-egress",
+        "inner-proxy-is-a-typed-reference-not-arbitrary-json",
+        "tls13-handshake-server-is-verified-before-activation",
+        "chain-fails-closed"
+      ],
+      "source": "https://github.com/ihciah/shadow-tls/blob/master/docs/protocol-v3-en.md"
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mazurovn/mazzy-vpn/runtime/v1/schema.json",
+  "title": "Mazzy VPN runtime adapter registry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "catalog_version", "status_values", "hard_release_gates", "adapters"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "catalog_version": {"type": "string", "format": "date"},
+    "status_values": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"enum": ["implemented", "partial", "planned"]}
+    },
+    "hard_release_gates": {"$ref": "#/$defs/StringList"},
+    "adapters": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 8,
+      "items": {"$ref": "#/$defs/Adapter"}
+    }
+  },
+  "$defs": {
+    "Status": {"enum": ["implemented", "partial", "planned"]},
+    "StringList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "Adapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "runtime", "required_version", "engine_bundled", "protocols", "process_graph", "support", "security_boundaries", "source"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]+$"},
+        "kind": {"enum": ["single-engine", "sidecar-bridge", "transport-chain"]},
+        "runtime": {"type": "string", "minLength": 1},
+        "required_version": {"type": "string", "minLength": 1},
+        "engine_bundled": {"const": false},
+        "protocols": {"$ref": "#/$defs/StringList"},
+        "process_graph": {"$ref": "#/$defs/StringList"},
+        "support": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["profile_validation", "secret_safe_import", "engine_config_render", "lifecycle", "integration_tests"],
+          "properties": {
+            "profile_validation": {"$ref": "#/$defs/Status"},
+            "secret_safe_import": {"$ref": "#/$defs/Status"},
+            "engine_config_render": {"$ref": "#/$defs/Status"},
+            "lifecycle": {"$ref": "#/$defs/Status"},
+            "integration_tests": {"$ref": "#/$defs/Status"}
+          }
+        },
+        "security_boundaries": {"$ref": "#/$defs/StringList"},
+        "source": {"type": "string", "format": "uri"}
+      }
+    }
+  }
+}

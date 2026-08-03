@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod agent_control;
 mod backend;
 
 use serde::{Deserialize, Serialize};
@@ -331,6 +332,7 @@ fn main() {
             backend::run_operation,
             backend::pick_profile_files,
             backend::pick_profile_folder,
+            agent_control::get_agent_integrations,
             show_main_window,
             hide_main_window,
             get_platform_info
@@ -346,6 +348,7 @@ fn main() {
             let open = MenuItem::with_id(app, "open", "Open Dashboard", true, None::<&str>)?;
             let profiles =
                 MenuItem::with_id(app, "profiles", "Profiles & Locations", true, None::<&str>)?;
+            let agents = MenuItem::with_id(app, "agents", "AI Agents", true, None::<&str>)?;
             let diagnostics = MenuItem::with_id(
                 app,
                 "diagnostics",
@@ -404,6 +407,7 @@ fn main() {
                     &description,
                     &open,
                     &profiles,
+                    &agents,
                     &diagnostics,
                     &settings,
                     &about,
@@ -434,6 +438,7 @@ fn main() {
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => show_page(app, "dashboard"),
                     "profiles" => show_page(app, "profiles"),
+                    "agents" => show_page(app, "agents"),
                     "diagnostics" => show_page(app, "diagnostics"),
                     "settings" => show_page(app, "settings"),
                     "about" => show_page(app, "about"),

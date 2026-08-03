@@ -8,6 +8,8 @@ CLI="$ROOT/mazzy-vpn"
 COMPAT_CLI="$ROOT/vpnctl"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
+REAL_PYTHON3="$(command -v python3)"
+export REAL_PYTHON3
 
 pass=0
 fail() {
@@ -49,7 +51,36 @@ chmod 600 "$TMP/config/wireguard/Unsafe.conf"
 cat >"$TMP/fakebin/systemctl" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"${FAKE_SYSTEMCTL_LOG:?}"
+[[ -z "${FAKE_TRANSITION_LOG:-}" ]] ||
+    printf 'systemctl %s\n' "$*" >>"$FAKE_TRANSITION_LOG"
+[[ -z "${FAKE_DURABILITY_LOG:-}" ]] ||
+    printf 'systemctl %s\n' "$*" >>"$FAKE_DURABILITY_LOG"
+
+fake_activate_api_recovery() {
+    printf 'activate mazzy-vpn-api-recovery.service\n' \
+        >>"${FAKE_SYSTEMCTL_RECOVERY_LOG:?}"
+    if grep -Fxq 'RemainAfterExit=yes' \
+            "${FAKE_SYSTEMCTL_RECOVERY_UNIT:?}"; then
+        : >"${FAKE_SYSTEMCTL_RECOVERY_ACTIVE_FILE:?}"
+    fi
+}
+
+if [[ "${FAKE_SYSTEMCTL_MODEL_RECOVERY_DEPENDENCY:-0}" == "1" ]]; then
+    case "$*" in
+        "start mazzy-vpn-api-recovery.service")
+            [[ -e "${FAKE_SYSTEMCTL_RECOVERY_ACTIVE_FILE:?}" ]] ||
+                fake_activate_api_recovery
+            ;;
+        "start vpnctl.service"|"restart vpnctl.service"|\
+        "start --no-block vpnctl.service"|"restart --no-block vpnctl.service")
+            [[ -e "${FAKE_SYSTEMCTL_RECOVERY_ACTIVE_FILE:?}" ]] ||
+                fake_activate_api_recovery
+            ;;
+    esac
+fi
 if [[ -n "${FAKE_SYSTEMCTL_DELAY_ONCE_FILE:-}" &&
+      ( -z "${FAKE_SYSTEMCTL_DELAY_ACTION:-}" ||
+        "$*" == "${FAKE_SYSTEMCTL_DELAY_ACTION}" ) &&
       ! -e "$FAKE_SYSTEMCTL_DELAY_ONCE_FILE" ]]; then
     touch "$FAKE_SYSTEMCTL_DELAY_ONCE_FILE"
     printf '%s\n' "$$" >"${FAKE_SYSTEMCTL_DELAY_PID_FILE:?}"
@@ -59,6 +90,18 @@ if [[ "${FAKE_SYSTEMCTL_DELAY_SECONDS:-0}" != "0" ]]; then
     sleep "$FAKE_SYSTEMCTL_DELAY_SECONDS"
 fi
 case "$*" in
+    "show --property=ActiveEnterTimestampMonotonic vpnctl.service")
+        [[ "${FAKE_SYSTEMCTL_ACTIVE_AGE_SECONDS:-}" =~ ^[0-9]+$ ]] || exit 1
+        now_usec="${FAKE_MONOTONIC_NOW_USEC:-9000000000000}"
+        [[ "$now_usec" =~ ^[1-9][0-9]*$ ]] || exit 1
+        if [[ "${FAKE_SYSTEMCTL_MONOTONIC_MALFORMED:-0}" == "1" ]]; then
+            printf 'ActiveEnterTimestampMonotonic=%s\nunexpected=true\n' \
+                "$((now_usec - FAKE_SYSTEMCTL_ACTIVE_AGE_SECONDS * 1000000))"
+        else
+            printf 'ActiveEnterTimestampMonotonic=%s\n' \
+                "$((now_usec - FAKE_SYSTEMCTL_ACTIVE_AGE_SECONDS * 1000000))"
+        fi
+        ;;
     reset-failed*vpnctl.service*)
         rm -f "${FAKE_SYSTEMCTL_COUNTER:?}"
         ;;
@@ -83,18 +126,58 @@ case "$*" in
             printf '%s\n' openvpn-too-many-connections \
                 >"${VPNCTL_RUN_DIR:?}/test.failure"
         fi
+        [[ -z "${FAKE_SYSTEMCTL_ACTIVATE_FILE:-}" ]] ||
+            : >"$FAKE_SYSTEMCTL_ACTIVATE_FILE"
         ;;
     "stop vpnctl.service")
         [[ "${FAKE_SYSTEMCTL_STOP_FAIL:-0}" == "1" ]] && exit 1
         ;;
     "is-active vpnctl.service")
-        [[ "${FAKE_SYSTEMCTL_INACTIVE:-0}" == "1" ]] && exit 3
+        if [[ "${FAKE_SYSTEMCTL_INACTIVE:-0}" == "1" &&
+              ( -z "${FAKE_SYSTEMCTL_ACTIVATE_FILE:-}" ||
+                ! -e "$FAKE_SYSTEMCTL_ACTIVATE_FILE" ) ]]; then
+            exit 3
+        fi
         exit 0
         ;;
     *is-active*) exit 0 ;;
     *cat*) exit 0 ;;
 esac
 exit 0
+EOF
+
+cat >"$TMP/fakebin/python3" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "-I" && "${2:-}" == "-c" &&
+      "${3:-}" == *"time.CLOCK_MONOTONIC"* ]]; then
+    [[ "${FAKE_PYTHON_MONOTONIC_FAIL:-0}" != "1" ]] || exit 1
+    if [[ "${FAKE_PYTHON_MONOTONIC_MALFORMED:-0}" == "1" ]]; then
+        printf 'not-a-timestamp\n'
+    else
+        printf '%s\n' "${FAKE_MONOTONIC_NOW_USEC:-9000000000000}"
+    fi
+    exit 0
+fi
+exec "${REAL_PYTHON3:?}" "$@"
+EOF
+
+cat >"$TMP/fakebin/nft" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"${FAKE_NFT_LOG:?}"
+case "$*" in
+    "delete table inet mazzy_vpn_transition")
+        [[ -z "${FAKE_TRANSITION_LOG:-}" ]] ||
+            printf 'guard remove\n' >>"$FAKE_TRANSITION_LOG"
+        exit 0
+        ;;
+    "-f -")
+        rules="$(cat)"
+        printf '%s\n' "$rules" >>"${FAKE_NFT_RULES_LOG:?}"
+        [[ -z "${FAKE_TRANSITION_LOG:-}" ]] ||
+            printf 'guard install\n' >>"$FAKE_TRANSITION_LOG"
+        [[ "${FAKE_NFT_INSTALL_FAIL:-0}" != "1" ]] || exit 1
+        ;;
+esac
 EOF
 
 cat >"$TMP/fakebin/timeout" <<'EOF'
@@ -123,6 +206,67 @@ for argument in "$@"; do
     url="$argument"
 done
 case "$url" in
+    *\[2606:4700:4700::1111\]/cdn-cgi/trace*)
+        [[ -z "${FAKE_TRANSITION_CURL_LOG:-}" ]] ||
+            printf '%s\n' "$*" >>"$FAKE_TRANSITION_CURL_LOG"
+        [[ -z "${FAKE_TRANSITION_LOG:-}" ]] ||
+            printf 'curl transition probe v6\n' >>"$FAKE_TRANSITION_LOG"
+        printf 'fl=test\nh=2606:4700:4700::1111\nip=%s\nvisit_scheme=https\nwarp=off\n' \
+            "${FAKE_BOUND_IPV6:-2001:db8::7}"
+        [[ "${FAKE_TRANSITION_PROBE_DUP_IP:-0}" != "1" ]] ||
+            printf 'ip=2001:db8::9\n'
+        ;;
+    *1.1.1.1/cdn-cgi/trace*)
+        [[ -z "${FAKE_TRANSITION_CURL_LOG:-}" ]] ||
+            printf '%s\n' "$*" >>"$FAKE_TRANSITION_CURL_LOG"
+        [[ -z "${FAKE_TRANSITION_LOG:-}" ]] ||
+            printf 'curl transition probe\n' >>"$FAKE_TRANSITION_LOG"
+        printf 'fl=test\nh=1.1.1.1\nip=%s\n' \
+            "${FAKE_BOUND_IPV4:-203.0.113.7}"
+        [[ "${FAKE_TRANSITION_PROBE_DUP_IP:-0}" != "1" ]] ||
+            printf 'ip=198.51.100.9\n'
+        printf 'visit_scheme=https\nwarp=off\n'
+        ;;
+    *probe.invalid*)
+        [[ -z "${FAKE_TRANSITION_CURL_LOG:-}" ]] ||
+            printf '%s\n' "$*" >>"$FAKE_TRANSITION_CURL_LOG"
+        [[ -z "${FAKE_TRANSITION_LOG:-}" ]] ||
+            printf 'curl hostname probe\n' >>"$FAKE_TRANSITION_LOG"
+        [[ "${FAKE_DNS_UNAVAILABLE:-0}" != "1" ]] || exit 6
+        if [[ "$has_interface" == true ]]; then
+            printf '%s' "${FAKE_BOUND_IPV4:-203.0.113.7}"
+        else
+            printf '%s' "${FAKE_DEFAULT_IPV4:-203.0.113.7}"
+        fi
+        ;;
+    *notebooklm.google.com*|*chatgpt.com/backend-api/codex/responses*)
+        [[ -z "${FAKE_SERVICE_CURL_LOG:-}" ]] ||
+            printf '%s\n' "$*" >>"$FAKE_SERVICE_CURL_LOG"
+        if [[ -n "${ALL_PROXY:-}${all_proxy:-}${HTTP_PROXY:-}${http_proxy:-}${HTTPS_PROXY:-}${https_proxy:-}${NO_PROXY:-}${no_proxy:-}" ]]; then
+            exit 96
+        fi
+        [[ "$has_interface" == true ]] || exit 97
+        [[ -z "${FAKE_SERVICE_PID_FILE:-}" ]] ||
+            printf '%s\n' "$$" >"$FAKE_SERVICE_PID_FILE"
+        if [[ -n "${FAKE_SERVICE_DELAY_SECONDS:-}" ]]; then
+            sleep "$FAKE_SERVICE_DELAY_SECONDS"
+        fi
+        status="${FAKE_SERVICE_STATUS:-302}"
+        printf 'HTTP/2 %s\r\n' "$status"
+        if [[ "${FAKE_SERVICE_OVERSIZE:-0}" == "1" ]]; then
+            printf 'X-Oversized: '
+            head -c 9000 /dev/zero | tr '\0' x
+            printf '\r\n'
+        fi
+        if [[ -n "${FAKE_SERVICE_LOCATION:-}" ]]; then
+            printf 'Location: %s\r\n' "$FAKE_SERVICE_LOCATION"
+            [[ "${FAKE_SERVICE_DUP_LOCATION:-0}" != "1" ]] ||
+                printf 'Location: %s\r\n' "$FAKE_SERVICE_LOCATION"
+        fi
+        [[ -z "${FAKE_SERVICE_ALLOW:-}" ]] ||
+            printf 'Allow: %s\r\n' "$FAKE_SERVICE_ALLOW"
+        printf '\r\n'
+        ;;
     *api6.ipify.org*)
         if [[ "$has_interface" == true ]]; then
             value="${FAKE_BOUND_IPV6:-}"
@@ -190,11 +334,26 @@ cat >"$TMP/fakebin/getent" <<'EOF'
 /usr/bin/getent "$@"
 EOF
 
+cat >"$TMP/fakebin/sync" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"${FAKE_SYNC_LOG:?}"
+[[ -z "${FAKE_DURABILITY_LOG:-}" ]] ||
+    printf 'sync %s\n' "$*" >>"$FAKE_DURABILITY_LOG"
+[[ "${FAKE_SYNC_FAIL_TARGET:-}" != "${*: -1}" ]] || exit 1
+exec /usr/bin/sync "$@"
+EOF
+
 cat >"$TMP/fakebin/openvpn" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >"${FAKE_OPENVPN_LOG:?}"
+if [[ -n "${FAKE_OPENVPN_DELAY_SECONDS:-}" ]]; then
+    sleep "$FAKE_OPENVPN_DELAY_SECONDS"
+fi
 if [[ "${FAKE_OPENVPN_TOO_MANY:-0}" == "1" ]]; then
     printf "Halt command was pushed by server ('Too many connections')\n" >&2
+fi
+if [[ "${FAKE_OPENVPN_AUTH_FAILED:-0}" == "1" ]]; then
+    printf 'AUTH_FAILED\n' >&2
 fi
 EOF
 
@@ -255,15 +414,46 @@ case "$*" in
         exit 1
         ;;
     "link show vpnwg0") exit 0 ;;
-    "link show vpnovpn0") exit 0 ;;
+    "link show adguard0") exit 0 ;;
+    "link show vpnovpn0")
+        [[ "${FAKE_OPENVPN_INTERFACE_MISSING:-0}" != "1" ]]
+        exit $?
+        ;;
+    "-o -4 address show dev "*" scope global")
+        [[ "${FAKE_IPV6_ONLY:-0}" != "1" ]] || exit 0
+        ;;
+    "-o -6 address show dev "*" scope global")
+        if [[ "${FAKE_IPV6_ONLY:-0}" == "1" ]]; then
+            printf '7: vpnovpn0 inet6 2001:db8::2/64 scope global\n'
+        fi
+        exit 0
+        ;;
     "route show default") printf 'default via 192.0.2.1 dev eth0\n'; exit 0 ;;
+    "-o route get 1.1.1.1") printf '1.1.1.1 dev adguard0 src 10.0.0.2\n'; exit 0 ;;
+    "-o route get 192.0.2.40") printf '192.0.2.40 dev eth0 src 198.51.100.2\n'; exit 0 ;;
 esac
 /usr/sbin/ip "$@"
+EOF
+
+cat >"$TMP/fakebin/ss" <<'EOF'
+#!/usr/bin/env bash
+pid_file="${VPNCTL_ADGUARD_PID_FILE:-}"
+if [[ "$*" == "-H -n -t -u -p" && -n "$pid_file" && -r "$pid_file" ]]; then
+    read -r pid <"$pid_file"
+    if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+        printf 'udp ESTAB 0 0 10.0.0.2:51820 192.0.2.40:443 users:(("adguardvpn-cli",pid=%s,fd=3))\n' \
+            "$pid"
+    fi
+fi
 EOF
 
 cat >"$TMP/fakebin/awg" <<'EOF'
 #!/usr/bin/env bash
 [[ "$*" == "show interfaces" ]] && exit 0
+if [[ "$*" == "show wg0 endpoints" ]]; then
+    printf 'test-peer 192.0.2.41:51820\n'
+    exit 0
+fi
 exit 0
 EOF
 
@@ -328,9 +518,20 @@ find "$TMP/fakebin" -maxdepth 1 -type f -exec chmod +x {} +
 chmod +x "$TMP/fallback-start" "$TMP/fallback-stop"
 export PATH="$TMP/fakebin:$PATH"
 export FAKE_SYSTEMCTL_LOG="$TMP/systemctl.log"
+export FAKE_SYSTEMCTL_RECOVERY_ACTIVE_FILE="$TMP/systemd-recovery.active"
+export FAKE_SYSTEMCTL_RECOVERY_LOG="$TMP/systemd-recovery.log"
+export FAKE_SYSTEMCTL_RECOVERY_UNIT="$ROOT/systemd/mazzy-vpn-api-recovery.service"
+export FAKE_TRANSITION_LOG="$TMP/transition.log"
+export FAKE_TRANSITION_CURL_LOG="$TMP/transition-curl.log"
+export FAKE_NFT_LOG="$TMP/nft.log"
+export FAKE_NFT_RULES_LOG="$TMP/nft-rules.log"
 export FAKE_SYSTEMCTL_COUNTER="$TMP/systemctl.counter"
 export FAKE_TIMEOUT_LOG="$TMP/timeout.log"
 export FAKE_SYSTEMD_RUN_LOG="$TMP/systemd-run.log"
+export FAKE_SERVICE_CURL_LOG="$TMP/service-curl.log"
+export FAKE_SERVICE_PID_FILE="$TMP/service-curl.pid"
+export FAKE_SYNC_LOG="$TMP/sync.log"
+export FAKE_DURABILITY_LOG="$TMP/durability.log"
 export FAKE_OPENVPN_LOG="$TMP/openvpn.log"
 export FAKE_RESOLVECTL_LOG="$TMP/resolvectl.log"
 export FAKE_SOCAT_DISPATCH="$CLI"
@@ -347,6 +548,7 @@ export VPNCTL_STATE_DIR="$TMP/state"
 export VPNCTL_API_ACTION_DIR="$TMP/state/api-actions"
 export VPNCTL_API_AUDIT_FILE="$TMP/state/api-audit.jsonl"
 export VPNCTL_RUN_DIR="$TMP/run"
+export VPNCTL_API_SOCKET="$TMP/run/api-v1.sock"
 export VPNCTL_DASHBOARD_DIR="$TMP/dashboard"
 export VPNCTL_PROBE_URL="https://probe.invalid"
 export VPNCTL_ADGUARD_CLI="$TMP/fakebin/adguardvpn-cli"
@@ -358,8 +560,8 @@ export VPNCTL_LEGACY_START="$TMP/fallback-start"
 export VPNCTL_LEGACY_STOP="$TMP/fallback-stop"
 export NO_COLOR=1
 
-"$CLI" version | grep -q '^Mazzy VPN 1\.3\.2 (mazzy-vpn; alias: vpnctl)$'
-"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.3\.2 ' ||
+"$CLI" version | grep -q '^Mazzy VPN 1\.4\.0 (mazzy-vpn; alias: vpnctl)$'
+"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.4\.0 ' ||
     fail "vpnctl compatibility wrapper is broken"
 ok "Mazzy VPN branding and compatibility alias"
 
@@ -377,7 +579,9 @@ for language_check in \
     'ko:사용법:'; do
     language_code="${language_check%%:*}"
     language_marker="${language_check#*:}"
-    VPNCTL_LANG="$language_code" "$CLI" help | grep -q "$language_marker" ||
+    localized_help="$(VPNCTL_LANG="$language_code" "$CLI" help)" ||
+        fail "localized help failed for $language_code"
+    grep -q "$language_marker" <<<"$localized_help" ||
         fail "localized help is missing for $language_code"
 done
 "$CLI" language de >/dev/null
@@ -614,6 +818,7 @@ fi
     fail "unsafe folder profile was copied"
 
 mkdir -p "$TMP/import-files-target"
+printf '3\n' >"$VPNCTL_RUN_DIR/health.failures"
 VPNCTL_CONFIG_DIR="$TMP/import-files-target" \
     "$CLI" import-files \
     "$TMP/import-source/mixed/AWG.conf" \
@@ -623,6 +828,8 @@ VPNCTL_CONFIG_DIR="$TMP/import-files-target" \
     fail "multi-file import did not detect both VPN protocols"
 [[ "$(stat -c %a "$TMP/import-files-target/amneziawg/AWG.conf")" == "600" ]] ||
     fail "multi-file import did not close target permissions"
+[[ ! -e "$VPNCTL_RUN_DIR/health.failures" ]] ||
+    fail "explicit profile mutation did not reset the health recovery counter"
 if VPNCTL_CONFIG_DIR="$TMP/import-files-target" \
     "$CLI" import-files \
     "$TMP/import-source/mixed/AWG.conf" \
@@ -647,7 +854,9 @@ cat >"$FAKE_IP_RULES" <<'EOF'
 220:	from all lookup 220
 EOF
 : >"$FAKE_IP_LOG"
-"$CLI" connect openvpn "Test Server" >/dev/null
+: >"$FAKE_TRANSITION_LOG"
+: >"$FAKE_TRANSITION_CURL_LOG"
+FAKE_DNS_UNAVAILABLE=1 "$CLI" connect openvpn "Test Server" >/dev/null
 grep -q '^PROTOCOL=openvpn$' "$TMP/state/active" || fail "protocol state missing"
 grep -q '^PROFILE=Test Server.ovpn$' "$TMP/state/active" || fail "profile state missing"
 grep -q '^DESIRED=up$' "$TMP/state/active" || fail "desired state missing"
@@ -661,8 +870,82 @@ done
 if grep -q -- '-4 rule delete priority 220' "$FAKE_IP_LOG"; then
     fail "unrelated IPsec priority 220 was removed"
 fi
+guard_install_line="$(grep -n -m1 '^guard install$' "$FAKE_TRANSITION_LOG" | cut -d: -f1)"
+service_stop_line="$(grep -n -m1 '^systemctl stop vpnctl.service$' "$FAKE_TRANSITION_LOG" | cut -d: -f1)"
+service_start_line="$(grep -n -m1 '^systemctl start vpnctl.service$' "$FAKE_TRANSITION_LOG" | cut -d: -f1)"
+guard_remove_line="$(grep -n '^guard remove$' "$FAKE_TRANSITION_LOG" | tail -n1 | cut -d: -f1)"
+[[ "$guard_install_line" =~ ^[0-9]+$ && "$service_stop_line" =~ ^[0-9]+$ &&
+   "$service_start_line" =~ ^[0-9]+$ && "$guard_remove_line" =~ ^[0-9]+$ &&
+   "$guard_install_line" -lt "$service_stop_line" &&
+   "$service_start_line" -lt "$guard_remove_line" ]] ||
+    fail "connect did not retain the leak guard across the tunnel transition"
+grep -q 'ip daddr 192.0.2.10 udp dport 1194 accept' \
+    "$FAKE_NFT_RULES_LOG" ||
+    fail "transition guard does not allow the selected VPN endpoint"
+if grep -q 'meta skuid 0 accept' "$FAKE_NFT_RULES_LOG"; then
+    fail "transition guard permits unrestricted privileged egress"
+fi
+grep -q 'chain forward' "$FAKE_NFT_RULES_LOG" ||
+    fail "transition guard does not cover forwarded traffic"
+grep -q 'reject with icmpx type admin-prohibited' "$FAKE_NFT_RULES_LOG" ||
+    fail "transition guard does not reject direct IPv4/IPv6 user traffic"
+grep -Eq -- '--interface vpnovpn0 .*https://1\.1\.1\.1/cdn-cgi/trace$' \
+    "$FAKE_TRANSITION_CURL_LOG" ||
+    fail "transition readiness is not bound to the selected VPN interface"
+awk '
+    /^guard install$/ { guarded = 1; next }
+    /^guard remove$/ { guarded = 0; next }
+    guarded && /^curl transition probe$/ { fixed_probe = 1 }
+    guarded && /^curl hostname probe$/ { hostname_probe = 1 }
+    END { exit !(fixed_probe && !hostname_probe) }
+' "$FAKE_TRANSITION_LOG" ||
+    fail "guarded transition readiness still depends on local DNS"
+if awk '
+    /dport[[:space:]]+53/ &&
+        $0 !~ /(^|[[:space:]])ip6?[[:space:]]+daddr/ { unsafe = 1 }
+    END { exit !unsafe }
+' "$FAKE_NFT_RULES_LOG"; then
+    fail "transition guard permits DNS egress without a resolver address"
+fi
 rm -f "$FAKE_IP_RULES"
-ok "connect persists profile and removes only stale wg-quick policy"
+ok "connect persists profile and prevents direct traffic during the transition"
+
+: >"$FAKE_TRANSITION_CURL_LOG"
+FAKE_IPV6_ONLY=1 "$CLI" reconnect >/dev/null
+grep -Eq -- '-6 .*--interface vpnovpn0 .*https://\[2606:4700:4700::1111\]/cdn-cgi/trace$' \
+    "$FAKE_TRANSITION_CURL_LOG" ||
+    fail "transition readiness did not verify an IPv6-only tunnel"
+ok "transition readiness supports IPv6-only protected egress"
+
+: >"$FAKE_TRANSITION_LOG"
+if FAKE_TRANSITION_PROBE_DUP_IP=1 VPNCTL_TRANSITION_READY_TIMEOUT=3 \
+    "$CLI" reconnect >/dev/null 2>&1; then
+    fail "transition readiness accepted an ambiguous IP-literal probe response"
+fi
+grep -q '^systemctl stop vpnctl.service$' "$FAKE_TRANSITION_LOG" ||
+    fail "failed transition readiness did not stop the unverified tunnel"
+if grep -q '^guard remove$' "$FAKE_TRANSITION_LOG"; then
+    fail "failed primary and rollback readiness removed the traffic guard"
+fi
+jq -e '
+    .state == "recovery-required" and
+    .reason == "managed-vpn-restore-failed"
+' "$TMP/state/transition-recovery-required.json" >/dev/null ||
+    fail "failed rollback did not persist transition recovery state"
+"$CLI" reconnect >/dev/null
+[[ ! -e "$TMP/state/transition-recovery-required.json" ]] ||
+    fail "successful reconnect did not clear transition recovery state"
+ok "transition readiness fails closed on ambiguous responses and recovers cleanly"
+
+: >"$FAKE_SYSTEMCTL_LOG"
+: >"$FAKE_TRANSITION_LOG"
+if FAKE_NFT_INSTALL_FAIL=1 "$CLI" reconnect >/dev/null 2>&1; then
+    fail "reconnect continued after the leak guard failed"
+fi
+if grep -Eq '^(stop|start|restart) vpnctl.service$' "$FAKE_SYSTEMCTL_LOG"; then
+    fail "failed leak guard allowed a tunnel lifecycle mutation"
+fi
+ok "tunnel mutation fails before stop when the leak guard is unavailable"
 
 cat >"$FAKE_IP_RULES" <<'EOF'
 214:	from all lookup main suppress_prefixlength 0
@@ -711,11 +994,11 @@ for _ in {1..30}; do
 done
 grep -q 'Подключение запущено' "$menu_live_output" ||
     fail "live TUI did not complete the connect action"
-exec 6>"$TMP/run/.action.lock"
-flock -n 6 || fail "idle TUI retained the action lock after connect"
+exec 6>"$TMP/run/.mutation.lock"
+flock -n 6 || fail "idle TUI retained the mutation lock after connect"
 flock -u 6
 wait "$menu_live_pid"
-ok "idle TUI releases the watchdog action lock"
+ok "idle TUI releases the watchdog mutation lock"
 
 printf '15\n3\n%s\n0\n' "$TMP/tui-config-tree" |
     VPNCTL_FORCE_INTERACTIVE=1 "$CLI" >/dev/null 2>&1
@@ -757,8 +1040,17 @@ unset FAKE_OPENVPN_TOO_MANY
 grep -qx 'openvpn-too-many-connections' "$TMP/run/test.failure" ||
     fail "OpenVPN connection-limit reason was not recorded"
 rm -f "$TMP/run/test.failure"
+export FAKE_OPENVPN_AUTH_FAILED=1
+openvpn_auth_rc=0
+"$CLI" _service-run >/dev/null 2>&1 || openvpn_auth_rc=$?
+unset FAKE_OPENVPN_AUTH_FAILED
+[[ "$openvpn_auth_rc" -eq 77 ]] ||
+    fail "permanent OpenVPN authentication rejection did not return exit 77"
+grep -qx 'openvpn-auth-failed' "$TMP/run/test.failure" ||
+    fail "OpenVPN authentication rejection reason was not recorded"
+rm -f "$TMP/run/test.failure"
 sed -i '/^TEST_/d; s/^MODE=test$/MODE=normal/' "$TMP/state/active"
-ok "test mode logging and OpenVPN server-halt detection"
+ok "test mode logging and permanent/retryable OpenVPN exit classification"
 
 foreign_option_1='dhcp-option DNS 9.9.9.9' \
     "$CLI" _openvpn-dns-up vpnovpn0
@@ -840,6 +1132,195 @@ jq -e '
     and .speed.connect_ms == 40
 ' <<<"$verify_speed_json" >/dev/null ||
     fail "explicit bounded speed sample is invalid"
+
+ru_numeric_locale="$(
+    locale -a | LC_ALL=C awk 'tolower($0) ~ /^ru_ru\.utf-?8$/ { print; exit }'
+)"
+if [[ -n "$ru_numeric_locale" ]]; then
+    [[ "$(LC_ALL="$ru_numeric_locale" locale decimal_point)" == ',' ]] ||
+        fail "$ru_numeric_locale does not provide the required comma decimal separator"
+    verify_speed_non_c_json="$(
+        LC_ALL="$ru_numeric_locale" "$CLI" verify --speed --json
+    )"
+    jq -e '
+        .speed.measured == true
+        and .speed.mbps == 100
+        and .speed.connect_ms == 40
+    ' <<<"$verify_speed_non_c_json" >/dev/null ||
+        fail "speed JSON depends on the caller numeric locale"
+else
+    printf 'notice: ru_RU UTF-8 locale unavailable; comma-decimal coverage skipped\n'
+fi
+verify_human_output="$("$CLI" verify)"
+grep -Fxq 'Network egress verified' <<<"$verify_human_output" ||
+    fail "generic verification still overclaims VPN or service eligibility"
+ok "network egress verification preserves schema v1 and locale-independent JSON"
+
+: >"$FAKE_SERVICE_CURL_LOG"
+service_notebook_unsupported="$(
+    ALL_PROXY=http://proxy.invalid:8080 \
+    HTTP_PROXY=http://proxy.invalid:8080 \
+    HTTPS_PROXY=http://proxy.invalid:8080 \
+    NO_PROXY=localhost \
+    FAKE_SERVICE_STATUS=302 \
+    FAKE_SERVICE_LOCATION='https://notebooklm.google/?location=unsupported' \
+        "$CLI" verify-service notebooklm --timeout 3 --json
+)"
+jq -e '
+    .schema_version == 1
+    and .scope == "unauthenticated-egress"
+    and (.results | length) == 1
+    and .results[0] == {
+        service_id: "notebooklm",
+        probe_version: 1,
+        reachability: "reachable",
+        egress_eligibility: "ineligible",
+        reason_code: "service.notebooklm.unsupported-location",
+        http_status: 302
+    }
+' <<<"$service_notebook_unsupported" >/dev/null ||
+    fail "NotebookLM unsupported-location redirect was misclassified"
+service_notebook_eligible="$(
+    FAKE_SERVICE_STATUS=302 \
+    FAKE_SERVICE_LOCATION='https://notebook.google.com/' \
+        "$CLI" verify-service notebooklm --timeout 3 --json
+)"
+jq -e '
+    .results[0].reachability == "reachable"
+    and .results[0].egress_eligibility == "eligible"
+    and .results[0].reason_code == "service.notebooklm.home-reached"
+' <<<"$service_notebook_eligible" >/dev/null ||
+    fail "NotebookLM exact eligible redirect was misclassified"
+service_notebook_unknown="$(
+    FAKE_SERVICE_STATUS=302 \
+    FAKE_SERVICE_LOCATION='https://accounts.google.com/unsafe-variable-target' \
+        "$CLI" verify-service notebooklm --timeout 3 --json
+)"
+jq -e '
+    .results[0].reachability == "reachable"
+    and .results[0].egress_eligibility == "indeterminate"
+    and .results[0].reason_code == "service.notebooklm.unrecognized-response"
+' <<<"$service_notebook_unknown" >/dev/null ||
+    fail "NotebookLM unrecognized redirect was trusted"
+
+for service_status_case in \
+    '401|eligible|service.openai.auth-boundary-reached' \
+    '405|eligible|service.openai.auth-boundary-reached' \
+    '403|ineligible|service.openai.edge-denied' \
+    '429|indeterminate|service.openai.rate-limited' \
+    '500|indeterminate|service.openai.service-unavailable' \
+    '418|indeterminate|service.openai.unrecognized-response'; do
+    service_status="${service_status_case%%|*}"
+    service_expected="${service_status_case#*|}"
+    service_eligibility="${service_expected%%|*}"
+    service_reason="${service_expected#*|}"
+    service_allow=""
+    [[ "$service_status" != 405 ]] || service_allow=POST
+    service_openai_result="$(
+        FAKE_SERVICE_STATUS="$service_status" \
+        FAKE_SERVICE_LOCATION='' FAKE_SERVICE_ALLOW="$service_allow" \
+            "$CLI" verify-service openai --timeout 3 --json
+    )"
+    jq -e \
+        --argjson status "$service_status" \
+        --arg eligibility "$service_eligibility" \
+        --arg reason "$service_reason" '
+        .results[0].service_id == "openai"
+        and .results[0].reachability == "reachable"
+        and .results[0].egress_eligibility == $eligibility
+        and .results[0].reason_code == $reason
+        and .results[0].http_status == $status
+    ' <<<"$service_openai_result" >/dev/null ||
+        fail "OpenAI status $service_status was misclassified"
+done
+service_openai_405_without_allow="$(
+    FAKE_SERVICE_STATUS=405 FAKE_SERVICE_ALLOW='' \
+        "$CLI" verify-service openai --timeout 3 --json
+)"
+jq -e '
+    .results[0].egress_eligibility == "indeterminate"
+    and .results[0].reason_code == "service.openai.unrecognized-response"
+' <<<"$service_openai_405_without_allow" >/dev/null ||
+    fail "OpenAI 405 without exact Allow: POST was trusted"
+service_all_result="$(
+    FAKE_SERVICE_STATUS=401 FAKE_SERVICE_LOCATION='' FAKE_SERVICE_ALLOW='' \
+        "$CLI" verify-service all --timeout 3 --json
+)"
+jq -e '
+    (.results | length) == 2
+    and (.results | map(.service_id)) == ["notebooklm", "openai"]
+    and .results[0].egress_eligibility == "indeterminate"
+    and .results[1].egress_eligibility == "eligible"
+' <<<"$service_all_result" >/dev/null ||
+    fail "verify-service all did not run both allowlisted probes"
+service_network_error="$(
+    FAKE_CURL_FAIL=1 "$CLI" verify-service openai --timeout 3 --json
+)"
+jq -e '
+    .results[0].reachability == "unreachable"
+    and .results[0].egress_eligibility == "indeterminate"
+    and .results[0].reason_code == "service.network-unreachable"
+    and .results[0].http_status == null
+' <<<"$service_network_error" >/dev/null ||
+    fail "service network failure was not sanitized"
+rm -f -- "$FAKE_SERVICE_PID_FILE"
+service_oversized="$(
+    FAKE_SERVICE_OVERSIZE=1 FAKE_SERVICE_STATUS=302 \
+        "$CLI" verify-service notebooklm --timeout 3 --json
+)"
+jq -e '
+    .results[0].reason_code == "service.response-too-large"
+    and .results[0].http_status == null
+' <<<"$service_oversized" >/dev/null ||
+    fail "service probe accepted oversized response headers"
+[[ -s "$FAKE_SERVICE_PID_FILE" ]] ||
+    fail "oversized-header test did not observe the curl worker"
+oversized_probe_pid="$(<"$FAKE_SERVICE_PID_FILE")"
+sleep 0.1
+if [[ -r "/proc/$oversized_probe_pid/cmdline" ]] &&
+   tr '\0' ' ' <"/proc/$oversized_probe_pid/cmdline" |
+       grep -Fq -- "$TMP/fakebin/curl"; then
+    fail "oversized service headers left a curl worker running"
+fi
+service_duplicate_location="$(
+    FAKE_SERVICE_STATUS=302 FAKE_SERVICE_DUP_LOCATION=1 \
+    FAKE_SERVICE_LOCATION='https://notebook.google.com/' \
+        "$CLI" verify-service notebooklm --timeout 3 --json
+)"
+jq -e '
+    .results[0].reason_code == "service.response-invalid"
+    and .results[0].egress_eligibility == "indeterminate"
+' <<<"$service_duplicate_location" >/dev/null ||
+    fail "service probe accepted duplicate Location headers"
+
+grep -Fq -- '--head --interface vpnovpn0' "$FAKE_SERVICE_CURL_LOG" ||
+    fail "service probe is not a HEAD request bound to the selected VPN interface"
+grep -Fq -- '--max-redirs 0' "$FAKE_SERVICE_CURL_LOG" ||
+    fail "service probe does not explicitly disable redirect traversal"
+if grep -Eq '(^| )(-L|--location|--cookie|--user|--netrc|--cert)( |$)' \
+    "$FAKE_SERVICE_CURL_LOG"; then
+    fail "service probe enabled redirects, credentials, cookies or client certificates"
+fi
+if grep -Eq 'https://|location=|[Cc]ookie|[Aa]uthorization|account' \
+    <<<"$service_notebook_unsupported"; then
+    fail "service result leaked a URL, header or account field"
+fi
+if grep -R -E 'location=unsupported|backend-api/codex/responses' \
+    "$VPNCTL_STATE_DIR" "$VPNCTL_RUN_DIR" >/dev/null 2>&1; then
+    fail "service probe persisted a raw URL or Location header"
+fi
+: >"$FAKE_SERVICE_CURL_LOG"
+if "$CLI" verify-service 'https://example.invalid/' --json >/dev/null 2>&1; then
+    fail "verify-service accepted an arbitrary URL"
+fi
+if "$CLI" verify-service openai --timeout 2 --json >/dev/null 2>&1 ||
+   "$CLI" verify-service openai --timeout 16 --json >/dev/null 2>&1 ||
+   "$CLI" verify-service all notebooklm --json >/dev/null 2>&1; then
+    fail "verify-service accepted an invalid timeout or duplicate scope"
+fi
+[[ ! -s "$FAKE_SERVICE_CURL_LOG" ]] ||
+    fail "invalid verify-service input reached curl"
+ok "allowlisted service egress classifiers are credential-free, bounded and sanitized"
 
 cp "$TMP/config/openvpn/Test Server.ovpn" "$TMP/profile-with-country.ovpn"
 sed -i '/^[#;][[:space:]]*mazzy-country-code[[:space:]]*:/d' \
@@ -1024,6 +1505,286 @@ if jq -e '
 ' <<<"$api_protocols_response" >/dev/null; then
     fail "local API protocols.list leaked a frontend-forbidden field"
 fi
+
+chmod 700 "$VPNCTL_STATE_DIR"
+[[ ! -e "$VPNCTL_API_ACTION_DIR" ]] ||
+    fail "planner fresh-state test unexpectedly has an action directory"
+unknown_profile_id="profile-ffffffffffffffffffffffffffffffff"
+planner_payload="$(
+    jq -cn \
+        --arg profile_id "$profile_id" \
+        --arg unknown_profile_id "$unknown_profile_id" '{
+        workload: "llm-streaming",
+        candidates: [
+            {
+                profile_id: $profile_id,
+                evidence: {
+                    recent_outcome: "success",
+                    consecutive_failures: 0,
+                    reachability: "reachable",
+                    latency_ms: 50,
+                    loss_percent: 0,
+                    evidence_age_seconds: 30
+                }
+            },
+            {
+                profile_id: $unknown_profile_id,
+                evidence: {
+                    recent_outcome: "unknown",
+                    consecutive_failures: 0,
+                    reachability: "unknown",
+                    latency_ms: null,
+                    loss_percent: 0,
+                    evidence_age_seconds: 30
+                }
+            }
+        ]
+    }'
+)"
+planner_request="$(
+    jq -cn --argjson payload "$planner_payload" '{
+        api_version: "1.0",
+        request_id: "request-planner-0001",
+        operation: "planner.evaluate",
+        deadline_ms: 5000,
+        payload: $payload
+    }'
+)"
+planner_response="$(printf '%s\n' "$planner_request" | "$CLI" _api-dispatch)"
+jq -e \
+    --arg profile_id "$profile_id" \
+    --arg unknown_profile_id "$unknown_profile_id" '
+    .api_version == "1.0"
+    and .request_id == "request-planner-0001"
+    and .status == "ok"
+    and .result.schema_version == 1
+    and .result.policy_version == 1
+    and .result.dry_run == true
+    and .result.workload == "llm-streaming"
+    and .result.ordered_profile_ids == [$profile_id]
+    and (.result.candidates | length) == 2
+    and .result.candidates[0].profile_id == $profile_id
+    and .result.candidates[0].protocol == "openvpn"
+    and .result.candidates[0].eligible == true
+    and .result.candidates[0].rank == 1
+    and .result.candidates[0].score == 92
+    and (.result.candidates[0].hard_gates | length) == 5
+    and all(.result.candidates[0].hard_gates[]; .passed == true)
+    and (.result.candidates[0].factors | map(.points) | add) == 92
+    and .result.candidates[1].profile_id == $unknown_profile_id
+    and .result.candidates[1].eligible == false
+    and .result.candidates[1].rank == null
+    and .result.candidates[1].score == null
+    and (.result.candidates[1] | has("protocol") | not)
+' <<<"$planner_response" >/dev/null ||
+    fail "local API planner.evaluate did not apply hard gates and scoring"
+if jq -e '
+    .. | objects | keys[] |
+    select(test("^(display_name|password|credentials?|secret|endpoint|file_name|file_path|private_key)$"))
+' <<<"$planner_response" >/dev/null; then
+    fail "local API planner.evaluate leaked frontend-forbidden profile data"
+fi
+
+planner_repeat_request="$(
+    jq -c '.request_id = "request-planner-0002"' <<<"$planner_request"
+)"
+planner_repeat_response="$(
+    printf '%s\n' "$planner_repeat_request" | "$CLI" _api-dispatch
+)"
+jq -S '.result | del(.evaluated_at)' <<<"$planner_response" \
+    >"$TMP/planner-first.json"
+jq -S '.result | del(.evaluated_at)' <<<"$planner_repeat_response" \
+    >"$TMP/planner-second.json"
+cmp -s "$TMP/planner-first.json" "$TMP/planner-second.json" ||
+    fail "local API planner.evaluate is not deterministic for equal evidence"
+
+planner_stale_request="$(
+    jq -c '
+        .request_id = "request-planner-stale-0001"
+        | .payload.candidates = [.payload.candidates[0]]
+        | .payload.candidates[0].evidence.evidence_age_seconds = 901
+    ' <<<"$planner_request"
+)"
+planner_stale_response="$(
+    printf '%s\n' "$planner_stale_request" | "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "ok"
+    and .result.candidates[0].score == 27
+    and (.result.candidates[0].reason_codes | index(
+        "planner.factor.recent-stale"
+    )) != null
+    and (.result.candidates[0].reason_codes | index(
+        "planner.factor.reachability-stale"
+    )) != null
+    and (.result.candidates[0].reason_codes | index(
+        "planner.factor.latency-loss-stale"
+    )) != null
+' <<<"$planner_stale_response" >/dev/null ||
+    fail "local API planner.evaluate trusted stale network evidence"
+
+: >"$FAKE_TIMEOUT_LOG"
+planner_deadline_request="$(
+    jq -c '
+        .request_id = "request-planner-deadline-0001"
+        | .deadline_ms = 500
+        | .payload.candidates = [.payload.candidates[0]]
+    ' <<<"$planner_request"
+)"
+planner_deadline_started=$SECONDS
+planner_deadline_response="$(
+    printf '%s\n' "$planner_deadline_request" |
+        FAKE_OPENVPN_DELAY_SECONDS=5 "$CLI" _api-dispatch
+)"
+planner_deadline_elapsed=$((SECONDS - planner_deadline_started))
+jq -e '
+    .status == "error"
+    and .error.code == "deadline-exceeded"
+    and .error.message_key == "api.planner.deadline-exceeded"
+' <<<"$planner_deadline_response" >/dev/null ||
+    fail "local API planner did not preserve its candidate validation deadline"
+((planner_deadline_elapsed < 3)) ||
+    fail "OpenVPN planner validation exceeded its sub-second deadline"
+if grep -Eq -- '(^| )(10|10\.000s) openvpn --config' "$FAKE_TIMEOUT_LOG"; then
+    fail "OpenVPN planner validation used the unbounded default parser timeout"
+fi
+
+chmod 644 "$TMP/config/openvpn/Test Server.ovpn"
+planner_unsafe_request="$(
+    jq -c '
+        .request_id = "request-planner-unsafe-0001"
+        | .payload.candidates = [.payload.candidates[0]]
+    ' <<<"$planner_request"
+)"
+planner_unsafe_response="$(
+    printf '%s\n' "$planner_unsafe_request" | "$CLI" _api-dispatch
+)"
+chmod 600 "$TMP/config/openvpn/Test Server.ovpn"
+jq -e '
+    .status == "ok"
+    and .result.ordered_profile_ids == []
+    and .result.candidates[0].eligible == false
+    and .result.candidates[0].score == null
+    and any(
+        .result.candidates[0].hard_gates[];
+        .id == "secrets-readable-only-by-backend" and .passed == false
+    )
+' <<<"$planner_unsafe_response" >/dev/null ||
+    fail "local API planner.evaluate ignored unsafe profile storage"
+
+planner_duplicate_candidate_request="$(
+    jq -c '
+        .request_id = "request-planner-duplicate-0001"
+        | .payload.candidates = [
+            .payload.candidates[0], .payload.candidates[0]
+        ]
+    ' <<<"$planner_request"
+)"
+planner_duplicate_candidate_response="$(
+    printf '%s\n' "$planner_duplicate_candidate_request" |
+        "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "invalid-request"
+    and .error.message_key == "api.planner.payload-invalid"
+' <<<"$planner_duplicate_candidate_response" >/dev/null ||
+    fail "local API planner.evaluate accepted duplicate candidate IDs"
+
+planner_untrusted_fit_request="$(
+    jq -c '
+        .request_id = "request-planner-untrusted-fit-0001"
+        | .payload.candidates = [.payload.candidates[0]]
+        | .payload.candidates[0].evidence.censorship_fit = "high"
+    ' <<<"$planner_request"
+)"
+planner_untrusted_fit_response="$(
+    printf '%s\n' "$planner_untrusted_fit_request" | "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "invalid-request"
+    and .error.message_key == "api.planner.payload-invalid"
+' <<<"$planner_untrusted_fit_response" >/dev/null ||
+    fail "local API planner.evaluate trusted caller-supplied policy fit"
+
+planner_nested_duplicate_response="$(
+    printf '%s\n' \
+        "{\"api_version\":\"1.0\",\"request_id\":\"request-planner-duplicate-0002\",\"operation\":\"planner.evaluate\",\"deadline_ms\":5000,\"payload\":{\"workload\":\"general\",\"candidates\":[{\"profile_id\":\"$profile_id\",\"evidence\":{},\"evidence\":{\"recent_outcome\":\"success\"}}]}}" |
+        "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "invalid-request"
+    and .error.message_key == "api.request.duplicate-key"
+' <<<"$planner_nested_duplicate_response" >/dev/null ||
+    fail "local API accepted a nested duplicate planner key"
+
+planner_cli_response="$(
+    printf '%s\n' "$planner_payload" |
+        VPNCTL_API_CLIENT_FORCE=1 \
+        "$CLI" planner evaluate --stdin --json
+)"
+jq -e \
+    --arg profile_id "$profile_id" '
+    .dry_run == true
+    and .ordered_profile_ids == [$profile_id]
+    and .candidates[0].score == 92
+    and (.candidates[0].reason_codes | index(
+        "planner.factor.censorship-catalog-medium"
+    )) != null
+    and (.candidates[0].reason_codes | index(
+        "planner.factor.workload-derived-high"
+    )) != null
+' <<<"$planner_cli_response" >/dev/null ||
+    fail "planner CLI did not use the typed local API query"
+
+planner_max_payload="$(
+    jq -cn '
+        def evidence: {
+            recent_outcome: "unknown",
+            consecutive_failures: 0,
+            reachability: "unknown",
+            latency_ms: null,
+            loss_percent: 0,
+            evidence_age_seconds: 30
+        };
+        {
+            workload: "general",
+            candidates: [
+                range(0; 128) as $index
+                | {
+                    profile_id: (
+                        "profile-" + (
+                            "00000000000000000000000000000000"
+                            + ($index | tostring)
+                        )[-32:]
+                    ),
+                    evidence: evidence
+                }
+            ]
+        }
+    '
+)"
+[[ "$(printf '%s' "$planner_max_payload" | wc -c)" -le 65536 ]] ||
+    fail "maximum planner fixture exceeds the documented request cap"
+planner_max_response="$(
+    printf '%s\n' "$planner_max_payload" |
+        VPNCTL_API_CLIENT_FORCE=1 \
+        "$CLI" planner evaluate --stdin --json
+)"
+[[ "$(printf '%s' "$planner_max_response" | wc -c)" -le 1048576 ]] ||
+    fail "maximum planner response exceeds its bounded CLI cap"
+jq -e '
+    (.candidates | length) == 128
+    and .ordered_profile_ids == []
+    and all(
+        .candidates[];
+        .eligible == false and .rank == null and .score == null
+    )
+' <<<"$planner_max_response" >/dev/null ||
+    fail "planner CLI did not handle the documented 128-candidate bound"
+ok "deterministic agent-safe protocol planner"
 
 api_probe_request="$(
     jq -cn '{
@@ -1212,6 +1973,107 @@ jq -e '
 ' <<<"$api_verify_busy_response" >/dev/null ||
     fail "local API allowed concurrent egress checks to multiply traffic"
 wait "$verify_lock_pid"
+
+api_service_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-service-verify-0001",
+        operation: "tests.verify-service-egress",
+        deadline_ms: 5000,
+        payload: {service: "openai", timeout_seconds: 3}
+    }'
+)"
+api_service_response="$(
+    FAKE_SERVICE_STATUS=401 "$CLI" _api-dispatch <<<"$api_service_request"
+)"
+jq -e '
+    .status == "ok"
+    and .result.schema_version == 1
+    and .result.scope == "unauthenticated-egress"
+    and (.result.results | length) == 1
+    and .result.results[0].service_id == "openai"
+    and .result.results[0].reachability == "reachable"
+    and .result.results[0].egress_eligibility == "eligible"
+    and .result.results[0].reason_code == "service.openai.auth-boundary-reached"
+    and .result.results[0].http_status == 401
+' <<<"$api_service_response" >/dev/null ||
+    fail "local API tests.verify-service-egress response is invalid"
+if grep -Eq 'https://|backend-api|[Cc]ookie|[Aa]uthorization|account' \
+    <<<"$api_service_response"; then
+    fail "local API service-egress result leaked request or account data"
+fi
+api_service_bad_payload="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-service-invalid-0001",
+        operation: "tests.verify-service-egress",
+        deadline_ms: 5000,
+        payload: {
+            service: "openai",
+            timeout_seconds: 3,
+            url: "https://example.invalid/"
+        }
+    }' | "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "invalid-request"
+    and .error.message_key == "api.tests.verify-service-egress.payload-invalid"
+' <<<"$api_service_bad_payload" >/dev/null ||
+    fail "local API service-egress accepted an arbitrary URL"
+
+rm -f -- "$FAKE_SERVICE_PID_FILE"
+api_service_deadline_request="$(
+    jq -c '
+        .request_id = "request-service-deadline-0001"
+        | .deadline_ms = 1500
+    ' <<<"$api_service_request"
+)"
+api_service_deadline_response="$(
+    FAKE_SERVICE_DELAY_SECONDS=10 \
+        "$CLI" _api-dispatch <<<"$api_service_deadline_request"
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "deadline-exceeded"
+    and .error.message_key == "api.tests.verify-service-egress.deadline"
+' <<<"$api_service_deadline_response" >/dev/null ||
+    fail "local API service-egress ignored the whole-request deadline"
+[[ -s "$FAKE_SERVICE_PID_FILE" ]] ||
+    fail "service-egress deadline test did not start its bounded worker"
+service_probe_pid="$(<"$FAKE_SERVICE_PID_FILE")"
+sleep 0.2
+if kill -0 "$service_probe_pid" 2>/dev/null; then
+    fail "timed-out service-egress API left a curl worker running"
+fi
+if find "$VPNCTL_API_ACTION_DIR" -maxdepth 1 -type f \
+    -name '.service-verify-result.*' | grep -q .; then
+    fail "service-egress API left a temporary result file"
+fi
+
+(
+    flock -x 9
+    touch "$TMP/service-verify.locked"
+    sleep 1
+) 9>"$VPNCTL_API_ACTION_DIR/.verify-service.lock" &
+service_verify_lock_pid=$!
+for _ in {1..100}; do
+    [[ -e "$TMP/service-verify.locked" ]] && break
+    sleep 0.01
+done
+[[ -e "$TMP/service-verify.locked" ]] ||
+    fail "service verify concurrency test did not acquire its lock"
+api_service_busy_response="$(
+    "$CLI" _api-dispatch <<<"$api_service_request"
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "busy"
+    and .error.message_key == "api.tests.verify-service-egress.busy"
+    and .error.retryable == true
+' <<<"$api_service_busy_response" >/dev/null ||
+    fail "local API allowed concurrent service egress checks"
+wait "$service_verify_lock_pid"
 ok "local API query envelopes expose sanitized status, profiles, probes and egress"
 
 api_oversized_request="$(printf 'я%.0s' {1..40})"
@@ -1306,7 +2168,7 @@ api_busy_request="$(
     }'
 )"
 mkdir -p "$VPNCTL_API_ACTION_DIR"
-exec 8>"$VPNCTL_API_ACTION_DIR/.mutation.lock"
+exec 8>"$TMP/run/.mutation.lock"
 flock 8
 api_busy_response="$(
     printf '%s\n' "$api_busy_request" | "$CLI" _api-dispatch
@@ -1395,7 +2257,10 @@ jq -e '
     and .outcome.action_id == "action-terminal-audit-0001"
     and .outcome.state == "succeeded"
 ' "$VPNCTL_API_ACTION_DIR/action-terminal-audit-0001.json" >/dev/null ||
-    fail "terminal audit fault lost the idempotent action outcome"
+    {
+        jq . "$VPNCTL_API_ACTION_DIR/action-terminal-audit-0001.json" >&2 || true
+        fail "terminal audit fault lost the idempotent action outcome"
+    }
 rmdir "$api_audit_archive_blocker" "$VPNCTL_API_AUDIT_FILE.1"
 "$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
 api_terminal_audit_retry="$(
@@ -1409,8 +2274,18 @@ jq -e '
     fail "acknowledged terminal audit fault lost its stored action result"
 [[ "$(wc -l <"$FAKE_SYSTEMCTL_LOG")" == "$api_terminal_audit_after" ]] ||
     fail "terminal audit retry executed the completed mutation twice"
+jq -s -e '
+    map(select(
+        .event_type == "audit.recorded"
+        and .action_id == "action-terminal-audit-0001"
+        and .payload.operation == "lifecycle.reconnect"
+        and .payload.outcome == "succeeded"
+    ))
+    | length == 1
+' "$VPNCTL_API_AUDIT_FILE" >/dev/null ||
+    fail "idempotent retry did not repair exactly one missing terminal audit event"
 rm -f -- "$VPNCTL_API_AUDIT_FILE"
-ok "local API preserves idempotency when terminal audit persistence fails"
+ok "local API repairs terminal audit persistence without repeating a mutation"
 
 api_connect_request="$(
     jq -cn --arg profile_id "$profile_id" '{
@@ -1419,11 +2294,12 @@ api_connect_request="$(
         operation: "lifecycle.connect",
         action_id: "action-connect-0001",
         authorization: "system-mutate",
-        deadline_ms: 5000,
+        deadline_ms: 30000,
         payload: {profile_id: $profile_id}
     }'
 )"
 : >"$FAKE_SYSTEMCTL_LOG"
+: >"$FAKE_DURABILITY_LOG"
 api_connect_response="$(printf '%s\n' "$api_connect_request" | "$CLI" _api-dispatch)"
 jq -e '
     .status == "ok"
@@ -1432,6 +2308,28 @@ jq -e '
     and .result.rollback.state == "not-needed"
 ' <<<"$api_connect_response" >/dev/null ||
     fail "local API lifecycle.connect did not succeed"
+awk -v action="$VPNCTL_API_ACTION_DIR/action-connect-0001.json" \
+    -v audit="$VPNCTL_API_AUDIT_FILE" \
+    -v state="$VPNCTL_STATE_DIR/active" '
+    $0 == "sync -f " action && !running_sync { running_sync = NR }
+    $0 == "sync -f " action {
+        action_sync_count++
+        if (action_sync_count == 2) completed_sync = NR
+    }
+    $0 == "sync -f " audit && !start_audit_sync { start_audit_sync = NR }
+    $0 == "sync -f " state && !state_sync { state_sync = NR }
+    /^systemctl (start|stop|restart) vpnctl[.]service$/ && !mutation { mutation = NR }
+    END {
+        exit !(running_sync && start_audit_sync && mutation &&
+            state_sync && completed_sync &&
+            running_sync < mutation && start_audit_sync < mutation &&
+            state_sync < completed_sync)
+    }
+' "$FAKE_DURABILITY_LOG" ||
+    {
+        sed -n '1,120p' "$FAKE_DURABILITY_LOG" >&2
+        fail "local API mutation started before its journal and audit were durable"
+    }
 api_start_count="$(grep -c '^start vpnctl.service$' "$FAKE_SYSTEMCTL_LOG")"
 api_replay_request="$(
     jq -c '.request_id = "request-connect-replay-0001"' <<<"$api_connect_request"
@@ -1643,7 +2541,7 @@ api_deadline_request="$(
         operation: "lifecycle.reconnect",
         action_id: "action-deadline-0001",
         authorization: "system-mutate",
-        deadline_ms: 500,
+        deadline_ms: 5000,
         payload: {}
     }'
 )"
@@ -1666,9 +2564,9 @@ jq -e '
 ' <<<"$api_deadline_response" >/dev/null ||
     fail "local API did not time out and roll back a sub-second mutation"
 grep -Eq -- \
-    '--kill-after=5s 0\.[0-9]{3}s .*/mazzy-vpn reconnect' \
+    '--kill-after=5s [0-4]\.[0-9]{3}s .*/mazzy-vpn reconnect' \
     "$FAKE_TIMEOUT_LOG" ||
-    fail "local API rounded a millisecond deadline up to a full second"
+    fail "local API did not account for preflight time in the mutation deadline"
 api_delayed_systemctl_pid="$(cat "$api_delayed_systemctl_pid_file")"
 for _ in {1..20}; do
     api_delayed_systemctl_state="$(
@@ -1687,7 +2585,7 @@ if kill -0 "$api_delayed_systemctl_pid" 2>/dev/null &&
    [[ "$api_delayed_systemctl_state" != Z* ]]; then
     fail "timed-out local API mutation left a systemctl descendant running"
 fi
-ok "local API accounts preflight time and preserves millisecond deadlines"
+ok "local API accounts preflight time and terminates timed-out descendants"
 
 sed -i 's/^DESIRED=up$/DESIRED=down/' "$VPNCTL_STATE_DIR/active"
 api_stop_rollback_request="$(
@@ -1722,6 +2620,11 @@ grep -Fq -- \
     fail "rollback timeout exceeded the client completion grace contract"
 "$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
 sed -i 's/^DESIRED=down$/DESIRED=up/' "$VPNCTL_STATE_DIR/active"
+[[ -s "$VPNCTL_STATE_DIR/transition-recovery-required.json" ]] ||
+    fail "failed stop rollback did not preserve the transition recovery marker"
+"$CLI" reconnect >/dev/null
+[[ ! -e "$VPNCTL_STATE_DIR/transition-recovery-required.json" ]] ||
+    fail "explicit verified reconnect did not clear transition recovery state"
 ok "local API fails closed when rollback cannot stop the service"
 
 api_retention_request="$(
@@ -1761,6 +2664,344 @@ if grep -Eq 'Test Server|192\.0\.2\.10|PrivateKey|PublicKey' \
     fail "rotated local API audit log leaked profile or endpoint data"
 fi
 ok "local API recovery fails closed and bounds persistent journals"
+
+boot_action_id="action-boot-recovery-0001"
+cp "$VPNCTL_STATE_DIR/active" \
+    "$VPNCTL_API_ACTION_DIR/.snapshot.$boot_action_id"
+sed -i 's/^DESIRED=up$/DESIRED=down/' "$VPNCTL_STATE_DIR/active"
+jq -cn '{
+    fingerprint: "boot-recovery-fingerprint",
+    state: "running",
+    operation: "lifecycle.disconnect",
+    started_at: "2026-01-01T00:00:00Z",
+    snapshot_existed: true
+}' >"$VPNCTL_API_ACTION_DIR/$boot_action_id.json"
+: >"$FAKE_SYSTEMCTL_LOG"
+"$CLI" _api-recover-interrupted-actions >/dev/null
+grep -q '^DESIRED=up$' "$VPNCTL_STATE_DIR/active" ||
+    fail "boot API recovery did not restore the interrupted action snapshot"
+jq -e '
+    .state == "completed"
+    and .outcome.state == "rolled-back"
+    and .outcome.rollback.state == "completed"
+' "$VPNCTL_API_ACTION_DIR/$boot_action_id.json" >/dev/null ||
+    fail "boot API recovery did not persist a successful terminal outcome"
+[[ ! -e "$VPNCTL_API_ACTION_DIR/.snapshot.$boot_action_id" ]] ||
+    fail "boot API recovery left a recovered snapshot behind"
+if grep -Eq '^(start|stop|restart) vpnctl\.service$' "$FAKE_SYSTEMCTL_LOG"; then
+    fail "boot API recovery recursively waited on an ordered vpnctl.service job"
+fi
+ok "boot API recovery reconciles interrupted actions without an ordering deadlock"
+
+transition_boot_marker="$VPNCTL_STATE_DIR/transition-recovery-required.json"
+jq -cn '{
+    state: "recovery-required",
+    reason: "simulated-power-loss",
+    created_at: "2026-08-03T00:00:00Z",
+    guard_table: "mazzy_vpn_transition"
+}' >"$transition_boot_marker"
+rm -f -- "$VPNCTL_STATE_DIR/test.transaction"
+: >"$FAKE_NFT_RULES_LOG"
+if "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1; then
+    fail "boot recovery accepted an unresolved transition marker"
+fi
+grep -q 'oifname "lo" accept' "$FAKE_NFT_RULES_LOG" ||
+    fail "boot recovery did not restore loopback access in the fail-closed guard"
+grep -q 'chain forward' "$FAKE_NFT_RULES_LOG" ||
+    fail "boot recovery did not restore the forwarded-traffic guard"
+[[ "$(grep -c 'reject with icmpx type admin-prohibited' \
+    "$FAKE_NFT_RULES_LOG")" -ge 2 ]] ||
+    fail "boot recovery did not reject both local and forwarded direct egress"
+if grep -Eq 'ip6?[[:space:]]+daddr|oifname "(eth0|adguard0|vpnwg0|vpnovpn0)" accept' \
+    "$FAKE_NFT_RULES_LOG"; then
+    fail "boot recovery restored an unverified egress exception"
+fi
+transition_service_rc=0
+"$CLI" _service-run >/dev/null 2>&1 || transition_service_rc=$?
+[[ "$transition_service_rc" -eq 77 ]] ||
+    fail "managed service did not stop retries behind the transition recovery marker"
+: >"$FAKE_SYSTEMCTL_LOG"
+FAKE_SYSTEMCTL_INACTIVE=1 "$CLI" _health-check >/dev/null 2>&1 || true
+if grep -Eq '^(start|restart) vpnctl\.service$' "$FAKE_SYSTEMCTL_LOG"; then
+    fail "health remediation bypassed the transition recovery marker"
+fi
+transition_blocked_response="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-transition-blocked-0001",
+        operation: "lifecycle.reconnect",
+        action_id: "action-transition-blocked-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {}
+    }' | "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.message_key == "api.action.recovery-required"
+    and .error.user_action_required == true
+' <<<"$transition_blocked_response" >/dev/null ||
+    fail "local API lifecycle bypassed the transition recovery marker"
+rm -f -- "$transition_boot_marker"
+ok "boot transition recovery restores a process-wide fail-closed guard"
+
+umask_probe_env="$TMP/api-recovery-umask-env"
+umask_probe_file="$TMP/api-recovery-umask-probe"
+umask_probe_record="$VPNCTL_API_ACTION_DIR/umask-probe!.json"
+cat >"$umask_probe_env" <<'EOF'
+if [[ -z "${UMASK_PROBE_ROOT_PID:-}" ]]; then
+    export UMASK_PROBE_ROOT_PID="$BASHPID"
+    umask 022
+    trap '[[ "$BASHPID" != "$UMASK_PROBE_ROOT_PID" ]] || : >"${UMASK_PROBE_FILE:?}"' EXIT
+fi
+EOF
+jq -cn '{state: "running"}' >"$umask_probe_record"
+if BASH_ENV="$umask_probe_env" UMASK_PROBE_FILE="$umask_probe_file" \
+    "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1; then
+    fail "boot API recovery accepted a corrupt action journal name"
+fi
+[[ "$(stat -c %a "$umask_probe_file")" == "644" ]] ||
+    fail "api_mark_recovery_required leaked its restrictive umask to the caller"
+rm -f -- "$umask_probe_record"
+"$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
+ok "API recovery marker creation restores the caller umask"
+
+boot_failed_action_id="action-boot-recovery-failed-0001"
+jq -cn '{
+    fingerprint: "boot-recovery-failed-fingerprint",
+    state: "running",
+    operation: "lifecycle.disconnect",
+    started_at: "2026-01-01T00:00:00Z",
+    snapshot_existed: true
+}' >"$VPNCTL_API_ACTION_DIR/$boot_failed_action_id.json"
+if "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1; then
+    fail "boot API recovery accepted an interrupted action without a snapshot"
+fi
+jq -e --arg action_id "$boot_failed_action_id" '
+    .state == "recovery-required"
+    and .action_id == $action_id
+    and .reason == "snapshot-missing"
+' "$VPNCTL_STATE_DIR/api-recovery-required.json" >/dev/null ||
+    fail "failed boot rollback did not preserve the recovery marker"
+if "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1; then
+    fail "boot API recovery ignored its fail-closed recovery marker"
+fi
+[[ -s "$VPNCTL_STATE_DIR/api-recovery-required.json" ]] ||
+    fail "repeated boot recovery cleared the recovery marker"
+if "$CLI" _service-run >/dev/null 2>&1; then
+    fail "managed tunnel started while boot recovery required review"
+fi
+"$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
+ok "boot API recovery failure remains fail closed until administrator acknowledgement"
+
+marker_unavailable_action_id="action-boot-marker-unavailable-0001"
+jq -cn '{
+    fingerprint: "boot-marker-unavailable-fingerprint",
+    state: "running",
+    operation: "lifecycle.disconnect",
+    started_at: "2026-01-01T00:00:00Z",
+    snapshot_existed: true
+}' >"$VPNCTL_API_ACTION_DIR/$marker_unavailable_action_id.json"
+marker_mv_bin="$TMP/marker-mv-bin"
+mkdir -p "$marker_mv_bin"
+cat >"$marker_mv_bin/mv" <<'EOF'
+#!/usr/bin/env bash
+target="${@: -1}"
+[[ "$target" != "${FAKE_MV_FAIL_TARGET:?}" ]] || exit 1
+exec /usr/bin/mv "$@"
+EOF
+chmod 700 "$marker_mv_bin/mv"
+if PATH="$marker_mv_bin:$PATH" \
+    FAKE_MV_FAIL_TARGET="$VPNCTL_STATE_DIR/api-recovery-required.json" \
+    "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1; then
+    fail "boot API recovery continued when its fail-closed marker could not persist"
+fi
+[[ ! -e "$VPNCTL_STATE_DIR/api-recovery-required.json" ]] ||
+    fail "failed marker persistence left an untrusted recovery marker"
+if find "$VPNCTL_STATE_DIR" -maxdepth 1 -name '.api-recovery.*' -print -quit |
+   grep -q .; then
+    fail "failed marker persistence left a temporary marker behind"
+fi
+rm -f -- "$VPNCTL_API_ACTION_DIR/$marker_unavailable_action_id.json"
+ok "boot recovery reports marker-persistence failure without leaking temporary state"
+
+api_recovery_bad_run_dir="$TMP/api-recovery-run-path"
+: >"$api_recovery_bad_run_dir"
+if VPNCTL_RUN_DIR="$api_recovery_bad_run_dir" \
+    "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1; then
+    fail "boot API recovery accepted an unavailable runtime directory"
+fi
+jq -e '
+    .state == "recovery-required"
+    and .action_id == "boot-recovery"
+    and .operation == "api.interrupted-recovery"
+    and .reason == "boot-recovery-directory-unavailable"
+' "$VPNCTL_STATE_DIR/api-recovery-required.json" >/dev/null ||
+    fail "runtime-directory failure did not persist the API recovery marker"
+rm -f -- "$api_recovery_bad_run_dir"
+"$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
+
+api_recovery_chmod_bin="$TMP/api-recovery-chmod-bin"
+mkdir -p "$api_recovery_chmod_bin"
+cat >"$api_recovery_chmod_bin/chmod" <<'EOF'
+#!/usr/bin/env bash
+for argument in "$@"; do
+    if [[ "$argument" == "${FAKE_CHMOD_FAIL_TARGET:?}" ]]; then
+        exit 1
+    fi
+done
+exec /usr/bin/chmod "$@"
+EOF
+chmod 700 "$api_recovery_chmod_bin/chmod"
+if PATH="$api_recovery_chmod_bin:$PATH" \
+    FAKE_CHMOD_FAIL_TARGET="$VPNCTL_RUN_DIR" \
+    "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1; then
+    fail "boot API recovery accepted an unprotected runtime directory"
+fi
+jq -e '
+    .state == "recovery-required"
+    and .reason == "boot-recovery-permissions-unavailable"
+' "$VPNCTL_STATE_DIR/api-recovery-required.json" >/dev/null ||
+    fail "runtime-directory chmod failure did not persist the API recovery marker"
+"$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
+
+exec 6>"$VPNCTL_RUN_DIR/.mutation.lock"
+flock 6
+if VPNCTL_API_RECOVERY_LOCK_WAIT_SECONDS=1 \
+    "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1; then
+    fail "boot API recovery bypassed the occupied shared mutation lock"
+fi
+flock -u 6
+exec 6>&-
+jq -e '
+    .state == "recovery-required"
+    and .action_id == "boot-recovery"
+    and .operation == "api.interrupted-recovery"
+    and .reason == "boot-recovery-lock-unavailable"
+' "$VPNCTL_STATE_DIR/api-recovery-required.json" >/dev/null ||
+    fail "shared-lock timeout did not persist the API recovery marker"
+[[ "$(stat -c %a "$VPNCTL_STATE_DIR/api-recovery-required.json")" == "600" ]] ||
+    fail "boot infrastructure failure marker is not root-only"
+api_marker_service_rc=0
+"$CLI" _service-run >/dev/null 2>&1 || api_marker_service_rc=$?
+[[ "$api_marker_service_rc" -eq 77 ]] ||
+    fail "managed service did not stop retries behind the API recovery marker"
+: >"$FAKE_SYSTEMCTL_LOG"
+FAKE_SYSTEMCTL_INACTIVE=1 "$CLI" _health-check >/dev/null 2>&1 || true
+if grep -Eq '^(start|restart) vpnctl\.service$' "$FAKE_SYSTEMCTL_LOG"; then
+    fail "health remediation bypassed the boot recovery lock failure marker"
+fi
+api_boot_lock_blocked_response="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-boot-lock-blocked-0001",
+        operation: "lifecycle.reconnect",
+        action_id: "action-boot-lock-blocked-0001",
+        authorization: "system-mutate",
+        deadline_ms: 5000,
+        payload: {}
+    }' | "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.message_key == "api.action.recovery-required"
+' <<<"$api_boot_lock_blocked_response" >/dev/null ||
+    fail "local API lifecycle bypassed the boot recovery lock failure marker"
+"$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
+ok "boot API infrastructure failures persist a fail-closed marker"
+
+assert_recovery_marker_blocks_runtime() {
+    local request_id="$1" blocked_response blocked_service_rc=0
+    "$CLI" _service-run >/dev/null 2>&1 || blocked_service_rc=$?
+    [[ "$blocked_service_rc" -eq 77 ]] ||
+        fail "managed service did not stop retries behind recovery marker $request_id"
+    : >"$FAKE_SYSTEMCTL_LOG"
+    FAKE_SYSTEMCTL_INACTIVE=1 "$CLI" _health-check >/dev/null 2>&1 || true
+    if grep -Eq '^(start|restart) vpnctl\.service$' "$FAKE_SYSTEMCTL_LOG"; then
+        fail "health remediation bypassed recovery marker $request_id"
+    fi
+    blocked_response="$(
+        jq -cn --arg request_id "$request_id" '{
+            api_version: "1.0",
+            request_id: $request_id,
+            operation: "lifecycle.reconnect",
+            action_id: ("action-" + $request_id),
+            authorization: "system-mutate",
+            deadline_ms: 5000,
+            payload: {}
+        }' | "$CLI" _api-dispatch
+    )"
+    jq -e '
+        .status == "error"
+        and .error.message_key == "api.action.recovery-required"
+    ' <<<"$blocked_response" >/dev/null ||
+        fail "local API bypassed recovery marker $request_id"
+}
+
+: >"$FAKE_SYNC_LOG"
+corrupt_recovery_record="$VPNCTL_API_ACTION_DIR/broken!.json"
+jq -cn '{state: "running"}' >"$corrupt_recovery_record"
+if "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1; then
+    fail "boot recovery accepted a corrupt action journal name"
+fi
+jq -e '
+    .state == "recovery-required"
+    and .action_id == "recovery-scan"
+    and .operation == "api.interrupted-recovery"
+    and .reason == "journal-corrupt"
+' "$VPNCTL_STATE_DIR/api-recovery-required.json" >/dev/null ||
+    fail "journal-corrupt recovery marker schema is invalid"
+[[ "$(stat -c %a "$VPNCTL_STATE_DIR/api-recovery-required.json")" == "600" ]] ||
+    fail "journal-corrupt recovery marker is not mode 600"
+grep -Fxq -- "-f $VPNCTL_STATE_DIR/api-recovery-required.json" "$FAKE_SYNC_LOG" ||
+    fail "journal-corrupt recovery marker was not durably synced"
+assert_recovery_marker_blocks_runtime request-journal-corrupt-0001
+rm -f -- "$corrupt_recovery_record"
+"$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
+
+journal_unavailable_id="action-journal-unavailable-0001"
+journal_unavailable_record="$VPNCTL_API_ACTION_DIR/$journal_unavailable_id.json"
+cp "$VPNCTL_STATE_DIR/active" \
+    "$VPNCTL_API_ACTION_DIR/.snapshot.$journal_unavailable_id"
+jq -cn '{
+    fingerprint: "journal-unavailable-fingerprint",
+    state: "running",
+    operation: "lifecycle.reconnect",
+    started_at: "2026-01-01T00:00:00Z",
+    snapshot_existed: true
+}' >"$journal_unavailable_record"
+journal_mv_bin="$TMP/journal-mv-bin"
+mkdir -p "$journal_mv_bin"
+cat >"$journal_mv_bin/mv" <<'EOF'
+#!/usr/bin/env bash
+target="${@: -1}"
+[[ "$target" != "${FAKE_MV_FAIL_TARGET:?}" ]] || exit 1
+exec /usr/bin/mv "$@"
+EOF
+chmod 700 "$journal_mv_bin/mv"
+: >"$FAKE_SYNC_LOG"
+if PATH="$journal_mv_bin:$PATH" \
+    FAKE_MV_FAIL_TARGET="$journal_unavailable_record" \
+    "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1; then
+    fail "boot recovery accepted an unavailable action journal"
+fi
+jq -e --arg action_id "$journal_unavailable_id" '
+    .state == "recovery-required"
+    and .action_id == $action_id
+    and .operation == "lifecycle.reconnect"
+    and .reason == "journal-unavailable"
+' "$VPNCTL_STATE_DIR/api-recovery-required.json" >/dev/null ||
+    fail "journal-unavailable recovery marker schema is invalid"
+[[ "$(stat -c %a "$VPNCTL_STATE_DIR/api-recovery-required.json")" == "600" ]] ||
+    fail "journal-unavailable recovery marker is not mode 600"
+grep -Fxq -- "-f $VPNCTL_STATE_DIR/api-recovery-required.json" "$FAKE_SYNC_LOG" ||
+    fail "journal-unavailable recovery marker was not durably synced"
+assert_recovery_marker_blocks_runtime request-journal-unavailable-0001
+rm -f -- \
+    "$journal_unavailable_record" \
+    "$VPNCTL_API_ACTION_DIR/.snapshot.$journal_unavailable_id"
+"$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
+ok "all boot journal failure markers are mode 600, synced and fail closed"
 
 real_path="${PATH#"$TMP/fakebin:"}"
 real_socat="$(PATH="$real_path" command -v socat)" ||
@@ -2004,6 +3245,9 @@ grep -q '^MODE=normal$' "$TMP/state/active" || fail "test did not restore previo
 grep -q -- '--on-active=2s' "$TMP/systemd-run.log" || fail "timeout guard was not armed"
 ok "successful test rolls back"
 
+(exec -a "/opt/adguardvpn_cli/adguardvpn-cli connect" sleep 30) &
+fake_adguard_transport_pid=$!
+printf '%s\n' "$fake_adguard_transport_pid" >"$VPNCTL_ADGUARD_PID_FILE"
 touch "$FAKE_ADGUARD_ACTIVE"
 : >"$FAKE_ADGUARD_LOG"
 export FAKE_ADGUARD_FORK=1
@@ -2017,12 +3261,56 @@ grep -q '^connect --no-progress -y$' "$FAKE_ADGUARD_LOG" ||
     fail "AdGuard fallback was not reconnected after rollback"
 grep -q '^DESIRED=down$' "$TMP/state/active" ||
     fail "managed watchdog remained armed over restored AdGuard fallback"
-rm -f "$FAKE_ADGUARD_ACTIVE"
-if ! "$CLI" connect openvpn "Test Server" >/dev/null; then
-    fail "daemonized AdGuard fallback inherited the vpnctl action lock"
+grep -q 'ip daddr 192.0.2.40 udp dport 443 accept' \
+    "$FAKE_NFT_RULES_LOG" ||
+    fail "AdGuard transition guard did not preserve the exact transport endpoint"
+grep -q 'oifname "adguard0" accept' "$FAKE_NFT_RULES_LOG" ||
+    fail "AdGuard transition guard did not preserve the proven tunnel interface"
+if grep -q 'oifname "eth0" accept' "$FAKE_NFT_RULES_LOG"; then
+    fail "AdGuard transition guard permitted unrestricted physical-interface egress"
 fi
+wait "$fake_adguard_transport_pid" 2>/dev/null || true
+rm -f "$FAKE_ADGUARD_ACTIVE" "$VPNCTL_ADGUARD_PID_FILE"
+if ! "$CLI" connect openvpn "Test Server" >/dev/null; then
+    fail "daemonized AdGuard fallback inherited the vpnctl mutation lock"
+fi
+
+"$CLI" disconnect >/dev/null
+(exec -a "/opt/adguardvpn_cli/adguardvpn-cli connect" sleep 30) &
+fake_adguard_transport_pid=$!
+printf '%s\n' "$fake_adguard_transport_pid" >"$VPNCTL_ADGUARD_PID_FILE"
+touch "$FAKE_ADGUARD_ACTIVE"
+export FAKE_SYSTEMCTL_START_FAIL=1
+api_fallback_fd_request="$(
+    jq -cn --arg profile_id "$profile_id" '{
+        api_version: "1.0",
+        request_id: "request-fallback-fd-0001",
+        operation: "lifecycle.connect",
+        action_id: "action-fallback-fd-0001",
+        authorization: "system-mutate",
+        deadline_ms: 10000,
+        payload: {profile_id: $profile_id}
+    }'
+)"
+api_fallback_fd_response="$(
+    printf '%s\n' "$api_fallback_fd_request" | "$CLI" _api-dispatch
+)"
+unset FAKE_SYSTEMCTL_START_FAIL
+jq -e '
+    .status == "ok"
+    and .result.state == "rolled-back"
+    and .result.rollback.state == "completed"
+' <<<"$api_fallback_fd_response" >/dev/null ||
+    fail "API fallback fd regression did not complete a rollback"
+wait "$fake_adguard_transport_pid" 2>/dev/null || true
+rm -f "$FAKE_ADGUARD_ACTIVE" "$VPNCTL_ADGUARD_PID_FILE"
+exec 6>"$TMP/run/.mutation.lock"
+flock -n 6 || fail "daemonized API fallback retained inherited mutation fd 7"
+flock -u 6
+exec 6>&-
+"$CLI" connect openvpn "Test Server" >/dev/null
 unset FAKE_ADGUARD_FORK
-ok "AdGuard fallback is restored without inheriting the action lock"
+ok "AdGuard fallback cannot retain direct or API mutation locks"
 
 rm -f "$FAKE_ADGUARD_ACTIVE"
 (exec -a "/opt/adguardvpn_cli/adguardvpn-cli connect" sleep 30) &
@@ -2045,12 +3333,13 @@ rm -f "$FAKE_ADGUARD_ACTIVE" "$VPNCTL_ADGUARD_PID_FILE"
 ok "AdGuard is detected by its validated PID file when status is unavailable"
 
 export FAKE_SYSTEMCTL_START_LIMIT=1
+"$CLI" reconnect >/dev/null
 batch_output="$("$CLI" test-all openvpn --timeout 2)"
 unset FAKE_SYSTEMCTL_START_LIMIT
 grep -q 'tested=1 passed=1 failed=0 skipped=0' <<<"$batch_output" ||
     fail "test-all summary is wrong"
 grep -q '^MODE=normal$' "$TMP/state/active" || fail "test-all did not restore state"
-ok "test-all resets systemd start limit and rolls back"
+ok "explicit profile cycling and test-all reset systemd start limit and roll back"
 
 cp "$TMP/config/openvpn/Test Server.ovpn" "$TMP/config/openvpn/Second Server.ovpn"
 export FAKE_SYSTEMCTL_OPENVPN_LIMIT=1
@@ -2086,12 +3375,12 @@ touch "$TMP/state/test.previous.exists" "$TMP/state/test.previous.active" \
     "$TMP/state/test.transaction"
 sed -i 's/^MODE=normal$/MODE=test/' "$TMP/state/active"
 printf 'TEST_TOKEN=race-token\nTEST_DEADLINE=1\n' >>"$TMP/state/active"
-exec 7>"$TMP/run/.action.lock"
+exec 7>"$TMP/run/.mutation.lock"
 flock 7
 timeout 5 "$CLI" _test-timeout race-token >/dev/null 2>&1 &
 guard_pid=$!
 sleep 0.2
-kill -0 "$guard_pid" 2>/dev/null || fail "timeout guard did not wait for action lock"
+kill -0 "$guard_pid" 2>/dev/null || fail "timeout guard did not wait for mutation lock"
 flock -u 7
 wait "$guard_pid"
 exec 7>&-
@@ -2123,13 +3412,23 @@ rm -f "$FAKE_LEGACY_ACTIVE"
 ok "boot recovery restores external fallback"
 
 export FAKE_CURL_FAIL=1
-if "$CLI" test openvpn "Test Server" --timeout 2 >/dev/null 2>&1; then
-    fail "failed tunnel test returned success"
-fi
+failed_test_rc=0
+"$CLI" test openvpn "Test Server" --timeout 2 >/dev/null 2>&1 ||
+    failed_test_rc=$?
+[[ "$failed_test_rc" -eq 2 ]] ||
+    fail "unverified test rollback did not return the critical status"
 unset FAKE_CURL_FAIL
-grep -q '^MODE=normal$' "$TMP/state/active" || fail "timeout did not restore previous state"
-[[ ! -e "$TMP/state/test.transaction" ]] || fail "failed test transaction was not cleaned"
-ok "test timeout rolls back"
+[[ -e "$TMP/state/test.transaction" ]] ||
+    fail "unverified test rollback discarded its recovery transaction"
+jq -e '.reason == "test-managed-restore-failed"' \
+    "$TMP/state/transition-recovery-required.json" >/dev/null ||
+    fail "unverified test rollback did not preserve fail-closed recovery state"
+"$CLI" _recover-stale-test >/dev/null
+grep -q '^MODE=normal$' "$TMP/state/active" ||
+    fail "recovery did not restore the previous test state"
+[[ ! -e "$TMP/state/test.transaction" ]] ||
+    fail "verified test recovery did not clean its transaction"
+ok "test timeout fails closed until rollback is independently verified"
 
 export FAKE_SYSTEMCTL_START_FAIL=1
 rollback_rc=0
@@ -2161,12 +3460,17 @@ rm -f "$FAKE_LEGACY_ACTIVE"
 "$CLI" connect openvpn "Test Server" >/dev/null
 ok "failed connect restores legacy fallback"
 
+(exec -a "/opt/adguardvpn_cli/adguardvpn-cli connect" sleep 30) &
+fake_adguard_transport_pid=$!
+printf '%s\n' "$fake_adguard_transport_pid" >"$VPNCTL_ADGUARD_PID_FILE"
 touch "$FAKE_ADGUARD_ACTIVE"
 "$CLI" test openvpn "Test Server" --timeout 2 --keep >/dev/null
 grep -q '^MODE=normal$' "$TMP/state/active" || fail "--keep did not finalize normal state"
 grep -q '^DESIRED=up$' "$TMP/state/active" || fail "--keep did not retain connection"
 [[ ! -e "$FAKE_ADGUARD_ACTIVE" ]] ||
     fail "--keep restored conflicting AdGuard fallback over managed VPN"
+wait "$fake_adguard_transport_pid" 2>/dev/null || true
+rm -f "$VPNCTL_ADGUARD_PID_FILE"
 ok "test keep leaves external fallback stopped"
 
 "$CLI" emergency --protocol openvpn --timeout 2 >/dev/null
@@ -2182,6 +3486,12 @@ fi
 unset FAKE_CURL_FAIL
 cmp -s "$TMP/emergency-before" "$TMP/state/active" ||
     fail "failed emergency did not restore previous state"
+[[ -e "$TMP/state/test.transaction" &&
+   -e "$TMP/state/transition-recovery-required.json" ]] ||
+    fail "unverified emergency rollback did not preserve recoverable state"
+"$CLI" _recover-stale-test >/dev/null
+[[ ! -e "$TMP/state/transition-recovery-required.json" ]] ||
+    fail "verified emergency recovery did not clear transition recovery state"
 ok "emergency failure rolls back"
 
 if "$CLI" connect wireguard Unsafe >/dev/null 2>&1; then
@@ -2191,7 +3501,7 @@ ok "unsafe hooks are rejected"
 
 : >"$TMP/systemctl.log"
 FAKE_DEFAULT_IPV4=198.51.100.9 "$CLI" _health-check >/dev/null
-if grep -q 'restart --no-block vpnctl.service' "$TMP/systemctl.log"; then
+if grep -q 'restart vpnctl.service' "$TMP/systemctl.log"; then
     fail "auto health policy forced full-tunnel recovery for a split profile"
 fi
 
@@ -2200,7 +3510,7 @@ FAKE_DEFAULT_IPV4=198.51.100.9 VPNCTL_HEALTH_REQUIRE_DEFAULT_EGRESS=yes \
     "$CLI" _health-check >/dev/null
 FAKE_DEFAULT_IPV4=198.51.100.9 VPNCTL_HEALTH_REQUIRE_DEFAULT_EGRESS=yes \
     "$CLI" _health-check >/dev/null
-grep -q 'restart --no-block vpnctl.service' "$TMP/systemctl.log" ||
+grep -q '^restart vpnctl.service$' "$TMP/systemctl.log" ||
     fail "strict health policy missed default traffic bypassing the VPN"
 ok "watchdog can enforce full-tunnel default egress without breaking split-tunnel auto mode"
 
@@ -2217,28 +3527,148 @@ chmod 600 "$TMP/config/wireguard/Full.conf"
 : >"$TMP/systemctl.log"
 FAKE_DEFAULT_IPV4=198.51.100.9 "$CLI" _health-check >/dev/null
 FAKE_DEFAULT_IPV4=198.51.100.9 "$CLI" _health-check >/dev/null
-grep -q 'restart --no-block vpnctl.service' "$TMP/systemctl.log" ||
+grep -q '^restart vpnctl.service$' "$TMP/systemctl.log" ||
     fail "auto health policy missed compact WireGuard full-tunnel AllowedIPs"
 "$CLI" connect openvpn "Test Server" >/dev/null
 rm -f -- "$TMP/config/wireguard/Full.conf"
 ok "watchdog parses compact WireGuard full-tunnel routes"
 
 : >"$TMP/systemctl.log"
-export FAKE_CURL_FAIL=1
+rm -f -- "$VPNCTL_RUN_DIR/health.failures"
+FAKE_OPENVPN_INTERFACE_MISSING=1 FAKE_SYSTEMCTL_ACTIVE_AGE_SECONDS=30 \
+    "$CLI" _health-check >/dev/null 2>&1
+[[ ! -e "$VPNCTL_RUN_DIR/health.failures" ]] ||
+    fail "watchdog counted a missing OpenVPN interface during startup grace"
+if grep -Eq '^(start|restart) vpnctl\.service$' "$TMP/systemctl.log"; then
+    fail "watchdog restarted OpenVPN during monotonic startup grace"
+fi
+[[ "$(grep -c '^show --property=ActiveEnterTimestampMonotonic vpnctl.service$' \
+    "$TMP/systemctl.log")" == 1 ]] ||
+    fail "watchdog did not obtain the systemd activation timestamp in one bounded query"
+FAKE_OPENVPN_INTERFACE_MISSING=1 FAKE_SYSTEMCTL_ACTIVE_AGE_SECONDS=61 \
+    "$CLI" _health-check >/dev/null 2>&1
+[[ "$(<"$VPNCTL_RUN_DIR/health.failures")" == 1 ]] ||
+    fail "watchdog did not resume bounded failure counting after startup grace"
 "$CLI" _health-check >/dev/null
+[[ ! -e "$VPNCTL_RUN_DIR/health.failures" ]] ||
+    fail "successful health tick did not reset the startup failure counter"
+FAKE_OPENVPN_INTERFACE_MISSING=1 FAKE_SYSTEMCTL_ACTIVE_AGE_SECONDS=30 \
+    FAKE_PYTHON_MONOTONIC_FAIL=1 \
+    "$CLI" _health-check >/dev/null 2>&1
+[[ "$(<"$VPNCTL_RUN_DIR/health.failures")" == 1 ]] ||
+    fail "watchdog granted startup grace without a trustworthy CLOCK_MONOTONIC source"
 "$CLI" _health-check >/dev/null
-grep -q 'restart --no-block vpnctl.service' "$TMP/systemctl.log" ||
-    fail "watchdog did not restart after threshold"
-unset FAKE_CURL_FAIL
-ok "watchdog reconnects after two confirmed network failures"
+[[ ! -e "$VPNCTL_RUN_DIR/health.failures" ]] ||
+    fail "successful health tick did not reset the monotonic-helper failure counter"
+FAKE_CURL_FAIL=1 FAKE_SYSTEMCTL_ACTIVE_AGE_SECONDS=30 \
+    "$CLI" _health-check >/dev/null 2>&1
+[[ ! -e "$VPNCTL_RUN_DIR/health.failures" ]] ||
+    fail "watchdog counted OpenVPN control-up/data-down during startup grace"
+FAKE_CURL_FAIL=1 FAKE_SYSTEMCTL_ACTIVE_AGE_SECONDS=61 \
+    "$CLI" _health-check >/dev/null 2>&1
+[[ "$(<"$VPNCTL_RUN_DIR/health.failures")" == 1 ]] ||
+    fail "watchdog did not count OpenVPN data-plane failure after startup grace"
+"$CLI" _health-check >/dev/null
+[[ ! -e "$VPNCTL_RUN_DIR/health.failures" ]] ||
+    fail "successful health tick did not reset the data-plane startup counter"
+ok "watchdog uses suspend-safe bounded monotonic grace and fails closed without its clock"
 
 : >"$TMP/systemctl.log"
-export FAKE_SYSTEMCTL_INACTIVE=1
+FAKE_CURL_FAIL=1 "$CLI" _health-check >/dev/null 2>&1
+FAKE_CURL_FAIL=1 "$CLI" _health-check >/dev/null 2>&1
+[[ "$(<"$VPNCTL_RUN_DIR/health.failures")" == 2 ]] ||
+    fail "watchdog cleared the failure counter before threshold recovery"
+[[ "$(grep -c '^restart vpnctl.service$' "$TMP/systemctl.log")" == 1 ]] ||
+    fail "watchdog did not restart exactly once at the failure threshold"
+if grep -q '^reset-failed .*vpnctl.service' "$TMP/systemctl.log"; then
+    fail "automatic watchdog recovery reset the systemd start limiter"
+fi
+health_paused_output="$(
+    FAKE_CURL_FAIL=1 "$CLI" _health-check 2>&1
+)"
+[[ "$(<"$VPNCTL_RUN_DIR/health.failures")" == 3 ]] ||
+    fail "watchdog did not saturate at threshold plus one"
+health_saturated_output="$(
+    FAKE_CURL_FAIL=1 "$CLI" _health-check 2>&1
+)"
+[[ "$(<"$VPNCTL_RUN_DIR/health.failures")" == 3 ]] ||
+    fail "watchdog failure counter exceeded threshold plus one"
+[[ "$(grep -c '^restart vpnctl.service$' "$TMP/systemctl.log")" == 1 ]] ||
+    fail "watchdog repeated same-profile recovery after the threshold"
+paused_warning_count="$(
+    printf '%s\n%s\n' "$health_paused_output" "$health_saturated_output" |
+        grep -c 'Автовосстановление приостановлено' || true
+)"
+[[ "$paused_warning_count" == 1 ]] ||
+    fail "watchdog did not emit exactly one recovery-paused warning"
+if grep -q '^reset-failed .*vpnctl.service' "$TMP/systemctl.log"; then
+    fail "multi-cycle automatic recovery reset the systemd start limiter"
+fi
 "$CLI" _health-check >/dev/null
-unset FAKE_SYSTEMCTL_INACTIVE
-grep -q '^start --no-block vpnctl.service$' "$TMP/systemctl.log" ||
+[[ ! -e "$VPNCTL_RUN_DIR/health.failures" ]] ||
+    fail "successful data-plane check did not reset the saturated counter"
+printf '3\n' >"$VPNCTL_RUN_DIR/health.failures"
+: >"$TMP/systemctl.log"
+"$CLI" reconnect >/dev/null
+[[ ! -e "$VPNCTL_RUN_DIR/health.failures" ]] ||
+    fail "explicit reconnect did not reset the health recovery counter"
+grep -q '^reset-failed vpnctl.service$' "$TMP/systemctl.log" ||
+    fail "explicit reconnect did not retain its manual start-limit reset"
+ok "watchdog caps automatic recovery and explicit recovery resets its counter"
+
+: >"$TMP/systemctl.log"
+health_active_file="$TMP/health-systemctl.active"
+rm -f -- "$health_active_file"
+FAKE_SYSTEMCTL_INACTIVE=1 FAKE_SYSTEMCTL_ACTIVATE_FILE="$health_active_file" \
+    "$CLI" _health-check >/dev/null
+grep -q '^start vpnctl.service$' "$TMP/systemctl.log" ||
     fail "watchdog did not immediately start an inactive desired service"
 ok "watchdog immediately restores an inactive desired service"
+
+: >"$TMP/systemctl.log"
+touch "$VPNCTL_STATE_DIR/api-recovery-required.json"
+FAKE_SYSTEMCTL_INACTIVE=1 "$CLI" _health-check >/dev/null 2>&1 || true
+rm -f -- "$VPNCTL_STATE_DIR/api-recovery-required.json"
+if grep -Eq '^(start|restart) vpnctl\.service$' "$TMP/systemctl.log"; then
+    fail "health remediation ignored the API recovery marker"
+fi
+ok "health remediation fails closed behind the recovery marker"
+
+: >"$TMP/systemctl.log"
+health_systemctl_delay_marker="$TMP/health-systemctl-delay-once"
+health_systemctl_pid_file="$TMP/health-systemctl-delay.pid"
+rm -f -- "$health_active_file"
+FAKE_SYSTEMCTL_INACTIVE=1 \
+FAKE_SYSTEMCTL_ACTIVATE_FILE="$health_active_file" \
+FAKE_SYSTEMCTL_DELAY_ACTION="start vpnctl.service" \
+FAKE_SYSTEMCTL_DELAY_ONCE_FILE="$health_systemctl_delay_marker" \
+FAKE_SYSTEMCTL_DELAY_PID_FILE="$health_systemctl_pid_file" \
+FAKE_SYSTEMCTL_DELAY_ONCE_SECONDS=2 \
+    "$CLI" _health-check >/dev/null 2>&1 &
+health_check_pid=$!
+for _ in {1..50}; do
+    [[ -s "$health_systemctl_pid_file" ]] && break
+    sleep 0.05
+done
+[[ -s "$health_systemctl_pid_file" ]] || {
+    wait "$health_check_pid" || true
+    fail "health remediation did not reach the delayed systemd job"
+}
+exec 6>"$TMP/run/.mutation.lock"
+if flock -n 6; then
+    flock -u 6
+    exec 6>&-
+    wait "$health_check_pid" || true
+    fail "health remediation released the shared lock before systemd completed"
+fi
+exec 6>&-
+wait "$health_check_pid" || fail "synchronous health remediation failed"
+grep -q '^start vpnctl.service$' "$TMP/systemctl.log" ||
+    fail "health remediation did not wait for the terminal systemd start result"
+if grep -q -- '--no-block' "$TMP/systemctl.log"; then
+    fail "health remediation still uses asynchronous systemd jobs"
+fi
+ok "health remediation retains the shared lock through terminal systemd result"
 
 "$CLI" autostart on >/dev/null
 "$CLI" autostart off >/dev/null
@@ -2253,9 +3683,40 @@ grep -q '^enable --now vpnctl-health.timer$' "$TMP/systemctl.log" ||
     fail "Desktop monitor control did not enable the health timer"
 grep -q '^enable vpnctl-test-recovery.service$' "$TMP/systemctl.log" ||
     fail "Desktop monitor control did not enable boot recovery"
+grep -q '^enable mazzy-vpn-api-recovery.service$' "$TMP/systemctl.log" ||
+    fail "Desktop monitor control did not enable API action boot recovery"
 grep -q '^disable --now vpnctl-health.timer$' "$TMP/systemctl.log" ||
     fail "Desktop monitor control did not stop the health timer"
 ok "independent health monitor control"
+
+: >"$TMP/systemctl.log"
+exec 6>"$TMP/run/.mutation.lock"
+flock 6
+if "$CLI" monitor on >/dev/null 2>&1; then
+    fail "monitor bypassed the shared mutation lock"
+fi
+profile_checksum_before="$(sha256sum "$TMP/config/openvpn/Test Server.ovpn")"
+if "$CLI" import openvpn "$TMP/config/openvpn/Test Server.ovpn" --force \
+    >/dev/null 2>&1; then
+    fail "profile import bypassed the shared mutation lock"
+fi
+[[ "$(sha256sum "$TMP/config/openvpn/Test Server.ovpn")" == \
+   "$profile_checksum_before" ]] ||
+    fail "blocked profile import changed the active fixture"
+flock -u 6
+exec 6>&-
+if grep -Eq '^(enable|disable|start|stop|restart|kill|daemon-reload)([[:space:]]|$)' \
+    "$TMP/systemctl.log"; then
+    fail "blocked monitor mutated systemd policy"
+fi
+if VPNCTL_MUTATION_LOCK_FD=99 "$CLI" autostart off >/dev/null 2>&1; then
+    fail "autostart trusted an invalid inherited mutation lock"
+fi
+if grep -Eq '^(enable|disable|start|stop|restart|kill|daemon-reload)([[:space:]]|$)' \
+    "$TMP/systemctl.log"; then
+    fail "invalid inherited mutation lock reached mutating systemctl"
+fi
+ok "service policy mutations fail closed behind the shared lock"
 
 logs_output="$("$CLI" logs --lines 250)"
 grep -q 'fake journal: -u vpnctl.service --no-pager -n 250' <<<"$logs_output" ||
@@ -2287,6 +3748,9 @@ stage="$TMP/stage"
    -f "$stage/usr/local/lib/mazzy-vpn/docs/PLATFORM_ROADMAP.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/PROTOCOL_ORCHESTRATION.en.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/PROTOCOL_ORCHESTRATION.ru.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/TARGET_ARCHITECTURE_2026-08-02.ru.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/R0_MUTATION_SINGLE_FLIGHT.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/FEATURE_PARITY.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/capabilities.json" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/API_CONTRACT.en.md" &&
@@ -2295,12 +3759,17 @@ stage="$TMP/stage"
    -f "$stage/usr/local/lib/mazzy-vpn/docs/AUDIT_2026-07-28.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/AUDIT_2026-08-01.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/AUDIT_2026-08-01_PROTOCOLS.ru.md" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/docs/AUDIT_2026-08-02_RUNTIME_AND_AGENTS.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.en.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/docs/ARCHITECTURE.ru.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/api/v1/manifest.json" &&
    -f "$stage/usr/local/lib/mazzy-vpn/api/v1/schema.json" &&
    -f "$stage/usr/local/lib/mazzy-vpn/protocols/v1/registry.json" &&
    -f "$stage/usr/local/lib/mazzy-vpn/protocols/v1/schema.json" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/protocols/v1/managed-profile.schema.json" &&
+   -x "$stage/usr/local/lib/mazzy-vpn/runtime/mazzy-sing-box-adapter" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/runtime/v1/adapter-registry.json" &&
+   -f "$stage/usr/local/lib/mazzy-vpn/runtime/v1/schema.json" &&
    -f "$stage/usr/local/lib/mazzy-vpn/LICENSE" &&
    -f "$stage/usr/local/lib/mazzy-vpn/AUTHORS.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/PRIVACY.md" ]] ||
@@ -2314,6 +3783,15 @@ cmp -s "$ROOT/api/v1/schema.json" \
 cmp -s "$ROOT/protocols/v1/registry.json" \
     "$stage/usr/local/lib/mazzy-vpn/protocols/v1/registry.json" ||
     fail "staged protocol registry differs from the source contract"
+cmp -s "$ROOT/protocols/v1/managed-profile.schema.json" \
+    "$stage/usr/local/lib/mazzy-vpn/protocols/v1/managed-profile.schema.json" ||
+    fail "staged managed profile schema differs from the source contract"
+cmp -s "$ROOT/runtime/mazzy-sing-box-adapter" \
+    "$stage/usr/local/lib/mazzy-vpn/runtime/mazzy-sing-box-adapter" ||
+    fail "staged sing-box adapter differs from source"
+cmp -s "$ROOT/runtime/v1/adapter-registry.json" \
+    "$stage/usr/local/lib/mazzy-vpn/runtime/v1/adapter-registry.json" ||
+    fail "staged runtime adapter registry differs from source"
 "$stage/usr/local/bin/mazzy-vpn" api-info --json |
     cmp -s - "$ROOT/api/v1/manifest.json" ||
     fail "staged CLI does not expose the installed API manifest"
@@ -2328,10 +3806,44 @@ done
 [[ -f "$stage/etc/systemd/system/vpnctl-health.timer" ]] || fail "timer not staged"
 grep -q '^Restart=always$' "$stage/etc/systemd/system/vpnctl.service" ||
     fail "service does not restart after a clean unexpected exit"
+grep -q '^RestartPreventExitStatus=77$' \
+    "$stage/etc/systemd/system/vpnctl.service" ||
+    fail "service retries permanent OpenVPN authentication failures"
+grep -q '^StartLimitIntervalSec=600$' \
+    "$stage/etc/systemd/system/vpnctl.service" ||
+    fail "service start-limit interval is not the tested ten-minute window"
+grep -q '^StartLimitBurst=5$' "$stage/etc/systemd/system/vpnctl.service" ||
+    fail "service start-limit burst is not bounded to five attempts"
 grep -q '^OnUnitActiveSec=20s$' "$stage/etc/systemd/system/vpnctl-health.timer" ||
     fail "health timer interval is not the expected 20 seconds"
 [[ -f "$stage/etc/systemd/system/vpnctl-test-recovery.service" ]] ||
     fail "test recovery unit not staged"
+[[ -f "$stage/etc/systemd/system/mazzy-vpn-api-recovery.service" ]] ||
+    fail "API action recovery unit not staged"
+grep -q '^Before=vpnctl-test-recovery.service vpnctl.service vpnctl-health.service mazzy-vpn-api.socket$' \
+    "$stage/etc/systemd/system/mazzy-vpn-api-recovery.service" ||
+    fail "API recovery is not ordered before every mutating/socket-activated consumer"
+grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
+    "$stage/etc/systemd/system/vpnctl-test-recovery.service" ||
+    fail "test recovery does not require successful API recovery"
+grep -q '^After=local-fs.target mazzy-vpn-api-recovery.service$' \
+    "$stage/etc/systemd/system/vpnctl-test-recovery.service" ||
+    fail "test recovery is not serialized after API recovery"
+grep -q '^TimeoutStartSec=60s$' \
+    "$stage/etc/systemd/system/vpnctl-test-recovery.service" ||
+    fail "test recovery has no bounded systemd startup budget"
+grep -q '^ExecStart=/usr/local/bin/mazzy-vpn _api-recover-interrupted-actions$' \
+    "$stage/etc/systemd/system/mazzy-vpn-api-recovery.service" ||
+    fail "API recovery unit does not use the root-only recovery entrypoint"
+grep -Fxq 'RemainAfterExit=yes' \
+    "$stage/etc/systemd/system/mazzy-vpn-api-recovery.service" ||
+    fail "staged API recovery unit does not remain active after boot recovery"
+grep -q '^ProtectSystem=strict$' \
+    "$stage/etc/systemd/system/mazzy-vpn-api-recovery.service" ||
+    fail "API recovery unit does not use strict filesystem protection"
+grep -q '^CapabilityBoundingSet=CAP_NET_ADMIN$' \
+    "$stage/etc/systemd/system/mazzy-vpn-api-recovery.service" ||
+    fail "API recovery unit cannot restore the nftables transition guard"
 [[ -f "$stage/etc/systemd/system/mazzy-vpn-api.socket" &&
    -f "$stage/etc/systemd/system/mazzy-vpn-api@.service" ]] ||
     fail "local API systemd units were not staged"
@@ -2352,9 +3864,6 @@ grep -q '^NoNewPrivileges=yes$' \
 grep -q 'ExecStart=/usr/local/bin/mazzy-vpn' \
     "$stage/etc/systemd/system/vpnctl.service" ||
     fail "staged service does not use Mazzy VPN command"
-grep -Eq '^StartLimitBurst=([1-9][0-9]{2,}|[1-9][0-9]{3,})$' \
-    "$stage/etc/systemd/system/vpnctl.service" ||
-    fail "staged service start limit is too low for test-all"
 ok "branded staged installation and aliases"
 
 installer_order_output="$(
@@ -2387,7 +3896,7 @@ deb = linux["deb"]
 rpm = linux["rpm"]
 for dependency in (
     "bash", "diffutils", "findutils", "grep", "iproute2", "jq", "pkexec",
-    "procps", "sed", "socat", "systemd",
+    "nftables", "procps", "python3", "sed", "socat", "systemd",
 ):
     assert dependency in deb["depends"]
 for dependency in (
@@ -2396,7 +3905,7 @@ for dependency in (
     assert dependency in deb["recommends"]
 for dependency in (
     "bash", "diffutils", "findutils", "gawk", "grep", "iproute", "jq",
-    "polkit", "procps-ng", "sed", "socat", "systemd",
+    "nftables", "polkit", "procps-ng", "python3", "sed", "socat", "systemd",
 ):
     assert dependency in rpm["depends"]
 for dependency in ("NetworkManager-l2tp", "nmap-ncat", "openvpn", "wireguard-tools"):
@@ -2492,6 +4001,7 @@ ok "package lifecycle migrates and restores trusted legacy CLI copies"
 
 for package_dropin in \
     "$ROOT/packaging/linux/systemd/mazzy-vpn-api.socket.d/10-package-docs.conf" \
+    "$ROOT/packaging/linux/systemd/mazzy-vpn-api-recovery.service.d/10-package-exec.conf" \
     "$ROOT/packaging/linux/systemd/mazzy-vpn-api@.service.d/10-package-exec.conf" \
     "$ROOT/packaging/linux/systemd/vpnctl-health.service.d/10-package-exec.conf" \
     "$ROOT/packaging/linux/systemd/vpnctl-test-recovery.service.d/10-package-exec.conf" \
@@ -2572,6 +4082,11 @@ COMP_CWORD=2
 _mazzy_vpn
 printf '%s\n' "${COMPREPLY[@]}" | grep -qx -- '--speed' ||
     fail "Mazzy VPN completion does not include verify --speed"
+COMP_WORDS=(mazzy-vpn planner e)
+COMP_CWORD=2
+_mazzy_vpn
+printf '%s\n' "${COMPREPLY[@]}" | grep -qx 'evaluate' ||
+    fail "Mazzy VPN completion does not include planner evaluate"
 COMP_WORDS=(mazzy-vpn language j)
 COMP_CWORD=2
 _mazzy_vpn
@@ -2582,6 +4097,47 @@ ok "Mazzy VPN bash completion"
 if grep -Eq '^(Wants|After)=.*vpnctl-test-recovery' "$ROOT/systemd/vpnctl.service"; then
     fail "runtime service pulls boot recovery into a locked test transaction"
 fi
+grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
+    "$ROOT/systemd/vpnctl.service" ||
+    fail "runtime service can start after API boot recovery fails"
+grep -q '^After=network-online.target NetworkManager.service mazzy-vpn-api-recovery.service$' \
+    "$ROOT/systemd/vpnctl.service" ||
+    fail "runtime service is not ordered after required API boot recovery"
+grep -q '^Before=vpnctl-test-recovery.service vpnctl.service vpnctl-health.service mazzy-vpn-api.socket$' \
+    "$ROOT/systemd/mazzy-vpn-api-recovery.service" ||
+    fail "boot API recovery ordering drifted"
+grep -Fxq 'RemainAfterExit=yes' \
+    "$ROOT/systemd/mazzy-vpn-api-recovery.service" ||
+    fail "successful boot API recovery is not retained for the boot"
+grep -q '^CapabilityBoundingSet=CAP_NET_ADMIN$' \
+    "$ROOT/systemd/mazzy-vpn-api-recovery.service" ||
+    fail "boot API recovery cannot restore the nftables transition guard"
+grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
+    "$ROOT/systemd/vpnctl-test-recovery.service" ||
+    fail "test boot recovery no longer requires API boot recovery"
+grep -q '^After=local-fs.target mazzy-vpn-api-recovery.service$' \
+    "$ROOT/systemd/vpnctl-test-recovery.service" ||
+    fail "boot recovery units are no longer ordered"
+grep -q '^TimeoutStartSec=60s$' \
+    "$ROOT/systemd/vpnctl-test-recovery.service" ||
+    fail "test boot recovery timeout budget drifted"
+grep -q '^WantedBy=multi-user.target$' \
+    "$ROOT/systemd/mazzy-vpn-api-recovery.service" ||
+    fail "boot API recovery is not enabled through the boot target"
+: >"$FAKE_SYSTEMCTL_RECOVERY_LOG"
+rm -f -- "$FAKE_SYSTEMCTL_RECOVERY_ACTIVE_FILE"
+FAKE_SYSTEMCTL_MODEL_RECOVERY_DEPENDENCY=1 \
+    systemctl start mazzy-vpn-api-recovery.service
+(
+    exec 9>"$VPNCTL_RUN_DIR/.mutation.lock"
+    flock -x 9
+    FAKE_SYSTEMCTL_MODEL_RECOVERY_DEPENDENCY=1 \
+        systemctl start vpnctl.service
+    FAKE_SYSTEMCTL_MODEL_RECOVERY_DEPENDENCY=1 \
+        systemctl restart vpnctl.service
+)
+[[ "$(wc -l <"$FAKE_SYSTEMCTL_RECOVERY_LOG")" == "1" ]] ||
+    fail "runtime VPN service activation re-entered boot API recovery"
 ok "runtime start cannot deadlock on boot recovery"
 
 mkdir -p "$TMP/installbin"
@@ -2660,6 +4216,33 @@ python3 "$ROOT/tests/check-protocol-registry.py" >/dev/null ||
     fail "protocol registry and orchestration policy are inconsistent"
 ok "protocol registry and AI orchestration policy"
 
+python3 "$ROOT/tests/check-agent-control-registry.py" >/dev/null ||
+    fail "agent-control transport registry and security policy are inconsistent"
+ok "reverse agent-control transports and ingress policy"
+
+grep -q 'agent_control::get_agent_integrations' "$ROOT/desktop/src-tauri/src/main.rs" ||
+    fail "Desktop agent diagnostics are not exposed through a typed command"
+if grep -ERq 'run_agent_operation|codex-remote-(start|pair|stop)|pairingGrant' \
+    "$ROOT/desktop/ui" "$ROOT/desktop/src-tauri/src"; then
+    fail "Desktop retains executable Agent Control renderer authority"
+fi
+if grep -q 'Command::new' "$ROOT/desktop/src-tauri/src/agent_control.rs"; then
+    fail "Desktop diagnostics execute an untrusted discovered agent binary"
+fi
+ok "Desktop Agent Control is diagnostics-only and exposes no renderer mutation"
+
+python3 "$ROOT/tests/check-managed-protocol-adapter.py" >/dev/null ||
+    fail "managed proxy profile and sing-box renderer boundary are inconsistent"
+ok "managed proxy profiles generate a closed sing-box TUN graph"
+
+python3 "$ROOT/tests/check-runtime-adapter-registry.py" >/dev/null ||
+    fail "runtime adapter registry overclaims an unverified lifecycle"
+ok "modern protocol runtime adapters have explicit execution and release gates"
+
+python3 "$ROOT/tests/check-planner-examples.py" >/dev/null ||
+    fail "planner SDK examples do not enforce strict bounded JSON"
+ok "planner SDK examples enforce strict bounded JSON"
+
 declare -A protocol_uri_schemes=(
     [vless]=vless
     [hysteria2]=hysteria2
@@ -2688,6 +4271,109 @@ for protocol_scheme in "${!protocol_uri_schemes[@]}"; do
         fail "protocol detector exposed $protocol_scheme credentials"
     fi
 done
+declare -A protocol_json_types=(
+    [vless]=vless
+    [hysteria2]=hysteria2
+    [tuic]=tuic
+    [trojan]=trojan
+    [anytls]=anytls
+    [shadowtls]=shadowtls
+    [naive]=naive
+    [mieru]=mieru
+)
+for protocol_type in "${!protocol_json_types[@]}"; do
+    protocol_detection="$(
+        jq -nc --arg type "$protocol_type" '{
+            outbounds: [{
+                type: $type,
+                server: "example.invalid",
+                password: "json-secret"
+            }]
+        }' | "$ROOT/mazzy-vpn" protocols detect --stdin --json
+    )" || fail "JSON protocol detector rejected $protocol_type"
+    jq -e --arg protocol "${protocol_json_types[$protocol_type]}" '
+        .recognized == true
+        and .protocol == $protocol
+        and .input_kind == "configuration-json"
+        and .contains_secrets == true
+    ' <<<"$protocol_detection" >/dev/null ||
+        fail "JSON protocol detector mislabeled $protocol_type"
+    if jq -r '.. | strings' <<<"$protocol_detection" |
+        grep -Eq 'example\.invalid|json-secret'; then
+        fail "JSON protocol detector exposed $protocol_type secrets"
+    fi
+done
+protocol_detection="$(
+    jq -nc '{
+        outbounds: [{
+            type: "shadowsocks",
+            method: "2022-blake3-aes-256-gcm",
+            server: "example.invalid",
+            password: "json-secret"
+        }]
+    }' | "$ROOT/mazzy-vpn" protocols detect --stdin --json
+)" || fail "JSON protocol detector rejected Shadowsocks 2022"
+jq -e '.recognized == true and .protocol == "shadowsocks2022"' \
+    <<<"$protocol_detection" >/dev/null ||
+    fail "JSON protocol detector mislabeled Shadowsocks 2022"
+protocol_detection="$(
+    printf '%s\n' '{' \
+        '  "listen": "socks://127.0.0.1:1080",' \
+        '  "proxy": "https://user:json-secret@example.invalid"' \
+        '}' | "$ROOT/mazzy-vpn" protocols detect --stdin --json
+)" || fail "JSON protocol detector rejected official NaiveProxy shape"
+jq -e '.recognized == true and .protocol == "naive"' \
+    <<<"$protocol_detection" >/dev/null ||
+    fail "JSON protocol detector mislabeled official NaiveProxy shape"
+protocol_detection="$(
+    jq -nc '{
+        profiles: [{
+            profileName: "default",
+            user: {name: "user", password: "json-secret"},
+            servers: [{domainName: "example.invalid", portBindings: []}]
+        }],
+        activeProfile: "default"
+    }' | "$ROOT/mazzy-vpn" protocols detect --stdin --json
+)" || fail "JSON protocol detector rejected official Mieru shape"
+jq -e '.recognized == true and .protocol == "mieru"' \
+    <<<"$protocol_detection" >/dev/null ||
+    fail "JSON protocol detector mislabeled official Mieru shape"
+set +e
+protocol_detection="$(
+    printf '%s' '{"type":"vless","type":"trojan"}' |
+        "$ROOT/mazzy-vpn" protocols detect --stdin --json
+)"
+protocol_detection_status=$?
+set -e
+[[ "$protocol_detection_status" -eq 2 ]] ||
+    fail "JSON protocol detector accepted duplicate keys"
+jq -e '.recognized == false and .reason == "duplicate-key"' \
+    <<<"$protocol_detection" >/dev/null ||
+    fail "JSON protocol detector returned an unsafe duplicate-key response"
+set +e
+protocol_detection="$(
+    printf '%s' '{"type":"vless","\u0074ype":"trojan"}' |
+        "$ROOT/mazzy-vpn" protocols detect --stdin --json
+)"
+protocol_detection_status=$?
+set -e
+[[ "$protocol_detection_status" -eq 2 ]] ||
+    fail "JSON protocol detector accepted an escaped-equivalent duplicate key"
+jq -e '.recognized == false and .reason == "duplicate-key"' \
+    <<<"$protocol_detection" >/dev/null ||
+    fail "JSON protocol detector did not normalize escaped duplicate keys"
+set +e
+protocol_detection="$(
+    printf '%s' '{"outbounds":[{"type":"vless"},{"type":"trojan"}]}' |
+        "$ROOT/mazzy-vpn" protocols detect --stdin --json
+)"
+protocol_detection_status=$?
+set -e
+[[ "$protocol_detection_status" -eq 2 ]] ||
+    fail "JSON protocol detector accepted an ambiguous multi-protocol config"
+jq -e '.recognized == false and .reason == "ambiguous-protocol"' \
+    <<<"$protocol_detection" >/dev/null ||
+    fail "JSON protocol detector returned an unsafe ambiguity response"
 protocol_detection="$(
     printf '%s\n' 'vless://user:password@example.invalid:443?id=secret#private' |
         "$ROOT/mazzy-vpn" protocols detect --stdin --json
@@ -2738,7 +4424,7 @@ set -e
 jq -e '.recognized == false and .reason == "invalid-input"' \
     <<<"$protocol_detection" >/dev/null ||
     fail "protocol detector returned an unsafe multi-line response"
-ok "protocol URI detection is bounded and credential-redacted"
+ok "protocol URI/JSON classification is bounded and credential-redacted"
 
 python3 "$ROOT/tests/audit-runtime-hardcodes.py" >/dev/null ||
     fail "runtime hard-code boundaries are inconsistent"

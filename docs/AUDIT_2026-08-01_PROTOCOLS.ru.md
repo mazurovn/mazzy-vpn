@@ -71,6 +71,12 @@ deadline, audit и rollback. Custom server не равен arbitrary config exec
 и DEL отклоняются. Результат содержит только protocol ID, kind и readiness;
 host, UUID, username, password, query и fragment отсутствуют.
 
+Повторный аудит 2026-08-02 добавил отдельную JSON-ветку: стандартный JSON
+whitespace допустим, но duplicate keys, несколько документов и смешанные
+protocol outbounds отклоняются. Detector узнаёт bounded sing-box/Xray, Mieru и
+NaiveProxy shapes и возвращает только очищенную классификацию; исходный JSON не
+становится runtime config.
+
 ### 6. High: fake transport test не обнаружил закрытие API response-half
 
 После установки DEB 0.3.1 socket activation запускал worker, но клиентский
@@ -89,7 +95,8 @@ Registry содержит 13 записей. Безопасный порядок
    только backend, transaction и rollback подготовлены.
 2. Evidence: recent success, censorship fit, endpoint/tunnel reachability,
    latency/loss и workload fit.
-3. Deterministic planner формирует объяснимый dry-run plan и bounded fallback.
+3. Deterministic planner формирует объяснимый dry-run rank; bounded fallback
+   остаётся отдельной authorized mutation.
 4. Привилегированный executor повторно проверяет plan и выполняет только
    allowlisted typed operation с action ID.
 
@@ -102,7 +109,7 @@ health evidence и catalog status. Он может запросить или о�
 - Реализовать отдельные адаптеры: sing-box family, Mieru и Naive/Cronet;
 - определить typed custom-server/import schema и secret lifecycle;
 - реализовать Linux TUN/DNS/route lifecycle с leak, rollback и fault tests;
-- добавить planner operation/event schema, policy versioning и human approval;
+- добавить history, authorized planner execution/failover и human approval;
 - завершить Windows Service/Wintun, signed installer и native integration tests;
 - создать Android `VpnService` source, embedded reproducible libraries,
   Keystore/import и real-device lifecycle tests;
@@ -119,7 +126,7 @@ VPN-клиентом или Android готовым приложением до �
 
 ## Проверки patch source и artifacts
 
-- `./tests/run.sh`: 79/79;
+- `./tests/run.sh`: 80/80;
 - Rust unit tests: 24/24;
 - Clippy `-D warnings`: проходит; два известных warning принадлежат
   byte-verified upstream `glib` 0.18 source;
@@ -127,9 +134,16 @@ VPN-клиентом или Android готовым приложением до �
 - cargo-deny 0.20.2 с обновлённой RustSec database: `advisories ok`;
 - Desktop contract: v0.3.2, 90 DOM IDs и 135 localized labels;
 - capability registry: 17 capabilities и 6 release gates;
-- API contract: v1.0, 27 operations и 14 errors;
+- API contract: v1.0, 28 operations и 14 errors;
 - protocol registry: 13 entries и 9 однозначных share URI schemes;
 - AppImage/DEB/RPM package audit: payload byte identity, dependencies,
   lifecycle, corresponding source и Xvfb GUI launch подтверждены;
 - все 12 screenshots пересняты из localhost-only fixture на 1680×951 с RFC
   5737 data и визуально проверены.
+
+Post-audit update: read-only `planner.evaluate` и CLI route реализованы после
+релиза 1.3.2. Они применяют пять backend-owned hard gates, policy v1 scoring,
+stale-evidence rules и stable opaque-ID tie-break. Operation не меняет сеть;
+issue #39 остаётся открытым для history, authorized execution/failover и
+Desktop/mobile integration. Визуальные surfaces не изменялись, поэтому
+повторная генерация screenshots для этого среза не требуется.

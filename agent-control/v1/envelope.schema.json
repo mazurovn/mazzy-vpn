@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mazurovn/mazzy-vpn/agent-control/v1/envelope.schema.json",
+  "title": "Mazzy encrypted agent-control envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "protocol", "message_id", "session_id", "sender_key_id", "recipient_key_id", "issued_at", "expires_at", "sequence", "content_type", "encryption", "signature"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "protocol": {"const": "mazzy-agent-control/1"},
+    "message_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{16,128}$"},
+    "session_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{16,128}$"},
+    "sender_key_id": {"type": "string", "pattern": "^[A-Za-z0-9_-]{16,128}$"},
+    "recipient_key_id": {"type": "string", "pattern": "^[A-Za-z0-9_-]{16,128}$"},
+    "issued_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "sequence": {"type": "integer", "minimum": 0},
+    "content_type": {"const": "application/vnd.mazzy.agent-command+json"},
+    "encryption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "encapsulated_key", "ciphertext"],
+      "properties": {
+        "profile": {"const": "hpke-base-x25519-hkdf-sha256-chacha20poly1305"},
+        "encapsulated_key": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$", "maxLength": 512},
+        "ciphertext": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$", "maxLength": 1398102}
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "value"],
+      "properties": {
+        "algorithm": {"const": "Ed25519"},
+        "value": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$", "maxLength": 128}
+      }
+    }
+  }
+}

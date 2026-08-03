@@ -28,6 +28,7 @@ jobs:
             packaging/linux/post-remove.sh \
             tests/run.sh tests/audit-public.sh tests/check-linux-packages.sh
           bash -n setup_amnezia_vpn.sh stop_amnezia_vpn.sh
+          bash -n runtime/mazzy-sing-box-adapter
           bash -n completions/mazzy-vpn completions/vpnctl
 
       - name: ShellCheck
@@ -38,6 +39,7 @@ jobs:
             packaging/linux/post-remove.sh \
             tests/run.sh tests/audit-public.sh tests/check-linux-packages.sh
           shellcheck setup_amnezia_vpn.sh stop_amnezia_vpn.sh
+          shellcheck runtime/mazzy-sing-box-adapter
           shellcheck completions/mazzy-vpn completions/vpnctl
 
       - name: Regression suite
@@ -47,11 +49,15 @@ jobs:
         run: |
           python3 tests/check-capabilities.py
           python3 tests/check-protocol-registry.py
+          python3 tests/check-runtime-adapter-registry.py
+          python3 tests/check-managed-protocol-adapter.py
+          python3 tests/check-agent-control-registry.py
 
       - name: Versioned local API contract
         run: |
           python3 tests/check-api-contract.py
           python3 tests/check-desktop-ui.py
+          python3 tests/check-planner-examples.py
 
       - name: Public repository audit
         run: |
@@ -72,6 +78,7 @@ jobs:
           systemd-analyze verify \
             "$stage/etc/systemd/system/mazzy-vpn-api.socket" \
             "$stage/etc/systemd/system/mazzy-vpn-api@.service" \
+            "$stage/etc/systemd/system/mazzy-vpn-api-recovery.service" \
             "$stage/etc/systemd/system/vpnctl.service" \
             "$stage/etc/systemd/system/vpnctl-health.service" \
             "$stage/etc/systemd/system/vpnctl-health.timer" \

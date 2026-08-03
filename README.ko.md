@@ -10,7 +10,10 @@ Mazzy VPN은 AmneziaWG, WireGuard, OpenVPN 및 NetworkManager L2TP/IPsec을
 검증된 카탈로그는 이제 13개 프로토콜을 포함합니다. 실제 Linux 연결 백엔드는
 위 네 가지에 한정됩니다. VLESS/REALITY, Hysteria 2, Mieru, NaiveProxy,
 TUIC v5, Shadowsocks 2022, Trojan, AnyTLS 및 ShadowTLS v3은 등록되었지만
-연결 상태는 명확히 `planned`입니다. 자세한 내용:
+연결 상태는 명확히 `planned`입니다. 9개 모두 폐쇄형 managed profile
+schema와 원자적 Linux import를 제공하며, 그중 6개는 폐쇄형 sing-box config
+renderer를 제공합니다. 하지만 연결 lifecycle 통합은 아직 완료되지 않았습니다.
+자세한 내용:
 [Protocol orchestration](docs/PROTOCOL_ORCHESTRATION.en.md).
 
 [영문 아키텍처 및 동작 다이어그램](docs/ARCHITECTURE.en.md) ·
@@ -63,7 +66,7 @@ Tauri Desktop은 Quick Connect, Reconnect, Disconnect, Refresh,
 Self-diagnostics를 창과 시스템 트레이에서 제공합니다. Linux 버전은 설치된
 CLI와 함께 실제로 동작하며 AppImage, DEB, RPM으로 제공됩니다. macOS와
 Windows는 네이티브 VPN 백엔드가 구현되기 전까지 UI 미리보기입니다. GUI는
-프로필이나 키를 읽지 않습니다. Desktop 0.3은 서명되지 않은 preview로
+프로필이나 키를 읽지 않습니다. Desktop 0.4은 서명되지 않은 preview로
 게시되었습니다. Issue #31은 검토된 upstream `glib` backport, 정확한 source
 provenance 검증 및 통과한 RustSec, Dependabot, CodeQL checks로 해결되었습니다.
 자세한 내용:

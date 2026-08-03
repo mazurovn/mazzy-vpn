@@ -40,9 +40,9 @@ Desktop работает без отдельной установки CLI, по�
 client/core. CLI и TUI остаются доступными отдельно и могут управлять тем же
 core, даже когда GUI закрыт.
 
-## Что готово в Desktop 0.3 Linux preview
+## Что готово в Desktop 0.4 Linux preview
 
-В опубликованном preview issue #31 исправлен точным upstream backport `glib`
+В release source preview 0.4 issue #31 исправлен точным upstream backport `glib`
 0.18 с проверенным source provenance и пустым cargo-deny ignore list. PR,
 default-branch security checks и tagged release artifacts прошли.
 
@@ -65,13 +65,15 @@ default-branch security checks и tagged release artifacts прошли.
 - подписанные обновления, миграция и transactional rollback installer;
 - typed import собственных серверов, pinned protocol adapters и проверенный TUN
   layer для реестра из 13 записей без произвольного root-run engine JSON;
-- deterministic evidence-based planner API для агентов: LLM может объяснить
-  или запросить dry-run plan, но не выдаёт shell commands и не получает secrets;
+- Desktop integration существующего read-only deterministic planner, а также
+  governed history и authorized execution/failover: LLM может объяснить или
+  запросить dry-run evaluation, но не выдаёт shell commands и не получает
+  secrets;
 - native macOS/Windows backends, signing/notarization и системные installers;
 - security, accessibility, failure-injection и длительные soak gates.
 
 До закрытия применимых production gates пакеты Desktop имеют статус **preview**.
-Issue #31 и gate публикации Desktop 0.3 закрыты; перечисленные ниже пункты всё
+Issue #31 и gate публикации Desktop 0.4 закрыты; перечисленные ниже пункты всё
 ещё блокируют статус Desktop 1.0.
 
 ## Целевые компоненты

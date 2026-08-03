@@ -22,7 +22,12 @@ Mazzy VPN не использует обязательный cloud account и н
 - root-owned профили `600`, вся цепочка каталогов без group/world write;
 - повторная проверка профиля внутри root service;
 - запрет executable hooks/includes/plugins;
-- один managed tunnel и одна изменяющая операция;
+- один managed tunnel и одна изменяющая операция через общий runtime
+  `.mutation.lock` в release 1.4;
+- dual-stack nftables transition guard для output/forward остаётся fail-closed,
+  пока не подтверждены новый tunnel или rollback;
+- boot recovery восстанавливает минимальный deny guard при persistent
+  transition marker до запуска управляющих services;
 - атомарное desired state;
 - транзакционный rollback;
 - redaction приватных параметров в расширенных журналах;
@@ -34,6 +39,15 @@ Mazzy VPN не использует обязательный cloud account и н
   одинаковые display names не считаются достаточной идентичностью;
 - отсутствие неявного публичного DNS: OpenVPN использует переданный сервером
   DNS либо явный `VPNCTL_OPENVPN_FALLBACK_DNS`.
+
+Общий lock является переходным R0a, а не полноценным `mazzy-vpnd`: direct root
+paths пока не имеют общего с API action journal, а rollback ещё не доказывает
+восстановление routes, DNS, firewall и отсутствие leak.
+
+Текущий Desktop Agent Control остаётся diagnostics-only preview. Renderer и
+Tauri invoke не предоставляют provider lifecycle, а diagnostics не запускает
+обнаруженный executable. Native command-bound approval, trusted executable
+resolution и process-tree containment обязательны до возврата этой authority.
 
 ## Проверки репозитория
 
@@ -75,6 +89,15 @@ redaction. Desktop uses a restrictive CSP, enum action allowlist, no shell and
 a strictly validated cache with no endpoint, path or config content. OpenVPN
 uses server-provided DNS or an explicit `VPNCTL_OPENVPN_FALLBACK_DNS`; it no
 longer silently substitutes a public resolver.
+An unresolved transition marker restores a minimal output/forward deny guard
+at boot before control services start.
+
+The shared lock is the transitional R0a boundary shipped in 1.4, not the target
+`mazzy-vpnd`; direct root paths do not yet share the API action journal and
+rollback does not prove route/DNS/firewall/leak restoration. Desktop Agent
+Control remains diagnostics-only: renderer/Tauri IPC exposes no provider
+lifecycle and diagnostics do not execute a discovered binary. Native approval,
+trusted executable resolution and process-tree containment remain mandatory.
 
 The repository runs public-tree audit, Gitleaks, npm audit, Rust tests and
 Clippy. GitHub Actions are pinned to full commit SHAs. Do not put a secret in a

@@ -6,9 +6,9 @@
 
 | Поверхность | Сейчас | Следующий production gate |
 |---|---|---|
-| CLI/TUI | опубликованный Linux 1.3 | стабильные schema/error codes, полный TUI service parity — [#12](https://github.com/mazurovn/mazzy-vpn/issues/12) |
-| Protocol orchestration | каталог 13, redacted detection/API | typed custom-server import, TUN adapters, deterministic planner и leak/rollback tests |
-| Desktop Linux | опубликованный unsigned 0.3 preview; issue #31 закрыт | versioned service API, policy/localization/accessibility, signed lifecycle — [#4](https://github.com/mazurovn/mazzy-vpn/issues/4) |
+| CLI/TUI | Linux 1.4 release source | tag/Release page, затем стабильные schema/error codes и полный TUI service parity — [#12](https://github.com/mazurovn/mazzy-vpn/issues/12) |
+| Protocol orchestration | stable 1.4: каталог 13, redacted detection/import/API и read-only planner | typed custom-server conversion, TUN adapters, authorized failover и leak/rollback tests |
+| Desktop Linux | unsigned 0.4 preview source; issue #31 закрыт | tag/Release page, versioned service API, policy/localization/accessibility, signed lifecycle — [#4](https://github.com/mazurovn/mazzy-vpn/issues/4) |
 | Desktop Windows | UI preview | Windows Service, WireGuard/Wintun, signed installer — [#7](https://github.com/mazurovn/mazzy-vpn/issues/7) |
 | Desktop macOS | UI preview | Network Extension, signing/notarization — [#10](https://github.com/mazurovn/mazzy-vpn/issues/10) |
 | Android | planned | native `VpnService`, device tests, signed AAB — [#13](https://github.com/mazurovn/mazzy-vpn/issues/13) |
@@ -37,9 +37,9 @@ and the [capability matrix](https://github.com/mazurovn/mazzy-vpn/blob/main/docs
 
 | Surface | Current state | Next production gate |
 |---|---|---|
-| CLI/TUI | published Linux 1.3 | stable schemas/error codes and complete TUI service parity — [#12](https://github.com/mazurovn/mazzy-vpn/issues/12) |
-| Protocol orchestration | 13-entry catalog and redacted detection/API | typed custom-server import, TUN adapters, deterministic planner and leak/rollback tests |
-| Desktop Linux | published unsigned 0.3 preview; issue #31 closed | versioned service API, policy/localization/accessibility and signed lifecycle — [#4](https://github.com/mazurovn/mazzy-vpn/issues/4) |
+| CLI/TUI | Linux 1.4 release source | tag/Release page, then stable schemas/error codes and complete TUI service parity — [#12](https://github.com/mazurovn/mazzy-vpn/issues/12) |
+| Protocol orchestration | stable 1.4: 13-entry catalog, redacted detection/import/API and read-only planner | typed custom-server conversion, TUN adapters, authorized failover and leak/rollback tests |
+| Desktop Linux | unsigned 0.4 preview source; issue #31 closed | tag/Release page, versioned service API, policy/localization/accessibility and signed lifecycle — [#4](https://github.com/mazurovn/mazzy-vpn/issues/4) |
 | Desktop Windows | UI preview | Windows Service, WireGuard/Wintun and signed installer — [#7](https://github.com/mazurovn/mazzy-vpn/issues/7) |
 | Desktop macOS | UI preview | Network Extension, signing and notarization — [#10](https://github.com/mazurovn/mazzy-vpn/issues/10) |
 | Android | planned | native `VpnService`, device tests and signed AAB — [#13](https://github.com/mazurovn/mazzy-vpn/issues/13) |

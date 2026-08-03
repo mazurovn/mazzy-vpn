@@ -13,7 +13,7 @@
   <a href="LICENSE"><img alt="License: AGPL-3.0-or-later" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-8f7dff"></a>
   <a href="https://github.com/mazurovn/mazzy-vpn/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mazurovn/mazzy-vpn/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Linux" src="https://img.shields.io/badge/platform-Linux-65e7ff">
-  <a href="https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.2"><img alt="Release 1.3.2" src="https://img.shields.io/badge/release-1.3.2-ef70ff"></a>
+  <a href="https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.0"><img alt="Release 1.4.0" src="https://img.shields.io/badge/release-1.4.0-ef70ff"></a>
 </p>
 
 Mazzy VPN is an open-source AI-ready VPN client for Linux with Desktop, tray,
@@ -28,9 +28,10 @@ Mazzy VPN is a client and control plane, not a hosted VPN subscription. Bring
 profiles from a VPN provider or your organization. No account, telemetry or
 project-hosted server is required.
 
-The current published line is [CLI/TUI 1.3.2](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.2)
-and [Desktop 0.3.2](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.2).
-Desktop 0.3 is an unsigned preview: Linux provides a functional control center,
+The current release source line is [CLI/TUI 1.4.0](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.0)
+and [Desktop 0.4.0](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.0).
+A version is published only when its linked tag and GitHub Release page exist.
+Desktop 0.4 is an unsigned preview: Linux provides a functional control center,
 while Windows and macOS artifacts are UI previews without native VPN backends.
 Issue #31 is closed with the reviewed upstream `glib` backport, an exact
 source-provenance gate and a clean default-branch dependency/security scan.
@@ -39,7 +40,9 @@ The versioned catalog now covers 13 protocols. Linux connection backends remain
 implemented for AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec. VLESS/REALITY,
 Hysteria 2, Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS and
 ShadowTLS v3 have a validated registry, redacted capability API and safe share
-URI detection where unambiguous. Their connection adapters are explicitly
+URI/JSON classification where unambiguous. All nine have a closed neutral
+profile validator and atomic secret-safe Linux import; six have a closed
+sing-box config renderer. Their connection adapters remain explicitly
 `planned`, not advertised as working tunnels.
 
 [Русский](README.ru.md) · [English](README.en.md) ·
@@ -55,13 +58,18 @@ URI detection where unambiguous. Their connection adapters are explicitly
 [Capability parity](docs/FEATURE_PARITY.md) ·
 [Cross-platform roadmap](docs/PLATFORM_ROADMAP.en.md) ·
 [Protocol and AI orchestration](docs/PROTOCOL_ORCHESTRATION.en.md) ·
+[Reverse Agent Control architecture](docs/AGENT_CONTROL_ARCHITECTURE.en.md) ·
+[Target architecture and delivery DAG (RU)](docs/TARGET_ARCHITECTURE_2026-08-02.ru.md) ·
+[Release 1.4 deep audit (RU)](docs/AUDIT_2026-08-03_RELEASE.ru.md) ·
+[R0a mutation single-flight specification (RU)](docs/R0_MUTATION_SINGLE_FLIGHT.ru.md) ·
+[Agent remote-control research (RU)](docs/RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md) ·
 [Project Wiki](https://github.com/mazurovn/mazzy-vpn/wiki)
 
 ![Mazzy VPN Desktop Dashboard in English](docs/images/dashboard-en.png)
 
 - Live CLI/TUI dashboard with connection checks, selected location, default
   config, handshake, public IP, autostart and health-monitor state.
-- Tauri 2 Desktop control center and expanded tray. Desktop 0.3 bundles the Linux engine
+- Tauri 2 Desktop control center and expanded tray. Desktop 0.4 bundles the Linux engine
   and installer, checks dependencies, imports and manages profiles, exposes
   sortable whole-list ping, fastest-location selection, actual egress/location
   verification, transactional tests, clickable events, Doctor output, logs
@@ -90,6 +98,9 @@ mazzy-vpn probe all --timeout 3 --jobs 4
 mazzy-vpn self-test
 mazzy-vpn protocols list --json
 mazzy-vpn protocols diagnose --json
+mazzy-vpn protocols adapters --json
+mazzy-vpn protocols managed-validate --stdin --json < profile.json
+mazzy-vpn protocols managed-import profile.json --dry-run --json
 ```
 
 Primary command: `mazzy-vpn`. Compatibility aliases installed automatically:

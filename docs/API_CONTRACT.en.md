@@ -12,13 +12,13 @@ boundary for issue
 [#5](https://github.com/mazurovn/mazzy-vpn/issues/5). The current
 `cli-json-adapter` is explicitly `partial`: existing safe JSON status/profile
 outputs remain available, and CLI/TUI now submit v1 envelopes for `status.get`,
-`profiles.list`, `protocols.list`, `tests.probe`, `tests.verify-egress` and `lifecycle.*` through
-one dispatcher. Remaining domains
+`profiles.list`, `protocols.list`, `planner.evaluate`, `tests.probe`,
+`tests.verify-egress` and `lifecycle.*` through one dispatcher. Remaining domains
 still use the compatible direct CLI control plane. Contract metadata is
 implemented. The
 socket-activated Linux transport is `partial`: it accepts `status.get`,
-`profiles.list`, `protocols.list`, the bounded `tests.probe`/`tests.verify-egress` queries and
-the three `lifecycle.*`
+`profiles.list`, `protocols.list`, `planner.evaluate`, the bounded
+`tests.probe`/`tests.verify-egress` queries and the three `lifecycle.*`
 mutations. Other operations and
 non-Linux transports remain `planned`, so this still does not claim that the
 complete cross-platform daemon exists.
@@ -93,7 +93,7 @@ On Linux, `mazzy-vpn-api.socket` exposes `/run/mazzy-vpn/api-v1.sock` as
 request and receives one newline-terminated response. The service stops reading
 at the configured byte limit before JSON parsing, including for a client that
 never terminates an oversized line. It accepts exactly one top-level JSON
-object and rejects duplicate envelope or payload keys, including keys encoded
+object and rejects duplicate object keys at every depth, including keys encoded
 with JSON Unicode escapes, before dispatch. Query cache refreshes are bounded
 by the smaller of the optional query deadline and the server refresh cap; an
 existing restricted cache may be returned when live refresh times out.
@@ -101,6 +101,9 @@ Interrupted refreshes clean their private temporary files. Mutations are seriali
 deadline-bounded and recorded by action ID under root-only state. The audit log
 contains operation IDs and outcomes only, never request payloads or backend
 output. A mutation is not started unless its initial audit event is durable.
+The snapshot, running action record and initial audit are synchronized together
+with their parent directories before the lifecycle child starts. Completed
+records and snapshot deletion are synchronized before terminal success.
 If a terminal audit event cannot be stored after state changed, the completed
 action remains idempotent but the API enters recovery-only mode for explicit
 administrator inspection. Completed outcomes are bounded to 512 records by default. The audit
@@ -109,7 +112,12 @@ reduced for constrained systems but must not be disabled.
 
 If crash reconciliation cannot read the pre-action snapshot or cannot restore
 it, the daemon persists a root-only recovery marker and rejects every later API
-mutation. After manually inspecting and repairing the current VPN state, an
+mutation. A hardened root boot oneshot reconciles interrupted actions under the
+shared mutation lock before test recovery, `vpnctl.service`, health remediation
+and the API socket. Failure to prepare its protected directories or acquire the
+lock also persists the marker. Test recovery requires this gate and starts only
+after it succeeds. While the marker exists, managed-service start, test recovery
+and health remediation fail closed. After manually inspecting and repairing the current VPN state, an
 administrator must explicitly acknowledge it with
 `sudo mazzy-vpn _api-clear-recovery --acknowledge-current-state`. The marker is
 never cleared by a timer or an unrelated successful request.
@@ -133,6 +141,47 @@ an implemented backend. The response contains public format, engine and
 transport identifiers only; it contains no endpoint, credential, profile or
 backend configuration. Its source of truth is
 [`../protocols/v1/registry.json`](../protocols/v1/registry.json).
+
+`planner.evaluate` is a read-only, deadline-bounded evaluation. The payload
+contains a workload and 1–128 unique opaque profile IDs, each with a complete
+bounded evidence object. The server, not the caller, computes these five hard
+gates from current local state: backend ready, profile valid, backend-only
+profile storage, protected rollback storage ready and Linux support implemented.
+The storage gate proves only that a secure journal/snapshot location can be
+used; candidate-specific rollback remains an execution concern. Only candidates
+that pass every gate receive a score and rank.
+
+The policy-v1 score is 30 points for recent outcome, 25 for censorship fit, 20
+for reachability, 15 for latency/loss and 10 for workload fit. Observed health
+evidence (`recent_outcome`, reachability and latency/loss) older than 900
+seconds scores zero. The backend derives `censorship-fit` from the protocol
+catalog and `workload-fit` from workload, protocol class and transports; the
+caller cannot self-assign either factor. Equal scores use the opaque profile ID
+as the stable tie-breaker. The response includes reason codes
+and factor points, but no display name, endpoint, filename, path, configuration
+or credential. It is always `dry_run: true`; it cannot connect or fail over.
+Candidate validation receives the same absolute monotonic deadline as the
+evaluator, including an OpenVPN parser subprocess. The CLI accepts one JSON
+payload up to 64 KiB on stdin and bounds the expanded explanation response to
+1 MiB:
+
+```bash
+jq -n --arg profile_id "$PROFILE_ID" '{
+  workload: "llm-streaming",
+  candidates: [{
+    profile_id: $profile_id,
+    evidence: {
+      recent_outcome: "success", consecutive_failures: 0,
+      reachability: "reachable", latency_ms: 80, loss_percent: 0,
+      evidence_age_seconds: 30
+    }
+  }]
+}' | mazzy-vpn planner evaluate --stdin --json
+```
+
+The caller can influence dry-run rank only through bounded health evidence and
+cannot bypass a backend-owned gate. Trusted history collection, authorized
+execution and automatic failover remain outside this operation.
 
 `tests.probe` checks every profile in the requested protocol scope with a
 per-endpoint timeout and bounded concurrency of 1–8 workers. It returns an
@@ -169,6 +218,21 @@ provider duplication, provider-IP mismatch and unexplained non-verified
 verdicts. The response contains no VPN endpoint, profile path, key or
 configuration. `include_speed=false` is the default; the five-megabyte transfer
 is never implicit.
+
+`tests.verify-service-egress` is a separate read-only query. Its strict payload
+is exactly `service` (`notebooklm`, `openai` or `all`) plus integer
+`timeout_seconds` from 3 through 15. The engine sends credential-free HEAD
+requests only to the built-in HTTPS allowlist, binds them to the selected VPN
+interface, disables redirects and proxy inheritance, and caps response headers.
+The strict result contains only schema/timestamp/scope plus service ID,
+reachability, egress eligibility, reason code and an optional HTTP status.
+NotebookLM trusts only the exact unsupported-location and home redirects.
+OpenAI treats 401, or 405 with exact `Allow: POST`, as the authentication
+boundary; 403 is an edge denial, while 429, 5xx and all unrecognized responses
+remain indeterminate. Network errors are unreachable/indeterminate. No URL,
+header, body, address, account or credential is returned or persisted. This
+query does not feed health recovery or planner evidence and does not prove
+authentication, subscription, organization or content access.
 
 Installed CLI and TUI clients use the socket without `sudo` for status, profile
 listing, batch endpoint probes, egress verification, connect, quick, reconnect

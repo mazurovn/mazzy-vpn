@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mazurovn/mazzy-vpn/agent-control/v1/schema.json",
+  "title": "Mazzy agent-control transport registry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "catalog_version", "layer", "status_values", "platforms", "transports", "ingress_channels", "orchestration"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "catalog_version": {"type": "string", "format": "date"},
+    "layer": {"const": "reverse-agent-control"},
+    "status_values": {"type": "array", "uniqueItems": true, "items": {"enum": ["implemented", "partial", "planned"]}},
+    "platforms": {"type": "array", "uniqueItems": true, "items": {"enum": ["linux", "windows", "macos", "android", "web"]}},
+    "transports": {
+      "type": "array",
+      "minItems": 5,
+      "items": {"$ref": "#/$defs/Transport"}
+    },
+    "ingress_channels": {
+      "type": "array",
+      "minItems": 3,
+      "items": {"$ref": "#/$defs/IngressChannel"}
+    },
+    "orchestration": {"$ref": "#/$defs/Orchestration"}
+  },
+  "$defs": {
+    "Status": {"enum": ["implemented", "partial", "planned"]},
+    "PlatformSupport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract", "diagnostics", "linux", "windows", "macos", "android", "web"],
+      "properties": {
+        "contract": {"$ref": "#/$defs/Status"},
+        "diagnostics": {"$ref": "#/$defs/Status"},
+        "linux": {"$ref": "#/$defs/Status"},
+        "windows": {"$ref": "#/$defs/Status"},
+        "macos": {"$ref": "#/$defs/Status"},
+        "android": {"$ref": "#/$defs/Status"},
+        "web": {"$ref": "#/$defs/Status"}
+      }
+    },
+    "StringList": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "Transport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "display_name", "family", "implementation_mode", "runtime_probes", "paths", "capabilities", "support", "source"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]+$"},
+        "display_name": {"type": "string", "minLength": 2},
+        "family": {"enum": ["local-stream", "brokered-stream", "p2p-quic", "p2p-ice", "mesh-overlay"]},
+        "implementation_mode": {"enum": ["embedded", "sidecar", "external"]},
+        "runtime_probes": {"$ref": "#/$defs/StringList"},
+        "paths": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"enum": ["local-direct", "internet-direct", "managed-relay", "self-hosted-relay", "mesh"]}
+        },
+        "capabilities": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["direct", "relay", "nat_traversal", "browser_client", "self_hosted"],
+          "properties": {
+            "direct": {"type": "boolean"},
+            "relay": {"type": "boolean"},
+            "nat_traversal": {"type": "boolean"},
+            "browser_client": {"type": "boolean"},
+            "self_hosted": {"type": "boolean"}
+          }
+        },
+        "support": {"$ref": "#/$defs/PlatformSupport"},
+        "source": {"type": "string", "format": "uri"}
+      }
+    },
+    "IngressChannel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "display_name", "trust_model", "risk_ceiling", "e2ee_mode", "support"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]+$"},
+        "display_name": {"type": "string", "minLength": 2},
+        "trust_model": {"enum": ["paired-first-party", "local-user", "third-party-gateway"]},
+        "risk_ceiling": {"enum": ["read-only", "low", "medium", "high"]},
+        "e2ee_mode": {"enum": ["mandatory", "local-only", "gateway-visible"]},
+        "support": {"$ref": "#/$defs/PlatformSupport"}
+      }
+    },
+    "ScoreFactor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "weight"],
+      "properties": {
+        "id": {"type": "string", "minLength": 2},
+        "weight": {"type": "integer", "minimum": 1, "maximum": 100}
+      }
+    },
+    "Orchestration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy_version", "path_priority", "hard_constraints", "score_factors", "fallback_rules", "channel_rules"],
+      "properties": {
+        "policy_version": {"const": 1},
+        "path_priority": {"$ref": "#/$defs/StringList"},
+        "hard_constraints": {"$ref": "#/$defs/StringList"},
+        "score_factors": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/ScoreFactor"}},
+        "fallback_rules": {"$ref": "#/$defs/StringList"},
+        "channel_rules": {"$ref": "#/$defs/StringList"}
+      }
+    }
+  }
+}

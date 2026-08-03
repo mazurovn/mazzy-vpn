@@ -9,12 +9,12 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 ![Mazzy VPN Desktop Dashboard — русские документационные данные](images/dashboard-ru.png)
 
 Mazzy VPN Desktop — приложение на Tauri 2 с общим движком `mazzy-vpn`.
-Linux-пакет 0.3 включает совместимый engine installer: отдельная предварительная
+Linux-пакет 0.4 включает совместимый engine installer: отдельная предварительная
 установка CLI больше не требуется. CLI и TUI остаются самостоятельными
 клиентами того же движка и состояния.
 
-> **Статус 0.3:** Linux control-center уже покрывает основной рабочий цикл, но
-> опубликован как unsigned preview и остаётся preview до закрытия
+> **Статус 0.4:** Linux control-center уже покрывает основной рабочий цикл. Его
+> release source является unsigned preview и остаётся preview до закрытия
 > [production gates](FEATURE_PARITY.md). Issue #31 закрыт точным upstream
 > backport `glib` 0.18 с проверенным source provenance и пустым cargo-deny
 > ignore list. Для Desktop 1.0 ещё
@@ -22,6 +22,10 @@ Linux-пакет 0.3 включает совместимый engine installer: �
 > fallback-policy UI, перевод всех экранов на шесть языков, подписанные
 > обновления, clean-device integration tests и перенос оставшихся typed
 > `pkexec`-операций в частично реализованный versioned local API.
+
+> **Разделение версий:** release source `desktop-v0.4.0` содержит Dashboard,
+> Profiles, Diagnostics, Settings, About и diagnostics-only Agent Control.
+> Agent Control не запускает и не связывает provider processes.
 
 ## Визуальный обзор
 
@@ -36,6 +40,10 @@ Linux-пакет 0.3 включает совместимый engine installer: �
 |---|---|
 | ![Зависимости и службы](images/settings-ru.png) | [English](images/dashboard-en.png) · [Русский](images/dashboard-ru.png) · [Deutsch](images/dashboard-de.png) · [中文](images/dashboard-zh.png) · [日本語](images/dashboard-ja.png) · [한국어](images/dashboard-ko.png) |
 
+| Диагностика управления AI-агентами — Desktop 0.4 |
+|---|
+| ![Provider adapters и catalog status](images/agents-ru.png) |
+
 ## Статус платформ
 
 | Платформа | Статус | Пакеты |
@@ -48,19 +56,21 @@ macOS и Windows preview не нужно использовать как сре�
 Для полноценной поддержки нужны нативные Network Extension/launchd и Windows
 service/Wintun backends, подпись кода и platform-specific тесты.
 
-## Экраны Desktop 0.3
+## Экраны Desktop 0.4.0
 
 1. **Обзор** — туннель, интернет, IP, handshake, health, recovery, проверка
    фактического egress и tray.
 2. **Профили** — безопасный импорт файлов/папок, поиск, протоколы, выбор
    локации/default-профиля, удаление, массовая проверка endpoint с отдельными
    reachability/latency/active и точечный live-test.
-3. **Диагностика** — validate, DNS/ping probe, транзакционные тесты, `test-all`,
+3. **AI-агенты (только диагностика)** — read-only обнаружение Codex/Claude и
+   catalog status семи будущих transport paths без provider lifecycle authority.
+4. **Диагностика** — validate, DNS/ping probe, транзакционные тесты, `test-all`,
    emergency recovery, полный результат Doctor/self-test и ограниченный журнал
    systemd.
-4. **Настройки** — версии bundled/installed engine, состояние зависимостей,
+5. **Настройки** — версии bundled/installed engine, состояние зависимостей,
    Install/Update/Repair, autostart, health monitor, privacy и уведомления.
-5. **О программе** — версии Desktop/engine/platform, автор, лицензия,
+6. **О программе** — версии Desktop/engine/platform, автор, лицензия,
    приватность и правила безопасной работы.
 
 ## Что показывает Dashboard
@@ -93,7 +103,7 @@ cache в закрытые `deny_unknown_fields` типы и проверяет �
 точному basename конфига; legacy fallback по display name разрешён только при
 единственном совпадении.
 
-Desktop 0.3.2 также принимает legacy cache schema 0.2 без `profile_id` и
+Desktop 0.4.0 также принимает legacy cache schema 0.2 без `profile_id` и
 вычисляет тот же opaque ID, что и текущий CLI. Нечитаемый или некорректный cache
 теперь показывается как недоступный, а не как пустая библиотека. Это исправляет
 наблюдавшийся случай, когда Dashboard считал 24 профиля, а экран «Профили»
@@ -101,9 +111,19 @@ Desktop 0.3.2 также принимает legacy cache schema 0.2 без `prof
 
 Versioned protocol registry описывает 13 записей, но этот экран пока импортирует
 и подключает только четыре реализованных Linux backend. Redacted URI detection
-для современных proxy protocols является основой CLI/API; Desktop import, TUN
-adapters и умный выбор остаются gated work. См.
+есть в stable 1.4.0, который также классифицирует ограниченный JSON;
+Desktop import, TUN adapters и умный выбор остаются gated work. См.
 [Оркестрацию протоколов](PROTOCOL_ORCHESTRATION.ru.md).
+
+Экран «AI-агенты» остаётся diagnostics-only. Он показывает
+кандидаты Codex/Claude и catalog status, не запускает обнаруженные binaries, а
+renderer и Tauri invoke не содержат start/pair/stop или pairing state. Native
+command-bound approval, trusted executable resolution и process-tree
+containment остаются R0 prerequisites для будущей lifecycle authority.
+
+Это partial read-only provider discovery. Собственный
+`mazzy-agentd`, E2EE reverse WSS/iroh, Web и Telegram ещё не реализованы. См.
+[исследование и архитектуру](RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md).
 
 ## Действия в окне и tray
 
@@ -209,23 +229,23 @@ package-owned `/usr/bin/mazzy-vpn`. Сторонние, пользователь
 DEB:
 
 Ниже указаны точные dot-normalized имена файлов со страницы GitHub Release
-`desktop-v0.3.2`. Локальный output `npm run build:release` может сохранять
+`desktop-v0.4.0`. Локальный output `npm run build:release` может сохранять
 пробелы из Tauri product name.
 
 ```bash
-sudo apt install ./Mazzy.VPN.Desktop_0.3.2_amd64.deb
+sudo apt install ./Mazzy.VPN.Desktop_0.4.0_amd64.deb
 ```
 
 RPM:
 
 ```bash
-sudo dnf install ./Mazzy.VPN.Desktop-0.3.2-1.x86_64.rpm
+sudo dnf install ./Mazzy.VPN.Desktop-0.4.0-1.x86_64.rpm
 ```
 
 Для DEB/RPM действие **Установить / обновить / исправить** запускает
 package-safe `mazzy-vpn doctor --fix`: оно исправляет поддерживаемые
 недостающие protocol dependencies и service state, но не копирует package
-files в `/usr/local`. Этот slice всё ещё preview. Опубликованные artifacts 0.3
+files в `/usr/local`. Этот slice всё ещё preview. Release artifacts 0.4
 содержат проверенный issue #31 backport `glib` и имеют чистый RustSec graph.
 Также остаются clean-device install/upgrade/remove
 tests для всех поддерживаемых дистрибутивов, package rollback/fault injection,
@@ -234,9 +254,9 @@ tests для всех поддерживаемых дистрибутивов, p
 AppImage:
 
 ```bash
-sha256sum -c --ignore-missing Mazzy.VPN.Desktop_0.3.2_SHA256SUMS
-chmod +x ./Mazzy.VPN.Desktop_0.3.2_amd64.AppImage
-./Mazzy.VPN.Desktop_0.3.2_amd64.AppImage
+sha256sum -c --ignore-missing Mazzy.VPN.Desktop_0.4.0_SHA256SUMS
+chmod +x ./Mazzy.VPN.Desktop_0.4.0_amd64.AppImage
+./Mazzy.VPN.Desktop_0.4.0_amd64.AppImage
 ```
 
 AppImage не может установить собственный privilege helper. Сначала проверьте

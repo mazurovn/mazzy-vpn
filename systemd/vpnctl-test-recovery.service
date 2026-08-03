@@ -2,13 +2,15 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 [Unit]
 Description=Restore Mazzy VPN state after an interrupted tunnel test
-After=local-fs.target
+Requires=mazzy-vpn-api-recovery.service
+After=local-fs.target mazzy-vpn-api-recovery.service
 Before=vpnctl.service
 
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/mazzy-vpn _recover-stale-test
 UMask=0077
+TimeoutStartSec=60s
 
 [Install]
 WantedBy=multi-user.target

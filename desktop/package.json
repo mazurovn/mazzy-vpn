@@ -1,7 +1,7 @@
 {
   "name": "mazzy-vpn-desktop",
   "private": true,
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "AI-ready, self-healing multi-protocol VPN client and control center",
   "author": "Nik m (@mazurovn)",
   "license": "AGPL-3.0-or-later",

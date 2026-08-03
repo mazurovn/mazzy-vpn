@@ -16,6 +16,7 @@ HTML = ROOT / "desktop/ui/index.html"
 JS = ROOT / "desktop/ui/app.js"
 RUST = ROOT / "desktop/src-tauri/src/backend.rs"
 MAIN = ROOT / "desktop/src-tauri/src/main.rs"
+AGENT = ROOT / "desktop/src-tauri/src/agent_control.rs"
 
 
 def fail(message: str) -> None:
@@ -79,6 +80,7 @@ def main() -> None:
     javascript = JS.read_text(encoding="utf-8")
     rust = RUST.read_text(encoding="utf-8")
     main_rust = MAIN.read_text(encoding="utf-8")
+    agent_rust = AGENT.read_text(encoding="utf-8")
 
     parser = UiParser()
     parser.feed(html)
@@ -130,6 +132,28 @@ def main() -> None:
         fail("Desktop real egress card bypasses the typed Rust command")
     if 'invoke("probe_profiles"' not in javascript:
         fail("Desktop location checks bypass the typed Rust command")
+    if 'invoke("get_agent_integrations"' not in javascript:
+        fail("Desktop agent view bypasses the typed Rust diagnostics command")
+    forbidden_agent_authority = (
+        "run_agent_operation",
+        "runAgentOperation",
+        "codex-remote-start",
+        "codex-remote-pair",
+        "codex-remote-stop",
+        "pairingGrant",
+    )
+    for authority in forbidden_agent_authority:
+        if authority in javascript or authority in html:
+            fail(f"Desktop renderer retains executable Agent Control authority: {authority}")
+    if "const readyProviders = 0;" in javascript:
+        fail("Desktop provider-readiness badge is hard-coded")
+    if (
+        "provider.installed" not in javascript
+        or "provider.remote_control_supported" not in javascript
+        or 'provider.adapter_status === "ready"' not in javascript
+        or 'provider.connection_model !== "diagnostics-only"' not in javascript
+    ):
+        fail("Desktop provider-readiness badge does not enforce runtime readiness")
     if 'previewParameters.get("preview") === "docs"' not in javascript:
         fail("Desktop documentation preview is missing")
     if (
@@ -176,8 +200,15 @@ def main() -> None:
         fail("Desktop status command bypasses the typed cache sanitizer")
     if 'backend::verify_connection' not in main_rust:
         fail("Desktop does not expose the typed egress verification command")
+    if "run_agent_operation" in main_rust or "run_agent_operation" in agent_rust:
+        fail("Desktop Tauri invoke surface retains Agent Control mutation authority")
+    if "Command::new" in agent_rust:
+        fail("Diagnostics-only Agent Control executes an untrusted discovered binary")
+    if 'agent_control::get_agent_integrations' not in main_rust:
+        fail("Desktop does not expose read-only Agent Control diagnostics")
     for tray_id in (
         "profiles",
+        "agents",
         "diagnostics",
         "settings",
         "about",

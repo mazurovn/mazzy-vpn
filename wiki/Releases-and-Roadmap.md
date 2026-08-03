@@ -1,5 +1,60 @@
 # Релизы и roadmap
 
+## 1.4.0 / Desktop 0.4.0 — planner, safe transitions и agent contracts
+
+- добавлен отдельный `agent-control/v1` contract для LAN WSS, iroh, libp2p,
+  WebRTC, WebTransport, Tailscale/Headscale и reverse WSS; все network runtimes
+  пока `planned`, подробности в [[Agent Control Gateway]];
+- повторный пяти-ролевой аудит зафиксирован в
+  [целевой архитектуре](https://github.com/mazurovn/mazzy-vpn/blob/main/docs/TARGET_ARCHITECTURE_2026-08-02.ru.md):
+  сначала hardening Desktop preview и один egress mutation owner, затем
+  `mazzy-agentd`, reverse HTTPS/WSS read-only slice, pairing/E2EE и только
+  после этого interactive Web/Telegram, LAN и iroh;
+- первый срез R0a свёл API, direct CLI, profile import/remove,
+  recovery, health remediation, policy cleanup, `doctor --fix`, autostart и monitor на общий runtime
+  `.mutation.lock`; это закрывает split-lock race, но ещё не является
+  `mazzy-vpnd` и не доказывает rollback routes/DNS/firewall/leak state;
+- P0 reboot slice добавил hardened root API recovery oneshot до tunnel,
+  health remediation и API socket; health проверяет recovery marker под общим
+  lock и ждёт terminal systemd result;
+- `agent-control/v1/registry.json` синхронизирован с ADR-009: reverse WSS/H2 —
+  durable baseline, LAN и iroh — accelerators, поздние paths не блокируют
+  первые релизы;
+- Desktop Agent Control ограничен read-only обнаружением Codex/Claude и catalog
+  status семи paths. Start/pair/stop удалены из renderer/Tauri invoke до native
+  approval, trusted executable resolution и process-tree containment;
+- [PR #43](https://github.com/mazurovn/mazzy-vpn/pull/43) добавляет
+  read-only `planner.evaluate` с пятью backend-owned hard gates, versioned
+  scoring и стабильным ранжированием opaque profile IDs;
+- повторный аудит ограничил OpenVPN parser общим monotonic deadline, исключил
+  stale recent outcome из score и уточнил, что rollback gate доказывает только
+  готовность защищённого storage;
+- censorship/workload fit теперь вычисляет backend из versioned catalog и
+  workload, а не принимает назначенным агентом;
+- detector классифицирует bounded JSON для sing-box/Xray, Mieru и NaiveProxy,
+  отклоняет duplicate keys и неоднозначные multi-protocol configs;
+- все девять modern profiles получили closed managed schema и атомарный
+  root-only import; шесть имеют закрытый sing-box renderer, но connection
+  lifecycle всё ещё `planned`;
+- runtime adapter registry фиксирует sing-box 1.13.12, Mieru 3.32.0,
+  NaiveProxy 148.0.7778.96-5, process graphs и обязательные rollback/leak gates;
+- Desktop возвращает безопасный reason code для missing/permission/invalid
+  profile cache вместо необъяснимого пустого списка;
+- evaluator всегда возвращает `dry_run: true`; history, authorized
+  connect/failover и Desktop/mobile integration остаются в issue #39.
+- dual-stack nftables transition guard закрывает output и forward до
+  interface-bound проверки нового tunnel или rollback; при двойном отказе
+  guard и root-only recovery marker остаются fail-closed;
+- API journal, audit, snapshots и recovery markers синхронизируются до
+  lifecycle mutation; IPv6-only readiness покрыта regression test;
+- capability risk Agent Control закреплён схемой, Telegram Bot ограничен
+  argument-free low-risk allowlist.
+
+Release source: [CLI/TUI `v1.4.0`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.0)
+и unsigned [Desktop `desktop-v0.4.0` preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.0).
+Публикация подтверждается только существованием соответствующих tag и Release page.
+Windows/macOS artifacts остаются UI-only, Android package отсутствует.
+
 ## 1.3.2 / Desktop 0.3.2 — protocol foundation и upgrade hotfix
 
 - исправлена совместимость Desktop с legacy cache без `profile_id` и ложная
@@ -10,8 +65,9 @@
 - добавлен versioned каталог из 13 протоколов, redacted URI detection,
   runtime diagnostics и безопасная read-only операция API `protocols.list`;
 - VLESS, Hysteria 2, Mieru, NaiveProxy и ещё пять современных направлений пока
-  не объявляются готовыми подключениями: остаются TUN/engine adapters и
-  integration gates, перечисленные в [[Protocol Orchestration]].
+  не объявляются готовыми подключениями: безопасный managed import и часть
+  renderer готовы, но остаются engine supply, TUN/service lifecycle, rollback
+  и leak integration gates из [[Protocol Orchestration]].
 
 ## 1.3.0 / Desktop 0.3.0 — предыдущая baseline
 
@@ -37,10 +93,8 @@ backport и закрытия platform release gates. Issue
 provenance-verified backport `glib`; RustSec, Dependabot и CodeQL release checks
 прошли без suppressions.
 
-Опубликованы [CLI/TUI `v1.3.0`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.0)
-и unsigned [Desktop `desktop-v0.3.0` preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.0).
-Оба tag указывают на один проверенный release source; к artifacts приложены
-SHA-256 manifests.
+Это предыдущая опубликованная release line; ссылки сохранены в истории GitHub
+Releases.
 
 ## 1.2.0 / Desktop 0.2.0 — предыдущая release line
 
@@ -96,12 +150,44 @@ CLI engine и не является самостоятельным Desktop VPN-�
 
 # Releases and roadmap
 
+Version 1.4.0 / Desktop 0.4.0 ships the read-only `planner.evaluate` query with
+five backend-owned hard gates,
+versioned scoring and stable opaque-ID ranking. The repeat audit propagated the
+monotonic deadline into the OpenVPN parser, removed stale recent outcomes from
+the score and narrowed the rollback gate to protected storage readiness. It
+always returns `dry_run: true`; history, authorized connect/failover and
+Desktop/mobile integration remain in issue #39.
+The backend now derives censorship/workload fit from the versioned catalog and
+workload. The detector classifies bounded sing-box/Xray, Mieru and NaiveProxy
+JSON without reflecting secrets, and Desktop preserves redacted profile-cache
+failure reasons instead of silently returning an empty catalog.
+All nine modern entries now have a closed neutral managed-profile validator and
+atomic root-only import. Six have a closed sing-box renderer. The versioned
+runtime adapter registry pins candidate versions and keeps service lifecycle,
+rollback and leak tests explicitly planned.
+
+The R0a slice also converges API, direct CLI, recovery,
+health remediation and service-policy mutations on one runtime lock. It fixes
+the split-lock race but does not claim the target `mazzy-vpnd` owner or full
+route/DNS/firewall rollback proof. Agent Control path priority now follows
+ADR-009: reverse WSS/H2 first, then LAN and iroh accelerators.
+The Agent Control files are catalog/schema declarations, not an implemented
+E2EE runtime. Desktop 0.4 has diagnostics-only
+Codex/Claude discovery and no provider lifecycle authority; native command-bound
+approval, trusted executable resolution and process-tree containment remain R0
+blockers.
+`mazzy-agentd`, relay, Web/Telegram and all seven network runtimes are planned.
+The release also adds a dual-stack output/forward transition guard, fail-closed
+recovery markers, durable API journals/audit/snapshots, IPv6-only readiness and
+schema-pinned Agent Control capability risk.
+
 Version 1.3.2 / Desktop 0.3.2 fixes legacy profile-cache compatibility and the
 mixed `/usr/local` versus package `/usr/bin` upgrade conflict. It adds a
 versioned 13-entry protocol catalog, credential-redacted URI detection, runtime
 diagnostics and the read-only `protocols.list` API operation. The nine modern
 proxy/transport entries remain gated adapter work rather than advertised
-connections; see [[Protocol Orchestration]]. It also keeps the real local API
+connections; the newer managed import/renderer foundation does not change that
+release claim. See [[Protocol Orchestration]]. It also keeps the real local API
 response half open after request EOF and tests that path through a delayed Unix
 socket responder.
 
@@ -115,7 +201,7 @@ location agreement, DNS/IPv6 signals, an optional bounded speed sample,
 whole-list ping sorting/connect-fastest, an expanded tray, clickable events,
 an About screen, explicit privacy rules and Android/iOS release gates.
 
-Desktop 0.3 does not require a prior manual CLI installation, but remains a
+Desktop 0.4 does not require a prior manual CLI installation, but remains a
 preview until the versioned service API, complete mode/localization parity,
 signed update/rollback, migration away from the temporary vendored Tauri/GTK
 `glib` backport and platform release gates are complete. [Issue
@@ -123,9 +209,10 @@ signed update/rollback, migration away from the temporary vendored Tauri/GTK
 provenance-verified backport; RustSec, Dependabot and CodeQL release checks pass
 without suppressions.
 
-Published pages: [CLI/TUI `v1.3.0`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.0)
-and the unsigned [Desktop `desktop-v0.3.0` preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.0).
-Both tags identify the same audited source commit and include SHA-256 manifests.
+Release targets: [CLI/TUI `v1.4.0`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.0)
+and the unsigned [Desktop `desktop-v0.4.0` preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.0).
+They are published only when both tag pages exist; both tags must identify the
+same audited source commit and include SHA-256 manifests.
 
 Version 1.2.0 / Desktop 0.2.0 is the previous published release line.
 

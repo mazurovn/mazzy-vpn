@@ -8,6 +8,11 @@ test/document reference and release gate remains consistent.
 
 Status: **I** implemented · **P** partial · **R** planned · **—** not applicable.
 
+Matrix scope: **CLI/TUI 1.4.0 and Desktop 0.4.0 release source**. Agent Control
+is diagnostics-only; `P` does not claim provider lifecycle, E2EE networking or
+remote execution. That capability remains an explicit Desktop 1.0 gate on
+Linux, macOS and Windows.
+
 | Capability ID | CLI | TUI | Linux | macOS | Windows | Android | iOS |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | `connection-lifecycle` | I | I | I | R | R | R | R |
@@ -25,6 +30,7 @@ Status: **I** implemented · **P** partial · **R** planned · **—** not appli
 | `privilege-boundary` | I | I | P | R | R | R | R |
 | `protocol-catalog-detection` | I | R | R | R | R | R | R |
 | `ai-orchestration-contract` | P | R | R | R | R | R | R |
+| `agent-provider-integration` | R | R | P | P | P | R | R |
 | `versioned-local-api` | P | P | P | P | P | R | R |
 | `mobile-vpn-lifecycle` | — | — | — | — | — | R | R |
 
@@ -32,7 +38,7 @@ Status: **I** implemented · **P** partial · **R** planned · **—** not appli
 
 | Gate | Declared ready | Meaning |
 |---|---:|---|
-| `cli-tui-1.3` | yes | Current Linux CLI/TUI release gate |
+| `cli-tui-1.4` | yes | Current Linux CLI/TUI release gate |
 | `desktop-linux-1.0` | **no** | Standalone Linux application; no separate CLI install |
 | `desktop-macos-1.0` | **no** | Standalone signed macOS application with native backend |
 | `desktop-windows-1.0` | **no** | Standalone signed Windows application with native backend |
@@ -45,10 +51,10 @@ ready while any required capability is `partial`, `planned` or
 
 ## Русский
 
-Desktop 0.3 — Linux control-center preview. Он уже включает установщик общего
+Desktop 0.4 — Linux control-center preview. Он уже включает установщик общего
 движка, импорт и выбор профилей, validate/probe/live-test, Doctor с полным
 выводом, фактическую проверку egress/DNS/IPv6/локации, сортировку локаций,
-расширенный tray, журнал и управление службами. Desktop 0.3 опубликован как
+расширенный tray, журнал и управление службами. Desktop 0.4 подготовлен как
 unsigned preview, а gate Desktop 1.0 всё ещё закрыт: issue #31 закрыт точным
 provenance-verified backport `glib`, но не завершены fallback-policy UI, полный перевод новых экранов на шесть языков и
 переход всех typed `pkexec`-операций к локальному versioned daemon API.
@@ -62,9 +68,19 @@ Android и iOS пока являются только планом: UI preview �
 Каталог из 13 протоколов и redacted CLI/API detection уже реализованы, но это
 не девять новых connection backends. VLESS/REALITY, Hysteria 2, Mieru,
 NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS и ShadowTLS v3 остаются
-`planned` для Linux/Windows/Android до platform adapter, TUN/routing/DNS,
+`planned` для Linux/macOS/Windows/Android до platform adapter, TUN/routing/DNS,
 secret storage, rollback и реальных integration tests. AI orchestration пока
-`partial`: policy и hard constraints опубликованы, исполняемый planner ещё нет.
+`partial`: CLI/API уже исполняют детерминированную read-only оценку с hard
+gates; censorship/workload fit выводится из trusted catalog/workload, а не
+назначается агентом. History store, authorized execution/failover и Desktop/mobile
+integration ещё не реализованы.
+
+Agent provider integration также `partial`: Desktop 0.4 выполняет
+только read-only обнаружение Codex/Claude и catalog diagnostics. Renderer и
+Tauri invoke не предоставляют start/pair/stop; diagnostics не запускает
+обнаруженный executable. Native approval, trusted executable resolution,
+process-tree containment, семь network paths, Web, Telegram и provider
+lifecycle остаются `planned`.
 
 Новая функция считается завершённой не после добавления одной кнопки, а после
 обновления общего API/core, всех применимых интерфейсов, автоматических тестов,
@@ -72,11 +88,11 @@ secret storage, rollback и реальных integration tests. AI orchestration
 
 ## English
 
-Desktop 0.3 is a Linux control-center preview. It bundles the shared-engine
+Desktop 0.4 is a Linux control-center preview. It bundles the shared-engine
 installer and now exposes profile import/selection, validation, probes, live
 tests, actual egress/DNS/IPv6/location verification, location sorting,
-an expanded tray, full Doctor output, logs and service controls. Desktop 0.3 is
-published as an unsigned preview, while the Desktop 1.0 gate remains closed:
+an expanded tray, full Doctor output, logs and service controls. Desktop 0.4 is
+prepared as an unsigned preview, while the Desktop 1.0 gate remains closed:
 issue #31 is closed with a provenance-verified `glib` backport, but fallback-policy UI, full six-language coverage for the new screens and
 the versioned local daemon API still need to replace every typed `pkexec`
 operation. The API `1.0` contract, manifest, frontend-safe envelopes and a
@@ -90,10 +106,19 @@ frontend does not count as a mobile VPN client.
 The 13-protocol catalog and redacted CLI/API detection are implemented, but
 this is not a claim of nine new connection backends. VLESS/REALITY, Hysteria 2,
 Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS and ShadowTLS v3
-remain `planned` on Linux/Windows/Android until platform adapters,
+remain `planned` on Linux/macOS/Windows/Android until platform adapters,
 TUN/routing/DNS, secret storage, rollback and real integration tests pass. AI
-orchestration is `partial`: policy and hard constraints exist, but the
-executable planner does not.
+orchestration is `partial`: CLI/API now execute deterministic read-only
+evaluation with hard gates; censorship/workload fit is derived from the trusted
+catalog/workload rather than assigned by an agent. History storage, authorized execution/failover
+and Desktop/mobile integration are not implemented.
+
+Agent provider integration is also `partial`: Desktop 0.4 performs
+read-only Codex/Claude discovery and catalog diagnostics. Renderer and Tauri
+invoke expose no start/pair/stop, and diagnostics do not execute a discovered
+binary. Native approval, trusted executable resolution, process-tree
+containment, all seven network paths, Web, Telegram and provider lifecycle
+remain `planned`.
 
 A feature is complete only after its shared API/core, every applicable
 interface, automated tests, this registry and both Russian and English

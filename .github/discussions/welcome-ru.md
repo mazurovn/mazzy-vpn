@@ -10,7 +10,7 @@ VPN-доступ и не предоставляет серверы: вы исп�
 
 ## Текущий статус
 
-- Опубликованная release line — CLI/TUI 1.3 для Linux и unsigned Desktop 0.3
+- Текущая release-source line — CLI/TUI 1.4 для Linux и unsigned Desktop 0.4
   preview. Linux Desktop функционален; Windows и macOS остаются UI preview без
   native VPN backend. Issue #31 закрыт проверенным `glib` backport и чистыми
   default-branch security checks.

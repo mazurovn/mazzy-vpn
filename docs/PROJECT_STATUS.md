@@ -2,31 +2,37 @@
 
 Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
-Last synchronized: 2026-08-01.
+Last synchronized: 2026-08-03.
 
 This file is the persistent handoff after interrupted Codex sessions. GitHub
 issues and release gates in [`capabilities.json`](capabilities.json) remain the
-authoritative backlog; this page records the verified resumption point.
+authoritative published-product backlog. Until dedicated issues/evidence gates
+are filed, R0/R1 architecture work is additionally governed by the IDs and DAG
+in [`TARGET_ARCHITECTURE_2026-08-02.ru.md`](TARGET_ARCHITECTURE_2026-08-02.ru.md).
+This page records the verified resumption point.
 
 ## Verified release baseline
 
-- Release tags `v1.3.0` and `desktop-v0.3.0` resolve to audited commit
-  `a759d723da0d9fca1e3f9fd0ea2a92ec116e2fbe`, after PR #32 and PR #33 were
-  merged with all required default-branch checks green.
-- The published stable release is CLI/TUI `v1.3.0`. The published Desktop
-  prerelease is `desktop-v0.3.0`; its Linux AppImage, DEB and RPM are also
-  attached to `v1.3.0` with a combined SHA-256 manifest.
+- The current release source is CLI/TUI `v1.4.0` and Desktop `0.4.0` from
+  PR #43. Publication targets are tags `v1.4.0` and `desktop-v0.4.0` after all
+  default-branch checks pass.
+- Linux CLI/TUI is functional. Linux Desktop remains an unsigned preview;
+  AppImage, DEB and RPM are functional control-center bundles.
 - Issue #31 is closed. The release carries the provenance-verified upstream
   `glib` backport, `event-listener` 5.4.2 and `serde_with` 3.21.0; current
   RustSec, Dependabot and CodeQL release scans have no open alerts.
-- Windows and macOS 0.3.0 artifacts are unsigned UI previews without native
+- A fresh 2026-08-02 `cargo audit` reports no known vulnerability, but does
+  report 16 allowed `unmaintained` warnings in the existing Linux Tauri/GTK3,
+  proc-macro and `unic` transitive graph. They are maintenance debt, not proof
+  of an exploitable issue; migration off the legacy GTK3 graph remains a
+  Desktop production gate.
+- Windows and macOS 0.4.0 artifacts are unsigned UI previews without native
   VPN backends. They must not be described as functional VPN clients.
 - Android and iOS clients are planned and have no application source or
   release artifacts.
-- Open backlog issues #4–#14 remain incremental roadmap slices, not proof that
-  the corresponding production gates are complete. PR #32 and PR #33 are
-  merged; issue #31 was closed only after the default-branch dependency graph
-  and release artifacts confirmed the source-level remediation.
+- Open backlog issues #4–#14 and #36–#39 remain incremental roadmap slices,
+  not proof that the corresponding production gates are complete. Issues #31,
+  #35 and #41 are closed after default-branch and release verification.
 - The uncompromising code, security, packaging and cross-platform review started
   in [`AUDIT_2026-07-28.ru.md`](AUDIT_2026-07-28.ru.md). The release audit is
   [`AUDIT_2026-08-01.ru.md`](AUDIT_2026-08-01.ru.md); it
@@ -34,44 +40,112 @@ authoritative backlog; this page records the verified resumption point.
   subprocess hang fix, tray-path consolidation and remaining production risks.
 - The installed-system, profile-cache and protocol review is
   [`AUDIT_2026-08-01_PROTOCOLS.ru.md`](AUDIT_2026-08-01_PROTOCOLS.ru.md).
+- The repeat planner, architecture, secret and release-state review is
+  [`AUDIT_2026-08-02_PLANNER.ru.md`](AUDIT_2026-08-02_PLANNER.ru.md).
+- The independent Claude/Codex/Qwen/Kimi release audit and remediation map is
+  [`AUDIT_2026-08-03_RELEASE.ru.md`](AUDIT_2026-08-03_RELEASE.ru.md).
+- The reverse agent-control plane is specified separately in
+  [`AGENT_CONTROL_ARCHITECTURE.ru.md`](AGENT_CONTROL_ARCHITECTURE.ru.md).
+  The v1 draft contract catalogs seven paths and five ingress channels. The
+  Desktop 0.4 implements diagnostics-only Codex/Claude
+  discovery and catalog status. Provider start/pair/stop was removed from both
+  renderer and Tauri invoke after the P0 review; native command-bound approval,
+  trusted executable resolution and process-tree containment are prerequisites
+  for restoring any such authority. The seven Mazzy transport runtimes,
+  first-party gateway, Web and Telegram remain planned and are not in published
+  releases.
+- The five-role repeat review and normative implementation plan are recorded in
+  [`TARGET_ARCHITECTURE_2026-08-02.ru.md`](TARGET_ARCHITECTURE_2026-08-02.ru.md).
+  It identifies the original P0 split-lock/rollback debt in the egress plane and incomplete
+  authorization, crypto, ACK and key-lifecycle contracts in Agent Control. The
+  plan uses reverse HTTPS/WSS first, LAN and iroh as measured accelerators, and
+  a release-gated delivery DAG instead of a seven-transport rollout.
+- Release 1.4 R0a converges API lifecycle, direct CLI, profile
+  import/remove, recovery, health remediation, policy cleanup, `doctor --fix`, autostart and monitor on
+  `$RUN_DIR/.mutation.lock`. API children validate the inherited lock inode and
+  fail closed on an invalid descriptor. This removes the confirmed split-lock
+  race, but it is not the planned `mazzy-vpnd` owner and does not prove
+  restoration of routes, DNS, firewall or leak state.
+  Implementation scope and migration criteria are recorded in
+  [`R0_MUTATION_SINGLE_FLIGHT.ru.md`](R0_MUTATION_SINGLE_FLIGHT.ru.md).
+- The P0 reboot slice adds a hardened root oneshot before `vpnctl.service`,
+  health remediation and the API socket. It reconciles interrupted API actions
+  under the same lock and restores a minimal nftables output/forward deny guard
+  when a transition marker survived reboot. Rollback failure keeps the
+  root-only marker, while API/service/health paths refuse mutation behind that
+  marker and health retains the lock until systemd reports a terminal result.
+- The source-level comparison and implementation decision is recorded in
+  [`RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md`](RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md).
+- The repeat managed-runtime and agent-control audit is
+  [`AUDIT_2026-08-02_RUNTIME_AND_AGENTS.ru.md`](AUDIT_2026-08-02_RUNTIME_AND_AGENTS.ru.md).
+  All nine modern entries now have closed validation and atomic secret-safe
+  Linux import. Six also have a tested closed sing-box config renderer. No new
+  connection lifecycle or platform backend is claimed.
 
-Published release links:
+Release target links (publication is valid only when both tag pages exist):
 
-- <https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.0>
-- <https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.0>
+- <https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.0>
+- <https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.0>
 
 ## Community and documentation baseline
 
 - Repository description, RU/EN Welcome and FAQ discussions, platform roadmap,
   support template and feature polls are published.
-- Public Wiki and repository `wiki/` sources are synchronized.
+- Repository `wiki/` sources contain the pending Agent Control, R0a and target
+  architecture updates. Public Wiki synchronization must be verified after
+  these repository changes reach the default branch; it is not currently
+  claimed complete.
 - Polls:
   - <https://github.com/mazurovn/mazzy-vpn/discussions/23>
   - <https://github.com/mazurovn/mazzy-vpn/discussions/24>
 
 ## Active backlog order
 
-1. [#35 profile/package hotfix](https://github.com/mazurovn/mazzy-vpn/issues/35)
-2. [#36 custom-server import](https://github.com/mazurovn/mazzy-vpn/issues/36),
+R0 status synchronized with the target architecture:
+
+| ID | Status | Remaining release gate |
+|---|---|---|
+| R0-1 | contained | Desktop provider actions removed; process-group/job-object deadline required before re-enabling |
+| R0-2 | contained | Desktop provider actions removed; native command-bound approval required before re-enabling |
+| R0-3 | contained | diagnostics do not execute discovered agents; trusted executable provenance required before re-enabling |
+| R0-4 | partial | shared R0a lock is implemented; daemon ownership, common audit IDs and provider fixtures remain |
+| R0-5 | partial | all UI/docs/registry readiness labels must remain evidence-backed |
+
+1. Keep Desktop Agent Control diagnostics-only while implementing
+   process-group/job-object deadlines, native command-bound confirmation,
+   cross-platform executable provenance, mutation single-flight/audit and
+   unambiguous readiness labels behind a new review gate.
+2. Converge egress mutations from the transitional shared R0a lock on one
+   `mazzy-vpnd` owner. Rollback still restores desired intent without proving
+   routes/DNS/interfaces/firewall. This remains P0 consistency debt before a
+   shared-daemon GA claim.
+3. Bootstrap the separate `mazzy-agent-control` monorepo: complete protocol and
+   conformance testkit, unprivileged `mazzy-agentd`, typed Codex/Claude/ACP
+   adapters, pairing/E2EE, reverse HTTPS/WSS and read-only Desktop/Web slice.
+   LAN and iroh follow as measured accelerators; Telegram follows the
+   interactive security gate. A first-party Mazzy network runtime does not yet
+   exist.
+4. Finish [#36 custom-server import](https://github.com/mazurovn/mazzy-vpn/issues/36)
+   beyond the implemented neutral profile/import foundation,
    [#37 sing-box/TUN adapters](https://github.com/mazurovn/mazzy-vpn/issues/37),
    [#38 Mieru/Naive adapters](https://github.com/mazurovn/mazzy-vpn/issues/38)
    and [#39 AI planner](https://github.com/mazurovn/mazzy-vpn/issues/39)
-3. [#4 Linux Desktop package lifecycle](https://github.com/mazurovn/mazzy-vpn/issues/4)
-4. [#5 shared core and versioned local API](https://github.com/mazurovn/mazzy-vpn/issues/5)
-5. [#12 CLI/TUI parity and automation contract](https://github.com/mazurovn/mazzy-vpn/issues/12)
-6. [#6 profiles](https://github.com/mazurovn/mazzy-vpn/issues/6),
+5. [#4 Linux Desktop package lifecycle](https://github.com/mazurovn/mazzy-vpn/issues/4)
+6. [#5 shared core and versioned local API](https://github.com/mazurovn/mazzy-vpn/issues/5)
+7. [#12 CLI/TUI parity and automation contract](https://github.com/mazurovn/mazzy-vpn/issues/12)
+8. [#6 profiles](https://github.com/mazurovn/mazzy-vpn/issues/6),
    [#8 services/recovery](https://github.com/mazurovn/mazzy-vpn/issues/8) and
    [#9 connection modes](https://github.com/mazurovn/mazzy-vpn/issues/9)
-7. [#7 Windows](https://github.com/mazurovn/mazzy-vpn/issues/7) and
+9. [#7 Windows](https://github.com/mazurovn/mazzy-vpn/issues/7) and
    [#10 macOS](https://github.com/mazurovn/mazzy-vpn/issues/10)
-8. [#13 Android](https://github.com/mazurovn/mazzy-vpn/issues/13) and
+10. [#13 Android](https://github.com/mazurovn/mazzy-vpn/issues/13) and
    [#14 iOS](https://github.com/mazurovn/mazzy-vpn/issues/14)
-9. [#11 cross-platform production gates](https://github.com/mazurovn/mazzy-vpn/issues/11)
+11. [#11 cross-platform production gates](https://github.com/mazurovn/mazzy-vpn/issues/11)
 
-## Protocol-orchestration work after 1.3.0
+## Protocol-orchestration release 1.4.0
 
-The 1.3.2 patch fixes three blockers found on an installed 0.2/1.2 system and
-adds the first protocol-orchestration contract:
+Release 1.4.0 preserves the 1.3.2 installed-system fixes and ships the first
+read-only planner, managed-profile and runtime-adapter foundation:
 
 - Desktop accepts legacy profile-cache entries without `profile_id`, derives
   the same opaque ID as the CLI and distinguishes an unavailable cache from a
@@ -85,19 +159,51 @@ adds the first protocol-orchestration contract:
   redacted catalog, runtime-diagnostic and URI-detection data. Connection stays
   truthfully limited to the four existing Linux backends until audited adapters
   and TUN integration pass their gates.
-- API v1 now has 27 operations and 14 stable error codes. `protocols.list` is
-  additive and does not change the API version.
+- All nine modern protocols now accept only the closed
+  `managed-profile.schema.json` and can be atomically imported under a
+  protocol/profile ID with root-only permissions. This is `partial` import,
+  not vendor-format conversion or connection support.
+- The packaged adapter renders a fixed sing-box 1.13.12 TUN/DNS/routing graph
+  for six protocols. `runtime/v1/adapter-registry.json` keeps lifecycle and
+  integration tests planned. Mieru/Naive need sidecar supervisors; ShadowTLS
+  needs a typed inner proxy chain.
+- Stable API v1 has 29 operations and 14 stable error codes, including
+  `planner.evaluate`, without changing the API version.
 - The real `socat` client preserves its response half after request EOF. A
   delayed Unix-socket integration test covers the installed systemd transport,
   which the previous fake dispatcher test did not model.
-- Remaining work is platform-specific: pinned sing-box-family, Mieru and
-  Naive/Cronet adapters; custom-server secret import; deterministic planner;
-  Linux TUN lifecycle; Windows service/Wintun; Android `VpnService`; and real
-  integration, rollback and leak tests.
-- Local patch verification is green: 79 Bash/end-to-end tests, 24 Rust tests,
-  Clippy, ShellCheck, npm audit, cargo-deny, public leak audit and the unpacked
-  AppImage/DEB/RPM lifecycle/source/GUI audit. All 12 documentation screenshots
-  were regenerated at 1680×951 from the localhost-only RFC 5737 fixture.
+- The deterministic read-only planner applies backend-owned hard gates
+  and versioned scoring to opaque profile IDs. Censorship/workload fit is now
+  derived from the trusted catalog and workload instead of caller assertions.
+  Its OpenVPN parser shares the request deadline, stale observed health is
+  ignored, and rollback readiness is explicitly limited to protected storage.
+  Remaining issue #39 work is history,
+  authorized execution/failover and non-CLI integration. Platform work still
+  includes pinned sing-box-family, Mieru and Naive/Cronet adapters;
+  custom-server secret import; Linux TUN lifecycle; Windows service/Wintun;
+  Android `VpnService`; and real integration, rollback and leak tests.
+- The release detector also classifies bounded sing-box/Xray, official Mieru
+  and NaiveProxy JSON shapes. It rejects duplicate keys, ambiguous mixed
+  protocols and secret reflection; classification alone is not import or
+  execution. Managed import is a separate closed-format operation.
+- The capability matrix tracks macOS separately, but strict protocol registry
+  v1 has only Linux, Windows and Android fields. Adding per-protocol macOS
+  status requires a versioned registry v2; mutating the published v1 shape
+  would break strict API/CLI consumers.
+- Desktop profile-cache failures now preserve redacted missing/permission/shape
+  reason codes instead of collapsing every failure into an unexplained empty
+  list. The installed 0.3.2 cache was verified readable with 24 entries (9
+  AmneziaWG and 15 OpenVPN).
+- The regression suite now pins its API socket inside the temporary test root;
+  an active installed daemon can no longer replace fixture profiles with the
+  host's live profile catalog during a local run.
+- Local release verification includes 100 Bash/end-to-end tests plus the
+  managed adapter, Agent Control, Rust, ShellCheck, package and UI gates.
+  GitHub CI remains authoritative for Clippy, cargo-deny, npm audit, CodeQL and
+  the cross-platform Desktop build matrix.
+  The existing 12 documentation screenshots remain at 1680×951; the two new
+  Agent Control captures are 1680×975. All 14 use the localhost-only RFC 5737
+  fixture.
 
 ## Current implementation slice
 

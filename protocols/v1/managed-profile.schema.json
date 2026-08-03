@@ -1,0 +1,341 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mazurovn/mazzy-vpn/protocols/v1/managed-profile.schema.json",
+  "title": "Mazzy managed proxy profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile_id", "display_name", "protocol", "endpoint", "credentials", "tls", "options", "dns", "routing"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "profile_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{2,63}$"},
+    "display_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\u0000-\\u001F\\u007F\\u00AD\\u061C\\u200B-\\u200F\\u2028-\\u202E\\u2060-\\u2064\\u2066-\\u2069\\uFEFF]+$"
+    },
+    "protocol": {"enum": ["vless", "hysteria2", "mieru", "naive", "tuic", "shadowsocks2022", "trojan", "anytls", "shadowtls"]},
+    "endpoint": {"$ref": "#/$defs/Endpoint"},
+    "credentials": {"type": "object"},
+    "tls": {"type": "object"},
+    "options": {"type": "object"},
+    "dns": {"$ref": "#/$defs/Dns"},
+    "routing": {"$ref": "#/$defs/Routing"}
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "protocol": {"const": "vless"},
+        "credentials": {"$ref": "#/$defs/VlessCredentials"},
+        "tls": {"$ref": "#/$defs/VlessTls"},
+        "options": {"$ref": "#/$defs/VlessOptions"}
+      }
+    },
+    {
+      "properties": {
+        "protocol": {"const": "hysteria2"},
+        "credentials": {"$ref": "#/$defs/PasswordCredentials"},
+        "tls": {"$ref": "#/$defs/StandardTls"},
+        "options": {"$ref": "#/$defs/Hysteria2Options"}
+      }
+    },
+    {
+      "properties": {
+        "protocol": {"const": "mieru"},
+        "credentials": {"$ref": "#/$defs/UserPasswordCredentials"},
+        "tls": {"$ref": "#/$defs/DisabledTls"},
+        "options": {"$ref": "#/$defs/MieruOptions"}
+      }
+    },
+    {
+      "properties": {
+        "protocol": {"const": "naive"},
+        "credentials": {"$ref": "#/$defs/UserPasswordCredentials"},
+        "tls": {"$ref": "#/$defs/StandardTls"},
+        "options": {"$ref": "#/$defs/NaiveOptions"}
+      }
+    },
+    {
+      "properties": {
+        "protocol": {"const": "tuic"},
+        "credentials": {"$ref": "#/$defs/TuicCredentials"},
+        "tls": {"$ref": "#/$defs/StandardTls"},
+        "options": {"$ref": "#/$defs/TuicOptions"}
+      }
+    },
+    {
+      "properties": {
+        "protocol": {"const": "shadowsocks2022"},
+        "credentials": {"$ref": "#/$defs/PasswordCredentials"},
+        "tls": {"$ref": "#/$defs/DisabledTls"},
+        "options": {"$ref": "#/$defs/Shadowsocks2022Options"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"options": {"properties": {"method": {"const": "2022-blake3-aes-128-gcm"}}}}},
+          "then": {"properties": {"credentials": {"$ref": "#/$defs/Shadowsocks128Credentials"}}}
+        },
+        {
+          "if": {"properties": {"options": {"properties": {"method": {"enum": ["2022-blake3-aes-256-gcm", "2022-blake3-chacha20-poly1305"]}}}}},
+          "then": {"properties": {"credentials": {"$ref": "#/$defs/Shadowsocks256Credentials"}}}
+        }
+      ]
+    },
+    {
+      "properties": {
+        "protocol": {"const": "trojan"},
+        "credentials": {"$ref": "#/$defs/PasswordCredentials"},
+        "tls": {"$ref": "#/$defs/StandardTls"},
+        "options": {"$ref": "#/$defs/TrojanOptions"}
+      }
+    },
+    {
+      "properties": {
+        "protocol": {"const": "anytls"},
+        "credentials": {"$ref": "#/$defs/PasswordCredentials"},
+        "tls": {"$ref": "#/$defs/StandardTls"},
+        "options": {"$ref": "#/$defs/AnyTlsOptions"}
+      }
+    },
+    {
+      "properties": {
+        "protocol": {"const": "shadowtls"},
+        "credentials": {"$ref": "#/$defs/PasswordCredentials"},
+        "tls": {"$ref": "#/$defs/StandardTls"},
+        "options": {"$ref": "#/$defs/ShadowTlsOptions"}
+      }
+    }
+  ],
+  "$defs": {
+    "Host": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^[A-Za-z0-9._:-]+$",
+      "not": {"pattern": "\\.\\."}
+    },
+    "Secret": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+    },
+    "Uuid": {
+      "type": "string",
+      "pattern": "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"
+    },
+    "Network": {"enum": ["tcp", "udp", "both"]},
+    "Endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "port"],
+      "properties": {
+        "host": {"$ref": "#/$defs/Host"},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535}
+      }
+    },
+    "VlessCredentials": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uuid"],
+      "properties": {"uuid": {"$ref": "#/$defs/Uuid"}}
+    },
+    "PasswordCredentials": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["password"],
+      "properties": {"password": {"$ref": "#/$defs/Secret"}}
+    },
+    "Shadowsocks128Credentials": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["password"],
+      "properties": {"password": {"type": "string", "pattern": "^[A-Za-z0-9+/]{22}==$"}}
+    },
+    "Shadowsocks256Credentials": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["password"],
+      "properties": {"password": {"type": "string", "pattern": "^[A-Za-z0-9+/]{43}=$"}}
+    },
+    "TuicCredentials": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["uuid", "password"],
+      "properties": {
+        "uuid": {"$ref": "#/$defs/Uuid"},
+        "password": {"$ref": "#/$defs/Secret"}
+      }
+    },
+    "UserPasswordCredentials": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["username", "password"],
+      "properties": {
+        "username": {"$ref": "#/$defs/Secret"},
+        "password": {"$ref": "#/$defs/Secret"}
+      }
+    },
+    "StandardTls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "insecure", "server_name"],
+      "properties": {
+        "enabled": {"const": true},
+        "insecure": {"const": false},
+        "server_name": {"$ref": "#/$defs/Host"},
+        "alpn": {"type": "array", "uniqueItems": true, "maxItems": 4, "items": {"type": "string", "minLength": 1, "maxLength": 32}},
+        "utls_fingerprint": {"enum": ["chrome", "firefox", "safari", "edge", "randomized"]},
+        "certificate_public_key_sha256": {"type": "array", "uniqueItems": true, "maxItems": 4, "items": {"type": "string", "minLength": 32, "maxLength": 128}}
+      }
+    },
+    "VlessTls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "insecure", "server_name"],
+      "dependentRequired": {
+        "reality_public_key": ["reality_short_id"],
+        "reality_short_id": ["reality_public_key"]
+      },
+      "properties": {
+        "enabled": {"const": true},
+        "insecure": {"const": false},
+        "server_name": {"$ref": "#/$defs/Host"},
+        "alpn": {"type": "array", "uniqueItems": true, "maxItems": 4, "items": {"type": "string", "minLength": 1, "maxLength": 32}},
+        "utls_fingerprint": {"enum": ["chrome", "firefox", "safari", "edge", "randomized"]},
+        "reality_public_key": {"type": "string", "minLength": 1, "maxLength": 128},
+        "reality_short_id": {"type": "string", "pattern": "^[0-9A-Fa-f]{0,16}$"},
+        "certificate_public_key_sha256": {"type": "array", "uniqueItems": true, "maxItems": 4, "items": {"type": "string", "minLength": 32, "maxLength": 128}}
+      }
+    },
+    "DisabledTls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "insecure", "server_name"],
+      "properties": {
+        "enabled": {"const": false},
+        "insecure": {"const": false},
+        "server_name": {"const": ""}
+      }
+    },
+    "VlessOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "flow": {"enum": ["", "xtls-rprx-vision"]},
+        "network": {"$ref": "#/$defs/Network"}
+      }
+    },
+    "Hysteria2Options": {
+      "type": "object",
+      "additionalProperties": false,
+      "dependentRequired": {
+        "obfs_type": ["obfs_password"],
+        "obfs_password": ["obfs_type"]
+      },
+      "properties": {
+        "up_mbps": {"type": "integer", "minimum": 1, "maximum": 100000},
+        "down_mbps": {"type": "integer", "minimum": 1, "maximum": 100000},
+        "obfs_type": {"const": "salamander"},
+        "obfs_password": {"$ref": "#/$defs/Secret"},
+        "network": {"$ref": "#/$defs/Network"}
+      }
+    },
+    "TuicOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "congestion_control": {"enum": ["cubic", "new_reno", "bbr"]},
+        "udp_relay_mode": {"enum": ["native", "quic"]},
+        "heartbeat": {"type": "string", "pattern": "^[1-9][0-9]{0,3}s$"},
+        "network": {"$ref": "#/$defs/Network"}
+      }
+    },
+    "MieruOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["transport"],
+      "properties": {
+        "transport": {"enum": ["TCP", "UDP"]},
+        "mtu": {"type": "integer", "minimum": 1280, "maximum": 1400},
+        "multiplexing": {"enum": ["MULTIPLEXING_OFF", "MULTIPLEXING_LOW", "MULTIPLEXING_MIDDLE", "MULTIPLEXING_HIGH"]},
+        "handshake_mode": {"enum": ["HANDSHAKE_STANDARD", "HANDSHAKE_NO_WAIT"]}
+      }
+    },
+    "NaiveOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proxy_protocol"],
+      "properties": {
+        "proxy_protocol": {"enum": ["https", "quic"]},
+        "tunnel_timeout": {"type": "integer", "minimum": 60, "maximum": 86400},
+        "idle_timeout": {"type": "integer", "minimum": 30, "maximum": 86400}
+      }
+    },
+    "Shadowsocks2022Options": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method"],
+      "properties": {
+        "method": {"enum": ["2022-blake3-aes-128-gcm", "2022-blake3-aes-256-gcm", "2022-blake3-chacha20-poly1305"]},
+        "network": {"$ref": "#/$defs/Network"}
+      }
+    },
+    "TrojanOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"network": {"$ref": "#/$defs/Network"}}
+    },
+    "AnyTlsOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "idle_session_check_interval": {"type": "string", "pattern": "^[1-9][0-9]{0,3}s$"},
+        "idle_session_timeout": {"type": "string", "pattern": "^[1-9][0-9]{0,3}s$"},
+        "min_idle_session": {"type": "integer", "minimum": 0, "maximum": 64}
+      }
+    },
+    "ShadowTlsOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version"],
+      "properties": {
+        "version": {"const": 3},
+        "network": {"const": "tcp"}
+      }
+    },
+    "Dns": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy", "servers"],
+      "properties": {
+        "strategy": {"enum": ["prefer_ipv4", "prefer_ipv6", "ipv4_only", "ipv6_only"]},
+        "servers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["server", "server_port", "server_name", "path"],
+            "properties": {
+              "server": {"$ref": "#/$defs/Host"},
+              "server_port": {"type": "integer", "minimum": 1, "maximum": 65535},
+              "server_name": {"$ref": "#/$defs/Host"},
+              "path": {"type": "string", "pattern": "^/[^?#]{0,255}$"}
+            }
+          }
+        }
+      }
+    },
+    "Routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "allow_lan"],
+      "properties": {
+        "mode": {"const": "full-tunnel"},
+        "allow_lan": {"type": "boolean"}
+      }
+    }
+  }
+}

@@ -33,7 +33,7 @@ stateDiagram-v2
     HealthTick --> Start: DESIRED=up, service inactive
     HealthTick --> Count1: interface или интернет не работает
     Count1 --> Recover: вторая последовательная ошибка
-    Recover --> Service: reset limit + restart
+    Recover --> Service: один restart без reset start limit
     HealthTick --> Healthy: interface и HTTPS работают
     Healthy --> Service: сброс счётчика
 ```
@@ -45,6 +45,47 @@ stateDiagram-v2
 Транзакционные `test` и `test-all` имеют основной rollback, независимый
 systemd timeout guard и boot recovery. Предыдущее managed или внешнее
 соединение восстанавливается после ошибки, timeout, сигнала или перезагрузки.
+Connect/reconnect/test/emergency/health recovery сначала устанавливают
+dual-stack nftables output/forward guard. Если новый tunnel и rollback не
+подтверждены, guard и
+`/var/lib/vpnctl/transition-recovery-required.json` сохраняются fail-closed.
+
+Hardened root oneshot `mazzy-vpn-api-recovery.service` запускается при загрузке
+до test recovery, managed tunnel, health remediation и local API socket. Test
+recovery требует успеха API gate и имеет 60-секундный unit budget. API
+oneshot согласует прерванные actions под общим mutation lock, а ошибки
+каталогов, permissions или lock сохраняют fail-closed marker. Managed tunnel
+имеет упорядоченный `Requires=` на этот gate, поэтому failed recovery блокирует
+activation даже при невозможности записать marker. Health remediation проверяет
+marker под тем же lock и ждёт terminal результат start/restart от systemd, не
+используя `--no-block`. Если после перезагрузки существует transition marker,
+oneshot с `CAP_NET_ADMIN` сначала восстанавливает минимальный output/forward
+deny guard. Без test transaction API socket, health и managed service остаются
+заблокированными до ручной проверки.
+
+## Recovery-required marker
+
+Если API не смог доказать хотя бы восстановление сохранённого intent/service,
+он создаёт root-only `/var/lib/vpnctl/api-recovery-required.json` и блокирует
+следующие API mutations. Сначала оператор должен проверить фактическое
+состояние, исправить сеть и сохранить диагностические данные:
+
+```bash
+sudo mazzy-vpn doctor
+sudo mazzy-vpn diagnose
+mazzy-vpn verify
+sudo journalctl -u vpnctl.service -n 200 --no-pager
+```
+
+Только после ручной проверки текущего tunnel, routes и DNS marker снимается
+явным административным подтверждением под общим mutation lock:
+
+```bash
+sudo mazzy-vpn _api-clear-recovery --acknowledge-current-state
+```
+
+Эта команда не ремонтирует соединение и не доказывает отсутствие leak; она
+только подтверждает, что оператор принимает уже проверенное текущее состояние.
 
 ---
 
@@ -79,6 +120,36 @@ delay. Independently, a roughly 20-second health timer immediately starts an
 inactive desired service and restarts a locally present but unusable tunnel
 after two consecutive confirmed failures.
 
+A hardened root `mazzy-vpn-api-recovery.service` oneshot runs at boot before
+test recovery, the managed tunnel, health remediation and local API socket.
+Test recovery requires this API gate and has a 60-second unit budget. The API
+oneshot reconciles interrupted actions under the shared mutation lock;
+directory, permission or lock failures preserve the fail-closed marker. The
+managed tunnel has an ordered `Requires=` dependency on this gate, so failed
+recovery blocks activation even when the marker cannot be written. Health
+remediation checks the marker while holding the shared lock and waits for
+systemd's terminal start/restart result; it does not use `--no-block`. If a
+transition marker survives reboot, the oneshot uses `CAP_NET_ADMIN` to restore
+a minimal output/forward deny guard first. Without a test transaction, the API
+socket, health remediation and managed service remain blocked for administrator
+review.
+
 Manual disconnect writes `DESIRED=down` first, so the watchdog never undoes an
 intentional disconnect. Transactional tests add a main rollback, independent
 systemd timeout guard and boot recovery.
+Connect/reconnect/test/emergency/health recovery install a dual-stack nftables
+output/forward guard first. If neither the new tunnel nor rollback is verified,
+the guard and `/var/lib/vpnctl/transition-recovery-required.json` remain
+fail-closed.
+
+If `/var/lib/vpnctl/api-recovery-required.json` exists, further API mutations
+are blocked. Run `sudo mazzy-vpn doctor`, `sudo mazzy-vpn diagnose`,
+`mazzy-vpn verify` and inspect the service journal first. Only after manually
+checking the tunnel, routes and DNS, acknowledge the current state with:
+
+```bash
+sudo mazzy-vpn _api-clear-recovery --acknowledge-current-state
+```
+
+This acknowledgment does not repair the network or prove leak freedom; it only
+clears the fail-closed marker under the shared mutation lock.

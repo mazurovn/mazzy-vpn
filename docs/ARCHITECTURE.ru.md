@@ -4,7 +4,7 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
 [English version](ARCHITECTURE.en.md) · [Главная страница](../README.md)
 
-Этот документ описывает действующую архитектуру CLI/TUI и Desktop 0.3.
+Этот документ описывает действующую архитектуру CLI/TUI 1.4 и Desktop 0.4.
 Целевая архитектура самостоятельного Desktop 1.0 с общим core и versioned API:
 [план Desktop 1.0](DESKTOP_ROADMAP.ru.md). Матрица
 [паритета функций](FEATURE_PARITY.md) не позволяет выдать preview за готовое
@@ -40,6 +40,8 @@ flowchart TB
         StatusCache["Очищенный статус без ключей и endpoint<br/>/run/mazzy-vpn/status.json"]
         ProfileCache["Очищенный каталог профилей без путей/endpoint<br/>/run/mazzy-vpn/profiles.json"]
         Verification["Ограниченные endpoint/egress проверки<br/>tests.probe / tests.verify-egress"]
+        Registry["Версионированный реестр протоколов<br/>capabilities + policy"]
+        Planner["Read-only planner<br/>backend gates + advisory score"]
     end
 
     subgraph Supervisor["Контроль systemd"]
@@ -80,6 +82,11 @@ flowchart TB
     Desktop --> ApiSocket
     ApiSocket --> Entry
     ApiSocket --> ActionJournal
+    Entry --> Registry
+    Entry --> Planner
+    Planner --> Registry
+    Planner --> ProfileCache
+    Planner --> Validation
     Desktop -. остальные фиксированные операции через pkexec .-> Entry
     Commands --> Validation
     Validation --> Profiles
@@ -135,18 +142,75 @@ OpenVPN использует DNS, переданный сервером/проф
 реализованы только для AmneziaWG, WireGuard, OpenVPN и L2TP/IPsec. Остальные
 девять записей не участвуют в lifecycle selection со статусом `planned`.
 
-`mazzy-vpn protocols list --json` и API `protocols.list` возвращают только
-публичные capabilities. `protocols detect --stdin --json` распознаёт
-однозначные share schemes, но не выводит host, user info, UUID, password, query
-или fragment. Proxy-протоколам нужен отдельный TUN adapter; произвольный
-пользовательский sing-box JSON никогда не является root execution format.
+Все девять modern entries теперь имеют закрытый neutral profile validator и
+атомарный root-only Linux import. Для шести протестирован фиксированный
+sing-box config renderer. Отдельный
+[`runtime/v1/adapter-registry.json`](../runtime/v1/adapter-registry.json)
+фиксирует версии engines и process graphs, но оставляет lifecycle и network
+integration tests в статусе `planned`. Mieru и NaiveProxy требуют
+двухпроцессный sidecar supervisor, ShadowTLS — typed inner proxy chain.
+
+`mazzy-vpn protocols list --json`, `protocols adapters --json` и API
+`protocols.list` возвращают только
+публичные capabilities. `protocols detect --stdin --json` классифицирует
+однозначные share URI и ограниченные JSON-структуры, но не выводит host, user
+info, UUID, password, query или fragment. Классифицированный JSON не считается
+валидированным runtime config. Validation/import принимает только
+`managed-profile.schema.json` и никогда не превращает распознанный vendor JSON
+непосредственно в root execution. Proxy-протоколам нужен отдельный TUN adapter;
+произвольный пользовательский sing-box JSON никогда не является root execution
+format.
 Полная модель описана в
 [документе об оркестрации](PROTOCOL_ORCHESTRATION.ru.md).
 
-Будущий planner детерминирован и подчинён hard constraints: platform backend
-готов, профиль валиден, секрет доступен только backend и rollback реализован.
-LLM может предложить dry-run plan, но не создаёт shell command/backend config и
-не обходит authorization/action-ID boundaries.
+## Контур обратного управления агентами
+
+Для управления AI-агентами выделен отдельный versioned draft contract.
+[`agent-control/v1/registry.json`](../agent-control/v1/registry.json) содержит
+LAN WSS, iroh, libp2p, WebRTC, WebTransport, Tailscale/Headscale и reverse WSS,
+не выдавая их за VPN-протоколы. Web, CLI и Telegram являются ingress channels
+над этими transports. Обычный Telegram Bot явно ограничен low-risk командами и
+не заявляет first-party E2EE; полное управление требует paired Web или Mini App.
+
+Сейчас реализованы draft catalog/schema, package payload и read-only Desktop
+diagnostics. Экран «AI-агенты» обнаруживает кандидаты Codex/Claude Code и
+catalog status, но не запускает найденные binaries и не предоставляет renderer
+операции start, pair или stop. Native command-bound approval, trusted
+executable resolution и process-tree containment обязательны до возврата
+lifecycle authority. Это не first-party `mazzy-agentd`. Ни один из семи agent
+transport runtimes ещё не готов к релизу; Web/Telegram и Claude lifecycle
+остаются planned. E2EE envelope, anti-replay и path failover являются целевой
+архитектурой, а не работающим runtime. Provider adapters
+и граница отдельного server repository описаны в
+[архитектуре Agent Control](AGENT_CONTROL_ARCHITECTURE.ru.md). Повторный
+критический разбор state ownership, wire protocol, transport orchestration,
+provider SPI, security boundaries и release DAG находится в
+[целевой архитектуре](TARGET_ARCHITECTURE_2026-08-02.ru.md).
+
+Реализованный query `planner.evaluate` подчинён вычисляемым backend hard
+constraints: platform backend готов, профиль валиден, секрет доступен только
+backend, защищённый rollback storage готов и platform support имеет статус
+`implemented`. Storage gate подтверждает место для защищённого journal/snapshot,
+но не доказывает rollback конкретного кандидата. Planner возвращает scored
+dry-run evaluation с opaque IDs и reason codes. LLM не создаёт shell
+command/backend config и не обходит gate. Operation не подключает VPN и не
+выполняет failover; будущее execution остаётся за authorization/action-ID,
+audit и rollback boundaries.
+
+Граница доверия задана явно:
+
+| Вход/состояние | Владелец | Использование planner |
+|---|---|---|
+| Наличие runtime, текущий parse профиля, права файла, rollback storage и platform support | backend | eligibility gates; caller не может их изменить |
+| Recent outcome, reachability, latency/loss и возраст измерения | caller в текущем срезе | только health score; evidence старше 900 секунд даёт ноль |
+| Censorship fit и workload fit | backend catalog + workload | score; caller не назначает эти значения |
+| Произвольный текст модели | недоверенный | никогда не разбирается как shell command, профиль или backend config |
+
+Для одинакового локального snapshot и evidence rank/reason codes
+детерминированы; `evaluated_at` намеренно меняется. Один абсолютный monotonic
+deadline проходит через candidate validation и OpenVPN parser. Поэтому timeout
+parser возвращается как `deadline-exceeded`, а не продолжает работу после
+исчерпания API budget.
 
 CLI/TUI-клиент подключается к Unix socket через автоматически установленный
 `socat`. Он ограничивает размер и время ответа, проверяет identity envelope и
@@ -297,12 +361,37 @@ stateDiagram-v2
    VPN-интерфейс и два HTTPS-маршрута. Для профиля, объявляющего full tunnel,
    auto policy также сравнивает default и interface-bound IPv4. Требуемый, но
    остановленный сервис запускается сразу. Не передающий трафик туннель или два
-   подтверждённых full-tunnel egress mismatch вызывают restart. Недоступность
-   observer сама по себе recovery не запускает.
+   подтверждённых full-tunnel egress mismatch вызывают один restart ровно на
+   настроенном пороге. Watchdog не вызывает `reset-failed` и не обнуляет
+   счётчик заранее. Следующий failed tick насыщает счётчик значением threshold+1,
+   один раз сообщает о pause recovery и оставляет native retry OpenVPN.
+   Успех, явные connect/reconnect и profile mutation сбрасывают счётчик. Для
+   отсутствующего OpenVPN interface и интервала, когда interface уже есть, но
+   HTTPS data plane ещё недоступен, действует ограниченный 60-секундный grace
+   по systemd monotonic activation timestamp и Python `CLOCK_MONOTONIC`, поэтому
+   suspend не завышает age. Если любой ограниченный timestamp source недоступен
+   или malformed, grace не предоставляется.
+3. `mazzy-vpn-api-recovery.service` запускается как hardened root oneshot до
+   test recovery, managed tunnel, health remediation и API socket. Он согласует
+   прерванные API journals под общим lock. Ошибка каталога, permissions,
+   получения lock или rollback сохраняет root-only marker. Managed service
+   имеет упорядоченный `Requires=` на этот gate, поэтому его activation
+   блокируется и тогда, когда сам marker сохранить невозможно. Test recovery
+   сохраняет deadlock-safe boot path и unit budget 60 секунд; health remediation
+   не запускает и не перезапускает tunnel, пока marker существует.
+
+Health start/restart удерживает общий mutation lock до terminal результата
+systemd и не использует `--no-block`.
 
 Ручной `disconnect` записывает `DESIRED=down` до остановки сервиса, поэтому
 монитор не отменяет осознанное отключение. Ожидающее ввода TUI не удерживает
-action lock.
+общий mutation lock.
+
+Проверка service eligibility — явная диагностическая ветка, а не recovery
+input: `verify-service` / `tests.verify-service-egress` отправляет ограниченные
+HEAD-only запросы на два встроенных allowlisted HTTPS endpoints через выбранный
+VPN interface. Результат не попадает в health counter или planner и содержит
+только очищенные enum evidence.
 
 ## Транзакционный live-test и rollback
 
@@ -354,24 +443,37 @@ sequenceDiagram
 | `/var/lib/vpnctl/api-actions` | Action IDs, rollback snapshots и очищенные outcomes | Постоянно, каталог `700`, records `600`; по умолчанию 512 последних завершённых outcomes |
 | `/var/lib/vpnctl/api-audit.jsonl{,.1}` | Operation, решение авторизации и outcome | Постоянно, `600`; без payload/backend output; ротация 2 МиБ с одним архивом |
 | `/var/lib/vpnctl/api-recovery-required.json` | Marker отсутствующего/неудачного rollback snapshot | Постоянно, `600`; блокирует API mutations до явного подтверждения администратора |
-| `/run/vpnctl` | Locks, health-счётчик и очищенный runtime log | Очищается при загрузке |
+| `/var/lib/vpnctl/transition-recovery-required.json` | Marker неподтверждённого восстановления tunnel/fallback | Постоянно, `600`; хранит причину сохранения fail-closed nftables guard |
+| `/var/lib/vpnctl/transition-fallback.rules` | Точный allowlist endpoint внешнего fallback | Постоянно, `600`, только пока может понадобиться безопасное восстановление fallback |
+| `/run/vpnctl` | Общий `.mutation.lock`, singleton `.health.lock`, health-счётчик и очищенный runtime log | Очищается при загрузке |
 | `/run/mazzy-vpn/status.json` | Очищенный статус для Desktop | Пересоздаётся root, `0640 root:mazzy-vpn`, без ключей и endpoint |
 | `/run/mazzy-vpn/api-v1.sock` | Versioned local API transport | Socket `0660 root:mazzy-vpn`, активируется systemd |
 | `vpnctl.service` | Владеет активным managed-туннелем | Долгоживущий, под контролем systemd |
 | `vpnctl-health.timer` | Планирует независимые health-проверки | Включён для автовосстановления |
 | `vpnctl-test-recovery.service` | Исправляет прерванный тест после загрузки | Boot-time oneshot |
+| `mazzy-vpn-api-recovery.service` | Согласует API actions и восстанавливает минимальный nftables deny guard для unresolved transition | Hardened root boot-time oneshot с `CAP_NET_ADMIN` |
 
 Инварианты безопасности:
 
-- один managed-туннель и одна изменяющая состояние операция одновременно;
+- в релизе 1.4 один managed-туннель и одна изменяющая
+  состояние операция одновременно защищены общим `.mutation.lock` для API,
+  direct CLI, recovery, health remediation и service-policy paths;
+- это переходный R0a process lock: API journal всё ещё покрывает только API
+  lifecycle, а целевой единственный владелец `mazzy-vpnd` не реализован;
 - прерванная API mutation согласуется по pre-action snapshot до запуска
   следующей изменяющей операции;
+- API journal/audit и snapshot синхронизируются до mutation, а удаление
+  terminal snapshot фиксируется до ответа об успехе;
+- connect, reconnect, test, emergency и health recovery устанавливают
+  output/forward nftables guard до остановки защищённого пути; guard снимается
+  только после interface-bound проверки нового пути или rollback;
 - тип профиля определяется по содержимому, затем проверяется до импорта;
 - приватные ключи, credentials, личные пути и рабочие профили не попадают в
   Git;
 - расширенный журнал скрывает приватные и AmneziaWG obfuscation-параметры;
-- Desktop принимает только enum-действия и не передаёт пользовательскую строку
-  в shell; Rust строго десериализует оба runtime cache, а точные opaque
+- Desktop Agent Control остаётся diagnostics-only и не предоставляет renderer
+  исполняемых операций;
+- Rust строго десериализует оба runtime cache, а точные opaque
   `profile_id`/basename не позволяют одинаковым display names подменить
   активный профиль; cache не содержат endpoint или содержимое профиля;
 - внешняя verification запускается явно, ограничена, валидируется и не

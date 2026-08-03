@@ -15,8 +15,9 @@ L2TP/IPsec, безопасно импортирует профили, измер
 профили своего VPN-провайдера или организации; учётная запись Mazzy VPN и
 телеметрия не требуются.
 
-Текущая опубликованная линия — [CLI/TUI 1.3.2](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.2)
-и неподписанный [Desktop 0.3.2 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.2).
+Текущая release-source линия — [CLI/TUI 1.4.0](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.0)
+и неподписанный [Desktop 0.4.0 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.0).
+Версия опубликована только тогда, когда существуют её tag и GitHub Release page.
 Linux Desktop является функциональным control center; Windows и macOS artifacts
 остаются UI preview без native VPN backend. Issue #31 закрыт проверенным
 upstream backport `glib`, точной проверкой source provenance и чистыми
@@ -26,15 +27,27 @@ default-branch результатами RustSec, Dependabot и CodeQL.
 backends по-прежнему готовы для AmneziaWG, WireGuard, OpenVPN и L2TP/IPsec.
 VLESS/REALITY, Hysteria 2, Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022,
 Trojan, AnyTLS и ShadowTLS v3 получили проверяемый registry, очищенный API и
-безопасное распознавание однозначных share URI. Их подключение помечено
-`planned`, пока не готовы TUN/routing/rollback integration tests.
+безопасную классификацию однозначных share URI и JSON. Для всех девяти теперь
+есть закрытая neutral schema и атомарный Linux import без отражения секретов;
+для шести — закрытый sing-box config renderer. Mieru/Naive sidecar и inner chain
+ShadowTLS ещё не готовы. Подключение всех девяти остаётся `planned`, пока не
+закрыты поставка engines, TUN/routing/rollback и leak integration tests.
 
 Основная команда — `mazzy-vpn`. Совместимые aliases: `vpnctl` и `mazzyvpn`.
 
 [Архитектура и схемы работы](docs/ARCHITECTURE.ru.md) ·
 [контракт локального API v1](docs/API_CONTRACT.ru.md) ·
 [протоколы и AI-оркестрация](docs/PROTOCOL_ORCHESTRATION.ru.md) ·
+[обратное управление AI-агентами](docs/AGENT_CONTROL_ARCHITECTURE.ru.md) ·
+[целевая архитектура и delivery DAG](docs/TARGET_ARCHITECTURE_2026-08-02.ru.md) ·
+[техническая спецификация R0a](docs/R0_MUTATION_SINGLE_FLIGHT.ru.md) ·
 [Architecture in English](docs/ARCHITECTURE.en.md)
+
+Релиз 1.4.0 переводит API lifecycle,
+прямой CLI, recovery, health remediation и service-policy команды на общий
+`/run/vpnctl/.mutation.lock`. Это устраняет обнаруженную split-lock гонку, но
+ещё не является целевым `mazzy-vpnd`: общий action journal для всех root paths
+и доказательство восстановления routes/DNS/firewall/leak state остаются P0.
 
 ## Установка
 
@@ -99,11 +112,18 @@ mazzy-vpn status --api-json        # сырой envelope local API v1
 mazzy-vpn profiles --api-json      # opaque ID без имён файлов движка
 mazzy-vpn protocols list --json    # каталог и честная готовность
 mazzy-vpn protocols diagnose --json
+mazzy-vpn protocols adapters --json # process graph и release gates
+mazzy-vpn agent-transports list --json
+mazzy-vpn agent-transports diagnose --json
 # share URI передаётся через stdin и не печатается обратно
 printf '%s\n' "$SHARE_URI" | mazzy-vpn protocols detect --stdin --json
+mazzy-vpn protocols managed-validate --stdin --json < profile.json
+mazzy-vpn protocols managed-import profile.json --dry-run --json
 mazzy-vpn diagnose
 mazzy-vpn verify                       # реальный egress, geo, DNS и IPv6
 mazzy-vpn verify --speed               # явный ограниченный sample 5 MB
+mazzy-vpn verify-service all --timeout 5 --json
+                                      # явная eligibility NotebookLM/OpenAI
 mazzy-vpn validate all
 mazzy-vpn probe all --timeout 3 --jobs 4
 mazzy-vpn probe all --timeout 3 --jobs 4 --json
@@ -117,10 +137,20 @@ mazzy-vpn language
 mazzy-vpn language en
 ```
 
+Agent-control catalog является отдельным слоем обратного управления из Web,
+CLI, Desktop и Telegram. В Desktop 0.4 есть обнаружение Codex/Claude
+и catalog diagnostics без исполняемых действий. Provider start/pair/stop
+отсутствует в renderer и Tauri IPC до реализации native approval, trusted
+executable resolution и process-tree containment. Это не планируемый first-party
+`mazzy-agentd`: семь каталогизированных network adapters, включая iroh,
+Web/Telegram и сам `mazzy-agentd` пока не
+release-ready; diagnostics не скрывает этот blocker.
+
 После установки status, list/dashboard и lifecycle-команды CLI/TUI используют
 защищённый `/run/mazzy-vpn/api-v1.sock` без `sudo`. Установщик добавляет
-пользователя в группу `mazzy-vpn` и автоматически ставит `jq`/`socat`; после
-первой установки может потребоваться повторный вход в сеанс. Test, import,
+пользователя в группу `mazzy-vpn` и автоматически ставит `jq`, `socat`,
+`nftables` и `python3` (для suspend-safe monotonic grace); после первой
+установки может потребоваться повторный вход в сеанс. Test, import,
 Doctor fixes и остальные ещё не перенесённые системные операции по-прежнему
 явно запрашивают root.
 
@@ -155,7 +185,7 @@ ping серверов, emergency recovery, doctor, автозапуск и жу�
 
 ![Mazzy VPN Desktop Dashboard на русском](docs/images/dashboard-ru.png)
 
-Tauri Desktop 0.3 для Linux содержит экраны Dashboard, Profiles, Diagnostics,
+Tauri Desktop 0.4 для Linux содержит экраны Dashboard, Profiles, Diagnostics,
 Settings и «О программе», а также системный tray. DEB/RPM устанавливают
 совместимый engine, systemd units и базовые runtime-зависимости через package
 manager; AppImage сохраняет явно разрешённый embedded installer. Клиент
@@ -169,7 +199,7 @@ manager; AppImage сохраняет явно разрешённый embedded in
 Linux-пакеты выпускаются как AppImage, DEB и RPM.
 
 Upgrade и remove DEB/RPM намеренно сохраняют профили `/etc/vpnctl` и state
-`/var/lib/vpnctl`. В опубликованном preview 0.3 issue #31 исправлен точным
+`/var/lib/vpnctl`. В release source preview 0.4 сохранено исправление issue #31 с точным
 upstream backport `glib` с проверкой checksum и всей source delta до cargo-deny;
 advisory ignore list остаётся пустым. До production также нужны clean-device
 install/upgrade/remove, rollback/fault и signing gates на каждом
@@ -178,7 +208,7 @@ install/upgrade/remove, rollback/fault и signing gates на каждом
 «О программе» показывает версии Desktop/engine/platform, автора, copyright,
 лицензию AGPL, принципы приватности и правила безопасной работы.
 
-Desktop 0.3 — полноценный центр управления Linux в статусе preview, но ещё не
+Desktop 0.4 — полноценный центр управления Linux в статусе preview, но ещё не
 финальный самостоятельный Desktop 1.0. Язык-независимая схема API v1,
 защищённый Linux service и lifecycle-клиенты CLI/TUI/Desktop уже реализованы,
 но остальные operation domains ещё не переведены на единый dispatcher. Для
@@ -399,11 +429,22 @@ OpenVPN также использует собственное переподк�
 AmneziaWG systemd перезапускает процесс после любого неожиданного завершения.
 Независимый health timer примерно каждые 20 секунд проверяет сохранённое
 состояние, сервис, VPN-интерфейс и реальный HTTPS-доступ именно через него. Если
-при `DESIRED=up` сервис остановлен, он запускается сразу; две последовательные
-ошибки трафика вызывают переподключение. `doctor --fix` включает мониторинг и
+при `DESIRED=up` сервис остановлен, он запускается сразу. Отсутствие OpenVPN
+interface или ещё не передающий HTTPS data plane игнорируется в ограниченный
+60-секундный startup grace по монотонному возрасту systemd. На второй
+последовательной ошибке watchdog выполняет ровно
+один restart, не обнуляя счётчик и systemd failure state. Следующая ошибка
+насыщает счётчик значением 3 и приостанавливает watchdog recovery, оставляя
+native retry OpenVPN. Успех, явные connect/reconnect и mutation профиля
+сбрасывают счётчик. `vpnctl.service` допускает пять starts за десять минут и не
+перезапускает намеренный exit status 77. `doctor --fix` включает мониторинг и
 восстанавливает автозапуск при наличии корректного профиля по умолчанию.
-Счётчик ошибок хранится только в `/run/vpnctl` и сбрасывается после успешной
-проверки.
+
+`verify-service [notebooklm|openai|all]` — отдельная явная credential-free
+HEAD-проверка через выбранный VPN interface. Она не следует redirects, не
+принимает URL пользователя и возвращает только очищенные enum-результаты. Она
+не проверяет login, account, organization, subscription или content access и
+не используется фоновым health monitor или planner.
 
 ## Публикация проекта
 

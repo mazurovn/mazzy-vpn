@@ -184,16 +184,14 @@ jobs:
           tagName: desktop-v__VERSION__
           releaseName: "Mazzy VPN Desktop v__VERSION__ (preview)"
           releaseBody: |
-            Mazzy VPN Desktop 0.3.2 is an AI-ready, bundled-bootstrap Linux control-center preview.
+            Mazzy VPN Desktop 0.4.0 is a functional unsigned Linux control-center preview bundled with the compatible Mazzy VPN 1.4.0 engine.
 
-            Linux DEB/RPM bundles install the compatible Mazzy VPN 1.3.2 engine, protected systemd services and base runtime dependencies through the package manager; AppImage retains an explicitly authorized embedded bootstrap. This patch fixes legacy profile-cache compatibility, mixed /usr/local versus package /usr/bin upgrades and real systemd socket request/response half-close handling. Dashboard, profile import and selection, sortable whole-list latency checks, actual egress/location/DNS/IPv6 verification, transactional tests, complete Doctor/self-test output, clickable events, expanded tray, service/recovery settings and About/Privacy information are included.
+            The Linux build includes deterministic read-only protocol planning, a 13-protocol catalog, closed managed-profile import for nine modern protocols, a gated sing-box renderer foundation for six, durable local API recovery and a fail-closed dual-stack transition guard. Linux connection lifecycle remains implemented only for AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec; modern protocol render/import support is not advertised as working connect/TUN/DNS/routing/rollback support.
 
-            A versioned catalog describes 13 protocols and exposes credential-redacted URI detection, runtime diagnostics and the read-only protocols.list API operation. Linux connections remain implemented for AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec. VLESS/REALITY, Hysteria 2, Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS and ShadowTLS v3 remain explicitly planned until their audited runtime/TUN/platform integration gates pass.
+            Agent Control exposes read-only Codex/Claude and transport diagnostics plus versioned future contracts for reverse WSS, LAN WSS, iroh and optional transports. It does not yet provide client-to-client remote control, E2EE sessions, Telegram execution or agent lifecycle authority.
 
-            The Linux build vendors the crates.io glib 0.18.5 source with the exact upstream VariantStrIter fix for RUSTSEC-2024-0429 / GHSA-wrw7-89jp-8q8g. CI downloads only the pinned crates.io archive, verifies its checksum and the exact two-line source delta, then cargo-deny audits the remaining dependency graph with no advisory suppressions. event-listener is updated to 5.4.2 for RUSTSEC-2026-0221 and serde_with to 3.21.0 for GHSA-7gcf-g7xr-8hxj.
+            macOS and Windows bundles are unsigned UI previews only and do not protect traffic: Network Extension and Windows Service/Wintun backends are not implemented. No Android artifact is produced because the repository has no Gradle/VpnService/AAB implementation.
 
-            macOS and Windows bundles remain UI previews only. They do not provide traffic protection until their native Network Extension and Windows Service/Wintun backends pass the platform release gates.
-
-            These preview artifacts are unsigned and do not have a production trust chain. Review the source commit, workflow run and project documentation before use.
+            Review RELEASE_NOTES.md, the source commit and the successful workflow run before use. Unsigned hashes prove file integrity, not publisher identity.
           releaseDraft: true
           prerelease: true

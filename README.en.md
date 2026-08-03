@@ -15,8 +15,9 @@ It is a client and control plane rather than a hosted VPN subscription. Use
 profiles from your VPN provider or organization; Mazzy VPN requires no project
 account and collects no telemetry.
 
-The current published line is [CLI/TUI 1.3.2](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.3.2)
-and the unsigned [Desktop 0.3.2 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.3.2).
+The current release source line is [CLI/TUI 1.4.0](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.0)
+and the unsigned [Desktop 0.4.0 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.0).
+A version is published only when its linked tag and GitHub Release page exist.
 Linux Desktop is a functional control center; Windows and macOS artifacts are
 UI previews without native VPN backends. Issue #31 is closed with the reviewed
 upstream `glib` backport, exact source-provenance verification and clean
@@ -26,8 +27,11 @@ The versioned catalog now contains 13 protocols. Functional Linux connection
 backends remain AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec. VLESS/REALITY,
 Hysteria 2, Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS and
 ShadowTLS v3 now have a validated registry, redacted capability API and safe
-share URI detection where unambiguous. Their connection adapters remain
-explicitly `planned` until TUN/routing/rollback integration tests pass.
+share URI/JSON classification where unambiguous. All nine also have a closed
+neutral profile validator and atomic secret-safe Linux import. Six have a
+closed sing-box config renderer, while Mieru/Naive sidecars and the ShadowTLS
+inner chain remain planned. Connection adapters remain explicitly `planned`
+until engine supply and TUN/routing/rollback/leak integration tests pass.
 
 The primary command is `mazzy-vpn`. The installer also creates the compatibility
 aliases `vpnctl` and `mazzyvpn`.
@@ -35,15 +39,39 @@ aliases `vpnctl` and `mazzyvpn`.
 [Architecture and operation diagrams](docs/ARCHITECTURE.en.md) ·
 [local API v1 contract](docs/API_CONTRACT.en.md) ·
 [protocol and AI orchestration](docs/PROTOCOL_ORCHESTRATION.en.md) ·
+[reverse agent-control architecture](docs/AGENT_CONTROL_ARCHITECTURE.en.md) ·
+[deep target architecture and delivery DAG (RU)](docs/TARGET_ARCHITECTURE_2026-08-02.ru.md) ·
+[R0a mutation single-flight specification (RU)](docs/R0_MUTATION_SINGLE_FLIGHT.ru.md) ·
 [Архитектура на русском](docs/ARCHITECTURE.ru.md)
+
+Release 1.4.0 moves API lifecycle, direct CLI, recovery,
+health remediation and service-policy commands onto the shared
+`/run/vpnctl/.mutation.lock`. This removes the confirmed split-lock race but is
+not the target `mazzy-vpnd`: a common journal for every root path and proof of
+route/DNS/firewall/leak restoration remain P0 work.
 
 Agent-safe protocol inventory and detection:
 
 ```bash
 mazzy-vpn protocols list --json
 mazzy-vpn protocols diagnose --json
+mazzy-vpn protocols adapters --json
 printf '%s\n' "$SHARE_URI" | mazzy-vpn protocols detect --stdin --json
+mazzy-vpn protocols managed-validate --stdin --json < profile.json
+mazzy-vpn protocols managed-import profile.json --dry-run --json
+mazzy-vpn agent-transports list --json
+mazzy-vpn agent-transports diagnose --json
 ```
+
+The agent-control catalog is a separate reverse-control layer for Web, CLI and
+Telegram clients. Desktop 0.4 adds Codex/Claude discovery and
+catalog diagnostics only. Provider start/pair/stop is absent from renderer and
+Tauri IPC until native approval, trusted executable resolution and process-tree
+containment exist.
+This is not the planned first-party `mazzy-agentd`:
+all seven cataloged network
+adapters, Web/Telegram clients and `mazzy-agentd` remain non-release-ready, and
+diagnostics report that explicitly.
 
 ## Install
 
@@ -143,6 +171,8 @@ mazzy-vpn profiles --api-json      # opaque IDs; no engine filenames
 mazzy-vpn diagnose
 mazzy-vpn verify                       # actual egress, geo, DNS and IPv6
 mazzy-vpn verify --speed               # explicit bounded 5 MB speed sample
+mazzy-vpn verify-service all --timeout 5 --json
+                                      # explicit NotebookLM/OpenAI egress eligibility
 mazzy-vpn validate all
 mazzy-vpn probe all --timeout 3 --jobs 4
 mazzy-vpn probe all --timeout 3 --jobs 4 --json
@@ -159,7 +189,8 @@ mazzy-vpn language de
 
 After installation, CLI/TUI status, list/dashboard and lifecycle commands use
 the protected `/run/mazzy-vpn/api-v1.sock` without `sudo`. The installer adds
-the user to the `mazzy-vpn` group and automatically installs `jq`/`socat`; a new
+the user to the `mazzy-vpn` group and automatically installs `jq`, `socat`,
+`nftables` and `python3` (used for a suspend-safe monotonic health grace); a new
 login session may be required after initial installation. Tests, imports,
 Doctor fixes and other system operations not migrated yet still request root
 explicitly.
@@ -178,7 +209,7 @@ Change the language immediately with menu item 16 or
 
 ![Mazzy VPN Desktop Dashboard in English](docs/images/dashboard-en.png)
 
-The Tauri Desktop 0.3 Linux preview provides Dashboard, Profiles, Diagnostics,
+The Tauri Desktop 0.4 Linux preview provides Dashboard, Profiles, Diagnostics,
 Settings and About screens plus a system tray. DEB/RPM own the compatible
 engine, systemd units and base runtime dependencies through the package
 manager; AppImage retains the explicitly authorized embedded installer.
@@ -192,7 +223,7 @@ without first installing the CLI by hand. Packages are available as AppImage,
 DEB and RPM.
 
 DEB/RPM upgrade and removal deliberately preserve `/etc/vpnctl` profiles and
-`/var/lib/vpnctl` state. The published 0.3 preview resolves issue #31 with the
+`/var/lib/vpnctl` state. The 0.4 release source retains the issue #31 fix with the
 exact upstream `glib` backport and verifies the crate checksum and complete
 source delta before cargo-deny; the advisory ignore list remains empty.
 Production status also requires clean-device install/upgrade/remove,
@@ -201,7 +232,7 @@ rollback/fault and signing gates on every supported distribution.
 About records the Desktop/engine/platform versions, author, copyright, AGPL
 license, privacy principles and safe-operation rules.
 
-Desktop 0.3 is a functional Linux control-center preview, not the final
+Desktop 0.4 is a functional Linux control-center preview, not the final
 standalone Desktop 1.0 product. The language-neutral API v1 schema, protected
 Linux service and CLI/TUI/Desktop lifecycle clients are implemented, while
 remaining operation domains have not yet moved to the shared dispatcher.
@@ -254,6 +285,11 @@ batch run instead of producing a long chain of misleading timeouts.
   DNS route and optionally runs an explicit bounded speed sample. It reports
   `verified`, `warning` or `failed`; it does not confuse a selected profile
   name with the observed location.
+- `verify-service [notebooklm|openai|all]` is a separate, explicit,
+  credential-free HEAD check bound to the selected VPN interface. It reports
+  only sanitized reachability/eligibility enums. It does not follow redirects,
+  accept a caller URL, or test login, account, organization, subscription or
+  content access; it is never used by background health or the planner.
 - `doctor` checks dependencies, AmneziaWG backend, L2TP/IPsec stack, fallback
   handlers, systemd units, profiles and saved state.
 - `self-test` combines validation, endpoint probes and doctor.
@@ -271,12 +307,20 @@ The existing internal unit names remain `vpnctl.service`,
 compatibility. Their descriptions and executable use the Mazzy VPN brand and
 `/usr/local/bin/mazzy-vpn`.
 
-The service restarts after any unexpected process exit. Independently, the
+The service restarts after any unexpected process exit except the deliberate
+policy exit status 77; systemd limits starts to five per ten minutes.
+Independently, the
 health timer checks the desired state, service, VPN interface and real HTTPS
 access through that interface about every 20 seconds. An inactive desired
-service is started immediately; two consecutive traffic failures trigger a
-reconnect. `doctor --fix` enables the monitor and repairs autostart when a valid
-default profile has `DESIRED=up`.
+service is started immediately. A missing OpenVPN interface or an interface
+whose data plane cannot yet pass HTTPS is ignored during a bounded 60-second
+grace measured from systemd's monotonic active age. Two
+consecutive traffic failures trigger exactly one restart without clearing the
+counter or systemd's failure state; the next failed tick caps the counter at
+three and pauses watchdog recovery while OpenVPN's native retry continues.
+Success and explicit connect/reconnect/profile mutation reset the counter.
+`doctor --fix` enables the monitor and repairs autostart when a valid default
+profile has `DESIRED=up`.
 
 The runtime cleans orphan `wg-quick` policy rules only when no WireGuard or
 AmneziaWG interface is active; unrelated IPsec rule 220 is left untouched.

@@ -231,10 +231,166 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
         fail("ResponseResult does not expose the structured probe collection")
     if "#/$defs/EgressVerification" not in response_refs:
         fail("ResponseResult does not expose structured egress verification")
+    if "#/$defs/ServiceEgressVerification" not in response_refs:
+        fail("ResponseResult does not expose structured service-egress verification")
     if "#/$defs/ProtocolCatalog" not in response_refs:
         fail("ResponseResult does not expose the sanitized protocol catalog")
+    if "#/$defs/PlannerEvaluation" not in response_refs:
+        fail("ResponseResult does not expose deterministic planner evaluation")
+
+    planner_request = defs.get("PlannerRequest", {})
+    planner_request_properties = planner_request.get("properties", {})
+    planner_candidates = planner_request_properties.get("candidates", {})
+    if set(planner_request.get("required", [])) != {"workload", "candidates"}:
+        fail("PlannerRequest must require workload and candidates only")
+    if (
+        planner_request.get("additionalProperties") is not False
+        or planner_candidates.get("minItems") != 1
+        or planner_candidates.get("maxItems") != 128
+        or planner_candidates.get("items", {}).get("$ref")
+        != "#/$defs/PlannerCandidateInput"
+    ):
+        fail("PlannerRequest must be strict and bound candidates to 1..128")
+
+    query_request = defs.get("QueryRequest", {})
+    planner_bindings = query_request.get("allOf")
+    if not isinstance(planner_bindings, list) or len(planner_bindings) != 4:
+        fail("QueryRequest must bind planner and service-egress operations")
+    operation_binding, payload_binding, service_operation_binding, service_payload_binding = (
+        planner_bindings
+    )
+    operation_then = operation_binding.get("then", {})
+    operation_properties = operation_then.get("properties", {})
+    planner_deadline = operation_properties.get("deadline_ms", {})
+    if (
+        operation_binding.get("if", {})
+        .get("properties", {})
+        .get("operation", {})
+        .get("const")
+        != "planner.evaluate"
+        or operation_then.get("required") != ["deadline_ms"]
+        or planner_deadline.get("minimum") != 100
+        or planner_deadline.get("maximum") != 30000
+        or operation_properties.get("payload", {}).get("$ref")
+        != "#/$defs/PlannerRequest"
+        or payload_binding.get("if", {})
+        .get("properties", {})
+        .get("payload", {})
+        .get("$ref")
+        != "#/$defs/PlannerRequest"
+        or payload_binding.get("then", {})
+        .get("properties", {})
+        .get("operation", {})
+        .get("const")
+        != "planner.evaluate"
+    ):
+        fail("planner schema binding must be bidirectional and deadline-bounded")
+    service_operation_then = service_operation_binding.get("then", {})
+    service_operation_properties = service_operation_then.get("properties", {})
+    if (
+        service_operation_binding.get("if", {})
+        .get("properties", {})
+        .get("operation", {})
+        .get("const")
+        != "tests.verify-service-egress"
+        or service_operation_then.get("required") != ["deadline_ms"]
+        or service_operation_properties.get("deadline_ms", {}).get("minimum") != 100
+        or service_operation_properties.get("deadline_ms", {}).get("maximum")
+        != 32000
+        or service_operation_properties.get("payload", {}).get("$ref")
+        != "#/$defs/ServiceEgressRequest"
+        or service_payload_binding.get("if", {})
+        .get("properties", {})
+        .get("payload", {})
+        .get("$ref")
+        != "#/$defs/ServiceEgressRequest"
+        or service_payload_binding.get("then", {})
+        .get("properties", {})
+        .get("operation", {})
+        .get("const")
+        != "tests.verify-service-egress"
+    ):
+        fail("service-egress schema binding must be bidirectional and deadline-bounded")
+
+    planner_evidence = defs.get("PlannerEvidence", {})
+    required_evidence = {
+        "recent_outcome",
+        "consecutive_failures",
+        "reachability",
+        "latency_ms",
+        "loss_percent",
+        "evidence_age_seconds",
+    }
+    if (
+        planner_evidence.get("additionalProperties") is not False
+        or set(planner_evidence.get("required", [])) != required_evidence
+        or set(planner_evidence.get("properties", {})) != required_evidence
+    ):
+        fail("PlannerEvidence must contain only bounded observed health evidence")
+
+    planner_evaluation = defs.get("PlannerEvaluation", {})
+    planner_evaluation_properties = planner_evaluation.get("properties", {})
+    planner_evaluation_required = {
+        "schema_version",
+        "policy_version",
+        "catalog_version",
+        "evaluated_at",
+        "dry_run",
+        "workload",
+        "ordered_profile_ids",
+        "candidates",
+    }
+    if (
+        planner_evaluation.get("additionalProperties") is not False
+        or set(planner_evaluation.get("required", []))
+        != planner_evaluation_required
+        or planner_evaluation_properties.get("dry_run", {}).get("const") is not True
+        or planner_evaluation_properties.get("policy_version", {}).get("const") != 1
+    ):
+        fail("PlannerEvaluation must remain versioned, strict and dry-run only")
+
+    planner_candidate = defs.get("PlannerCandidate", {})
+    planner_candidate_properties = planner_candidate.get("properties", {})
+    if (
+        planner_candidate.get("additionalProperties") is not False
+        or "display_name" in planner_candidate_properties
+        or not {
+            "profile_id",
+            "eligible",
+            "rank",
+            "score",
+            "hard_gates",
+            "factors",
+            "reason_codes",
+        }.issubset(set(planner_candidate.get("required", [])))
+        or planner_candidate_properties.get("hard_gates", {}).get("minItems") != 5
+        or planner_candidate_properties.get("hard_gates", {}).get("maxItems") != 5
+        or planner_candidate_properties.get("factors", {}).get("minItems") != 5
+        or planner_candidate_properties.get("factors", {}).get("maxItems") != 5
+    ):
+        fail("PlannerCandidate must expose opaque IDs and exactly five gates/factors")
+
     verification = defs.get("EgressVerification", {})
     verification_required = set(verification.get("required", []))
+    egress_fields = {
+        "schema_version",
+        "checked_at",
+        "verdict",
+        "message_key",
+        "tunnel",
+        "ipv4",
+        "ipv6",
+        "geo",
+        "dns",
+        "speed",
+        "findings",
+    }
+    if (
+        verification.get("additionalProperties") is not False
+        or set(verification.get("properties", {})) != egress_fields
+        or verification_required != egress_fields
+    ):
+        fail("EgressVerification v1 byte shape changed")
     if not {
         "verdict",
         "tunnel",
@@ -255,6 +411,75 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
         speed_required
     ):
         fail("EgressVerification speed sample is not explicit and bounded")
+
+    service_request = defs.get("ServiceEgressRequest", {})
+    if (
+        service_request.get("additionalProperties") is not False
+        or set(service_request.get("required", [])) != {"service", "timeout_seconds"}
+        or set(service_request.get("properties", {}))
+        != {"service", "timeout_seconds"}
+        or service_request.get("properties", {}).get("service", {}).get("enum")
+        != ["notebooklm", "openai", "all"]
+        or service_request.get("properties", {})
+        .get("timeout_seconds", {})
+        .get("minimum")
+        != 3
+        or service_request.get("properties", {})
+        .get("timeout_seconds", {})
+        .get("maximum")
+        != 15
+    ):
+        fail("ServiceEgressRequest must be strict, allowlisted and bounded")
+    service_probe = defs.get("ServiceEgressProbe", {})
+    service_probe_fields = {
+        "service_id",
+        "probe_version",
+        "reachability",
+        "egress_eligibility",
+        "reason_code",
+        "http_status",
+    }
+    service_probe_properties = service_probe.get("properties", {})
+    expected_reasons = {
+        "service.notebooklm.unsupported-location",
+        "service.notebooklm.home-reached",
+        "service.notebooklm.unrecognized-response",
+        "service.openai.auth-boundary-reached",
+        "service.openai.edge-denied",
+        "service.openai.rate-limited",
+        "service.openai.service-unavailable",
+        "service.openai.unrecognized-response",
+        "service.network-unreachable",
+        "service.response-invalid",
+        "service.response-too-large",
+    }
+    if (
+        service_probe.get("additionalProperties") is not False
+        or set(service_probe.get("required", [])) != service_probe_fields
+        or set(service_probe_properties) != service_probe_fields
+        or service_probe_properties.get("service_id", {}).get("enum")
+        != ["notebooklm", "openai"]
+        or service_probe_properties.get("reachability", {}).get("enum")
+        != ["reachable", "unreachable"]
+        or service_probe_properties.get("egress_eligibility", {}).get("enum")
+        != ["eligible", "ineligible", "indeterminate"]
+        or set(service_probe_properties.get("reason_code", {}).get("enum", []))
+        != expected_reasons
+    ):
+        fail("ServiceEgressProbe must expose only strict sanitized evidence")
+    service_verification = defs.get("ServiceEgressVerification", {})
+    service_results = service_verification.get("properties", {}).get("results", {})
+    if (
+        service_verification.get("additionalProperties") is not False
+        or set(service_verification.get("required", []))
+        != {"schema_version", "checked_at", "scope", "results"}
+        or service_results.get("minItems") != 1
+        or service_results.get("maxItems") != 2
+        or service_results.get("uniqueItems") is not True
+        or service_results.get("items", {}).get("$ref")
+        != "#/$defs/ServiceEgressProbe"
+    ):
+        fail("ServiceEgressVerification must be strict and bounded to two services")
 
     security = manifest.get("security")
     if not isinstance(security, dict):

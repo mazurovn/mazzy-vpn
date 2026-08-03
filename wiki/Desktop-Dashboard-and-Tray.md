@@ -8,10 +8,10 @@
 [日本語](https://raw.githubusercontent.com/mazurovn/mazzy-vpn/main/docs/images/dashboard-ja.png) ·
 [한국어](https://raw.githubusercontent.com/mazurovn/mazzy-vpn/main/docs/images/dashboard-ko.png)
 
-> Desktop 0.3 — Linux control center preview со встроенным installer engine.
+> Desktop 0.4 — Linux control center preview со встроенным installer engine.
 > Он сам проверяет зависимости и может установить/восстановить engine после
 > явного разрешения. Versioned service API и остальные release gates описаны в
-> [плане Desktop 1.0](Desktop-Full-Application-Plan). Preview 0.3 опубликован;
+> [плане Desktop 1.0](Desktop-Full-Application-Plan). Preview 0.4 является текущим release source;
 > issue #31 закрыт проверенным `glib` backport и чистыми release checks.
 
 Интерфейс объединяет:
@@ -82,12 +82,12 @@ flowchart LR
 
 # Desktop control center and tray
 
-> Desktop 0.3 is a Linux control-center preview with a bundled engine installer.
+> Desktop 0.4 is a Linux control-center preview with a bundled engine installer.
 > It checks dependencies and can install or repair the engine after explicit
 > authorization. The versioned service API and remaining gates are tracked in the
 > [Desktop 1.0 plan](Desktop-Full-Application-Plan#english). Issue #31 is
-> closed with a verified `glib` backport and clean release checks; preview 0.3
-> is published.
+> closed with a verified `glib` backport and clean release checks; preview 0.4
+> is the current release source and is published only with its tag and Release page.
 
 The control center combines:
 

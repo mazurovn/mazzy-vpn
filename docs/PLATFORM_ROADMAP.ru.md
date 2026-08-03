@@ -14,6 +14,9 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 versioned local API уже отделяет lifecycle CLI/TUI/Desktop от системного Linux
 VPN backend. Приватные ключи и
 полные конфигурации не попадают в status cache, телеметрию или публичные логи.
+Read-only planner уже ранжирует opaque profile IDs через backend-owned hard
+gates и policy-v1 scoring. Он пока не хранит history, не подключает VPN и не
+выполняет failover.
 
 ## Контракт AI-ready надёжности
 
@@ -48,6 +51,17 @@ Hysteria 2, Mieru, NaiveProxy, TUIC v5, Shadowsocks 2022, Trojan, AnyTLS и
 ShadowTLS v3 остаются работой над адаптерами с отдельными platform gates.
 Большинство из них являются proxy protocols и требуют проверенного TUN adapter,
 прежде чем их можно показывать как device-wide VPN.
+Capability matrix хранит отдельный status для Linux, Windows, macOS и Android.
+Strict protocol registry v1 пока содержит только Linux/Windows/Android;
+per-protocol macOS status должен появиться в registry v2, без несовместимого
+изменения опубликованной v1-схемы. `planned` не подтверждает runtime.
+
+Порядок adapter work общий для каждой новой семьи: строгий parser и redacted
+import preview; platform secret store; pinned/reproducible engine; TUN, route и
+DNS lifecycle; leak/rollback/fault tests; только затем перевод platform status
+из `planned`. На Linux первой общей runtime-основой остаётся sing-box-compatible
+TUN для VLESS, Hysteria 2, TUIC, Shadowsocks 2022, Trojan, AnyTLS и ShadowTLS, а
+Mieru и NaiveProxy требуют отдельных pinned adapters.
 
 ```mermaid
 flowchart LR
@@ -94,7 +108,7 @@ flowchart LR
 
 ## Linux
 
-Desktop 0.3 опубликован как функциональный preview: он включает
+Desktop 0.4 подготовлен как функциональный preview source: он включает
 engine/bootstrap, профили, тесты, Doctor, журнал и системные настройки. Issue
 #31 закрыт provenance-verified upstream backport `glib`, release checks чистые.
 До Linux Desktop 1.0 остаются versioned service API, полный
@@ -150,6 +164,11 @@ macOS preview показывает интерфейс, но ещё не подн
 
 Gate: `mobile-android-1.0`.
 
+Shell CLI внутри Android app не является целевой product surface: управление
+должно идти через typed mobile API/intent и общий SDK-контракт для агентов. Это
+сохраняет Android `VpnService` lifecycle и permission boundary вместо запуска
+root-like команд из LLM или terminal wrapper.
+
 ## iOS
 
 Планируется отдельный клиент на Network Extension:
@@ -167,7 +186,7 @@ entitlements, сертификаты и macOS runner; их нельзя заме
 
 ## Порядок продвижения релизов
 
-1. Поддерживать опубликованную Linux Desktop 0.3 исправлениями и regression tests.
+1. Поддерживать Linux Desktop 0.4 source line исправлениями и regression tests.
 2. Завершить общий API, protocol adapters и Linux Desktop 1.0.
 3. Выпускать Windows и macOS preview независимо; production только по своему
    gate, без ожидания другой платформы.

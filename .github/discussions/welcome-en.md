@@ -10,8 +10,8 @@ License: GNU AGPL-3.0-or-later.
 
 ## Current status
 
-- The published release line is CLI/TUI 1.3 for Linux and the unsigned Desktop
-  0.3 preview. Linux Desktop is functional; Windows and macOS remain UI
+- The current release source line is CLI/TUI 1.4.0 for Linux and the unsigned
+  Desktop 0.4.0 preview. Linux Desktop is functional; Windows and macOS remain UI
   previews without native VPN backends. Issue #31 is closed with a verified
   `glib` backport and clean default-branch security checks.
 - Windows/macOS — UI preview without a production VPN backend.

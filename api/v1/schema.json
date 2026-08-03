@@ -49,10 +49,12 @@
         "status.get",
         "profiles.list",
         "protocols.list",
+        "planner.evaluate",
         "profiles.inspect-import",
         "tests.validate",
         "tests.probe",
         "tests.verify-egress",
+        "tests.verify-service-egress",
         "services.get",
         "doctor.inspect",
         "settings.get"
@@ -110,6 +112,83 @@
         },
         "replace_existing": {
           "type": "boolean"
+        }
+      }
+    },
+    "PlannerEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recent_outcome",
+        "consecutive_failures",
+        "reachability",
+        "latency_ms",
+        "loss_percent",
+        "evidence_age_seconds"
+      ],
+      "properties": {
+        "recent_outcome": {
+          "enum": ["success", "unknown", "failure"]
+        },
+        "consecutive_failures": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "reachability": {
+          "enum": ["reachable", "unknown", "unreachable"]
+        },
+        "latency_ms": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 60000
+        },
+        "loss_percent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "evidence_age_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400
+        }
+      }
+    },
+    "PlannerCandidateInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile_id", "evidence"],
+      "properties": {
+        "profile_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "evidence": {
+          "$ref": "#/$defs/PlannerEvidence"
+        }
+      }
+    },
+    "PlannerRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workload", "candidates"],
+      "properties": {
+        "workload": {
+          "enum": [
+            "general",
+            "llm-streaming",
+            "api-calls",
+            "video",
+            "split-routing"
+          ]
+        },
+        "candidates": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": {
+            "$ref": "#/$defs/PlannerCandidateInput"
+          }
         }
       }
     },
@@ -210,7 +289,13 @@
           "$ref": "#/$defs/ImportReference"
         },
         {
+          "$ref": "#/$defs/PlannerRequest"
+        },
+        {
           "$ref": "#/$defs/TestRequest"
+        },
+        {
+          "$ref": "#/$defs/ServiceEgressRequest"
         },
         {
           "$ref": "#/$defs/ServiceChange"
@@ -250,7 +335,81 @@
         "payload": {
           "$ref": "#/$defs/RequestPayload"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["operation"],
+            "properties": {
+              "operation": {"const": "planner.evaluate"}
+            }
+          },
+          "then": {
+            "required": ["deadline_ms"],
+            "properties": {
+              "deadline_ms": {
+                "type": "integer",
+                "minimum": 100,
+                "maximum": 30000
+              },
+              "payload": {
+                "$ref": "#/$defs/PlannerRequest"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["payload"],
+            "properties": {
+              "payload": {
+                "$ref": "#/$defs/PlannerRequest"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "operation": {"const": "planner.evaluate"}
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["operation"],
+            "properties": {
+              "operation": {"const": "tests.verify-service-egress"}
+            }
+          },
+          "then": {
+            "required": ["deadline_ms"],
+            "properties": {
+              "deadline_ms": {
+                "type": "integer",
+                "minimum": 100,
+                "maximum": 32000
+              },
+              "payload": {
+                "$ref": "#/$defs/ServiceEgressRequest"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["payload"],
+            "properties": {
+              "payload": {
+                "$ref": "#/$defs/ServiceEgressRequest"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "operation": {"const": "tests.verify-service-egress"}
+            }
+          }
+        }
+      ]
     },
     "MutationRequest": {
       "type": "object",
@@ -558,6 +717,169 @@
               }
             },
             "agent_rules": {"type": "array", "uniqueItems": true, "items": {"type": "string", "maxLength": 96}}
+          }
+        }
+      }
+    },
+    "PlannerGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "passed", "reason_code"],
+      "properties": {
+        "id": {
+          "enum": [
+            "backend-ready",
+            "profile-valid",
+            "secrets-readable-only-by-backend",
+            "rollback-storage-ready",
+            "platform-supported"
+          ]
+        },
+        "passed": {
+          "type": "boolean"
+        },
+        "reason_code": {
+          "$ref": "#/$defs/Identifier"
+        }
+      }
+    },
+    "PlannerFactor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "points", "max_points", "reason_code"],
+      "properties": {
+        "id": {
+          "enum": [
+            "recent-success",
+            "censorship-fit",
+            "reachability",
+            "latency-loss",
+            "workload-fit"
+          ]
+        },
+        "points": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "max_points": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "reason_code": {
+          "$ref": "#/$defs/Identifier"
+        }
+      }
+    },
+    "PlannerCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "eligible",
+        "rank",
+        "score",
+        "hard_gates",
+        "factors",
+        "reason_codes"
+      ],
+      "properties": {
+        "profile_id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "protocol": {
+          "$ref": "#/$defs/Protocol"
+        },
+        "eligible": {
+          "type": "boolean"
+        },
+        "rank": {
+          "type": ["integer", "null"],
+          "minimum": 1
+        },
+        "score": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "hard_gates": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "items": {
+            "$ref": "#/$defs/PlannerGate"
+          }
+        },
+        "factors": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "items": {
+            "$ref": "#/$defs/PlannerFactor"
+          }
+        },
+        "reason_codes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/Identifier"
+          }
+        }
+      }
+    },
+    "PlannerEvaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "policy_version",
+        "catalog_version",
+        "evaluated_at",
+        "dry_run",
+        "workload",
+        "ordered_profile_ids",
+        "candidates"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "policy_version": {
+          "const": 1
+        },
+        "catalog_version": {
+          "type": "string",
+          "format": "date"
+        },
+        "evaluated_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "dry_run": {
+          "const": true
+        },
+        "workload": {
+          "enum": [
+            "general",
+            "llm-streaming",
+            "api-calls",
+            "video",
+            "split-routing"
+          ]
+        },
+        "ordered_profile_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/Identifier"
+          }
+        },
+        "candidates": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": {
+            "$ref": "#/$defs/PlannerCandidate"
           }
         }
       }
@@ -1030,6 +1352,117 @@
         }
       }
     },
+    "ServiceEgressRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "service",
+        "timeout_seconds"
+      ],
+      "properties": {
+        "service": {
+          "enum": [
+            "notebooklm",
+            "openai",
+            "all"
+          ]
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 15
+        }
+      }
+    },
+    "ServiceEgressProbe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "service_id",
+        "probe_version",
+        "reachability",
+        "egress_eligibility",
+        "reason_code",
+        "http_status"
+      ],
+      "properties": {
+        "service_id": {
+          "enum": [
+            "notebooklm",
+            "openai"
+          ]
+        },
+        "probe_version": {
+          "const": 1
+        },
+        "reachability": {
+          "enum": [
+            "reachable",
+            "unreachable"
+          ]
+        },
+        "egress_eligibility": {
+          "enum": [
+            "eligible",
+            "ineligible",
+            "indeterminate"
+          ]
+        },
+        "reason_code": {
+          "enum": [
+            "service.notebooklm.unsupported-location",
+            "service.notebooklm.home-reached",
+            "service.notebooklm.unrecognized-response",
+            "service.openai.auth-boundary-reached",
+            "service.openai.edge-denied",
+            "service.openai.rate-limited",
+            "service.openai.service-unavailable",
+            "service.openai.unrecognized-response",
+            "service.network-unreachable",
+            "service.response-invalid",
+            "service.response-too-large"
+          ]
+        },
+        "http_status": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 100,
+          "maximum": 599
+        }
+      }
+    },
+    "ServiceEgressVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "checked_at",
+        "scope",
+        "results"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "checked_at": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "scope": {
+          "const": "unauthenticated-egress"
+        },
+        "results": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/ServiceEgressProbe"
+          }
+        }
+      }
+    },
     "ServiceState": {
       "type": "object",
       "additionalProperties": false,
@@ -1281,6 +1714,9 @@
           "$ref": "#/$defs/ProtocolCatalog"
         },
         {
+          "$ref": "#/$defs/PlannerEvaluation"
+        },
+        {
           "$ref": "#/$defs/TestResult"
         },
         {
@@ -1288,6 +1724,9 @@
         },
         {
           "$ref": "#/$defs/EgressVerification"
+        },
+        {
+          "$ref": "#/$defs/ServiceEgressVerification"
         },
         {
           "$ref": "#/$defs/ServiceCollection"

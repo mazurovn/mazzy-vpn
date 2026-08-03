@@ -130,7 +130,20 @@ const translations = {
 
 Object.assign(translations.ru, {
   navDashboard: "Обзор", navProfiles: "Профили", navDiagnostics: "Диагностика",
-  navSettings: "Настройки", navAbout: "О программе",
+  navAgents: "Агенты", navSettings: "Настройки", navAbout: "О программе",
+  agentsCenter: "УПРАВЛЕНИЕ АГЕНТАМИ", agentsTitle: "Доступ к AI-агентам",
+  agentsHint: "Диагностика локальных кандидатов и готовности будущих каналов управления.",
+  refreshAgents: "Обновить", providerAdapters: "АДАПТЕРЫ ПРОВАЙДЕРОВ",
+  localAgents: "Локальные агенты", agentsLoading: "Проверяем агенты…",
+  remoteAccess: "СТАТУС УПРАВЛЕНИЯ", diagnosticsOnlyTitle: "Только диагностика",
+  embeddedAgentClient: "Встроенный клиент",
+  firstPartyGateway: "Mazzy gateway", telegramIngress: "Telegram",
+  vendorRemoteBoundary: "Запуск, сопряжение и остановка отключены до native approval, trusted executable resolution и process-tree containment.",
+  transportReadiness: "ГОТОВНОСТЬ ТРАНСПОРТОВ", mazzyControlPaths: "Каналы Mazzy Agent Control",
+  runtimeReady: "ГОТОВ", runtimeUnavailable: "НЕТ RUNTIME", gatewayPlanned: "ЗАПЛАНИРОВАНО",
+  providerInstalled: "установлен", providerMissing: "не установлен", daemonRunning: "работает",
+  daemonStopped: "остановлен", remoteSupported: "remote control доступен",
+  remoteUnsupported: "remote control недоступен", discoveryOnly: "ТОЛЬКО ОБНАРУЖЕНИЕ",
   profileLibrary: "БИБЛИОТЕКА ПРОФИЛЕЙ", profileManagement: "Профили и локации",
   profileManagementHint: "Импорт, проверка, выбор и безопасный тест конфигураций.",
   importFiles: "Загрузить файлы", scanFolder: "Проверить папку", importFolder: "Импортировать папку",
@@ -177,12 +190,12 @@ Object.assign(translations.ru, {
   endpointProbeHint: "Проверка измеряет DNS/ICMP/TCP доступность сервера, но не подтверждает VPN-авторизацию и маршрутизацию.",
   connectFastest: "Подключить самую быструю", fastestUnavailable: "Сначала проверьте локации; доступный ping не найден",
   sortRecommended: "Рекомендуемые", sortLatency: "По ping", sortStatus: "По доступности", sortName: "По имени",
-  realVerification: "РЕАЛЬНАЯ ПРОВЕРКА VPN", realVerificationTitle: "Фактический маршрут и локация",
+  realVerification: "ПРОВЕРКА СЕТЕВОГО EGRESS", realVerificationTitle: "Фактический маршрут и локация",
   realVerificationHint: "Сравнивает исходящий маршрут с туннелем, два источника геолокации, DNS и IPv6.",
-  notVerified: "НЕ ПРОВЕРЕНО", verifyNow: "Проверить VPN", verifyWithSpeed: "Проверить + скорость",
+  notVerified: "НЕ ПРОВЕРЕНО", verifyNow: "Проверить сетевой egress", verifyWithSpeed: "Проверить egress + скорость",
   observedLocation: "Фактическая локация", profileLocationMatch: "Совпадение с профилем",
   systemEgress: "Системный IPv4 egress", ipv6Leak: "IPv6-утечка", dnsRouting: "DNS-маршрут",
-  speedSample: "Контрольная проверка скорости", verified: "ПОДТВЕРЖДЕНО", warning: "ЕСТЬ РИСКИ",
+  speedSample: "Контрольная проверка скорости", verified: "СЕТЕВОЙ EGRESS ПОДТВЕРЖДЁН", warning: "ЕСТЬ РИСКИ",
   failed: "НЕ РАБОТАЕТ", matches: "СОВПАДАЕТ", mismatch: "НЕ СОВПАДАЕТ", unknown: "НЕИЗВЕСТНО",
   sameEgress: "Через VPN", differentEgress: "Маршрут отличается", noLeak: "Не обнаружена",
   potentialLeak: "ВОЗМОЖНА", fullTunnelDns: "Через VPN", partialDns: "Не подтверждён полностью",
@@ -207,7 +220,19 @@ Object.assign(translations.ru, {
 
 Object.assign(translations.en, {
   navDashboard: "Dashboard", navProfiles: "Profiles", navDiagnostics: "Diagnostics",
-  navSettings: "Settings", navAbout: "About",
+  navAgents: "Agents", navSettings: "Settings", navAbout: "About",
+  agentsCenter: "AGENT CONTROL", agentsTitle: "AI agent access",
+  agentsHint: "Diagnostics for local candidates and future control-channel readiness.",
+  refreshAgents: "Refresh", providerAdapters: "PROVIDER ADAPTERS", localAgents: "Local agents",
+  agentsLoading: "Checking agents…", remoteAccess: "CONTROL STATUS",
+  diagnosticsOnlyTitle: "Diagnostics only",
+  embeddedAgentClient: "Embedded client", firstPartyGateway: "Mazzy gateway",
+  telegramIngress: "Telegram", vendorRemoteBoundary: "Start, pair and stop are disabled until native approval, trusted executable resolution and process-tree containment exist.",
+  transportReadiness: "TRANSPORT READINESS", mazzyControlPaths: "Mazzy Agent Control paths",
+  runtimeReady: "READY", runtimeUnavailable: "NO RUNTIME", gatewayPlanned: "PLANNED",
+  providerInstalled: "installed", providerMissing: "not installed", daemonRunning: "running",
+  daemonStopped: "stopped", remoteSupported: "remote control available",
+  remoteUnsupported: "remote control unavailable", discoveryOnly: "DISCOVERY ONLY",
   profileLibrary: "PROFILE LIBRARY", profileManagement: "Profiles and locations",
   profileManagementHint: "Import, validate, select and safely test configurations.",
   importFiles: "Import files", scanFolder: "Scan folder", importFolder: "Import folder",
@@ -252,12 +277,12 @@ Object.assign(translations.en, {
   endpointProbeHint: "The probe checks DNS/ICMP/TCP reachability; it does not prove VPN authentication or routing.",
   connectFastest: "Connect fastest", fastestUnavailable: "Check locations first; no reachable latency result is available",
   sortRecommended: "Recommended", sortLatency: "By ping", sortStatus: "By availability", sortName: "By name",
-  realVerification: "REAL VPN VERIFICATION", realVerificationTitle: "Actual route and location",
+  realVerification: "NETWORK EGRESS VERIFICATION", realVerificationTitle: "Actual route and location",
   realVerificationHint: "Compares system egress with the tunnel, two geolocation sources, DNS and IPv6.",
-  notVerified: "NOT VERIFIED", verifyNow: "Verify VPN", verifyWithSpeed: "Verify + speed",
+  notVerified: "NOT VERIFIED", verifyNow: "Verify network egress", verifyWithSpeed: "Verify egress + speed",
   observedLocation: "Observed location", profileLocationMatch: "Profile location match",
   systemEgress: "System IPv4 egress", ipv6Leak: "IPv6 leak", dnsRouting: "DNS routing",
-  speedSample: "Bounded speed sample", verified: "VERIFIED", warning: "RISKS FOUND",
+  speedSample: "Bounded speed sample", verified: "NETWORK EGRESS VERIFIED", warning: "RISKS FOUND",
   failed: "FAILED", matches: "MATCH", mismatch: "MISMATCH", unknown: "UNKNOWN",
   sameEgress: "Through VPN", differentEgress: "Route differs", noLeak: "Not detected",
   potentialLeak: "POTENTIAL", fullTunnelDns: "Through VPN", partialDns: "Not fully confirmed",
@@ -290,7 +315,7 @@ Object.assign(translations.de, {
   notVerified: "NICHT GEPRÜFT", verifyNow: "VPN prüfen", verifyWithSpeed: "Prüfen + Geschwindigkeit",
   observedLocation: "Ermittelter Standort", profileLocationMatch: "Profilstandort stimmt",
   systemEgress: "System-IPv4-Egress", ipv6Leak: "IPv6-Leck", dnsRouting: "DNS-Route",
-  speedSample: "Begrenzter Geschwindigkeitstest", verified: "BESTÄTIGT", warning: "RISIKEN GEFUNDEN",
+  speedSample: "Begrenzter Geschwindigkeitstest", verified: "NETZWERK-EGRESS BESTÄTIGT", warning: "RISIKEN GEFUNDEN",
   failed: "FEHLGESCHLAGEN", matches: "STIMMT", mismatch: "ABWEICHUNG", unknown: "UNBEKANNT",
   sameEgress: "Über VPN", differentEgress: "Route weicht ab", noLeak: "Nicht erkannt",
   potentialLeak: "MÖGLICH", fullTunnelDns: "Über VPN", partialDns: "Nicht vollständig bestätigt",
@@ -309,7 +334,7 @@ Object.assign(translations.zh, {
   notVerified: "未验证", verifyNow: "验证 VPN", verifyWithSpeed: "验证并测速",
   observedLocation: "实际位置", profileLocationMatch: "与配置位置匹配",
   systemEgress: "系统 IPv4 出口", ipv6Leak: "IPv6 泄漏", dnsRouting: "DNS 路由",
-  speedSample: "有限测速样本", verified: "已验证", warning: "发现风险",
+  speedSample: "有限测速样本", verified: "网络出口已验证", warning: "发现风险",
   failed: "失败", matches: "匹配", mismatch: "不匹配", unknown: "未知",
   sameEgress: "通过 VPN", differentEgress: "路由不同", noLeak: "未发现",
   potentialLeak: "可能泄漏", fullTunnelDns: "通过 VPN", partialDns: "未完全确认",
@@ -328,7 +353,7 @@ Object.assign(translations.ja, {
   notVerified: "未検証", verifyNow: "VPN を検証", verifyWithSpeed: "検証 + 速度",
   observedLocation: "検出された場所", profileLocationMatch: "プロファイル位置との一致",
   systemEgress: "システム IPv4 出口", ipv6Leak: "IPv6 リーク", dnsRouting: "DNS ルート",
-  speedSample: "制限付き速度サンプル", verified: "確認済み", warning: "リスクあり",
+  speedSample: "制限付き速度サンプル", verified: "ネットワーク出口を確認済み", warning: "リスクあり",
   failed: "失敗", matches: "一致", mismatch: "不一致", unknown: "不明",
   sameEgress: "VPN 経由", differentEgress: "ルートが異なる", noLeak: "検出なし",
   potentialLeak: "可能性あり", fullTunnelDns: "VPN 経由", partialDns: "完全には未確認",
@@ -347,7 +372,7 @@ Object.assign(translations.ko, {
   notVerified: "검증 안 됨", verifyNow: "VPN 검증", verifyWithSpeed: "검증 + 속도",
   observedLocation: "관측 위치", profileLocationMatch: "프로필 위치 일치",
   systemEgress: "시스템 IPv4 출구", ipv6Leak: "IPv6 유출", dnsRouting: "DNS 경로",
-  speedSample: "제한된 속도 샘플", verified: "검증됨", warning: "위험 발견",
+  speedSample: "제한된 속도 샘플", verified: "네트워크 이그레스 확인됨", warning: "위험 발견",
   failed: "실패", matches: "일치", mismatch: "불일치", unknown: "알 수 없음",
   sameEgress: "VPN 경유", differentEgress: "경로 다름", noLeak: "감지 안 됨",
   potentialLeak: "가능성 있음", fullTunnelDns: "VPN 경유", partialDns: "완전히 확인되지 않음",
@@ -379,6 +404,7 @@ const state = {
   probeRunningScope: null,
   verification: null,
   installation: null,
+  agentIntegrations: null,
   platformInfo: null,
   lastSignature: "",
   lastActiveProfileSignature: "",
@@ -405,6 +431,7 @@ function applyLanguage() {
   renderProbeCheckedAt();
   renderVerification();
   if (state.installation) renderInstallation(state.installation);
+  if (state.agentIntegrations) renderAgentIntegrations(state.agentIntegrations);
   renderAbout();
 }
 
@@ -457,7 +484,7 @@ function showToast(message, error = false) {
 }
 
 function showPage(page) {
-  if (!["dashboard", "profiles", "diagnostics", "settings", "about"].includes(page)) return;
+  if (!["dashboard", "profiles", "agents", "diagnostics", "settings", "about"].includes(page)) return;
   state.page = page;
   document.querySelectorAll("[data-page]").forEach((button) => {
     button.classList.toggle("active", button.dataset.page === page);
@@ -465,6 +492,7 @@ function showPage(page) {
   document.querySelectorAll("[data-page-panel]").forEach((panel) => {
     panel.classList.toggle("active", panel.dataset.pagePanel === page);
   });
+  if (page === "agents" && invoke && !state.agentIntegrations) refreshAgents(false);
 }
 
 // Documentation-only browser fixture. Runtime profiles always come from get_profiles/API.
@@ -539,7 +567,7 @@ function documentationPreviewData() {
       available: true,
       generated_at: Math.floor(Date.now() / 1000),
       product: "Mazzy VPN",
-      version: "1.3.2",
+      version: "1.4.0",
       service_state: "active",
       desired: "up",
       internet: "up",
@@ -624,8 +652,8 @@ function documentationPreviewData() {
     installation: {
       engine_installed: true,
       package_managed: true,
-      installed_version: "1.3.2",
-      bundled_version: "1.3.2",
+      installed_version: "1.4.0",
+      bundled_version: "1.4.0",
       bundled_installer: true,
       needs_install: false,
       service_installed: true,
@@ -649,10 +677,38 @@ function documentationPreviewData() {
         }
       ]
     },
+    agents: {
+      schema_version: 1,
+      generated_at: Math.floor(Date.now() / 1000),
+      embedded_client_ready: false,
+      first_party_gateway_ready: false,
+      telegram_ready: false,
+      providers: [
+        {
+          id: "codex", display_name: "Codex", installed: true,
+          version: null, adapter_status: "discovery-only",
+          connection_model: "diagnostics-only", remote_control_supported: false,
+          running: null, actions: []
+        },
+        {
+          id: "claude-code", display_name: "Claude Code", installed: true,
+          version: "2.1.197", adapter_status: "discovery-only",
+          connection_model: "interactive-vendor-native", remote_control_supported: true,
+          running: null, actions: []
+        }
+      ],
+      transports: [
+        "LAN WSS", "iroh QUIC", "libp2p QUIC", "WebRTC DataChannel",
+        "WebTransport", "Tailscale / Headscale", "Reverse WSS broker"
+      ].map((display_name, index) => ({
+        id: `docs-transport-${index}`, display_name,
+        candidate_runtime_available: false, runtime_ready: false
+      }))
+    },
     platform: {
       functional: true,
       os: "linux",
-      desktop_version: "0.3.2",
+      desktop_version: "0.4.0",
       author: "Nik m (@mazurovn)",
       license: "AGPL-3.0-or-later"
     }
@@ -681,6 +737,7 @@ function renderDocumentationPreview() {
   fixture.probe.results.forEach((entry) => state.profileHealth.set(entry.profile_id, entry));
   state.probeCheckedAt = fixture.probe.checked_at;
   state.installation = fixture.installation;
+  state.agentIntegrations = fixture.agents;
   state.platformInfo = fixture.platform;
   renderStatus(fixture.status);
   state.verification = fixture.verification;
@@ -688,6 +745,7 @@ function renderDocumentationPreview() {
   renderProbeCheckedAt();
   renderVerification();
   renderInstallation(fixture.installation);
+  renderAgentIntegrations(fixture.agents);
   renderAbout();
   const verification = verificationOutput(fixture.verification);
   showOperationResult({
@@ -724,6 +782,7 @@ function setBusy(busy) {
   document.querySelectorAll("button").forEach((button) => {
     if (!button.matches("[data-page], #hide-button, #privacy-button")) button.disabled = busy;
   });
+  if (!busy && state.agentIntegrations) renderAgentIntegrations(state.agentIntegrations);
 }
 
 function showOperationResult(result, title = "") {
@@ -1263,6 +1322,78 @@ function renderInstallation(report) {
   renderAbout();
 }
 
+function renderAgentIntegrations(report) {
+  state.agentIntegrations = report;
+  const providers = report?.providers || [];
+  const providerList = $("#agent-provider-list");
+  if (!providerList) return;
+  providerList.replaceChildren(...providers.map((provider) => {
+    const row = document.createElement("div");
+    row.className = "agent-provider-row";
+    const copy = document.createElement("div");
+    copy.className = "agent-provider-copy";
+    const name = document.createElement("strong");
+    name.textContent = provider.display_name;
+    const details = document.createElement("small");
+    const installation = provider.installed ? t("providerInstalled") : t("providerMissing");
+    const remote = provider.remote_control_supported ? t("remoteSupported") : t("remoteUnsupported");
+    const running = provider.running === true ? t("daemonRunning")
+      : provider.running === false ? t("daemonStopped") : "";
+    details.textContent = [provider.version || installation, remote, running].filter(Boolean).join(" · ");
+    copy.append(name, details);
+    const status = document.createElement("span");
+    const discovery = provider.adapter_status === "discovery-only";
+    status.className = `agent-provider-state${discovery ? " partial" : ""}`;
+    status.textContent = discovery ? t("discoveryOnly") : t("runtimeUnavailable");
+    row.append(copy, status);
+    return row;
+  }));
+
+  const readyProviders = providers.filter((provider) =>
+    provider.installed
+      && provider.remote_control_supported
+      && provider.adapter_status === "ready"
+      && provider.connection_model !== "diagnostics-only"
+  ).length;
+  const providerBadge = $("#agent-provider-badge");
+  providerBadge.textContent = `${readyProviders}/${providers.length}`;
+  providerBadge.className = `health-badge ${readyProviders ? "ok" : "bad"}`;
+
+  $("#embedded-agent-client-state").textContent = report?.embedded_client_ready
+    ? t("runtimeReady") : t("runtimeUnavailable");
+  $("#first-party-gateway-state").textContent = report?.first_party_gateway_ready
+    ? t("runtimeReady") : t("gatewayPlanned");
+  $("#telegram-agent-state").textContent = report?.telegram_ready
+    ? t("runtimeReady") : t("gatewayPlanned");
+
+  const transports = report?.transports || [];
+  $("#agent-transport-list").replaceChildren(...transports.map((transport) => {
+    const row = document.createElement("div");
+    row.className = `agent-transport-row${transport.runtime_ready ? " ready" : ""}`;
+    const label = document.createElement("span");
+    label.textContent = transport.display_name;
+    const status = document.createElement("strong");
+    status.textContent = transport.runtime_ready ? t("runtimeReady") : t("runtimeUnavailable");
+    row.append(label, status);
+    return row;
+  }));
+  const readyTransports = transports.filter((transport) => transport.runtime_ready).length;
+  const transportBadge = $("#agent-transport-badge");
+  transportBadge.textContent = `${readyTransports}/${transports.length}`;
+  transportBadge.className = `health-badge ${readyTransports ? "ok" : "bad"}`;
+}
+
+async function refreshAgents(manual = false) {
+  if (!invoke) return;
+  try {
+    const report = await invoke("get_agent_integrations");
+    renderAgentIntegrations(report);
+    if (manual) showToast(t("refreshed"));
+  } catch (error) {
+    if (manual) showToast(String(error), true);
+  }
+}
+
 function renderAbout() {
   const info = state.platformInfo;
   if (!$("#about-version")) return;
@@ -1380,6 +1511,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("#connect-fastest-button").addEventListener("click", connectFastestProfile);
   $("#verify-egress-button").addEventListener("click", () => verifyConnection(false));
   $("#verify-speed-button").addEventListener("click", () => verifyConnection(true));
+  $("#agents-refresh-button").addEventListener("click", () => refreshAgents(true));
 
   $("#import-files-button").addEventListener("click", async () => {
     if (!invoke || state.busy) return;
@@ -1520,6 +1652,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     $("#platform-note").textContent = platform?.functional ? "" : t("preview");
     renderAbout();
   }
-  await Promise.all([refreshStatus(false), refreshProfiles(false), refreshInstallation()]);
+  await Promise.all([
+    refreshStatus(false), refreshProfiles(false), refreshInstallation(), refreshAgents(false)
+  ]);
   setInterval(() => refreshStatus(false), 5000);
+  setInterval(() => {
+    if (state.page === "agents" && !state.busy) refreshAgents(false);
+  }, 15000);
 });

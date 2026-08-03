@@ -2,9 +2,137 @@
 
 All notable changes to Mazzy VPN are documented here.
 
-## Unreleased
+## 1.4.0 / Desktop 0.4.0 - 2026-08-03
 
-No changes yet.
+- Added explicit credential-free `verify-service` and
+  `tests.verify-service-egress` checks for fixed NotebookLM/OpenAI endpoints.
+  Probes use bounded HEAD requests through the selected VPN interface and emit
+  only strict sanitized egress-eligibility enums; they do not influence health,
+  planning or automatic profile selection.
+- Renamed the generic success label to `Network egress verified` without
+  changing the strict `EgressVerification` v1 result shape, and made speed JSON
+  numeric formatting independent of the caller locale.
+- Bounded watchdog recovery to one restart exactly at the consecutive-failure
+  threshold, followed by a threshold-plus-one pause while OpenVPN native retry
+  continues. Automatic recovery no longer clears systemd failure state; a
+  monotonic startup grace and realistic systemd start budget are covered by
+  source/package parity tests.
+- Added a dual-stack `nftables` output/forward transition guard around managed
+  connect, reconnect, live test, emergency selection and health recovery.
+  Direct egress is rejected before the old tunnel stops; only exact managed or
+  fallback transport endpoints and exact resolver addresses are allowlisted.
+  Readiness is bound to the selected interface and supports IPv4- and
+  IPv6-only protected paths. If neither the new path nor rollback can be
+  verified, the guard and a root-only recovery marker remain fail-closed.
+  This closes the confirmed transition leak without claiming the still-planned
+  persistent always-on kill switch.
+- Added a root-only boot recovery entrypoint and hardened oneshot unit for
+  interrupted local API actions. It takes the shared mutation lock before
+  reconciliation and is ordered before test recovery, the managed tunnel,
+  health remediation and API socket. Runtime-directory, permission and lock
+  acquisition failures now durably preserve the root-only recovery marker.
+  The tunnel service has an ordered `Requires=` dependency on recovery, so a
+  marker-persistence failure also blocks boot activation; test recovery keeps
+  its deadlock-safe boot path and bounded startup budget.
+- Made API snapshots, running/completed action records, audit events and
+  recovery markers durable with file and parent-directory synchronization
+  before lifecycle mutation. Snapshot deletion is also persisted before a
+  terminal response is acknowledged.
+- Health remediation now checks that recovery marker while holding the shared
+  lock and waits for the terminal `systemctl` result. It no longer releases
+  mutation authority after an asynchronous `--no-block` request.
+- Added a closed managed-profile v1 for VLESS, Hysteria 2, Mieru, NaiveProxy,
+  TUIC, Shadowsocks 2022, Trojan, AnyTLS and ShadowTLS. Validation rejects
+  duplicate keys, insecure TLS and user-controlled listeners, paths, marks and
+  routing; responses never reflect endpoints or credentials.
+- Tightened managed TLS validation with a closed uTLS fingerprint enum,
+  unique ALPN and certificate-pin sets, and a minimum certificate-pin length.
+- Added atomic `protocols managed-import` with dry-run, conflict protection,
+  explicit force replacement, symlink rejection and root-only `0700/0600`
+  storage. Modern-protocol import is now truthfully `partial`; connection
+  remains `planned`.
+- Added the packaged, version-pinned `mazzy-sing-box-adapter` foundation. It
+  renders a closed TUN, proxy-routed DoH and final-route graph for six protocols
+  but is not wired into service lifecycle. Mieru/Naive sidecars and the typed
+  ShadowTLS inner chain fail closed.
+- Added `runtime/v1/adapter-registry.json` and `protocols adapters --json` with
+  explicit engine versions, process graphs and supply-chain, rollback, leak and
+  crash-test gates.
+- Added a separate reverse agent-control v1 contract for LAN WSS, iroh, libp2p,
+  WebRTC, WebTransport, Tailscale/Headscale and reverse WSS, plus draft schemas
+  that declare future signed E2EE envelopes and Desktop/Web/CLI/Telegram
+  channel-risk policy. No E2EE runtime is claimed; all seven paths are planned.
+- Bound every agent-control capability to a fixed risk class and restricted
+  Telegram Bot commands to an argument-free low-risk allowlist, preventing a
+  caller from downgrading command risk or bypassing channel policy.
+- Contained the unreleased Desktop Agent Control screen to read-only
+  Codex/Claude and transport discovery. The renderer and Tauri invoke surface
+  no longer expose provider start/pair/stop, and diagnostics do not execute a
+  discovered agent binary. Native command-bound approval, trusted executable
+  resolution and process-tree containment remain mandatory before any local
+  provider lifecycle authority can return.
+- Hardened Desktop executable discovery: provider/probe names pass through a
+  static allowlist and only fixed system directories are inspected. Unix
+  candidates must be executable; Windows accepts only the fixed
+  `.com`/`.exe`/`.bat`/`.cmd` suffix set. Mutable `PATH`, `HOME` and `PATHEXT`
+  values cannot redirect diagnostics to an arbitrary file.
+- Recovery markers make `_service-run` return systemd's permanent stop status
+  `77`, preventing `Restart=always` from looping during manual recovery. The
+  Agent Control provider badge is derived from installed, authorized runtime
+  readiness instead of a fixed value.
+- Documented the source-level Happy, Claude Bridge, Paseo and Yep Anywhere
+  comparison and separated ingress, E2EE transport and provider-adapter
+  boundaries. Typed Codex app-server/Claude/ACP adapters are preferred over a
+  PTY protocol.
+- Added the five-role target-architecture audit and executable delivery DAG for
+  the privileged egress and unprivileged Agent Control planes. It records the
+  split-lock/rollback P0 debt, selects reverse HTTPS/WSS as the durable first
+  path, defines `mazzy-vpnd`/`mazzy-agentd` ownership, protocol/crypto/ACK/key
+  requirements and defers optional transports behind measured release gates.
+- Removed the Desktop pairing parser fallback that could expose an opaque
+  vendor `pairingCode` when `manualPairingCode` was absent. Opaque-only
+  responses now fail closed and are covered by a Rust regression.
+- Added the transitional R0a single-flight boundary: API lifecycle, direct
+  CLI, ordinary/managed profile import/remove, timeout/boot recovery, health
+  remediation, policy cleanup, `doctor --fix`, autostart and monitor now
+  contend on one runtime `.mutation.lock`. API child operations
+  validate the inherited lock inode; invalid descriptors fail closed before a
+  system mutation, and fallback subprocesses close API/direct lock descriptors
+  before they may daemonize. This does not claim the planned `mazzy-vpnd` owner
+  or full route/DNS/firewall rollback proof.
+- Aligned the Agent Control registry with ADR-009: reverse WSS is the durable
+  baseline, followed by LAN and iroh accelerators; optional/later transports
+  no longer precede the baseline in executable path priority.
+
+- Added the read-only API v1 `planner.evaluate` operation and
+  `mazzy-vpn planner evaluate --stdin --json`. The backend enforces five
+  non-overridable runtime/profile/storage/platform gates and applies the
+  versioned 100-point protocol policy with stable opaque-ID tie-breaking. The
+  rollback-storage gate is a prerequisite for future execution, not a claim
+  that a candidate-specific rollback has already been proved.
+- Planner inputs are strict, limited to 64 KiB and 128 unique candidates, and
+  reject duplicate JSON keys at every object depth. Results are dry-run only,
+  credential-free and bounded to a 1 MiB CLI response cap.
+- The public schema now binds `planner.evaluate`, `PlannerRequest` and its
+  required 100–30000 ms deadline in both directions, matching backend dispatch.
+- Planner deadlines now reach the OpenVPN parser inside candidate validation;
+  expired health evidence, including recent outcome, contributes no health
+  score. The Python SDK example accepts legal JSON whitespace but rejects
+  duplicate keys, non-finite numbers and multiple documents.
+- Removed caller-assigned censorship/workload fit from planner evidence. The
+  backend now derives both factors from the versioned protocol catalog,
+  workload, protocol class and transports, while caller evidence is limited to
+  observed health inputs.
+- Extended credential-redacted protocol classification to bounded JSON for
+  sing-box/Xray outbounds, official Mieru settings and NaiveProxy. Duplicate
+  keys, multiple documents and ambiguous mixed-protocol configurations fail
+  closed; classification never authorizes import or engine execution.
+- Desktop profile-cache failures now retain safe missing, permission and
+  invalid-shape reason codes instead of collapsing every failure into an
+  unexplained empty library.
+- Added deterministic, deadline, stale-evidence, unsafe-storage,
+  unknown-profile, duplicate-input and local-transport regressions. Automatic
+  switching, failover and mutation authorization remain tracked in issue #39.
 
 ## 1.3.2 / Desktop 0.3.2 - 2026-08-01
 

@@ -7,18 +7,33 @@ _mazzy_vpn()
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    commands="api-info list profiles connect quick disconnect reconnect dashboard status diagnose validate probe test test-all emergency self-test doctor autostart monitor import import-files import-dir init-config-dir remove logs language help version"
+    commands="api-info protocols planner list profiles connect quick disconnect reconnect dashboard status diagnose verify verify-service validate probe test test-all emergency self-test doctor autostart monitor import import-files import-dir init-config-dir remove logs language help version"
     protocols="amneziawg wireguard openvpn l2tp"
 
     if ((COMP_CWORD == 1)); then
         mapfile -t COMPREPLY < <(compgen -W "$commands" -- "$cur")
     elif [[ "$prev" == "api-info" ]]; then
         mapfile -t COMPREPLY < <(compgen -W "--json" -- "$cur")
+    elif [[ "${COMP_WORDS[1]:-}" == "protocols" ]]; then
+        mapfile -t COMPREPLY < <(
+            compgen -W "list diagnose detect --json --stdin" -- "$cur"
+        )
+    elif [[ "${COMP_WORDS[1]:-}" == "planner" ]]; then
+        mapfile -t COMPREPLY < <(
+            compgen -W "evaluate --stdin --json" -- "$cur"
+        )
     elif [[ "$prev" == "status" || "$prev" == "profiles" ]]; then
         mapfile -t COMPREPLY < <(compgen -W "--json --api-json" -- "$cur")
     elif [[ "${COMP_WORDS[1]:-}" == "probe" || "${COMP_WORDS[1]:-}" == "ping" ]]; then
         mapfile -t COMPREPLY < <(
             compgen -W "$protocols all --timeout --jobs --json" -- "$cur"
+        )
+    elif [[ "${COMP_WORDS[1]:-}" == "verify" ||
+            "${COMP_WORDS[1]:-}" == "verify-egress" ]]; then
+        mapfile -t COMPREPLY < <(compgen -W "--timeout --speed --json" -- "$cur")
+    elif [[ "${COMP_WORDS[1]:-}" == "verify-service" ]]; then
+        mapfile -t COMPREPLY < <(
+            compgen -W "notebooklm openai all --timeout --json" -- "$cur"
         )
     elif [[ "$prev" == "list" || "$prev" == "connect" || "$prev" == "test" ||
             "$prev" == "test-all" || "$prev" == "validate" ||
