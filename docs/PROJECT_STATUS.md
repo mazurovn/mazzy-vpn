@@ -13,9 +13,10 @@ This page records the verified resumption point.
 
 ## Verified release baseline
 
-- The current release source is CLI/TUI `v1.4.0` and Desktop `0.4.0` from
-  PR #43. Publication targets are tags `v1.4.0` and `desktop-v0.4.0` after all
-  default-branch checks pass.
+- The current published line is CLI/TUI `v1.4.0` and unsigned Desktop preview
+  `desktop-v0.4.0`. PR #43 was squash-merged as commit
+  `2faebdb4ac2f88ba7dd7467b0dd2485afba65ed3`; both tags point to that commit
+  and the tag workflows passed.
 - Linux CLI/TUI is functional. Linux Desktop remains an unsigned preview;
   AppImage, DEB and RPM are functional control-center bundles.
 - Issue #31 is closed. The release carries the provenance-verified upstream
@@ -82,7 +83,7 @@ This page records the verified resumption point.
   Linux import. Six also have a tested closed sing-box config renderer. No new
   connection lifecycle or platform backend is claimed.
 
-Release target links (publication is valid only when both tag pages exist):
+Published release links:
 
 - <https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.0>
 - <https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.0>
@@ -91,10 +92,8 @@ Release target links (publication is valid only when both tag pages exist):
 
 - Repository description, RU/EN Welcome and FAQ discussions, platform roadmap,
   support template and feature polls are published.
-- Repository `wiki/` sources contain the pending Agent Control, R0a and target
-  architecture updates. Public Wiki synchronization must be verified after
-  these repository changes reach the default branch; it is not currently
-  claimed complete.
+- Repository `wiki/` sources and the public GitHub Wiki contain the synchronized
+  Agent Control, R0a, target architecture and 1.4/0.4 publication updates.
 - Polls:
   - <https://github.com/mazurovn/mazzy-vpn/discussions/23>
   - <https://github.com/mazurovn/mazzy-vpn/discussions/24>
