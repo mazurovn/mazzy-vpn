@@ -4186,7 +4186,7 @@ cmd_connect() (
     local requested_protocol="${1:-}" requested_profile="${2:-}" protocol fallback=""
     local transition_guard_active=0 previous_active=0 previous_protocol=""
     local previous_profile="" previous_state_backup="" fallback_interface=""
-    # shellcheck disable=SC2329  # invoked by the EXIT trap below
+    # shellcheck disable=SC2317,SC2329  # invoked by the EXIT trap below
     cleanup_connect_transition_guard() {
         if ((transition_guard_active)); then
             transition_guard_hold interrupted-connect >/dev/null 2>&1 || true
@@ -4308,7 +4308,7 @@ cmd_reconnect() (
     local fallback="" transition_guard_active=0 previous_active=0
     local previous_protocol="" previous_profile="" previous_state_backup=""
     local fallback_interface=""
-    # shellcheck disable=SC2329  # invoked by the EXIT trap below
+    # shellcheck disable=SC2317,SC2329  # invoked by the EXIT trap below
     cleanup_reconnect_transition_guard() {
         if ((transition_guard_active)); then
             transition_guard_hold interrupted-reconnect >/dev/null 2>&1 || true
