@@ -50,9 +50,9 @@
 - capability risk Agent Control закреплён схемой, Telegram Bot ограничен
   argument-free low-risk allowlist.
 
-Release source: [CLI/TUI `v1.4.0`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.0)
+Опубликованы [CLI/TUI `v1.4.0`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.0)
 и unsigned [Desktop `desktop-v0.4.0` preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.0).
-Публикация подтверждается только существованием соответствующих tag и Release page.
+Оба tag указывают на audited merge commit `2faebdb4`; release workflows прошли.
 Windows/macOS artifacts остаются UI-only, Android package отсутствует.
 
 ## 1.3.2 / Desktop 0.3.2 — protocol foundation и upgrade hotfix
@@ -209,10 +209,10 @@ signed update/rollback, migration away from the temporary vendored Tauri/GTK
 provenance-verified backport; RustSec, Dependabot and CodeQL release checks pass
 without suppressions.
 
-Release targets: [CLI/TUI `v1.4.0`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.0)
+Published releases: [CLI/TUI `v1.4.0`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.0)
 and the unsigned [Desktop `desktop-v0.4.0` preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.0).
-They are published only when both tag pages exist; both tags must identify the
-same audited source commit and include SHA-256 manifests.
+Both tags point to audited merge commit `2faebdb4`; release workflows passed
+and both release pages include SHA-256 manifests.
 
 Version 1.2.0 / Desktop 0.2.0 is the previous published release line.
 
