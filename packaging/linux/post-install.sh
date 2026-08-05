@@ -127,8 +127,11 @@ activate_services() {
     systemctl restart mazzy-vpn-api.socket
     systemctl restart vpnctl-health.timer
 
-    if systemctl is-active --quiet vpnctl.service; then
-        systemctl try-restart vpnctl.service
+    # Preserve an existing user opt-in across package upgrades without
+    # enabling the VPN service on a fresh install.
+    if systemctl is-enabled --quiet vpnctl.service; then
+        systemctl enable vpnctl.service
+        systemctl start vpnctl.service
     fi
 
     /usr/bin/mazzy-vpn _refresh-dashboard-cache

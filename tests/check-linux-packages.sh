@@ -197,6 +197,31 @@ fi
 
 cmp -s "$ROOT/packaging/linux/post-install.sh" "$deb_control/postinst" ||
     fail "DEB postinst differs from the audited source"
+grep -q '^    if systemctl is-enabled --quiet vpnctl.service; then$' \
+    "$ROOT/packaging/linux/post-install.sh" ||
+    fail "package post-install does not preserve the existing engine opt-in"
+grep -q '^        systemctl enable vpnctl.service$' \
+    "$ROOT/packaging/linux/post-install.sh" ||
+    fail "package post-install does not re-enable an opted-in engine"
+grep -q '^        systemctl start vpnctl.service$' \
+    "$ROOT/packaging/linux/post-install.sh" ||
+    fail "package post-install does not start an opted-in engine after upgrade"
+if grep -Eq '^    systemctl enable vpnctl\.service$' \
+    "$ROOT/packaging/linux/post-install.sh"; then
+    fail "package post-install unconditionally enables the VPN engine"
+fi
+grep -q '^    if systemctl is-enabled --quiet vpnctl.service; then$' \
+    "$ROOT/install.sh" ||
+    fail "installer does not preserve the existing engine opt-in"
+grep -q '^        run systemctl enable vpnctl.service$' \
+    "$ROOT/install.sh" ||
+    fail "installer does not re-enable an opted-in engine"
+grep -q '^        run systemctl start vpnctl.service$' \
+    "$ROOT/install.sh" ||
+    fail "installer does not start an opted-in engine after upgrade"
+if grep -Eq '^    run systemctl enable vpnctl\.service$' "$ROOT/install.sh"; then
+    fail "installer unconditionally enables the VPN engine"
+fi
 cmp -s "$ROOT/packaging/linux/pre-remove.sh" "$deb_control/prerm" ||
     fail "DEB prerm differs from the audited source"
 cmp -s "$ROOT/packaging/linux/post-remove.sh" "$deb_control/postrm" ||
