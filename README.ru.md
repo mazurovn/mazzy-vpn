@@ -15,8 +15,8 @@ L2TP/IPsec, безопасно импортирует профили, измер
 профили своего VPN-провайдера или организации; учётная запись Mazzy VPN и
 телеметрия не требуются.
 
-Текущая release-source линия — [CLI/TUI 1.4.1](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.1)
-и [Desktop 0.4.1 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.1).
+Текущая release-source линия — [CLI/TUI 1.4.2](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.2)
+и [Desktop 0.4.2 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.2).
 Версия опубликована только тогда, когда существуют её tag и GitHub Release page.
 Linux Desktop является функциональным control center; Windows и macOS artifacts
 остаются UI preview без native VPN backend и OS code signing. Installable

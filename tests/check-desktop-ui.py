@@ -101,7 +101,7 @@ def check_updater_signature_audit() -> None:
             "A" * 64 + "\n", encoding="utf-8"
         )
         manifest = {
-            "version": "0.4.1",
+            "version": "0.4.2",
             "platforms": {
                 "linux-x86_64": {
                     "url": "https://api.github.com/repos/example/releases/assets/42",
@@ -117,7 +117,7 @@ def check_updater_signature_audit() -> None:
         canonical_env.update(
             {
                 "GITHUB_REPOSITORY": "mazurovn/mazzy-vpn",
-                "RELEASE_TAG": "desktop-v0.4.1",
+                "RELEASE_TAG": "desktop-v0.4.2",
             }
         )
         subprocess.run(
@@ -131,7 +131,7 @@ def check_updater_signature_audit() -> None:
         canonical = json.loads((metadata_dir / "latest.json").read_text())
         if canonical["platforms"]["linux-x86_64"]["url"] != (
             "https://github.com/mazurovn/mazzy-vpn/releases/download/"
-            "desktop-v0.4.1/Mazzy.AppImage.tar.gz"
+            "desktop-v0.4.2/Mazzy.AppImage.tar.gz"
         ):
             fail("Updater feed did not canonicalize a draft API asset URL")
 

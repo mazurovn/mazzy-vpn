@@ -13,7 +13,7 @@
   <a href="LICENSE"><img alt="License: AGPL-3.0-or-later" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-8f7dff"></a>
   <a href="https://github.com/mazurovn/mazzy-vpn/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mazurovn/mazzy-vpn/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Linux" src="https://img.shields.io/badge/platform-Linux-65e7ff">
-  <a href="https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.1"><img alt="Release 1.4.1" src="https://img.shields.io/badge/release-1.4.1-ef70ff"></a>
+  <a href="https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.2"><img alt="Release 1.4.2" src="https://img.shields.io/badge/release-1.4.2-ef70ff"></a>
 </p>
 
 Mazzy VPN is an open-source AI-ready VPN client for Linux with Desktop, tray,
@@ -28,10 +28,10 @@ Mazzy VPN is a client and control plane, not a hosted VPN subscription. Bring
 profiles from a VPN provider or your organization. No account, telemetry or
 project-hosted server is required.
 
-The current release source line is [CLI/TUI 1.4.1](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.1)
-and [Desktop 0.4.1](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.1).
+The current release source line is [CLI/TUI 1.4.2](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.2)
+and [Desktop 0.4.2](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.2).
 A version is published only when its linked tag and GitHub Release page exist.
-Desktop 0.4.1 is a preview with consent-gated, Tauri-signed updater artifacts:
+Desktop 0.4.2 is a preview with consent-gated, Tauri-signed updater artifacts:
 Linux provides a functional control center, while Windows and macOS artifacts
 remain UI previews without native VPN backends or OS code signing.
 Issue #31 is closed with the reviewed upstream `glib` backport, an exact
