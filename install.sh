@@ -816,6 +816,12 @@ if [[ -z "$DESTDIR" && $DEPS_ONLY -eq 0 ]]; then
     run systemctl enable --now mazzy-vpn-api.socket
     run systemctl enable vpnctl-test-recovery.service
     run systemctl enable --now vpnctl-health.timer
+    # Preserve an existing user opt-in across package upgrades without
+    # enabling the VPN service on a fresh install.
+    if systemctl is-enabled --quiet vpnctl.service; then
+        run systemctl enable vpnctl.service
+        run systemctl start vpnctl.service
+    fi
     run systemctl restart vpnctl-health.timer
     run /usr/local/bin/mazzy-vpn _refresh-dashboard-cache
     if ((DRY_RUN)); then
