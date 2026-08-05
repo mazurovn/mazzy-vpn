@@ -4087,14 +4087,30 @@ grep -q '^RandomizedDelaySec=5s$' \
     "$ROOT/packaging/linux/systemd/vpnctl-health.timer.d/10-package-interval.conf" ||
     fail "package health timer drop-in loses bounded jitter"
 
-effective_units="$TMP/effective-systemd-units"
-mkdir -p "$effective_units/etc" "$effective_units/usr"
+effective_root="$TMP/effective-systemd-root"
+effective_etc="$effective_root/etc/systemd/system"
+effective_usr="$effective_root/usr/lib/systemd/system"
+mkdir -p "$effective_etc" "$effective_usr" "$effective_root/usr/bin"
+cp "$ROOT/mazzy-vpn" "$effective_root/usr/bin/mazzy-vpn"
+chmod 755 "$effective_root/usr/bin/mazzy-vpn"
+for effective_target in \
+    basic.target \
+    local-fs.target \
+    multi-user.target \
+    network-online.target \
+    shutdown.target \
+    sockets.target \
+    sysinit.target \
+    timers.target; do
+    printf '[Unit]\nDefaultDependencies=no\n' \
+        >"$effective_usr/$effective_target"
+done
 awk '
     /^Requires=mazzy-vpn-api-recovery\.service$/ { next }
     /^After=mazzy-vpn-api-recovery\.service$/ { next }
     { print }
 ' "$ROOT/systemd/mazzy-vpn-api.socket" \
-    >"$effective_units/etc/mazzy-vpn-api.socket"
+    >"$effective_etc/mazzy-vpn-api.socket"
 awk '
     /^Requires=mazzy-vpn-api-recovery\.service$/ { next }
     /^After=network-online\.target mazzy-vpn-api-recovery\.service vpnctl\.service$/ {
@@ -4103,34 +4119,36 @@ awk '
     }
     { print }
 ' "$ROOT/systemd/vpnctl-health.service" \
-    >"$effective_units/etc/vpnctl-health.service"
+    >"$effective_etc/vpnctl-health.service"
 sed 's/^OnUnitActiveSec=.*/OnUnitActiveSec=20s/' \
     "$ROOT/systemd/vpnctl-health.timer" \
-    >"$effective_units/etc/vpnctl-health.timer"
+    >"$effective_etc/vpnctl-health.timer"
 for effective_unit in \
     mazzy-vpn-api.socket \
+    mazzy-vpn-api@.service \
     mazzy-vpn-api-recovery.service \
     vpnctl-health.service \
     vpnctl-health.timer \
     vpnctl.service \
     vpnctl-test-recovery.service; do
-    cp "$ROOT/systemd/$effective_unit" "$effective_units/usr/$effective_unit"
+    cp "$ROOT/systemd/$effective_unit" "$effective_usr/$effective_unit"
 done
 for effective_dropin in \
     mazzy-vpn-api.socket.d/10-package-docs.conf \
+    mazzy-vpn-api@.service.d/10-package-exec.conf \
     mazzy-vpn-api-recovery.service.d/10-package-exec.conf \
     vpnctl-health.service.d/10-package-exec.conf \
     vpnctl-health.timer.d/10-package-interval.conf \
     vpnctl.service.d/10-package-exec.conf \
     vpnctl-test-recovery.service.d/10-package-exec.conf; do
-    mkdir -p "$effective_units/usr/${effective_dropin%/*}"
+    mkdir -p "$effective_usr/${effective_dropin%/*}"
     cp "$ROOT/packaging/linux/systemd/$effective_dropin" \
-        "$effective_units/usr/$effective_dropin"
+        "$effective_usr/$effective_dropin"
 done
 effective_verify_log="$TMP/effective-systemd-verify.log"
-if ! SYSTEMD_UNIT_PATH="$effective_units/etc:$effective_units/usr:/usr/lib/systemd/system" \
-    systemd-analyze verify \
+if ! systemd-analyze --root="$effective_root" --man=no verify \
         mazzy-vpn-api.socket \
+        mazzy-vpn-api@internal.service \
         mazzy-vpn-api-recovery.service \
         vpnctl-health.service \
         vpnctl-health.timer \

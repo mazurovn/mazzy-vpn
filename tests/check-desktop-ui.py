@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import struct
+import sys
+import tempfile
 from collections import Counter
 from html.parser import HTMLParser
 from pathlib import Path
@@ -24,6 +27,7 @@ TAURI_CONFIG = ROOT / "desktop/src-tauri/tauri.conf.json"
 CAPABILITY = ROOT / "desktop/src-tauri/capabilities/default.json"
 BUILD_RELEASE = ROOT / "desktop/scripts/build-release.mjs"
 DESKTOP_WORKFLOW = ROOT / ".github/workflows/desktop.yml"
+UPDATER_SIGNATURE_AUDIT = ROOT / "tests/prepare-updater-signature-audit.py"
 
 
 def fail(message: str) -> None:
@@ -83,7 +87,59 @@ def desktop_version() -> str:
     return versions.pop()
 
 
+def check_updater_signature_audit() -> None:
+    with tempfile.TemporaryDirectory(prefix="mazzy-updater-audit-") as workspace_raw:
+        workspace = Path(workspace_raw)
+        metadata_dir = workspace / "updater-metadata"
+        assets_dir = workspace / "updater-assets"
+        metadata_dir.mkdir()
+        assets_dir.mkdir()
+        artifact = assets_dir / "Mazzy.AppImage.tar.gz"
+        artifact.write_bytes(b"signed updater fixture")
+        manifest = {
+            "platforms": {
+                "linux-x86_64": {
+                    "url": (
+                        "https://github.com/mazurovn/mazzy-vpn/releases/download/"
+                        "desktop-v0.4.1/Mazzy.AppImage.tar.gz"
+                    ),
+                    "signature": "A" * 64,
+                }
+            }
+        }
+        (metadata_dir / "latest.json").write_text(
+            json.dumps(manifest), encoding="utf-8"
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(UPDATER_SIGNATURE_AUDIT)],
+            cwd=workspace,
+            check=True,
+            capture_output=True,
+            timeout=10,
+        )
+        signature = workspace / "updater-signatures/signature-000.sig"
+        expected = os.fsencode(artifact) + b"\0" + os.fsencode(signature) + b"\0"
+        if (
+            result.stdout != expected
+            or signature.read_text(encoding="utf-8") != "A" * 64 + "\n"
+        ):
+            fail("Updater signature audit did not emit the expected safe arguments")
+
+        (assets_dir / "unexpected-directory").mkdir()
+        unsafe = subprocess.run(
+            [sys.executable, str(UPDATER_SIGNATURE_AUDIT)],
+            cwd=workspace,
+            check=False,
+            capture_output=True,
+            timeout=10,
+        )
+        if unsafe.returncode == 0 or b"unsafe entry" not in unsafe.stderr:
+            fail("Updater signature audit accepted an unsafe asset entry")
+
+
 def main() -> None:
+    check_updater_signature_audit()
     html = HTML.read_text(encoding="utf-8")
     javascript = JS.read_text(encoding="utf-8")
     rust = RUST.read_text(encoding="utf-8")
@@ -355,6 +411,11 @@ def main() -> None:
         or "shell: false" not in build_release
     ):
         fail("Release builds do not safely gate updater artifacts on the signing key")
+    if (
+        'spawnSync("cargo", [' not in build_release
+        or "process.env.CARGO" in build_release
+    ):
+        fail("Release builds allow the cargo executable to be replaced through input")
     for workflow_boundary in (
         "TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}",
         "environment: desktop-release",

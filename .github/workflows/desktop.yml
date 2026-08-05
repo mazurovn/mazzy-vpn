@@ -252,10 +252,7 @@ jobs:
               ([.platforms | keys[] | startswith("windows-")] | any) and
               ([.platforms | keys[] | startswith("darwin-")] | any)
             ' updater-metadata/latest.json >/dev/null
-          python3 tests/prepare-updater-signature-audit.py \
-            updater-metadata/latest.json \
-            updater-assets \
-            updater-signatures >updater-signature-args
+          python3 tests/prepare-updater-signature-audit.py >updater-signature-args
           mapfile -d '' -t updater_signature_args <updater-signature-args
           ((${#updater_signature_args[@]} > 0))
           cargo run --locked --quiet \

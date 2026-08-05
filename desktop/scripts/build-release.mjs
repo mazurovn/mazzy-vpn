@@ -32,7 +32,7 @@ if (process.env.TAURI_SIGNING_PRIVATE_KEY) {
   );
   tauriArgs.push("--config", updaterConfig);
 }
-const metadata = spawnSync(process.env.CARGO || "cargo", [
+const metadata = spawnSync("cargo", [
   "metadata",
   "--format-version", "1",
   "--no-deps",
