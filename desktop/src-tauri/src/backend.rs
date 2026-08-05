@@ -36,6 +36,8 @@ const MAX_API_RESPONSE_BYTES: usize = 64 * 1024;
 const LOCAL_API_COMPLETION_GRACE_MS: u64 = 60_000;
 #[cfg(target_os = "linux")]
 const READ_ONLY_API_RETRY_DELAYS_MS: &[u64] = &[0, 250, 500, 1_000, 2_000, 4_000];
+#[cfg(target_os = "linux")]
+const API_STARTUP_RETRY_DELAYS_MS: &[u64] = &[0, 250, 500, 1_000, 2_000, 4_000, 8_000];
 static API_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[cfg(target_os = "linux")]
@@ -590,6 +592,14 @@ fn normalize_privileged_error(cleaned: String) -> String {
         return "PolicyKit authorization is unavailable for this desktop operation. Start Mazzy VPN Desktop from a graphical session with a PolicyKit authentication agent, or wait for the local Mazzy VPN API to become ready.".into();
     }
     cleaned
+}
+
+fn package_managed_cli(cli_path: &Path) -> bool {
+    cli_path == Path::new(SYSTEM_CLI_PATH)
+}
+
+fn engine_not_ready_error() -> String {
+    "Mazzy VPN engine is installed, but its local API is still starting. Wait a few seconds and retry; no privileged fallback was started from the desktop.".into()
 }
 
 pub(crate) fn clean_output(output: &Output) -> String {
@@ -1477,6 +1487,9 @@ pub(crate) fn verify_connection_sync(
     let cli_path = installed_cli_path().ok_or_else(|| {
         "Mazzy VPN engine is not installed. Open Settings and run Install / Repair.".to_owned()
     })?;
+    if package_managed_cli(cli_path) {
+        return Err(engine_not_ready_error());
+    }
     let mut command = Command::new(TIMEOUT_PATH);
     command
         .args(["--kill-after=2s", "240s", PKEXEC_PATH])
@@ -1537,6 +1550,9 @@ pub(crate) fn probe_profiles_sync(
     let cli_path = installed_cli_path().ok_or_else(|| {
         "Mazzy VPN engine is not installed. Open Settings and run Install / Repair.".to_owned()
     })?;
+    if package_managed_cli(cli_path) {
+        return Err(engine_not_ready_error());
+    }
     let probe_deadline = probe_deadline_ms(
         cached_profile_count(&selected_protocol),
         timeout_seconds,
@@ -1718,6 +1734,24 @@ fn send_local_api_for_read_only(request: &Value) -> Result<Value, LocalApiError>
 }
 
 #[cfg(target_os = "linux")]
+fn wait_for_local_api() -> bool {
+    for (attempt, delay_ms) in API_STARTUP_RETRY_DELAYS_MS.iter().enumerate() {
+        if attempt > 0 {
+            thread::sleep(std::time::Duration::from_millis(*delay_ms));
+        }
+        if UnixStream::connect(API_SOCKET).is_ok() {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(not(target_os = "linux"))]
+fn wait_for_local_api() -> bool {
+    true
+}
+
+#[cfg(target_os = "linux")]
 fn try_execute_local_api(request: &OperationRequest) -> Option<OperationResult> {
     if !Path::new(API_SOCKET).exists() {
         return None;
@@ -1764,6 +1798,14 @@ fn try_execute_local_api(_: &OperationRequest) -> Option<OperationResult> {
 
 pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> OperationResult {
     if matches!(request, OperationRequest::Bootstrap) {
+        if Path::new(SYSTEM_CLI_PATH).is_file() && !wait_for_local_api() {
+            return OperationResult {
+                success: false,
+                action: "bootstrap".into(),
+                output: engine_not_ready_error(),
+                code: None,
+            };
+        }
         if Path::new(SYSTEM_CLI_PATH).is_file() {
             return timed_operation_result(
                 "bootstrap".into(),
@@ -1819,6 +1861,14 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
             code: None,
         };
     };
+    if package_managed_cli(cli_path) && !wait_for_local_api() {
+        return OperationResult {
+            success: false,
+            action,
+            output: engine_not_ready_error(),
+            code: None,
+        };
+    }
     if let Some(result) = try_execute_local_api(&request) {
         return result;
     }
@@ -2367,6 +2417,23 @@ mod tests {
             Some(Path::new(LOCAL_CLI_PATH))
         );
         assert_eq!(select_cli_path(false, false), None);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn package_startup_wait_has_a_finite_budget() {
+        let budget_ms: u64 = API_STARTUP_RETRY_DELAYS_MS.iter().sum();
+        assert_eq!(budget_ms, 15_750);
+        assert!(package_managed_cli(Path::new(SYSTEM_CLI_PATH)));
+        assert!(!package_managed_cli(Path::new(LOCAL_CLI_PATH)));
+    }
+
+    #[test]
+    fn engine_not_ready_error_explains_the_safe_fallback() {
+        let message = engine_not_ready_error();
+        assert!(message.contains("local API is still starting"));
+        assert!(message.contains("no privileged fallback"));
+        assert!(!message.contains("pkexec"));
     }
 
     #[test]
