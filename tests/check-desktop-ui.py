@@ -55,9 +55,10 @@ def translations(javascript: str) -> dict[str, dict[str, str]]:
         f"{prefix}\nprocess.stdout.write(JSON.stringify(translations));"
     )
     result = subprocess.run(
-        ["node", "-e", script],
+        ["node"],
         check=True,
         capture_output=True,
+        input=script,
         text=True,
         encoding="utf-8",
         errors="strict",
