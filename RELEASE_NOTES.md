@@ -1,8 +1,21 @@
-# Mazzy VPN 1.4.1 / Desktop 0.4.1
+# Mazzy VPN 1.4.2 / Desktop 0.4.2
 
 Release source prepared 2026-08-05 by [Nik m (@mazurovn)](https://github.com/mazurovn).
-Published releases: [CLI/TUI `v1.4.1`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.1)
-and [Desktop `desktop-v0.4.1` preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.1).
+This release source is not published yet; tags and GitHub Releases are created
+only after the release gates pass.
+
+## Startup recovery fixes
+
+- Desktop retries profile-cache loading while the local API socket and engine
+  finish booting, so a reboot no longer leaves the dashboard at “Profiles not
+  found” until a manual refresh.
+- Package-managed Desktop waits for the local API before read-only and
+  lifecycle fallbacks. Missing PolicyKit authentication no longer surfaces as
+  a raw `/dev/tty` error during normal startup; an actionable engine-not-ready
+  state is returned instead.
+- Package upgrades preserve a previously enabled VPN engine while fresh
+  installation remains consent-preserving and does not start the engine
+  unexpectedly.
 
 ## Patch scope
 
@@ -40,7 +53,7 @@ and [Desktop `desktop-v0.4.1` preview](https://github.com/mazurovn/mazzy-vpn/rel
 - Release helpers no longer accept caller-controlled cargo commands or
   filesystem roots. Downloaded updater artifacts are selected from a bounded
   local inventory, signature files use local sequence names, and the workflow
-  publishes `Mazzy.VPN.Desktop_0.4.1_SHA256SUMS` only after updater signatures
+  publishes `Mazzy.VPN.Desktop_0.4.2_SHA256SUMS` only after updater signatures
   pass. The systemd upgrade regression now runs in an isolated root and cannot
   pass merely because an older Mazzy VPN package is installed on the host.
 - The cross-platform UI audit sends generated JavaScript to Node over stdin,

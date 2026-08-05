@@ -12,6 +12,17 @@ All notable changes to Mazzy VPN are documented here.
 - Synchronize the project status, installation guide, FAQ and roadmap with the
   published `v1.4.1` and `desktop-v0.4.1` releases.
 
+## 1.4.2 / Desktop 0.4.2 - 2026-08-05
+
+- Fixed Desktop startup recovery when the local API socket or profile cache is
+  created after the graphical session: profile loading now uses bounded retry
+  and no longer requires a manual refresh.
+- Delayed package-managed Desktop fallbacks until the local API is ready,
+  preventing boot-time `pkexec` `/dev/tty` errors and reporting an actionable
+  engine-not-ready state instead.
+- Preserved an explicitly enabled VPN engine across package upgrades without
+  enabling or starting the engine unexpectedly on a fresh installation.
+
 ## 1.4.1 / Desktop 0.4.1 - 2026-08-05
 
 - Fixed the systemd boot transaction cycle that could drop

@@ -778,7 +778,7 @@ function documentationPreviewData() {
       available: true,
       generated_at: Math.floor(Date.now() / 1000),
       product: "Mazzy VPN",
-      version: "1.4.1",
+      version: "1.4.2",
       service_state: "active",
       desired: "up",
       internet: "up",
@@ -863,8 +863,8 @@ function documentationPreviewData() {
     installation: {
       engine_installed: true,
       package_managed: true,
-      installed_version: "1.4.1",
-      bundled_version: "1.4.1",
+      installed_version: "1.4.2",
+      bundled_version: "1.4.2",
       bundled_installer: true,
       needs_install: false,
       service_installed: true,
@@ -919,7 +919,7 @@ function documentationPreviewData() {
     platform: {
       functional: true,
       os: "linux",
-      desktop_version: "0.4.1",
+      desktop_version: "0.4.2",
       author: "Nik m (@mazurovn)",
       license: "AGPL-3.0-or-later"
     }
@@ -970,8 +970,8 @@ function renderDocumentationPreview() {
   showPage(previewParameters.get("page") || "dashboard");
   if (previewParameters.get("update") === "available") {
     showUpdateDialog({
-      current_version: "0.4.1",
-      version: "0.4.2",
+      current_version: "0.4.2",
+      version: "0.4.3",
       install_supported: true,
       installation_method: "signed-in-app"
     });
