@@ -22,6 +22,16 @@ All notable changes to Mazzy VPN are documented here.
   and macOS signed build can publish the versioned preview and advance the
   fixed updater metadata. Operating-system code signing/notarization and
   native Windows/macOS VPN backends remain separate open gates.
+- Hardened the release gate against command and path injection: the cargo
+  executable is fixed, updater metadata can select only an inventoried
+  downloaded artifact, signature outputs use local bounded names, and the
+  helper has no caller-controlled filesystem paths. The cross-platform UI
+  audit streams JavaScript over stdin instead of exceeding the Windows command
+  line limit.
+- Made the legacy-upgrade systemd regression independent of an already
+  installed Mazzy VPN by verifying package units, drop-ins, executable and
+  inert target fixtures inside an isolated root. The signed Desktop workflow
+  now publishes a versioned SHA-256 manifest after updater-signature audit.
 - Expanded systemd, package-payload, updater-consent and release supply-chain
   regressions. The shell suite now passes 103 cases.
 - Prevented duplicate Desktop/WebView/tray instances; a repeated launch now

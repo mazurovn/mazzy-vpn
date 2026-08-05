@@ -36,6 +36,15 @@ Publication is confirmed only by the corresponding GitHub tag and Release page.
   verified before installation. AppImage can update in-app; DEB/RPM opens the
   versioned release so package ownership is preserved. The release feed moves
   only after Linux, Windows and macOS build jobs succeed.
+- Release helpers no longer accept caller-controlled cargo commands or
+  filesystem roots. Downloaded updater artifacts are selected from a bounded
+  local inventory, signature files use local sequence names, and the workflow
+  publishes `Mazzy.VPN.Desktop_0.4.1_SHA256SUMS` only after updater signatures
+  pass. The systemd upgrade regression now runs in an isolated root and cannot
+  pass merely because an older Mazzy VPN package is installed on the host.
+- The cross-platform UI audit sends generated JavaScript to Node over stdin,
+  avoiding the Windows command-line length limit without weakening parsing or
+  localization checks.
 - No protocol readiness claim changes. Windows and macOS remain UI-only
   previews without operating-system code signing or native VPN backends,
   Android remains unavailable, and the nine modern protocol adapters remain

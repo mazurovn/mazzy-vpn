@@ -127,3 +127,26 @@ tail -n 100 "$HOME/.local/share/com.mazurovn.mazzy-vpn/logs/Mazzy VPN Desktop.lo
 с `OnUnitActiveSec=20s` остаётся виден в `systemctl cat`, но package drop-in
 сначала очищает накопительное значение и задаёт 60 секунд; effective state
 подтверждает `OnUnitActiveUSec=1min`, jitter `5s` и активный timer.
+
+## Повторный аудит release gate
+
+До публикации patch release PR-проверки нашли и устранили четыре независимых
+проблемы pipeline:
+
+- Windows UI audit передавал большой сгенерированный JavaScript через
+  `node -e` и превышал системный предел длины команды (`WinError 206`). Script
+  теперь передаётся через stdin, при этом тот же parser и contract остаются
+  обязательными на Linux, macOS и Windows.
+- CodeQL обнаружил один command-injection flow из `CARGO` и восемь
+  path-injection flow из аргументов helper проверки updater signatures.
+  Release builder вызывает фиксированный `cargo`; helper не принимает пути от
+  caller, использует фиксированный workspace, bounded inventory скачанных
+  regular files и локальные порядковые имена signatures.
+- systemd regression локально зависел от уже установленного
+  `/usr/bin/mazzy-vpn` и host unit path. На чистом runner это корректно
+  приводило к отказу. Тест перенесён в отдельный root с package units,
+  drop-ins, API template, executable и inert standard targets.
+- Signed Desktop workflow проверяет все updater signatures до публикации и
+  после этого создаёт и загружает
+  `Mazzy.VPN.Desktop_0.4.1_SHA256SUMS`. Fixed update feed продвигается только
+  после успешной Linux/macOS/Windows matrix и этой проверки.

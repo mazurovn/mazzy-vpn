@@ -34,8 +34,11 @@ Normal pull-request builds set `createUpdaterArtifacts=false`. The release
 wrapper enables it only when `TAURI_SIGNING_PRIVATE_KEY` exists. A tagged
 release remains a draft until Linux, Windows and macOS jobs have produced valid
 non-empty signatures and same-tag asset URLs. Only then does CI publish the
-versioned preview and replace `latest.json` on the fixed `desktop-updater`
-release; both publication jobs use the protected `desktop-release` environment.
+versioned preview, upload the versioned SHA-256 manifest and replace
+`latest.json` on the fixed `desktop-updater` release; both publication jobs use
+the protected `desktop-release` environment. The checksum manifest is generated
+from the downloaded release-asset inventory after every updater signature has
+been verified. It is an integrity aid and does not replace those signatures.
 
 The Tauri updater signature authenticates an artifact to existing Mazzy VPN
 Desktop installations. It is not Authenticode, Apple code signing/notarization,
@@ -91,8 +94,11 @@ artifact публичным ключом из `tauri.conf.json`; зашифро�
 включает artifacts только при наличии `TAURI_SIGNING_PRIVATE_KEY`. Tagged
 release остаётся draft, пока Linux, Windows и macOS jobs не создадут непустые
 подписи и URL того же tag. Только после этого CI публикует versioned preview и
-заменяет `latest.json` в фиксированном release `desktop-updater`; обе операции
-публикации защищены environment `desktop-release`.
+versioned SHA-256 manifest, затем заменяет `latest.json` в фиксированном release
+`desktop-updater`; обе операции публикации защищены environment
+`desktop-release`. Manifest строится по скачанному инвентарю release assets
+после проверки каждой updater-подписи. Он помогает проверить целостность, но не
+заменяет эти подписи.
 
 Tauri updater signature подтверждает artifact для уже установленного Mazzy VPN
 Desktop. Она не является Authenticode, Apple code signing/notarization,
