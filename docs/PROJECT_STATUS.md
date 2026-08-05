@@ -2,7 +2,7 @@
 
 Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
-Last synchronized: 2026-08-03.
+Last synchronized: 2026-08-05.
 
 This file is the persistent handoff after interrupted Codex sessions. GitHub
 issues and release gates in [`capabilities.json`](capabilities.json) remain the
@@ -17,8 +17,19 @@ This page records the verified resumption point.
   `desktop-v0.4.0`. PR #43 was squash-merged as commit
   `2faebdb4ac2f88ba7dd7467b0dd2485afba65ed3`; both tags point to that commit
   and the tag workflows passed.
-- Linux CLI/TUI is functional. Linux Desktop remains an unsigned preview;
-  AppImage, DEB and RPM are functional control-center bundles.
+- Patch source `1.4.1` / Desktop `0.4.1` fixes the installed 0.4.0 API-socket
+  boot ordering cycle and carries critical recovery policy through package
+  drop-ins when legacy `/etc/systemd/system` units shadow package units. It
+  also adds a consent-gated Tauri-signed updater with a fixed GitHub feed;
+  DEB/RPM remains package-manager owned. It is not published until both patch
+  tags and Release pages exist. Evidence is in
+  [`AUDIT_2026-08-04_SYSTEMD_HOTFIX.ru.md`](AUDIT_2026-08-04_SYSTEMD_HOTFIX.ru.md).
+  Runtime evidence and the Desktop/health recovery follow-up are recorded in
+  [`AUDIT_2026-08-05_RUNTIME_INCIDENT.ru.md`](AUDIT_2026-08-05_RUNTIME_INCIDENT.ru.md).
+- Linux CLI/TUI is functional. Linux Desktop remains a preview; AppImage, DEB
+  and RPM are functional control-center bundles. Installable updater artifacts
+  are Tauri-signed, while package-repository and OS code-signing gates remain
+  open.
 - Issue #31 is closed. The release carries the provenance-verified upstream
   `glib` backport, `event-listener` 5.4.2 and `serde_with` 3.21.0; current
   RustSec, Dependabot and CodeQL release scans have no open alerts.
@@ -27,8 +38,9 @@ This page records the verified resumption point.
   proc-macro and `unic` transitive graph. They are maintenance debt, not proof
   of an exploitable issue; migration off the legacy GTK3 graph remains a
   Desktop production gate.
-- Windows and macOS 0.4.0 artifacts are unsigned UI previews without native
-  VPN backends. They must not be described as functional VPN clients.
+- Windows and macOS 0.4.1 artifacts remain UI previews without native VPN
+  backends or OS code signing. They must not be described as functional VPN
+  clients; a Tauri updater signature does not change that boundary.
 - Android and iOS clients are planned and have no application source or
   release artifacts.
 - Open backlog issues #4–#14 and #36–#39 remain incremental roadmap slices,
@@ -196,13 +208,13 @@ read-only planner, managed-profile and runtime-adapter foundation:
 - The regression suite now pins its API socket inside the temporary test root;
   an active installed daemon can no longer replace fixture profiles with the
   host's live profile catalog during a local run.
-- Local release verification includes 100 Bash/end-to-end tests plus the
+- Local release verification includes 103 Bash/end-to-end tests plus the
   managed adapter, Agent Control, Rust, ShellCheck, package and UI gates.
   GitHub CI remains authoritative for Clippy, cargo-deny, npm audit, CodeQL and
   the cross-platform Desktop build matrix.
-  The existing 12 documentation screenshots remain at 1680×951; the two new
-  Agent Control captures are 1680×975. All 14 use the localhost-only RFC 5737
-  fixture.
+  Fourteen documentation screenshots remain unchanged; two new signed-update
+  dialog captures are 1680×951. All 16 use the localhost-only RFC 5737 fixture;
+  the Agent Control pair remains 1680×975 and the other 14 are 1680×951.
 
 ## Current implementation slice
 

@@ -66,7 +66,7 @@ Tauri Desktop は Quick Connect、Reconnect、Disconnect、Refresh、
 Self-diagnostics をウィンドウとシステムトレイから提供します。Linux 版は
 インストール済み CLI と連携して動作し、AppImage、DEB、RPM を用意します。
 macOS と Windows はネイティブ VPN バックエンド実装前の UI プレビューです。
-Desktop 0.4 は未署名 preview として公開済みです。Issue #31 はレビュー済みの
+Desktop 0.4.1 は preview のままですが、インストール可能な更新は Tauri 署名で検証され、必ず確認を求めます。Issue #31 はレビュー済みの
 upstream `glib` backport、厳密な source provenance 検証、成功した RustSec、
 Dependabot、CodeQL checks により解決済みです。GUI はプロファイルや鍵を読みません。詳細:
 [Desktop guide (English)](docs/DESKTOP.en.md)。
@@ -93,7 +93,7 @@ sudo mazzy-vpn autostart on
 ## 自動監視と修復
 
 VPN プロセスが予期せず終了すると systemd が再起動します。独立したヘルス
-タイマーは約 20 秒ごとに、希望状態、サービス、VPN インターフェース、および
+タイマーは約 1 分ごとに、希望状態、サービス、VPN インターフェース、および
 そのインターフェース経由の実際の HTTPS 接続を確認します。
 `DESIRED=up` なのにサービスが停止している場合は直ちに起動し、通信チェックが
 2 回連続で失敗すると再接続します。`sudo mazzy-vpn doctor --fix` は監視を有効に

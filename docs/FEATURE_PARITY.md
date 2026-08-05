@@ -8,7 +8,7 @@ test/document reference and release gate remains consistent.
 
 Status: **I** implemented · **P** partial · **R** planned · **—** not applicable.
 
-Matrix scope: **CLI/TUI 1.4.0 and Desktop 0.4.0 release source**. Agent Control
+Matrix scope: **CLI/TUI 1.4.1 and Desktop 0.4.1 release source**. Agent Control
 is diagnostics-only; `P` does not claim provider lifecycle, E2EE networking or
 remote execution. That capability remains an explicit Desktop 1.0 gate on
 Linux, macOS and Windows.
@@ -31,6 +31,7 @@ Linux, macOS and Windows.
 | `protocol-catalog-detection` | I | R | R | R | R | R | R |
 | `ai-orchestration-contract` | P | R | R | R | R | R | R |
 | `agent-provider-integration` | R | R | P | P | P | R | R |
+| `signed-consent-updates` | — | — | P | P | P | R | R |
 | `versioned-local-api` | P | P | P | P | P | R | R |
 | `mobile-vpn-lifecycle` | — | — | — | — | — | R | R |
 
@@ -55,7 +56,8 @@ Desktop 0.4 — Linux control-center preview. Он уже включает ус�
 движка, импорт и выбор профилей, validate/probe/live-test, Doctor с полным
 выводом, фактическую проверку egress/DNS/IPv6/локации, сортировку локаций,
 расширенный tray, журнал и управление службами. Desktop 0.4 подготовлен как
-unsigned preview, а gate Desktop 1.0 всё ещё закрыт: issue #31 закрыт точным
+preview с Tauri-подписанным consent-gated updater, а gate Desktop 1.0 всё ещё
+закрыт: issue #31 закрыт точным
 provenance-verified backport `glib`, но не завершены fallback-policy UI, полный перевод новых экранов на шесть языков и
 переход всех typed `pkexec`-операций к локальному versioned daemon API.
 Контракт API `1.0`, manifest, безопасные envelopes и ограниченный protected
@@ -92,7 +94,8 @@ Desktop 0.4 is a Linux control-center preview. It bundles the shared-engine
 installer and now exposes profile import/selection, validation, probes, live
 tests, actual egress/DNS/IPv6/location verification, location sorting,
 an expanded tray, full Doctor output, logs and service controls. Desktop 0.4 is
-prepared as an unsigned preview, while the Desktop 1.0 gate remains closed:
+prepared as a preview with a Tauri-signed consent-gated updater, while the
+Desktop 1.0 gate remains closed:
 issue #31 is closed with a provenance-verified `glib` backport, but fallback-policy UI, full six-language coverage for the new screens and
 the versioned local daemon API still need to replace every typed `pkexec`
 operation. The API `1.0` contract, manifest, frontend-safe envelopes and a

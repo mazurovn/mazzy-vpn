@@ -1,9 +1,61 @@
-# Mazzy VPN 1.4.0 / Desktop 0.4.0
+# Mazzy VPN 1.4.1 / Desktop 0.4.1
 
-Release source prepared 2026-08-03 by [Nik m (@mazurovn)](https://github.com/mazurovn).
+Release source prepared 2026-08-05 by [Nik m (@mazurovn)](https://github.com/mazurovn).
 Publication is confirmed only by the corresponding GitHub tag and Release page.
 
-## English
+## Patch scope
+
+- Breaks the verified systemd boot-ordering cycle between the early
+  `mazzy-vpn-api.socket` transaction and the fail-closed API recovery oneshot.
+- Makes the socket require successful recovery directly and retains explicit
+  local-filesystem and shutdown ordering without the service's implicit
+  `basic.target` dependency.
+- Carries recovery dependencies, bounded service restart policy and recovery
+  timeout in package drop-ins so upgrades from legacy `/etc/systemd/system`
+  units receive the current safety contract instead of silently shadowing it.
+- Resets the effective health timer to one minute plus bounded jitter even when
+  a legacy `/etc/systemd/system/vpnctl-health.timer` still shadows the package
+  unit. This
+  prevents transient failures from triggering the old 20-second probe cadence.
+- Prevents duplicate Desktop/WebView/tray processes and focuses the existing
+  dashboard when Desktop is launched again.
+- Shows missing optional profile-country metadata or one-provider GeoIP as a
+  distinct amber `PARTIALLY VERIFIED` state only when tunnel, route, DNS and
+  IPv6 leak checks are otherwise safe. Other warnings remain risks.
+- Adds a persistent privacy-bounded Desktop lifecycle log with `KeepOne`
+  rotation and a `1,000,000`-byte limit. It records bounded lifecycle and
+  diagnostic aggregates without profile names, endpoints, credentials,
+  configurations or IP addresses.
+- Adds staged-installation regressions for clean installs and upgrades. The
+  103-case shell suite, systemd verification and Linux AppImage/DEB/RPM
+  payload, dependency, lifecycle and GUI-launch audit pass.
+- Adds automatic startup checks against a fixed GitHub update feed with a
+  mandatory Desktop dialog. No download or installation starts without the
+  user's explicit action.
+- Installable updater artifacts are signed with the Tauri updater key and
+  verified before installation. AppImage can update in-app; DEB/RPM opens the
+  versioned release so package ownership is preserved. The release feed moves
+  only after Linux, Windows and macOS build jobs succeed.
+- No protocol readiness claim changes. Windows and macOS remain UI-only
+  previews without operating-system code signing or native VPN backends,
+  Android remains unavailable, and the nine modern protocol adapters remain
+  planned beyond their import/render foundations.
+
+По-русски: patch устраняет подтверждённый boot cycle локального API,
+восстанавливает socket activation после перезагрузки и переносит критические
+systemd policy в package drop-ins для безопасного обновления с 1.3.2/0.3.2.
+Desktop автоматически проверяет фиксированный GitHub feed, но обязательно
+показывает диалог и не загружает обновление без подтверждения. Tauri-подпись
+проверяет updater artifact; она не заменяет Authenticode, Apple notarization
+или подпись DEB/RPM. Обновление также переносит health timer со старого
+20-секундного интервала на минутный, блокирует дубли Desktop/tray, отделяет
+частичную GeoIP-проверку от реального риска и добавляет ограниченный постоянный
+lifecycle log без профилей, endpoint, credentials и IP. Функциональные границы
+протоколов и платформ не изменились.
+
+## 1.4.0 baseline notes
+
+### English
 
 Mazzy VPN 1.4.0 advances the audited Linux control plane for resilient access
 to AI services, the web and corporate networks. Desktop 0.4.0 is a functional
@@ -88,7 +140,7 @@ unit before tunnel/test recovery. DEB/RPM continue to migrate trusted legacy
 `/usr/local/bin` copies to package-owned `/usr/bin` commands with reversible
 backups.
 
-## Русский
+### Русский
 
 Mazzy VPN 1.4.0 развивает проверенный Linux control plane для устойчивого
 доступа к AI-сервисам, открытому интернету и корпоративным сетям. Desktop 0.4.0

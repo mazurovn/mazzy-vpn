@@ -13,19 +13,20 @@ Linux-пакет 0.4 включает совместимый engine installer: �
 установка CLI больше не требуется. CLI и TUI остаются самостоятельными
 клиентами того же движка и состояния.
 
-> **Статус 0.4:** Linux control-center уже покрывает основной рабочий цикл. Его
-> release source является unsigned preview и остаётся preview до закрытия
+> **Статус 0.4:** Linux control-center уже покрывает основной рабочий цикл и
+> остаётся preview до закрытия
 > [production gates](FEATURE_PARITY.md). Issue #31 закрыт точным upstream
 > backport `glib` 0.18 с проверенным source provenance и пустым cargo-deny
 > ignore list. Для Desktop 1.0 ещё
 > нужны общий native service, полный
-> fallback-policy UI, перевод всех экранов на шесть языков, подписанные
-> обновления, clean-device integration tests и перенос оставшихся typed
+> fallback-policy UI, clean-device integration tests, platform code
+> signing/notarization и перенос оставшихся typed
 > `pkexec`-операций в частично реализованный versioned local API.
 
-> **Разделение версий:** release source `desktop-v0.4.0` содержит Dashboard,
+> **Разделение версий:** release source `desktop-v0.4.1` содержит Dashboard,
 > Profiles, Diagnostics, Settings, About и diagnostics-only Agent Control.
-> Agent Control не запускает и не связывает provider processes.
+> В нём добавлены Tauri-подписанные обновления с обязательным диалогом. Agent
+> Control не запускает и не связывает provider processes.
 
 ## Визуальный обзор
 
@@ -44,6 +45,10 @@ Linux-пакет 0.4 включает совместимый engine installer: �
 |---|
 | ![Provider adapters и catalog status](images/agents-ru.png) |
 
+| Диалог подписанного обновления — Desktop 0.4.1 |
+|---|
+| ![Версии и явное действие установки](images/update-ru.png) |
+
 ## Статус платформ
 
 | Платформа | Статус | Пакеты |
@@ -56,7 +61,7 @@ macOS и Windows preview не нужно использовать как сре�
 Для полноценной поддержки нужны нативные Network Extension/launchd и Windows
 service/Wintun backends, подпись кода и platform-specific тесты.
 
-## Экраны Desktop 0.4.0
+## Экраны Desktop 0.4.1
 
 1. **Обзор** — туннель, интернет, IP, handshake, health, recovery, проверка
    фактического egress и tray.
@@ -69,7 +74,8 @@ service/Wintun backends, подпись кода и platform-specific тесты
    emergency recovery, полный результат Doctor/self-test и ограниченный журнал
    systemd.
 5. **Настройки** — версии bundled/installed engine, состояние зависимостей,
-   Install/Update/Repair, autostart, health monitor, privacy и уведомления.
+   Install/Update/Repair, проверка подписанных обновлений и consent dialog,
+   autostart, health monitor, privacy и уведомления.
 6. **О программе** — версии Desktop/engine/platform, автор, лицензия,
    приватность и правила безопасной работы.
 
@@ -145,6 +151,14 @@ containment остаются R0 prerequisites для будущей lifecycle au
 | Service settings | `mazzy-vpn autostart` / `monitor` |
 | Logs | `mazzy-vpn logs --lines N` |
 
+Собственный журнал Desktop хранится в
+`~/.local/share/com.mazurovn.mazzy-vpn/logs/Mazzy VPN Desktop.log` на Linux,
+`~/Library/Logs/com.mazurovn.mazzy-vpn/Mazzy VPN Desktop.log` на macOS и
+`%LOCALAPPDATA%\com.mazurovn.mazzy-vpn\logs\Mazzy VPN Desktop.log` на Windows.
+Файл ограничен одним мегабайтом с `KeepOne` rotation и содержит только
+lifecycle, тип операции, результат, число профилей и агрегаты диагностики.
+Имена профилей, endpoint, ключи, конфигурации и IP в него не записываются.
+
 Из tray теперь можно сразу открыть Обзор, Профили, Диагностику, Настройки или
 «О программе». Там же доступны Quick Connect, Reconnect, Disconnect, проверка
 фактического egress, ping всего списка локаций, refresh, Doctor, отдельные
@@ -195,6 +209,8 @@ output. Те же lifecycle-команды CLI/TUI используют этот
 `pkexec`, поэтому ОС может показать стандартный запрос прав администратора.
 Закрытие окна скрывает приложение в tray; окончательный выход выполняется
 пунктом **Quit Mazzy VPN**.
+Повторный запуск Desktop показывает существующий единственный экземпляр, а не
+создаёт второй WebView и вторую tray-иконку.
 
 На Linux контекстное меню tray открывается правой кнопкой. Поддержка события
 обычного клика зависит от desktop environment.
@@ -214,7 +230,9 @@ runtime в `/usr/lib/mazzy-vpn`, systemd units/drop-ins в
 Существующие профили `/etc/vpnctl` и state `/var/lib/vpnctl` не входят в
 package payload и намеренно сохраняются при upgrade и remove. Старый ручной
 unit в `/etc/systemd/system` сохраняет свои настройки, а package drop-in
-переключает только executable на package-owned `/usr/bin/mazzy-vpn`. Если
+переключает executable на package-owned `/usr/bin/mazzy-vpn`, сохраняет
+инварианты recovery/restart и сбрасывает старый health timer на актуальный
+минутный интервал. Если
 установка запущена через `sudo` или `pkexec`, вызывающий пользователь
 добавляется в группу `mazzy-vpn`; для socket может понадобиться новый login.
 Package-safe действие «Исправить» повторяет это добавление, если графический
@@ -229,17 +247,17 @@ package-owned `/usr/bin/mazzy-vpn`. Сторонние, пользователь
 DEB:
 
 Ниже указаны точные dot-normalized имена файлов со страницы GitHub Release
-`desktop-v0.4.0`. Локальный output `npm run build:release` может сохранять
+`desktop-v0.4.1`. Локальный output `npm run build:release` может сохранять
 пробелы из Tauri product name.
 
 ```bash
-sudo apt install ./Mazzy.VPN.Desktop_0.4.0_amd64.deb
+sudo apt install ./Mazzy.VPN.Desktop_0.4.1_amd64.deb
 ```
 
 RPM:
 
 ```bash
-sudo dnf install ./Mazzy.VPN.Desktop-0.4.0-1.x86_64.rpm
+sudo dnf install ./Mazzy.VPN.Desktop-0.4.1-1.x86_64.rpm
 ```
 
 Для DEB/RPM действие **Установить / обновить / исправить** запускает
@@ -254,9 +272,9 @@ tests для всех поддерживаемых дистрибутивов, p
 AppImage:
 
 ```bash
-sha256sum -c --ignore-missing Mazzy.VPN.Desktop_0.4.0_SHA256SUMS
-chmod +x ./Mazzy.VPN.Desktop_0.4.0_amd64.AppImage
-./Mazzy.VPN.Desktop_0.4.0_amd64.AppImage
+sha256sum -c --ignore-missing Mazzy.VPN.Desktop_0.4.1_SHA256SUMS
+chmod +x ./Mazzy.VPN.Desktop_0.4.1_amd64.AppImage
+./Mazzy.VPN.Desktop_0.4.1_amd64.AppImage
 ```
 
 AppImage не может установить собственный privilege helper. Сначала проверьте
@@ -266,9 +284,10 @@ AppImage по-прежнему использует явно разрешённ�
 является package-managed установкой.
 
 Имена версий в примерах замените на фактические имена загруженных файлов.
-Preview-артефакты пока не подписаны, а workflow ещё не публикует подписанные
-checksum или provenance. Проверяйте source commit и его GitHub Actions run, но
-не считайте неподписанный hash доказательством издателя.
+Installable updater artifacts имеют Tauri-подпись, которую Desktop проверяет
+встроенным public key. У DEB/RPM и platform executables пока нет repository,
+Authenticode или Apple signing; проверяйте source commit и успешный GitHub
+Actions run. Граница описана в [Desktop signed updates](DESKTOP_UPDATES.md).
 
 ## Языки
 
@@ -322,6 +341,7 @@ Linux build создаёт AppImage, DEB и RPM в
 `desktop/src-tauri/target/release/bundle/`. Зависимости npm и Cargo
 зафиксированы lock-файлами. Release-команда удаляет локальный домашний путь
 сборщика из диагностических строк Rust. CI собирает каждую ОС на
-соответствующем GitHub runner. Tagged workflow сначала создаёт draft unsigned
-preview; он публикуется только после аудита platform artifacts, checksums и
-обязательного Linux RustSec gate.
+соответствующем GitHub runner. Tagged workflow сначала создаёт draft preview с
+Tauri-подписанными updater artifacts. Release публикуется и фиксированный feed
+двигается только после Linux, Windows и macOS builds, проверки metadata и
+обязательных Linux RustSec/package gates.

@@ -3,8 +3,11 @@
 [Unit]
 Description=Recover interrupted Mazzy VPN API actions before control services
 Documentation=file:/usr/local/lib/mazzy-vpn/docs/API_CONTRACT.en.md
+DefaultDependencies=no
+Requires=local-fs.target
 After=local-fs.target
-Before=vpnctl-test-recovery.service vpnctl.service vpnctl-health.service mazzy-vpn-api.socket
+Conflicts=shutdown.target
+Before=shutdown.target vpnctl-test-recovery.service vpnctl.service vpnctl-health.service mazzy-vpn-api.socket
 
 [Service]
 Type=oneshot

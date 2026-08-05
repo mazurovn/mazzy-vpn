@@ -19,17 +19,3 @@ if (build.error) {
 if (build.status !== 0) {
   process.exit(build.status ?? 1);
 }
-
-if (process.platform === "linux") {
-  const audit = spawnSync(join("..", "tests", "check-linux-packages.sh"), {
-    cwd: process.cwd(),
-    stdio: "inherit",
-  });
-  if (audit.error) {
-    console.error(audit.error.message);
-    process.exit(1);
-  }
-  if (audit.status !== 0) {
-    process.exit(audit.status ?? 1);
-  }
-}

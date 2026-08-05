@@ -2023,7 +2023,34 @@ fn dependencies() -> Vec<DependencyState> {
 
 #[tauri::command]
 pub fn get_profiles() -> Value {
-    profile_cache_response(fs::read_to_string(PROFILES_FILE))
+    let response = profile_cache_response(fs::read_to_string(PROFILES_FILE));
+    if profile_cache_is_available(&response) {
+        let count = response
+            .get("profiles")
+            .and_then(Value::as_array)
+            .map_or(0, Vec::len);
+        log::info!(
+            target: "mazzy_vpn_desktop::profiles",
+            "profiles.loaded count={count}"
+        );
+    } else {
+        let error_code = response
+            .get("error_code")
+            .and_then(Value::as_str)
+            .unwrap_or("profile-cache-unavailable");
+        log::warn!(
+            target: "mazzy_vpn_desktop::profiles",
+            "profiles.unavailable code={error_code}"
+        );
+    }
+    response
+}
+
+fn profile_cache_is_available(response: &Value) -> bool {
+    response
+        .get("available")
+        .and_then(Value::as_bool)
+        .unwrap_or(true)
 }
 
 fn unavailable_profile_cache(error_code: &str, error: &str) -> Value {
@@ -2067,18 +2094,45 @@ pub async fn probe_profiles(
     timeout: u16,
     concurrency: u8,
 ) -> Result<Value, String> {
-    tauri::async_runtime::spawn_blocking(move || {
+    let result = tauri::async_runtime::spawn_blocking(move || {
         probe_profiles_sync(protocol, timeout, concurrency)
     })
     .await
-    .map_err(|error| error.to_string())?
+    .map_err(|error| error.to_string())?;
+    match &result {
+        Ok(report) => log::info!(
+            target: "mazzy_vpn_desktop::probe",
+            "probe.complete total={} reachable={} unknown={}",
+            report.pointer("/summary/total").and_then(Value::as_u64).unwrap_or(0),
+            report.pointer("/summary/reachable").and_then(Value::as_u64).unwrap_or(0),
+            report.pointer("/summary/unknown").and_then(Value::as_u64).unwrap_or(0)
+        ),
+        Err(_) => log::warn!(target: "mazzy_vpn_desktop::probe", "probe.failed"),
+    }
+    result
 }
 
 #[tauri::command]
 pub async fn verify_connection(timeout: u16, include_speed: bool) -> Result<Value, String> {
-    tauri::async_runtime::spawn_blocking(move || verify_connection_sync(timeout, include_speed))
-        .await
-        .map_err(|error| error.to_string())?
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        verify_connection_sync(timeout, include_speed)
+    })
+    .await
+    .map_err(|error| error.to_string())?;
+    match &result {
+        Ok(report) => log::info!(
+            target: "mazzy_vpn_desktop::verification",
+            "verification.complete verdict={} findings={} speed_requested={}",
+            report.get("verdict").and_then(Value::as_str).unwrap_or("unknown"),
+            report.get("findings").and_then(Value::as_array).map_or(0, Vec::len),
+            report.pointer("/speed/requested").and_then(Value::as_bool).unwrap_or(false)
+        ),
+        Err(_) => log::warn!(
+            target: "mazzy_vpn_desktop::verification",
+            "verification.failed"
+        ),
+    }
+    result
 }
 
 #[tauri::command]
@@ -2127,9 +2181,23 @@ pub async fn run_operation(
     app: AppHandle,
     request: OperationRequest,
 ) -> Result<OperationResult, String> {
-    tauri::async_runtime::spawn_blocking(move || execute_operation(&app, request))
+    let result = tauri::async_runtime::spawn_blocking(move || execute_operation(&app, request))
         .await
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string());
+    match &result {
+        Ok(operation) => log::info!(
+            target: "mazzy_vpn_desktop::operation",
+            "operation.complete action={} success={} code={}",
+            operation.action,
+            operation.success,
+            operation.code.map_or_else(|| "none".to_owned(), |code| code.to_string())
+        ),
+        Err(_) => log::error!(
+            target: "mazzy_vpn_desktop::operation",
+            "operation.worker_failed"
+        ),
+    }
+    result
 }
 
 #[tauri::command]
@@ -2485,6 +2553,7 @@ mod tests {
         let encoded = serde_json::to_string(&cache).expect("profile cache JSON");
         let sanitized = sanitize_profile_cache(&encoded).expect("sanitized profile cache");
         assert_eq!(sanitized["profiles"][0]["location"], "Belgium — Brussels");
+        assert!(profile_cache_is_available(&sanitized));
 
         let legacy_cache = json!({
             "schema_version": 1,
@@ -2589,6 +2658,7 @@ mod tests {
             "fixture missing",
         )));
         assert_eq!(missing["available"], false);
+        assert!(!profile_cache_is_available(&missing));
         assert_eq!(missing["error_code"], "profile-cache-missing");
         assert_eq!(missing["profiles"], json!([]));
 
@@ -2610,7 +2680,7 @@ mod tests {
             "schema_version": 1,
             "generated_at": 1,
             "product": "Mazzy VPN",
-            "version": "1.4.0",
+            "version": "1.4.1",
             "language": "en",
             "selected": true,
             "service_state": "active",

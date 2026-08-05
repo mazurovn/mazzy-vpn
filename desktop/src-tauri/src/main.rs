@@ -4,6 +4,7 @@
 
 mod agent_control;
 mod backend;
+mod updater;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -145,9 +146,19 @@ fn get_api_info() -> Result<Value, String> {
 
 #[tauri::command]
 async fn run_action(app: AppHandle, action: VpnAction) -> Result<ActionResult, String> {
-    tauri::async_runtime::spawn_blocking(move || execute_tray_action(&app, action))
+    let result = tauri::async_runtime::spawn_blocking(move || execute_tray_action(&app, action))
         .await
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string());
+    match &result {
+        Ok(operation) => log::info!(
+            target: "mazzy_vpn_desktop::tray",
+            "tray.complete action={} success={}",
+            operation.action,
+            operation.success
+        ),
+        Err(_) => log::error!(target: "mazzy_vpn_desktop::tray", "tray.worker_failed"),
+    }
+    result
 }
 
 fn show_window(app: &AppHandle) {
@@ -321,6 +332,20 @@ fn platform_info() -> PlatformInfo {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            log::info!(target: "mazzy_vpn_desktop::lifecycle", "single_instance.focus_existing");
+            show_window(app);
+        }))
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
+                .max_file_size(1_000_000)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
+                .build(),
+        )
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updater::PendingUpdate::default())
         .invoke_handler(tauri::generate_handler![
             get_status,
             get_api_info,
@@ -335,9 +360,19 @@ fn main() {
             agent_control::get_agent_integrations,
             show_main_window,
             hide_main_window,
-            get_platform_info
+            get_platform_info,
+            updater::check_for_update,
+            updater::open_update_release,
+            updater::install_update,
+            updater::restart_application
         ])
         .setup(|app| {
+            log::info!(
+                target: "mazzy_vpn_desktop::lifecycle",
+                "desktop.start version={} os={}",
+                env!("CARGO_PKG_VERSION"),
+                std::env::consts::OS
+            );
             let description = MenuItem::with_id(
                 app,
                 "description",

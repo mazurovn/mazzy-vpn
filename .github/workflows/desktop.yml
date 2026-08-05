@@ -103,10 +103,14 @@ jobs:
 
   preview-release:
     if: ${{ startsWith(github.ref, 'refs/tags/desktop-v') }}
+    environment: desktop-release
     permissions:
       contents: write
     strategy:
       fail-fast: false
+      # tauri-action merges each platform into one latest.json release asset.
+      # Serialize writers so one matrix job cannot overwrite another platform.
+      max-parallel: 1
       matrix:
         platform: [ubuntu-22.04, macos-14, windows-2022]
     runs-on: ${{ matrix.platform }}
@@ -178,20 +182,104 @@ jobs:
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: desktop
           tauriScript: npm run tauri:audited --
           tagName: desktop-v__VERSION__
           releaseName: "Mazzy VPN Desktop v__VERSION__ (preview)"
           releaseBody: |
-            Mazzy VPN Desktop 0.4.0 is a functional unsigned Linux control-center preview bundled with the compatible Mazzy VPN 1.4.0 engine.
+            Mazzy VPN Desktop 0.4.1 is a functional Linux control-center preview bundled with the compatible Mazzy VPN 1.4.1 engine. Installable updater artifacts carry a Tauri signature and the application always asks before download or installation.
 
             The Linux build includes deterministic read-only protocol planning, a 13-protocol catalog, closed managed-profile import for nine modern protocols, a gated sing-box renderer foundation for six, durable local API recovery and a fail-closed dual-stack transition guard. Linux connection lifecycle remains implemented only for AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec; modern protocol render/import support is not advertised as working connect/TUN/DNS/routing/rollback support.
 
             Agent Control exposes read-only Codex/Claude and transport diagnostics plus versioned future contracts for reverse WSS, LAN WSS, iroh and optional transports. It does not yet provide client-to-client remote control, E2EE sessions, Telegram execution or agent lifecycle authority.
 
-            macOS and Windows bundles are unsigned UI previews only and do not protect traffic: Network Extension and Windows Service/Wintun backends are not implemented. No Android artifact is produced because the repository has no Gradle/VpnService/AAB implementation.
+            macOS and Windows bundles are UI previews only and do not protect traffic: Network Extension and Windows Service/Wintun backends are not implemented, and operating-system code signing/notarization remains open. No Android artifact is produced because the repository has no Gradle/VpnService/AAB implementation.
 
-            Review RELEASE_NOTES.md, the source commit and the successful workflow run before use. Unsigned hashes prove file integrity, not publisher identity.
+            Review RELEASE_NOTES.md, the source commit and the successful workflow run before use. The Tauri updater signature does not replace Authenticode, Apple notarization or distribution-package repository signatures.
           releaseDraft: true
           prerelease: true
+
+      - name: Audit signed Linux package payload and lifecycle
+        if: matrix.platform == 'ubuntu-22.04'
+        run: ./tests/check-linux-packages.sh
+
+  publish-update-feed:
+    if: ${{ startsWith(github.ref, 'refs/tags/desktop-v') }}
+    needs: preview-release
+    runs-on: ubuntu-22.04
+    environment: desktop-release
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Rust
+        shell: bash
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup default 1.88.0
+
+      - name: Download and validate signed updater metadata
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir updater-metadata
+          mkdir updater-assets
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern latest.json \
+            --dir updater-metadata
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir updater-assets
+          jq -e \
+            --arg version "${RELEASE_TAG#desktop-v}" \
+            --arg prefix "https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/" \
+            '
+              .version == $version and
+              ([.platforms[] | .signature | type == "string" and length > 32] | all) and
+              ([.platforms[] | .url | startswith($prefix)] | all) and
+              ([.platforms | keys[] | startswith("linux-")] | any) and
+              ([.platforms | keys[] | startswith("windows-")] | any) and
+              ([.platforms | keys[] | startswith("darwin-")] | any)
+            ' updater-metadata/latest.json >/dev/null
+          python3 tests/prepare-updater-signature-audit.py \
+            updater-metadata/latest.json \
+            updater-assets \
+            updater-signatures >updater-signature-args
+          mapfile -d '' -t updater_signature_args <updater-signature-args
+          ((${#updater_signature_args[@]} > 0))
+          cargo run --locked --quiet \
+            --manifest-path desktop/src-tauri/Cargo.toml \
+            --example verify-updater-signatures -- \
+            desktop/src-tauri/tauri.conf.json \
+            "${updater_signature_args[@]}"
+
+      - name: Publish release and advance fixed update feed
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          gh release edit "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft=false \
+            --prerelease
+          if ! gh release view desktop-updater --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create desktop-updater \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Mazzy VPN Desktop signed update feed" \
+              --notes "Machine-readable signed updater metadata. Install updates only through the consent dialog in Mazzy VPN Desktop." \
+              --prerelease
+          fi
+          gh release upload desktop-updater updater-metadata/latest.json \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber

@@ -2,9 +2,9 @@
   "schema_version": 1,
   "product": "Mazzy VPN",
   "author": "Nik m (@mazurovn)",
-  "matrix_scope": "release-1.4.0-desktop-0.4.0",
+  "matrix_scope": "release-1.4.1-desktop-0.4.1",
   "published_baseline": "desktop-v0.4.0",
-  "release_source": "desktop-v0.4.0",
+  "release_source": "desktop-v0.4.1",
   "status_values": [
     "implemented",
     "partial",
@@ -311,6 +311,23 @@
       "docs": ["docs/PLATFORM_ROADMAP.en.md", "docs/PLATFORM_ROADMAP.ru.md"]
     },
     {
+      "id": "signed-consent-updates",
+      "name_en": "Automatic signed update check with mandatory consent",
+      "name_ru": "Автопроверка подписанных обновлений с обязательным подтверждением",
+      "owner": "desktop-release",
+      "surfaces": {
+        "cli": "not-applicable",
+        "tui": "not-applicable",
+        "desktop_linux": "partial",
+        "desktop_macos": "partial",
+        "desktop_windows": "partial",
+        "mobile_android": "planned",
+        "mobile_ios": "planned"
+      },
+      "tests": ["tests/check-desktop-ui.py", "desktop/src-tauri/src/updater.rs"],
+      "docs": ["docs/DESKTOP_UPDATES.md", "docs/ARCHITECTURE.en.md", "docs/ARCHITECTURE.ru.md", "SECURITY.md", "PRIVACY.md"]
+    },
+    {
       "id": "versioned-local-api",
       "name_en": "Versioned shared request, response, event and error contract",
       "name_ru": "Версионированный общий контракт запросов, ответов, событий и ошибок",
@@ -360,6 +377,7 @@
         {"capability": "automatic-recovery", "surfaces": ["desktop_linux"]},
         {"capability": "self-contained-runtime", "surfaces": ["desktop_linux"]},
         {"capability": "privilege-boundary", "surfaces": ["desktop_linux"]},
+        {"capability": "signed-consent-updates", "surfaces": ["desktop_linux"]},
         {"capability": "versioned-local-api", "surfaces": ["desktop_linux"]},
         {"capability": "agent-provider-integration", "surfaces": ["desktop_linux"]}
       ]
@@ -381,6 +399,7 @@
         {"capability": "automatic-recovery", "surfaces": ["desktop_macos"]},
         {"capability": "self-contained-runtime", "surfaces": ["desktop_macos"]},
         {"capability": "privilege-boundary", "surfaces": ["desktop_macos"]},
+        {"capability": "signed-consent-updates", "surfaces": ["desktop_macos"]},
         {"capability": "versioned-local-api", "surfaces": ["desktop_macos"]},
         {"capability": "agent-provider-integration", "surfaces": ["desktop_macos"]}
       ]
@@ -402,6 +421,7 @@
         {"capability": "automatic-recovery", "surfaces": ["desktop_windows"]},
         {"capability": "self-contained-runtime", "surfaces": ["desktop_windows"]},
         {"capability": "privilege-boundary", "surfaces": ["desktop_windows"]},
+        {"capability": "signed-consent-updates", "surfaces": ["desktop_windows"]},
         {"capability": "versioned-local-api", "surfaces": ["desktop_windows"]},
         {"capability": "agent-provider-integration", "surfaces": ["desktop_windows"]}
       ]

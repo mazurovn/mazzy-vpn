@@ -8,6 +8,8 @@
 [日本語](https://raw.githubusercontent.com/mazurovn/mazzy-vpn/main/docs/images/dashboard-ja.png) ·
 [한국어](https://raw.githubusercontent.com/mazurovn/mazzy-vpn/main/docs/images/dashboard-ko.png)
 
+![Signed update consent](https://raw.githubusercontent.com/mazurovn/mazzy-vpn/main/docs/images/update-en.png)
+
 > Desktop 0.4 — Linux control center preview со встроенным installer engine.
 > Он сам проверяет зависимости и может установить/восстановить engine после
 > явного разрешения. Versioned service API и остальные release gates описаны в
@@ -28,11 +30,24 @@
 - validate, probe, transactional test, test-all и emergency;
 - полный вывод Doctor, self-test и bounded logs;
 - состояние зависимостей, установка/repair engine и настройки services;
+- автоматическая проверка подписанных обновлений с обязательным диалогом;
 - кликабельные события текущего UI-сеанса с полным detail и возраст данных.
 
 Dashboard и общие элементы поддерживают `ru`, `en`, `de`, `zh`, `ja`, `ko`;
 новые экраны полностью переведены на русский и английский, остальные языки
 временно используют английский fallback. Выбор остаётся в WebView storage.
+
+## Обновления Desktop
+
+Автопроверка при запуске включена по умолчанию и отключается в Settings. Она
+обращается только к фиксированному `desktop-updater` feed в GitHub Releases.
+Найденная версия всегда показывается в modal dialog; фоновой установки нет.
+AppImage после отдельного подтверждения загружает и проверяет Tauri-подписанный
+artifact. DEB/RPM открывает versioned release и не заменяет package-managed
+binary. Windows/macOS используют тот же updater trust key, но остаются
+UI-preview без native VPN backend, Authenticode и Apple notarization.
+Технический trust boundary и rollback limits описаны в
+[`docs/DESKTOP_UPDATES.md`](https://github.com/mazurovn/mazzy-vpn/blob/main/docs/DESKTOP_UPDATES.md).
 
 ## Tray menu
 
@@ -50,6 +65,18 @@ Dashboard и общие элементы поддерживают `ru`, `en`, `d
 
 Закрытие окна скрывает его в tray. На Linux контекстное меню надёжнее открывать
 правой кнопкой: событие обычного клика зависит от desktop environment.
+Повторный запуск приложения фокусирует уже работающий single instance и не
+создаёт дополнительный WebView или tray.
+
+## Журнал Desktop
+
+Собственный ограниченный журнал находится на Linux в
+`~/.local/share/com.mazurovn.mazzy-vpn/logs/Mazzy VPN Desktop.log`. На macOS
+используется `~/Library/Logs/com.mazurovn.mazzy-vpn/`, на Windows —
+`%LOCALAPPDATA%\com.mazurovn.mazzy-vpn\logs\`. Ротация `KeepOne` ограничивает
+файл одним мегабайтом. Записываются только lifecycle, вид операции, успех/ошибка
+и агрегаты проверок; профили, endpoint, credentials, конфигурации и IP не
+попадают в этот журнал.
 
 ## Модель привилегий
 
@@ -103,16 +130,25 @@ The control center combines:
 - validate, probe, transactional test, test-all and emergency;
 - retained Doctor, self-test and bounded log output;
 - dependency readiness, engine install/repair and service settings;
+- automatic signed-update checks with a mandatory consent dialog;
 - clickable current-session events with retained detail and data age.
 
 The dashboard and shared elements support `ru`, `en`, `de`, `zh`, `ja` and
 `ko`. New screens are complete in Russian and English and temporarily use an
 English fallback for the other languages.
 
+Startup update checks are enabled by default and can be disabled in Settings.
+They contact only the fixed `desktop-updater` GitHub Releases feed. A discovered
+version is always shown in a modal and is never installed in the background.
+AppImage verifies the Tauri updater signature after separate consent; DEB/RPM
+opens the versioned release rather than bypassing package ownership.
+
 The tray opens Dashboard, Profiles, Diagnostics, Settings or About and provides
 Quick Connect, Reconnect, Disconnect, Verify VPN Egress, Ping All Locations,
 Refresh, Self-diagnostics, explicit Auto-connect/Health Monitor on/off actions
 and Quit. Closing the window hides it to the tray.
+Launching the application again focuses the existing single instance rather
+than creating another WebView or tray icon.
 On Linux, use the right-click context menu because plain-click events depend on
 the desktop environment.
 

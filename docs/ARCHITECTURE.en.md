@@ -46,7 +46,7 @@ flowchart TB
 
     subgraph Supervisor["systemd supervision"]
         Service["vpnctl.service<br/>Restart=always"]
-        Timer["vpnctl-health.timer<br/>about every 20 seconds"]
+        Timer["vpnctl-health.timer<br/>about every minute"]
         Health["vpnctl-health.service"]
         BootRecovery["vpnctl-test-recovery.service"]
         ApiSocket["mazzy-vpn-api.socket<br/>0660 root:mazzy-vpn"]
@@ -236,6 +236,13 @@ handshake age, public VPN address, autostart/health-monitor state and sanitized
 profile labels. Profile paths, server endpoints, keys and configuration
 directives are not exported.
 
+The unprivileged Desktop keeps a separate bounded lifecycle log in the standard
+platform application log directory. It is capped at `1,000,000` bytes with `KeepOne`
+rotation and contains only startup version/OS, repeated launches, operation
+type/outcome, profile counts and probe/verify/updater aggregates. Profile names,
+endpoints, credentials, configurations and IP addresses remain outside this
+observability boundary.
+
 ```mermaid
 sequenceDiagram
     actor User
@@ -278,6 +285,33 @@ settings still use the typed `pkexec` adapter until their API handlers are
 implemented. Completing that migration remains a Desktop 1.0 gate. macOS and
 Windows builds are UI previews and are not advertised as working VPN clients
 until native backends exist.
+
+Desktop updates use a separate unprivileged trust boundary. A startup check
+reads only the fixed `desktop-updater` metadata asset from GitHub Releases and
+stores the resulting Tauri `Update` object in Rust memory. The WebView receives
+only current/new versions and the allowed installation method. It cannot
+supply a URL or invoke the raw updater/opener plugins. A modal action is
+required before the backend consumes the pending update. Tauri verifies the
+artifact signature against the embedded public key; release CI owns the private
+key and advances the feed only after Linux, Windows and macOS builds pass.
+Package-managed Linux installs open the exact versioned release instead of
+replacing a DEB/RPM executable with the AppImage updater target.
+
+```mermaid
+sequenceDiagram
+    participant UI as consent dialog
+    participant Rust as trusted updater boundary
+    participant Feed as fixed GitHub feed
+    participant CI as three-platform release gate
+    UI->>Rust: check_for_update
+    Rust->>Feed: HTTPS latest.json
+    Feed-->>Rust: version + URL + signature
+    Rust-->>UI: versions + allowed method only
+    UI->>Rust: install_update after explicit click
+    Rust->>Rust: verify embedded-key signature
+    Rust-->>UI: installed / restart required
+    CI->>Feed: advance only after all signed builds pass
+```
 
 Egress verification makes bounded HTTPS requests through the selected
 interface. Public-IP and two geolocation services run only after an explicit
@@ -450,6 +484,7 @@ previous connection has been restored successfully.
 | `/run/vpnctl` | Shared `.mutation.lock`, singleton `.health.lock`, health counter and sanitized runtime log | Cleared at boot |
 | `/run/mazzy-vpn/status.json` | Sanitized Desktop status | Recreated by root, `0640 root:mazzy-vpn`, without keys or endpoint |
 | `/run/mazzy-vpn/api-v1.sock` | Versioned local API transport | Socket `0660 root:mazzy-vpn`, systemd activated |
+| Platform app log directory / `Mazzy VPN Desktop.log` | Sanitized Desktop lifecycle and aggregates | User-owned, `KeepOne`, at most `1,000,000` bytes; no profiles, endpoints, credentials, configurations or IP addresses |
 | `vpnctl.service` | Owns the active managed tunnel | Long-running, systemd supervised |
 | `vpnctl-health.timer` | Schedules independent health checks | Enabled for unattended recovery |
 | `vpnctl-test-recovery.service` | Repairs interrupted tests after boot | Boot-time oneshot |

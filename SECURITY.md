@@ -39,6 +39,16 @@ Linux is the only platform with a functional VPN backend in the current
 Desktop release. macOS and Windows artifacts are unsigned UI previews and must
 not be treated as traffic-protection tools.
 
+Desktop update checks use one fixed GitHub Releases feed. The renderer can only
+request a check, accept the pending update or open its fixed project release;
+it has no arbitrary URL, opener or raw updater capability. Download and install
+require a modal confirmation, and Tauri verifies the artifact with the public
+key embedded in the application. The private updater key is stored only in the
+tag-only `desktop-release` GitHub Environment secrets. The release workflow advances the feed only after all
+three desktop platform builds pass. This updater signature authenticates the
+artifact to Mazzy VPN Desktop; it does not replace Authenticode, Apple code
+signing/notarization or distribution-package repository signatures.
+
 Dependency updates are tracked for GitHub Actions, npm and Cargo. Release
 candidates must pass the Bash regression suite, ShellCheck, full-history
 Gitleaks, the public repository and Desktop UI contract audits, Rust tests,

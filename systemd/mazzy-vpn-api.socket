@@ -3,6 +3,8 @@
 [Unit]
 Description=Mazzy VPN protected local API socket
 Documentation=file:/usr/local/lib/mazzy-vpn/docs/API_CONTRACT.en.md
+Requires=mazzy-vpn-api-recovery.service
+After=mazzy-vpn-api-recovery.service
 
 [Socket]
 ListenStream=/run/mazzy-vpn/api-v1.sock

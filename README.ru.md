@@ -15,11 +15,12 @@ L2TP/IPsec, безопасно импортирует профили, измер
 профили своего VPN-провайдера или организации; учётная запись Mazzy VPN и
 телеметрия не требуются.
 
-Текущая release-source линия — [CLI/TUI 1.4.0](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.0)
-и неподписанный [Desktop 0.4.0 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.0).
+Текущая release-source линия — [CLI/TUI 1.4.1](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.1)
+и [Desktop 0.4.1 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.1).
 Версия опубликована только тогда, когда существуют её tag и GitHub Release page.
 Linux Desktop является функциональным control center; Windows и macOS artifacts
-остаются UI preview без native VPN backend. Issue #31 закрыт проверенным
+остаются UI preview без native VPN backend и OS code signing. Installable
+updater artifacts имеют Tauri-подпись и всегда требуют consent. Issue #31 закрыт проверенным
 upstream backport `glib`, точной проверкой source provenance и чистыми
 default-branch результатами RustSec, Dependabot и CodeQL.
 
@@ -427,7 +428,7 @@ systemctl status vpnctl-health.timer
 
 OpenVPN также использует собственное переподключение. Для WireGuard и
 AmneziaWG systemd перезапускает процесс после любого неожиданного завершения.
-Независимый health timer примерно каждые 20 секунд проверяет сохранённое
+Независимый health timer примерно каждую минуту проверяет сохранённое
 состояние, сервис, VPN-интерфейс и реальный HTTPS-доступ именно через него. Если
 при `DESIRED=up` сервис остановлен, он запускается сразу. Отсутствие OpenVPN
 interface или ещё не передающий HTTPS data plane игнорируется в ограниченный

@@ -6,7 +6,7 @@ set -uo pipefail
 PRODUCT_NAME="Mazzy VPN"
 CLI_COMMAND="mazzy-vpn"
 COMPAT_COMMAND="vpnctl"
-VERSION="1.4.0"
+VERSION="1.4.1"
 
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd -- "$(dirname -- "$SELF")" && pwd)"
@@ -9783,16 +9783,18 @@ health_recover() {
     fi
     cleanup_stale_quick_policy
     warn "Автовосстановление: $reason; действие=$action $SERVICE_NAME"
-    if systemctl "$action" "$SERVICE_NAME" &&
-       wait_for_connection_ready "$SELECTED_PROTOCOL"; then
+    if ! systemctl "$action" "$SERVICE_NAME"; then
+        error "systemd отклонил команду автовосстановления"
+    elif wait_for_connection_ready "$SELECTED_PROTOCOL"; then
         transition_guard_release || {
             error "Автовосстановление не смогло снять transition guard"
             return 1
         }
         info "Автовосстановление завершено и защищённый выход подтверждён"
         return 0
+    else
+        error "VPN перезапущен, но защищённый egress не подтверждён"
     fi
-    error "systemd отклонил команду автовосстановления"
     stop_service_bounded 15 no-reset || true
     if [[ -n "$fallback" ]] && start_external_fallback "$fallback" &&
        transition_wait_external_ready "$fallback" "$fallback_interface"; then
