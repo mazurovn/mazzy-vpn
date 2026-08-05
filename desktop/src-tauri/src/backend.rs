@@ -34,6 +34,8 @@ const TRUNCATED_OUTPUT_MARKER: &[u8] = b"\n[output truncated]\n";
 const MAX_API_RESPONSE_BYTES: usize = 64 * 1024;
 #[cfg(target_os = "linux")]
 const LOCAL_API_COMPLETION_GRACE_MS: u64 = 60_000;
+#[cfg(target_os = "linux")]
+const READ_ONLY_API_RETRY_DELAYS_MS: &[u64] = &[0, 250, 500, 1_000, 2_000, 4_000];
 static API_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[cfg(target_os = "linux")]
@@ -582,6 +584,14 @@ fn build_cli_args(request: &OperationRequest) -> Result<(String, Vec<String>), S
     Ok((action.into(), args))
 }
 
+fn normalize_privileged_error(cleaned: String) -> String {
+    let lower = cleaned.to_ascii_lowercase();
+    if lower.contains("error creating textual authentication agent") && lower.contains("/dev/tty") {
+        return "PolicyKit authorization is unavailable for this desktop operation. Start Mazzy VPN Desktop from a graphical session with a PolicyKit authentication agent, or wait for the local Mazzy VPN API to become ready.".into();
+    }
+    cleaned
+}
+
 pub(crate) fn clean_output(output: &Output) -> String {
     let mut bytes = output.stdout.clone();
     if !output.stderr.is_empty() {
@@ -610,7 +620,7 @@ pub(crate) fn clean_output(output: &Output) -> String {
             cleaned.push(character);
         }
     }
-    cleaned.trim().to_owned()
+    normalize_privileged_error(cleaned.trim().to_owned())
 }
 
 fn drain_bounded<R: Read>(mut reader: R, limit: usize) -> io::Result<Vec<u8>> {
@@ -1452,17 +1462,15 @@ pub(crate) fn verify_connection_sync(
 ) -> Result<Value, String> {
     timeout(timeout_seconds, 3, 30)?;
 
-    if Path::new(API_SOCKET).exists() {
-        let request = verify_api_request(timeout_seconds, include_speed);
-        match send_local_api_with_retry(&request) {
-            Ok(response) => return verify_result_from_response(response),
-            Err(LocalApiError::Unavailable) => {}
-            Err(LocalApiError::Indeterminate(error)) => {
-                return Err(format!(
-                    "The local API verification outcome is unknown; it was not repeated \
-                     through another privilege path: {error}"
-                ));
-            }
+    let request = verify_api_request(timeout_seconds, include_speed);
+    match send_local_api_for_read_only(&request) {
+        Ok(response) => return verify_result_from_response(response),
+        Err(LocalApiError::Unavailable) => {}
+        Err(LocalApiError::Indeterminate(error)) => {
+            return Err(format!(
+                "The local API verification outcome is unknown; it was not repeated \
+                 through another privilege path: {error}"
+            ));
         }
     }
 
@@ -1509,22 +1517,20 @@ pub(crate) fn probe_profiles_sync(
         return Err("Probe concurrency must be between 1 and 8".to_owned());
     }
 
-    if Path::new(API_SOCKET).exists() {
-        let request = probe_api_request(
-            &selected_protocol,
-            timeout_seconds,
-            concurrency,
-            cached_profile_count(&selected_protocol),
-        );
-        match send_local_api_with_retry(&request) {
-            Ok(response) => return probe_result_from_response(response),
-            Err(LocalApiError::Unavailable) => {}
-            Err(LocalApiError::Indeterminate(error)) => {
-                return Err(format!(
-                    "The local API probe outcome is unknown; the request was not repeated \
-                     through another privilege path: {error}"
-                ));
-            }
+    let request = probe_api_request(
+        &selected_protocol,
+        timeout_seconds,
+        concurrency,
+        cached_profile_count(&selected_protocol),
+    );
+    match send_local_api_for_read_only(&request) {
+        Ok(response) => return probe_result_from_response(response),
+        Err(LocalApiError::Unavailable) => {}
+        Err(LocalApiError::Indeterminate(error)) => {
+            return Err(format!(
+                "The local API probe outcome is unknown; the request was not repeated \
+                 through another privilege path: {error}"
+            ));
         }
     }
 
@@ -1695,6 +1701,20 @@ fn retry_indeterminate<T>(
 #[cfg(target_os = "linux")]
 fn send_local_api_with_retry(request: &Value) -> Result<Value, LocalApiError> {
     retry_indeterminate(|| send_local_api(request))
+}
+
+#[cfg(target_os = "linux")]
+fn send_local_api_for_read_only(request: &Value) -> Result<Value, LocalApiError> {
+    for (attempt, delay_ms) in READ_ONLY_API_RETRY_DELAYS_MS.iter().enumerate() {
+        if attempt > 0 {
+            thread::sleep(std::time::Duration::from_millis(*delay_ms));
+        }
+        match send_local_api_with_retry(request) {
+            Err(LocalApiError::Unavailable) => {}
+            result => return result,
+        }
+    }
+    Err(LocalApiError::Unavailable)
 }
 
 #[cfg(target_os = "linux")]
@@ -2272,6 +2292,15 @@ mod tests {
             .output()
             .expect("printf");
         assert_eq!(clean_output(&output), "FAIL");
+    }
+
+    #[test]
+    fn policykit_terminal_errors_are_actionable() {
+        let message = normalize_privileged_error(
+            "Error creating textual authentication agent: Error opening current controlling terminal for the process (/dev/tty): No such device or address".into(),
+        );
+        assert!(message.contains("PolicyKit authorization is unavailable"));
+        assert!(!message.contains("/dev/tty"));
     }
 
     #[test]
