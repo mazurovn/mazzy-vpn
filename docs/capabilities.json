@@ -3,7 +3,7 @@
   "product": "Mazzy VPN",
   "author": "Nik m (@mazurovn)",
   "matrix_scope": "release-1.4.1-desktop-0.4.1",
-  "published_baseline": "desktop-v0.4.0",
+  "published_baseline": "desktop-v0.4.1",
   "release_source": "desktop-v0.4.1",
   "status_values": [
     "implemented",

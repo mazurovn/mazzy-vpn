@@ -45,22 +45,23 @@ sudo ./install.sh --live-test
 локальный Tauri build может сохранять пробелы из product name.
 
 ```bash
-sudo apt install ./Mazzy.VPN.Desktop_0.4.0_amd64.deb
-sudo dnf install ./Mazzy.VPN.Desktop-0.4.0-1.x86_64.rpm
-chmod +x ./Mazzy.VPN.Desktop_0.4.0_amd64.AppImage
+sudo apt install ./Mazzy.VPN.Desktop_0.4.1_amd64.deb
+sudo dnf install ./Mazzy.VPN.Desktop-0.4.1-1.x86_64.rpm
+chmod +x ./Mazzy.VPN.Desktop_0.4.1_amd64.AppImage
 ```
 
 DEB и RPM добавляют приложение в системное меню. AppImage можно запускать без
 системной установки. Сверяйте artifact с конкретным release/Actions commit.
-Текущие preview artifacts не подписаны; неподписанный SHA-256 обнаруживает
-случайное повреждение, но сам по себе не доказывает издателя.
+Installable updater artifacts имеют Tauri-подписи, которые проверяет встроенный
+public key. Это не заменяет Authenticode, Apple notarization, подпись RPM или
+APT-репозитория; SHA-256 manifest остаётся отдельной проверкой целостности.
 
 Desktop 0.4 release source содержит совместимые installer/engine resources. На экране Settings
 он проверяет установленную версию и зависимости и после явного системного
 разрешения устанавливает, обновляет или восстанавливает engine. Поэтому сначала
 устанавливать CLI вручную не требуется. Статус preview сохраняется до закрытия
 критериев [[Desktop Full Application Plan]]. Issue #31 закрыт проверенным
-`glib` backport; сверяйте downloads с `Mazzy.VPN.Desktop_0.4.0_SHA256SUMS`.
+`glib` backport; сверяйте downloads с `Mazzy.VPN.Desktop_0.4.1_SHA256SUMS`.
 
 DEB/RPM владеют `/usr/bin/mazzy-vpn`. Начиная с 0.3.2 доверенные root-owned
 копии Mazzy VPN из `/usr/local/bin` сохраняются в закрытом migration-каталоге и
@@ -121,15 +122,16 @@ These are the exact dot-normalized names of the 0.4 GitHub Release
 assets; a local Tauri build may retain spaces from the product name.
 
 ```bash
-sudo apt install ./Mazzy.VPN.Desktop_0.4.0_amd64.deb
-sudo dnf install ./Mazzy.VPN.Desktop-0.4.0-1.x86_64.rpm
-chmod +x ./Mazzy.VPN.Desktop_0.4.0_amd64.AppImage
+sudo apt install ./Mazzy.VPN.Desktop_0.4.1_amd64.deb
+sudo dnf install ./Mazzy.VPN.Desktop-0.4.1-1.x86_64.rpm
+chmod +x ./Mazzy.VPN.Desktop_0.4.1_amd64.AppImage
 ```
 
 DEB and RPM add an application-menu entry. AppImage is portable. Match the
-artifact to its release/Actions commit. Current preview artifacts are unsigned;
-an unsigned SHA-256 detects accidental corruption but does not prove the
-publisher.
+artifact to its release/Actions commit. Installable updater artifacts carry
+Tauri signatures verified by the embedded public key. This does not replace
+Authenticode, Apple notarization, RPM signing or APT repository signing; the
+SHA-256 manifest remains a separate integrity check.
 
 The Desktop 0.4 release source contains compatible installer/engine resources. Its Settings screen
 checks the installed version and dependencies and, after explicit system
@@ -137,7 +139,7 @@ authorization, installs, updates or repairs the engine. A prior manual CLI
 installation is therefore not required. The package remains a preview until
 the [[Desktop Full Application Plan]] release criteria are complete. Issue #31
 is closed with a verified `glib` backport; verify downloads with
-`Mazzy.VPN.Desktop_0.4.0_SHA256SUMS`.
+`Mazzy.VPN.Desktop_0.4.1_SHA256SUMS`.
 
 DEB/RPM own `/usr/bin/mazzy-vpn`. Since 0.3.2, recognized root-owned
 Mazzy VPN copies under `/usr/local/bin` are moved into a private migration

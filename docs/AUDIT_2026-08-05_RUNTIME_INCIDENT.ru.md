@@ -55,10 +55,10 @@
 - Запуск из desktop shell направлял stdout/stderr в `/dev/null`; поэтому у
   Desktop не было отдельного crash-журнала. Coredump не найден, а сами процессы
   не падали.
-- Автопроверка обновлений получает `404 Not Found`, пока release-feed
-  `desktop-updater/latest.json` не опубликован. Это не влияет на туннель и API,
-  но создаёт отдельную ошибку updater при каждом старте и подтверждает, что
-  release pipeline ещё не завершён.
+- Во время инцидента автопроверка обновлений получала `404 Not Found`, потому
+  что release-feed `desktop-updater/latest.json` ещё не был опубликован. Это не
+  влияло на туннель и API. Feed опубликован после завершения release gate и
+  теперь возвращает подписанный manifest `0.4.1`.
 
 ## Исправления в patch source
 
@@ -150,3 +150,22 @@ tail -n 100 "$HOME/.local/share/com.mazurovn.mazzy-vpn/logs/Mazzy VPN Desktop.lo
   после этого создаёт и загружает
   `Mazzy.VPN.Desktop_0.4.1_SHA256SUMS`. Fixed update feed продвигается только
   после успешной Linux/macOS/Windows matrix и этой проверки.
+
+## Финализация release
+
+- PR #49 squash-merged в `64ee927153f95b378ab68f7e82c6d3970cb18167`;
+  annotated tags `v1.4.1` и `desktop-v0.4.1` указывают на этот commit.
+- Linux, macOS и Windows signed build jobs tag workflow завершились успешно.
+  Финальный publication job остановился до публикации: созданный Tauri
+  `latest.json` содержал GitHub draft API URLs, а gate допускал только будущие
+  public release URLs. Это была ошибка нормализации metadata, не ошибка сборки
+  или подписи.
+- Manifest сопоставлен с фактическими `.sig` assets, URL заменены на public
+  same-tag URLs. Все девять platform entries проверены Rust/minisign verifier,
+  14 release assets сверены по SHA-256, после чего опубликованы
+  [`v1.4.1`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.1),
+  [`desktop-v0.4.1`](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.1)
+  и fixed `desktop-updater/latest.json`.
+- Follow-up workflow выполняет эту канонизацию по signature-to-artifact
+  inventory до проверки, загружает исправленный manifest и SHA-256 inventory в
+  draft и только затем делает versioned release публичным.

@@ -1,7 +1,8 @@
 # Mazzy VPN 1.4.1 / Desktop 0.4.1
 
 Release source prepared 2026-08-05 by [Nik m (@mazurovn)](https://github.com/mazurovn).
-Publication is confirmed only by the corresponding GitHub tag and Release page.
+Published releases: [CLI/TUI `v1.4.1`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.1)
+and [Desktop `desktop-v0.4.1` preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.1).
 
 ## Patch scope
 

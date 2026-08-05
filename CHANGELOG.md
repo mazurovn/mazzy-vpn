@@ -2,6 +2,16 @@
 
 All notable changes to Mazzy VPN are documented here.
 
+## Unreleased
+
+- Canonicalize Tauri draft-release API asset URLs from the downloaded signed
+  artifact inventory before updater verification and publication. The corrected
+  manifest is uploaded while the versioned release is still a draft, and the
+  SHA-256 manifest now covers that exact public feed without recursively
+  including an older checksum manifest on a retried job.
+- Synchronize the project status, installation guide, FAQ and roadmap with the
+  published `v1.4.1` and `desktop-v0.4.1` releases.
+
 ## 1.4.1 / Desktop 0.4.1 - 2026-08-05
 
 - Fixed the systemd boot transaction cycle that could drop
