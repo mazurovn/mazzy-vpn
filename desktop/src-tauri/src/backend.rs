@@ -1472,6 +1472,13 @@ pub(crate) fn verify_connection_sync(
 ) -> Result<Value, String> {
     timeout(timeout_seconds, 3, 30)?;
 
+    let cli_path = installed_cli_path().ok_or_else(|| {
+        "Mazzy VPN engine is not installed. Open Settings and run Install / Repair.".to_owned()
+    })?;
+    if package_managed_cli(cli_path) && !wait_for_local_api() {
+        return Err(engine_not_ready_error());
+    }
+
     let request = verify_api_request(timeout_seconds, include_speed);
     match send_local_api_for_read_only(&request) {
         Ok(response) => return verify_result_from_response(response),
@@ -1484,9 +1491,6 @@ pub(crate) fn verify_connection_sync(
         }
     }
 
-    let cli_path = installed_cli_path().ok_or_else(|| {
-        "Mazzy VPN engine is not installed. Open Settings and run Install / Repair.".to_owned()
-    })?;
     if package_managed_cli(cli_path) {
         return Err(engine_not_ready_error());
     }
@@ -1530,6 +1534,13 @@ pub(crate) fn probe_profiles_sync(
         return Err("Probe concurrency must be between 1 and 8".to_owned());
     }
 
+    let cli_path = installed_cli_path().ok_or_else(|| {
+        "Mazzy VPN engine is not installed. Open Settings and run Install / Repair.".to_owned()
+    })?;
+    if package_managed_cli(cli_path) && !wait_for_local_api() {
+        return Err(engine_not_ready_error());
+    }
+
     let request = probe_api_request(
         &selected_protocol,
         timeout_seconds,
@@ -1547,9 +1558,6 @@ pub(crate) fn probe_profiles_sync(
         }
     }
 
-    let cli_path = installed_cli_path().ok_or_else(|| {
-        "Mazzy VPN engine is not installed. Open Settings and run Install / Repair.".to_owned()
-    })?;
     if package_managed_cli(cli_path) {
         return Err(engine_not_ready_error());
     }
