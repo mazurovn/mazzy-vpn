@@ -89,7 +89,7 @@ def desktop_version() -> str:
 
 def check_updater_signature_audit() -> None:
     with tempfile.TemporaryDirectory(prefix="mazzy-updater-audit-") as workspace_raw:
-        workspace = Path(workspace_raw)
+        workspace = Path(workspace_raw).resolve()
         metadata_dir = workspace / "updater-metadata"
         assets_dir = workspace / "updater-assets"
         metadata_dir.mkdir()
