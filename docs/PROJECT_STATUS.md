@@ -13,16 +13,17 @@ This page records the verified resumption point.
 
 ## Verified release baseline
 
-- The current published line is CLI/TUI `v1.4.0` and unsigned Desktop preview
-  `desktop-v0.4.0`. PR #43 was squash-merged as commit
-  `2faebdb4ac2f88ba7dd7467b0dd2485afba65ed3`; both tags point to that commit
-  and the tag workflows passed.
+- The current published line is CLI/TUI `v1.4.1` and Tauri-signed Desktop
+  preview `desktop-v0.4.1`. PR #49 was squash-merged as commit
+  `64ee927153f95b378ab68f7e82c6d3970cb18167`; both version tags point to that
+  commit. The Desktop release remains a prerelease because Windows and macOS
+  do not yet have native VPN backends or operating-system code signing.
 - Patch source `1.4.1` / Desktop `0.4.1` fixes the installed 0.4.0 API-socket
   boot ordering cycle and carries critical recovery policy through package
   drop-ins when legacy `/etc/systemd/system` units shadow package units. It
   also adds a consent-gated Tauri-signed updater with a fixed GitHub feed;
-  DEB/RPM remains package-manager owned. It is not published until both patch
-  tags and Release pages exist. Evidence is in
+  DEB/RPM remains package-manager owned. Both patch releases and the signed
+  fixed `desktop-updater` feed were published on 2026-08-05. Evidence is in
   [`AUDIT_2026-08-04_SYSTEMD_HOTFIX.ru.md`](AUDIT_2026-08-04_SYSTEMD_HOTFIX.ru.md).
   Runtime evidence and the Desktop/health recovery follow-up are recorded in
   [`AUDIT_2026-08-05_RUNTIME_INCIDENT.ru.md`](AUDIT_2026-08-05_RUNTIME_INCIDENT.ru.md).
@@ -97,8 +98,8 @@ This page records the verified resumption point.
 
 Published release links:
 
-- <https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.0>
-- <https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.0>
+- <https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.1>
+- <https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.1>
 
 ## Community and documentation baseline
 

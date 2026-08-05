@@ -1,5 +1,20 @@
 # Релизы и roadmap
 
+## 1.4.1 / Desktop 0.4.1 — recovery и подписанные обновления
+
+- исправлен systemd boot cycle локального API и перенесены recovery/restart
+  policy в package drop-ins для обновления поверх legacy units;
+- Desktop ограничен одним процессом/tray, health cadence исправлен на минуту,
+  а partial GeoIP degradation больше не выдаётся за подтверждённую утечку;
+- добавлен обязательный диалог обновления и Tauri-подпись installable updater
+  artifacts; fixed feed не продвигается до проверки подписей Linux, macOS и
+  Windows artifacts;
+- опубликованы [CLI/TUI `v1.4.1`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.1)
+  и [Desktop `desktop-v0.4.1` preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.1)
+  из audited merge commit `64ee927`;
+- Windows/macOS остаются UI-only previews без нативных VPN backends и OS
+  signing/notarization; Android artifact отсутствует.
+
 ## 1.4.0 / Desktop 0.4.0 — planner, safe transitions и agent contracts
 
 - добавлен отдельный `agent-control/v1` contract для LAN WSS, iroh, libp2p,
@@ -50,7 +65,7 @@
 - capability risk Agent Control закреплён схемой, Telegram Bot ограничен
   argument-free low-risk allowlist.
 
-Опубликованы [CLI/TUI `v1.4.0`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.0)
+Предыдущая линия была опубликована как [CLI/TUI `v1.4.0`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.0)
 и unsigned [Desktop `desktop-v0.4.0` preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.0).
 Оба tag указывают на audited merge commit `2faebdb4`; release workflows прошли.
 Windows/macOS artifacts остаются UI-only, Android package отсутствует.
@@ -150,6 +165,13 @@ CLI engine и не является самостоятельным Desktop VPN-�
 
 # Releases and roadmap
 
+Version 1.4.1 / Desktop 0.4.1 fixes the local API systemd boot cycle and carries
+recovery/restart policy through package drop-ins for upgrades over legacy
+units. It also enforces one Desktop/tray process, corrects health cadence and
+partial GeoIP presentation, and adds a mandatory update consent dialog with
+Tauri-signed installable updater artifacts. The fixed feed advances only after
+the Linux, macOS and Windows updater signatures pass verification.
+
 Version 1.4.0 / Desktop 0.4.0 ships the read-only `planner.evaluate` query with
 five backend-owned hard gates,
 versioned scoring and stable opaque-ID ranking. The repeat audit propagated the
@@ -209,10 +231,11 @@ signed update/rollback, migration away from the temporary vendored Tauri/GTK
 provenance-verified backport; RustSec, Dependabot and CodeQL release checks pass
 without suppressions.
 
-Published releases: [CLI/TUI `v1.4.0`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.0)
-and the unsigned [Desktop `desktop-v0.4.0` preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.0).
-Both tags point to audited merge commit `2faebdb4`; release workflows passed
-and both release pages include SHA-256 manifests.
+Published releases: [CLI/TUI `v1.4.1`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.1)
+and the Tauri-signed [Desktop `desktop-v0.4.1` preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.1).
+Both version tags point to audited merge commit `64ee927`; both release pages
+include SHA-256 manifests. Windows/macOS remain UI-only previews without native
+VPN backends or operating-system code signing, and no Android artifact exists.
 
 Version 1.2.0 / Desktop 0.2.0 is the previous published release line.
 

@@ -241,6 +241,7 @@ jobs:
           gh release download "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --dir updater-assets
+          python3 tests/canonicalize-updater-feed.py
           jq -e \
             --arg version "${RELEASE_TAG#desktop-v}" \
             --arg prefix "https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/" \
@@ -260,24 +261,30 @@ jobs:
             --example verify-updater-signatures -- \
             desktop/src-tauri/tauri.conf.json \
             "${updater_signature_args[@]}"
+          cp updater-metadata/latest.json updater-assets/latest.json
           checksums="Mazzy.VPN.Desktop_${RELEASE_TAG#desktop-v}_SHA256SUMS"
           (
             cd updater-assets
-            sha256sum -- *
+            find . -maxdepth 1 -type f ! -name '*_SHA256SUMS' -printf '%P\0' \
+              | sort -z \
+              | xargs -0 sha256sum --
           ) >"updater-metadata/$checksums"
 
       - name: Publish release and advance fixed update feed
         shell: bash
         run: |
           set -Eeuo pipefail
+          checksums="Mazzy.VPN.Desktop_${RELEASE_TAG#desktop-v}_SHA256SUMS"
+          gh release upload "$RELEASE_TAG" updater-metadata/latest.json \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+          gh release upload "$RELEASE_TAG" "updater-metadata/$checksums" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
           gh release edit "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --draft=false \
             --prerelease
-          checksums="Mazzy.VPN.Desktop_${RELEASE_TAG#desktop-v}_SHA256SUMS"
-          gh release upload "$RELEASE_TAG" "updater-metadata/$checksums" \
-            --repo "$GITHUB_REPOSITORY" \
-            --clobber
           if ! gh release view desktop-updater --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create desktop-updater \
               --repo "$GITHUB_REPOSITORY" \

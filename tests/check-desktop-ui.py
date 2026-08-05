@@ -28,6 +28,7 @@ CAPABILITY = ROOT / "desktop/src-tauri/capabilities/default.json"
 BUILD_RELEASE = ROOT / "desktop/scripts/build-release.mjs"
 DESKTOP_WORKFLOW = ROOT / ".github/workflows/desktop.yml"
 UPDATER_SIGNATURE_AUDIT = ROOT / "tests/prepare-updater-signature-audit.py"
+UPDATER_FEED_CANONICALIZER = ROOT / "tests/canonicalize-updater-feed.py"
 
 
 def fail(message: str) -> None:
@@ -96,13 +97,14 @@ def check_updater_signature_audit() -> None:
         assets_dir.mkdir()
         artifact = assets_dir / "Mazzy.AppImage.tar.gz"
         artifact.write_bytes(b"signed updater fixture")
+        (assets_dir / "Mazzy.AppImage.tar.gz.sig").write_text(
+            "A" * 64 + "\n", encoding="utf-8"
+        )
         manifest = {
+            "version": "0.4.1",
             "platforms": {
                 "linux-x86_64": {
-                    "url": (
-                        "https://github.com/mazurovn/mazzy-vpn/releases/download/"
-                        "desktop-v0.4.1/Mazzy.AppImage.tar.gz"
-                    ),
+                    "url": "https://api.github.com/repos/example/releases/assets/42",
                     "signature": "A" * 64,
                 }
             }
@@ -110,6 +112,28 @@ def check_updater_signature_audit() -> None:
         (metadata_dir / "latest.json").write_text(
             json.dumps(manifest), encoding="utf-8"
         )
+
+        canonical_env = os.environ.copy()
+        canonical_env.update(
+            {
+                "GITHUB_REPOSITORY": "mazurovn/mazzy-vpn",
+                "RELEASE_TAG": "desktop-v0.4.1",
+            }
+        )
+        subprocess.run(
+            [sys.executable, str(UPDATER_FEED_CANONICALIZER)],
+            cwd=workspace,
+            env=canonical_env,
+            check=True,
+            capture_output=True,
+            timeout=10,
+        )
+        canonical = json.loads((metadata_dir / "latest.json").read_text())
+        if canonical["platforms"]["linux-x86_64"]["url"] != (
+            "https://github.com/mazurovn/mazzy-vpn/releases/download/"
+            "desktop-v0.4.1/Mazzy.AppImage.tar.gz"
+        ):
+            fail("Updater feed did not canonicalize a draft API asset URL")
 
         result = subprocess.run(
             [sys.executable, str(UPDATER_SIGNATURE_AUDIT)],
@@ -125,6 +149,22 @@ def check_updater_signature_audit() -> None:
             or signature.read_text(encoding="utf-8") != "A" * 64 + "\n"
         ):
             fail("Updater signature audit did not emit the expected safe arguments")
+
+        duplicate = assets_dir / "duplicate.bin"
+        duplicate.write_bytes(b"different updater fixture")
+        (assets_dir / "duplicate.bin.sig").write_text(
+            "A" * 64 + "\n", encoding="utf-8"
+        )
+        ambiguous = subprocess.run(
+            [sys.executable, str(UPDATER_FEED_CANONICALIZER)],
+            cwd=workspace,
+            env=canonical_env,
+            check=False,
+            capture_output=True,
+            timeout=10,
+        )
+        if ambiguous.returncode == 0 or b"ambiguously" not in ambiguous.stderr:
+            fail("Updater feed accepted one signature for multiple artifacts")
 
         (assets_dir / "unexpected-directory").mkdir()
         unsafe = subprocess.run(
@@ -429,6 +469,7 @@ def main() -> None:
         'startswith("windows-")',
         'startswith("darwin-")',
         "max-parallel: 1",
+        "canonicalize-updater-feed.py",
         "prepare-updater-signature-audit.py",
         "--example verify-updater-signatures",
     ):
@@ -436,6 +477,18 @@ def main() -> None:
             fail(f"Desktop signed release workflow is incomplete: {workflow_boundary}")
     if desktop_workflow.count("environment: desktop-release") < 2:
         fail("Desktop update-feed publication bypasses the protected environment")
+    canonicalize_index = desktop_workflow.index("canonicalize-updater-feed.py")
+    signature_audit_index = desktop_workflow.index(
+        "prepare-updater-signature-audit.py"
+    )
+    upload_index = desktop_workflow.index(
+        'gh release upload "$RELEASE_TAG" updater-metadata/latest.json'
+    )
+    publish_index = desktop_workflow.index('gh release edit "$RELEASE_TAG"')
+    if canonicalize_index > signature_audit_index or upload_index > publish_index:
+        fail("Desktop release publishes before canonical feed verification/upload")
+    if "! -name '*_SHA256SUMS'" not in desktop_workflow:
+        fail("Desktop checksum manifest can recursively include an older manifest")
     if "mapfile -d '' -t updater_signature_args < <(" in desktop_workflow:
         fail("Desktop signature-audit preparation can hide a failed subprocess")
     for screenshot_name in ("update-en.png", "update-ru.png"):
