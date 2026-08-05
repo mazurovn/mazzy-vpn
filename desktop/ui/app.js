@@ -460,7 +460,8 @@ Object.assign(translations.ko, {
 
 const $ = (selector) => document.querySelector(selector);
 const supportedLanguages = new Set(["ru", "en", "de", "zh", "ja", "ko"]);
-const profileRetryDelays = [500, 1000, 2000, 4000, 8000, 15000];
+// Keep startup recovery finite: the engine normally becomes ready within this window.
+const profileRetryDelays = [500, 1000, 2000, 4000, 8000, 12000];
 const previewParameters = new URLSearchParams(window.location.search);
 const localDocumentationHosts = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const documentationPreview =
@@ -503,6 +504,7 @@ const state = {
 let profileRefreshPromise = null;
 let profileRetryTimer = null;
 let profileRetryAttempt = 0;
+let profileRetryExhausted = false;
 
 function t(key) {
   return translations[state.lang]?.[key] || translations.en[key] || key;
@@ -1400,8 +1402,12 @@ async function connectFastestProfile() {
 }
 
 function scheduleProfileRefresh() {
-  if (state.profileCacheAvailable || profileRetryTimer !== null) return;
-  const delay = profileRetryDelays[Math.min(profileRetryAttempt, profileRetryDelays.length - 1)];
+  if (state.profileCacheAvailable || profileRetryTimer !== null || profileRetryExhausted) return;
+  if (profileRetryAttempt >= profileRetryDelays.length) {
+    profileRetryExhausted = true;
+    return;
+  }
+  const delay = profileRetryDelays[profileRetryAttempt];
   profileRetryAttempt += 1;
   profileRetryTimer = window.setTimeout(async () => {
     profileRetryTimer = null;
@@ -1411,6 +1417,14 @@ function scheduleProfileRefresh() {
 }
 
 async function refreshProfiles(manual = false) {
+  if (manual) {
+    profileRetryAttempt = 0;
+    profileRetryExhausted = false;
+    if (profileRetryTimer !== null) {
+      window.clearTimeout(profileRetryTimer);
+      profileRetryTimer = null;
+    }
+  }
   if (profileRefreshPromise) {
     await profileRefreshPromise;
     return;
@@ -1423,6 +1437,7 @@ async function refreshProfiles(manual = false) {
       state.profileCacheAvailable = data?.available !== false;
       if (state.profileCacheAvailable) {
         profileRetryAttempt = 0;
+        profileRetryExhausted = false;
         if (profileRetryTimer !== null) {
           window.clearTimeout(profileRetryTimer);
           profileRetryTimer = null;
@@ -1955,7 +1970,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (state.autoUpdateChecks) void checkForUpdates(false);
   setInterval(() => {
     refreshStatus(false);
-    if (!state.profileCacheAvailable) refreshProfiles(false);
+    if (!state.profileCacheAvailable && !profileRetryExhausted) refreshProfiles(false);
   }, 5000);
   setInterval(() => {
     if (state.page === "agents" && !state.busy) refreshAgents(false);

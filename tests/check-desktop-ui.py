@@ -343,17 +343,38 @@ def main() -> None:
         fail("Desktop active-profile state is not resolved through one exact identity helper")
     if 'data?.available !== false' not in javascript or 't("profilesUnavailable")' not in javascript:
         fail("Desktop hides an unavailable profile cache as an empty profile library")
+    retry_match = re.search(r"const profileRetryDelays = \[([0-9, ]+)\];", javascript)
+    if not retry_match:
+        fail("Desktop profile startup retry delays are missing")
+    retry_delays = [int(value) for value in retry_match.group(1).split(",")]
+    if not retry_delays or sum(retry_delays) > 30_000:
+        fail("Desktop profile startup retry exceeds the 30 second boot-race budget")
+    if "Math.min(profileRetryAttempt, profileRetryDelays.length - 1)" in javascript:
+        fail("Desktop profile startup retry can continue indefinitely after the final delay")
     for profile_startup_boundary in (
-        "const profileRetryDelays = [500, 1000, 2000, 4000, 8000, 15000];",
+        "const profileRetryDelays = [500, 1000, 2000, 4000, 8000, 12000];",
         "let profileRefreshPromise = null;",
         "let profileRetryTimer = null;",
+        "let profileRetryExhausted = false;",
         "function scheduleProfileRefresh()",
         "if (profileRefreshPromise) {",
         "if (!state.profileCacheAvailable) scheduleProfileRefresh();",
-        "if (!state.profileCacheAvailable) refreshProfiles(false);",
+        "if (!state.profileCacheAvailable && !profileRetryExhausted) refreshProfiles(false);",
     ):
         if profile_startup_boundary not in javascript:
             fail(f"Desktop profile startup recovery is incomplete: {profile_startup_boundary}")
+    if javascript.count("profileRetryExhausted") < 6:
+        fail("Desktop profile startup exhaustion is not enforced across scheduling and reset paths")
+    for bounded_retry_guard in (
+        "if (profileRetryAttempt >= profileRetryDelays.length)",
+        "profileRetryExhausted = true;",
+        "if (state.profileCacheAvailable || profileRetryTimer !== null || profileRetryExhausted) return;",
+        "if (manual) {",
+        "profileRetryAttempt = 0;",
+        "profileRetryExhausted = false;",
+    ):
+        if bounded_retry_guard not in javascript:
+            fail(f"Desktop profile startup retry is not bounded or manually recoverable: {bounded_retry_guard}")
     for identity_field in ("state.status.profile_id", "state.status.profile_file_name"):
         if identity_field not in javascript:
             fail(f"Desktop active-profile state ignores {identity_field}")
