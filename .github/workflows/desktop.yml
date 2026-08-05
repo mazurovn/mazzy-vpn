@@ -260,6 +260,11 @@ jobs:
             --example verify-updater-signatures -- \
             desktop/src-tauri/tauri.conf.json \
             "${updater_signature_args[@]}"
+          checksums="Mazzy.VPN.Desktop_${RELEASE_TAG#desktop-v}_SHA256SUMS"
+          (
+            cd updater-assets
+            sha256sum -- *
+          ) >"updater-metadata/$checksums"
 
       - name: Publish release and advance fixed update feed
         shell: bash
@@ -269,6 +274,10 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --draft=false \
             --prerelease
+          checksums="Mazzy.VPN.Desktop_${RELEASE_TAG#desktop-v}_SHA256SUMS"
+          gh release upload "$RELEASE_TAG" "updater-metadata/$checksums" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
           if ! gh release view desktop-updater --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create desktop-updater \
               --repo "$GITHUB_REPOSITORY" \

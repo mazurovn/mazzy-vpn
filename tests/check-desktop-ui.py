@@ -422,6 +422,8 @@ def main() -> None:
         "publish-update-feed:",
         "needs: preview-release",
         "gh release edit \"$RELEASE_TAG\"",
+        "Mazzy.VPN.Desktop_${RELEASE_TAG#desktop-v}_SHA256SUMS",
+        'gh release upload "$RELEASE_TAG"',
         "gh release upload desktop-updater",
         'startswith("linux-")',
         'startswith("windows-")',
