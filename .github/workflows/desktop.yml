@@ -222,6 +222,17 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libgtk-3-dev \
+            jq
+
       - name: Set up Rust
         shell: bash
         run: |
