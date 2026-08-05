@@ -15,11 +15,12 @@ It is a client and control plane rather than a hosted VPN subscription. Use
 profiles from your VPN provider or organization; Mazzy VPN requires no project
 account and collects no telemetry.
 
-The current release source line is [CLI/TUI 1.4.0](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.0)
-and the unsigned [Desktop 0.4.0 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.0).
+The current release source line is [CLI/TUI 1.4.1](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.1)
+and the [Desktop 0.4.1 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.1).
 A version is published only when its linked tag and GitHub Release page exist.
 Linux Desktop is a functional control center; Windows and macOS artifacts are
-UI previews without native VPN backends. Issue #31 is closed with the reviewed
+UI previews without native VPN backends or OS code signing. Installable updater
+artifacts are Tauri-signed and always require consent. Issue #31 is closed with the reviewed
 upstream `glib` backport, exact source-provenance verification and clean
 default-branch RustSec, Dependabot and CodeQL results.
 
@@ -311,7 +312,7 @@ The service restarts after any unexpected process exit except the deliberate
 policy exit status 77; systemd limits starts to five per ten minutes.
 Independently, the
 health timer checks the desired state, service, VPN interface and real HTTPS
-access through that interface about every 20 seconds. An inactive desired
+access through that interface about every minute. An inactive desired
 service is started immediately. A missing OpenVPN interface or an interface
 whose data plane cannot yet pass HTTPS is ignored during a bounded 60-second
 grace measured from systemd's monotonic active age. Two

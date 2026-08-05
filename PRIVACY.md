@@ -44,8 +44,19 @@ Mazzy VPN не содержит телеметрии, рекламных SDK, а
   окружение не может перенаправить эту проверку на произвольный адрес.
 - Systemd journal может содержать технические имена профилей и сообщения VPN
   runtime. Журнал остаётся в системном хранилище устройства.
+- Desktop ведёт отдельный пользовательский lifecycle log в стандартном app log
+  directory (`Mazzy VPN Desktop.log`). `KeepOne` сохраняет только один активный
+  файл размером до `1 000 000` байт. В него попадают версия/OS, повторный
+  запуск, тип и результат операции, число профилей и агрегаты
+  probe/verify/updater; имена профилей, endpoint, credentials, конфигурации и IP
+  не записываются. После остановки Desktop файл можно удалить вручную.
 - Привилегированные изменения выполняются только после стандартного разрешения
   ОС через `sudo`/`pkexec`.
+- Desktop по умолчанию один раз при запуске запрашивает фиксированный
+  `desktop-updater` asset на GitHub Releases. Запрос раскрывает GitHub обычные
+  сетевые метаданные, включая исходящий IP. Версия, профили, ключи, диагностика
+  и история действий проекту не отправляются. Проверку можно отключить в
+  Settings; загрузка и установка требуют отдельного подтверждения в диалоге.
 
 Оператор VPN-сервера, интернет-провайдер, ОС и сторонние protocol runtimes имеют
 собственные правила обработки данных. Mazzy VPN не может заменить их privacy
@@ -93,8 +104,19 @@ device.
   the environment cannot redirect those probes to an arbitrary destination.
 - The systemd journal may contain technical profile labels and VPN runtime
   messages. It remains in the device's system log store.
+- Desktop also keeps a separate user-owned lifecycle log in the standard
+  platform app log directory (`Mazzy VPN Desktop.log`). `KeepOne` retains one
+  active file up to `1,000,000` bytes. It contains version/OS, repeated-launch,
+  operation type/outcome, profile-count and probe/verify/updater aggregates;
+  profile names, endpoints, credentials, configurations and IP addresses are
+  not written. The file can be deleted manually while Desktop is stopped.
 - Privileged changes run only after standard OS authorization through
   `sudo`/`pkexec`.
+- By default, Desktop requests the fixed `desktop-updater` GitHub Releases asset
+  once at startup. GitHub receives ordinary network metadata, including the
+  egress address. Profiles, keys, diagnostics and action history are not sent
+  to the project. The check can be disabled in Settings; download and install
+  require separate confirmation in the modal dialog.
 
 The VPN server operator, Internet provider, operating system and third-party
 protocol runtimes have their own data practices. Mazzy VPN cannot replace their

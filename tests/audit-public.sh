@@ -18,6 +18,7 @@ filter_safe_system_config() {
         -e 'packaging/linux/systemd/mazzy-vpn-api.socket.d/10-package-docs.conf' \
         -e 'packaging/linux/systemd/mazzy-vpn-api@.service.d/10-package-exec.conf' \
         -e 'packaging/linux/systemd/vpnctl-health.service.d/10-package-exec.conf' \
+        -e 'packaging/linux/systemd/vpnctl-health.timer.d/10-package-interval.conf' \
         -e 'packaging/linux/systemd/vpnctl-test-recovery.service.d/10-package-exec.conf' \
         -e 'packaging/linux/systemd/vpnctl.service.d/10-package-exec.conf'
 }

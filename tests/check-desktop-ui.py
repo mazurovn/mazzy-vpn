@@ -4,8 +4,12 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
+import struct
+import sys
+import tempfile
 from collections import Counter
 from html.parser import HTMLParser
 from pathlib import Path
@@ -17,6 +21,13 @@ JS = ROOT / "desktop/ui/app.js"
 RUST = ROOT / "desktop/src-tauri/src/backend.rs"
 MAIN = ROOT / "desktop/src-tauri/src/main.rs"
 AGENT = ROOT / "desktop/src-tauri/src/agent_control.rs"
+UPDATER = ROOT / "desktop/src-tauri/src/updater.rs"
+CARGO_MANIFEST = ROOT / "desktop/src-tauri/Cargo.toml"
+TAURI_CONFIG = ROOT / "desktop/src-tauri/tauri.conf.json"
+CAPABILITY = ROOT / "desktop/src-tauri/capabilities/default.json"
+BUILD_RELEASE = ROOT / "desktop/scripts/build-release.mjs"
+DESKTOP_WORKFLOW = ROOT / ".github/workflows/desktop.yml"
+UPDATER_SIGNATURE_AUDIT = ROOT / "tests/prepare-updater-signature-audit.py"
 
 
 def fail(message: str) -> None:
@@ -48,9 +59,10 @@ def translations(javascript: str) -> dict[str, dict[str, str]]:
         f"{prefix}\nprocess.stdout.write(JSON.stringify(translations));"
     )
     result = subprocess.run(
-        ["node", "-e", script],
+        ["node"],
         check=True,
         capture_output=True,
+        input=script,
         text=True,
         encoding="utf-8",
         errors="strict",
@@ -75,12 +87,70 @@ def desktop_version() -> str:
     return versions.pop()
 
 
+def check_updater_signature_audit() -> None:
+    with tempfile.TemporaryDirectory(prefix="mazzy-updater-audit-") as workspace_raw:
+        workspace = Path(workspace_raw).resolve()
+        metadata_dir = workspace / "updater-metadata"
+        assets_dir = workspace / "updater-assets"
+        metadata_dir.mkdir()
+        assets_dir.mkdir()
+        artifact = assets_dir / "Mazzy.AppImage.tar.gz"
+        artifact.write_bytes(b"signed updater fixture")
+        manifest = {
+            "platforms": {
+                "linux-x86_64": {
+                    "url": (
+                        "https://github.com/mazurovn/mazzy-vpn/releases/download/"
+                        "desktop-v0.4.1/Mazzy.AppImage.tar.gz"
+                    ),
+                    "signature": "A" * 64,
+                }
+            }
+        }
+        (metadata_dir / "latest.json").write_text(
+            json.dumps(manifest), encoding="utf-8"
+        )
+
+        result = subprocess.run(
+            [sys.executable, str(UPDATER_SIGNATURE_AUDIT)],
+            cwd=workspace,
+            check=True,
+            capture_output=True,
+            timeout=10,
+        )
+        signature = workspace / "updater-signatures/signature-000.sig"
+        expected = os.fsencode(artifact) + b"\0" + os.fsencode(signature) + b"\0"
+        if (
+            result.stdout != expected
+            or signature.read_text(encoding="utf-8") != "A" * 64 + "\n"
+        ):
+            fail("Updater signature audit did not emit the expected safe arguments")
+
+        (assets_dir / "unexpected-directory").mkdir()
+        unsafe = subprocess.run(
+            [sys.executable, str(UPDATER_SIGNATURE_AUDIT)],
+            cwd=workspace,
+            check=False,
+            capture_output=True,
+            timeout=10,
+        )
+        if unsafe.returncode == 0 or b"unsafe entry" not in unsafe.stderr:
+            fail("Updater signature audit accepted an unsafe asset entry")
+
+
 def main() -> None:
+    check_updater_signature_audit()
     html = HTML.read_text(encoding="utf-8")
     javascript = JS.read_text(encoding="utf-8")
     rust = RUST.read_text(encoding="utf-8")
     main_rust = MAIN.read_text(encoding="utf-8")
     agent_rust = AGENT.read_text(encoding="utf-8")
+    updater_rust = UPDATER.read_text(encoding="utf-8")
+    cargo_manifest = CARGO_MANIFEST.read_text(encoding="utf-8")
+    tauri_config = json.loads(TAURI_CONFIG.read_text(encoding="utf-8"))
+    capability = json.loads(CAPABILITY.read_text(encoding="utf-8"))
+    build_release = BUILD_RELEASE.read_text(encoding="utf-8")
+    desktop_workflow = DESKTOP_WORKFLOW.read_text(encoding="utf-8")
 
     parser = UiParser()
     parser.feed(html)
@@ -114,14 +184,41 @@ def main() -> None:
         "dnsRouting",
         "speedSample",
         "verificationDisclaimer",
+        "partiallyVerified",
+        "profileCountryMissing",
         "startService",
         "restartService",
         "stopService",
     }
+    localized_updater = {
+        "checkUpdates",
+        "automaticUpdateChecks",
+        "automaticUpdateChecksHint",
+        "updateAvailable",
+        "currentDesktopVersion",
+        "availableDesktopVersion",
+        "signedUpdate",
+        "signedUpdateHint",
+        "updateDialogInstallHint",
+        "updateDialogPackageHint",
+        "updateLater",
+        "installUpdate",
+        "openRelease",
+        "checkingForUpdates",
+        "upToDate",
+        "updateDownloading",
+        "updateInstalling",
+        "updateInstalled",
+        "restartNow",
+        "updateCheckFailed",
+    }
     for language in ("ru", "en", "de", "zh", "ja", "ko"):
-        missing = sorted(localized_verification - set(values.get(language, {})))
+        missing = sorted(
+            (localized_verification | localized_updater)
+            - set(values.get(language, {}))
+        )
         if missing:
-            fail(f"{language} verification UI is not localized: {missing}")
+            fail(f"{language} safety-critical UI is not localized: {missing}")
 
     for dangerous in (".innerHTML", "insertAdjacentHTML", "eval(", "new Function"):
         if dangerous in javascript:
@@ -130,6 +227,21 @@ def main() -> None:
         fail("Desktop privacy mode is not enabled by default")
     if 'invoke("verify_connection"' not in javascript:
         fail("Desktop real egress card bypasses the typed Rust command")
+    if (
+        "limitedConfidenceVerification" not in javascript
+        or 'verify.geo.expected-country-unavailable' not in javascript
+        or 'verify.geo.single-provider' not in javascript
+        or 'result?.ipv4?.same_egress === true' not in javascript
+        or 'result?.ipv6?.potential_leak === false' not in javascript
+        or 'result?.dns?.state === "vpn-full-tunnel"' not in javascript
+    ):
+        fail("Desktop misclassifies limited GeoIP confidence as an egress risk")
+    if (
+        'key: "partiallyVerified", css: "partial", severity: "warning"'
+        not in javascript
+        or 'presentation.css === "partial"' not in javascript
+    ):
+        fail("Desktop partial verification is visually promoted to full success")
     if 'invoke("probe_profiles"' not in javascript:
         fail("Desktop location checks bypass the typed Rust command")
     if 'invoke("get_agent_integrations"' not in javascript:
@@ -156,6 +268,8 @@ def main() -> None:
         fail("Desktop provider-readiness badge does not enforce runtime readiness")
     if 'previewParameters.get("preview") === "docs"' not in javascript:
         fail("Desktop documentation preview is missing")
+    if 'previewParameters.get("update") === "available"' not in javascript:
+        fail("Desktop signed-update documentation fixture is missing")
     if (
         "!window.__TAURI_INTERNALS__" not in javascript
         or 'window.location.protocol === "http:"' not in javascript
@@ -206,6 +320,135 @@ def main() -> None:
         fail("Diagnostics-only Agent Control executes an untrusted discovered binary")
     if 'agent_control::get_agent_integrations' not in main_rust:
         fail("Desktop does not expose read-only Agent Control diagnostics")
+    if '<dialog class="update-dialog" id="update-dialog"' not in html:
+        fail("Desktop update consent is not presented in a modal dialog")
+    for command in (
+        'invoke("check_for_update")',
+        'invoke("install_update")',
+        'invoke("open_update_release")',
+        'invoke("restart_application")',
+    ):
+        if command not in javascript:
+            fail(f"Desktop update workflow is incomplete: {command}")
+    install_call = 'invoke("install_update")'
+    update_action_start = javascript.find("async function runPendingUpdateAction()")
+    update_action_end = javascript.find("\nfunction handleUpdateProgress", update_action_start)
+    if (
+        javascript.count(install_call) != 1
+        or update_action_start < 0
+        or update_action_end < 0
+        or not update_action_start
+        < javascript.find(install_call)
+        < update_action_end
+    ):
+        fail("Desktop can install an update outside the explicit consent action")
+    if 'if (state.autoUpdateChecks) void checkForUpdates(false);' not in javascript:
+        fail("Desktop does not automatically check for updates at startup")
+    if (
+        'localStorage.getItem("mazzy-auto-update-check") !== "false"'
+        not in javascript
+    ):
+        fail("Desktop startup update checks are not enabled by default")
+    if "info.install_supported" not in javascript:
+        fail("Desktop does not distinguish package-managed updates")
+    if "download_and_install" not in updater_rust:
+        fail("Desktop updater does not verify and install signed artifacts")
+    if (
+        'std::env::var_os("APPIMAGE")' not in updater_rust
+        or "DEB/RPM" not in updater_rust
+    ):
+        fail("Desktop updater can overwrite a package-managed Linux install")
+    if (
+        'https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v'
+        not in updater_rust
+        or "safe_release_version" not in updater_rust
+    ):
+        fail("Desktop updater can open an untrusted release URL")
+    if "PendingUpdate(Mutex<Option<Update>>)" not in updater_rust:
+        fail("Desktop updater does not keep consent state in the trusted backend")
+    if (
+        ".as_ref()\n        .cloned()" not in updater_rust
+        or "update.install_failed" not in updater_rust
+        or "state.updateInfo = null" in javascript
+    ):
+        fail("Desktop cannot safely retry a failed signed update download")
+    if "tauri_plugin_updater::Builder::new().build()" not in main_rust:
+        fail("Desktop signed updater plugin is not initialized")
+    if (
+        'tauri-plugin-log = "2"' not in cargo_manifest
+        or "tauri_plugin_log::Builder::new()" not in main_rust
+        or ".max_file_size(1_000_000)" not in main_rust
+        or "RotationStrategy::KeepOne" not in main_rust
+        or 'target: "mazzy_vpn_desktop::operation"' not in rust
+        or 'target: "mazzy_vpn_desktop::verification"' not in rust
+    ):
+        fail("Desktop persistent diagnostics logging is missing or unbounded")
+    single_instance = main_rust.find(".plugin(tauri_plugin_single_instance::init")
+    opener_plugin = main_rust.find(".plugin(tauri_plugin_opener::init())")
+    if single_instance < 0 or opener_plugin < 0 or single_instance > opener_plugin:
+        fail("Desktop single-instance protection is missing or not the first plugin")
+    updater_config = tauri_config.get("plugins", {}).get("updater", {})
+    if updater_config.get("endpoints") != [
+        "https://github.com/mazurovn/mazzy-vpn/releases/download/desktop-updater/latest.json"
+    ]:
+        fail("Desktop updater endpoint is not pinned to the project update feed")
+    if len(updater_config.get("pubkey", "")) < 100:
+        fail("Desktop updater does not embed a release verification key")
+    if tauri_config.get("bundle", {}).get("createUpdaterArtifacts") is not False:
+        fail("Unsigned pull-request builds can create updater artifacts")
+    renderer_permissions = capability.get("permissions", [])
+    if any(
+        isinstance(permission, str)
+        and permission.startswith(("updater:", "opener:"))
+        for permission in renderer_permissions
+    ):
+        fail("The renderer can bypass the trusted update consent commands")
+    if (
+        'if (process.env.TAURI_SIGNING_PRIVATE_KEY)' not in build_release
+        or "createUpdaterArtifacts: true" not in build_release
+        or "mkdtempSync" not in build_release
+        or "writeFileSync" not in build_release
+        or "shell: false" not in build_release
+    ):
+        fail("Release builds do not safely gate updater artifacts on the signing key")
+    if (
+        'spawnSync("cargo", [' not in build_release
+        or "process.env.CARGO" in build_release
+    ):
+        fail("Release builds allow the cargo executable to be replaced through input")
+    for workflow_boundary in (
+        "TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}",
+        "environment: desktop-release",
+        "publish-update-feed:",
+        "needs: preview-release",
+        "gh release edit \"$RELEASE_TAG\"",
+        "Mazzy.VPN.Desktop_${RELEASE_TAG#desktop-v}_SHA256SUMS",
+        'gh release upload "$RELEASE_TAG"',
+        "gh release upload desktop-updater",
+        'startswith("linux-")',
+        'startswith("windows-")',
+        'startswith("darwin-")',
+        "max-parallel: 1",
+        "prepare-updater-signature-audit.py",
+        "--example verify-updater-signatures",
+    ):
+        if workflow_boundary not in desktop_workflow:
+            fail(f"Desktop signed release workflow is incomplete: {workflow_boundary}")
+    if desktop_workflow.count("environment: desktop-release") < 2:
+        fail("Desktop update-feed publication bypasses the protected environment")
+    if "mapfile -d '' -t updater_signature_args < <(" in desktop_workflow:
+        fail("Desktop signature-audit preparation can hide a failed subprocess")
+    for screenshot_name in ("update-en.png", "update-ru.png"):
+        screenshot = ROOT / "docs/images" / screenshot_name
+        contents = screenshot.read_bytes()
+        if contents[:8] != b"\x89PNG\r\n\x1a\n" or len(contents) < 24:
+            fail(f"Desktop updater screenshot is not a valid PNG: {screenshot_name}")
+        width, height = struct.unpack(">II", contents[16:24])
+        if (width, height) != (1680, 951):
+            fail(
+                f"Desktop updater screenshot has unexpected dimensions: "
+                f"{screenshot_name}={width}x{height}"
+            )
     for tray_id in (
         "profiles",
         "agents",

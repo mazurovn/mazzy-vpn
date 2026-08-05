@@ -2,6 +2,54 @@
 
 All notable changes to Mazzy VPN are documented here.
 
+## 1.4.1 / Desktop 0.4.1 - 2026-08-05
+
+- Fixed the systemd boot transaction cycle that could drop
+  `mazzy-vpn-api.socket` after an upgrade. The early recovery unit now has an
+  explicit dependency graph, and every mutating consumer requires successful
+  recovery before activation.
+- Propagated recovery ordering, bounded restart policy and permanent failure
+  handling through package drop-ins so legacy `/etc/systemd/system` units
+  cannot shadow the current safety contract.
+- Added a consent-gated Desktop updater. It checks a fixed GitHub release feed
+  at startup, displays a modal before any action, and verifies installable
+  artifacts with an embedded Tauri updater public key. The private key exists
+  only in release secrets.
+- AppImage, Windows and macOS updater artifacts can be installed in-app after
+  explicit confirmation. DEB/RPM installations open the matching release
+  instead of replacing a package-managed executable with an AppImage.
+- Added a three-platform release/feed gate: only a successful Linux, Windows
+  and macOS signed build can publish the versioned preview and advance the
+  fixed updater metadata. Operating-system code signing/notarization and
+  native Windows/macOS VPN backends remain separate open gates.
+- Hardened the release gate against command and path injection: the cargo
+  executable is fixed, updater metadata can select only an inventoried
+  downloaded artifact, signature outputs use local bounded names, and the
+  helper has no caller-controlled filesystem paths. The cross-platform UI
+  audit streams JavaScript over stdin instead of exceeding the Windows command
+  line limit.
+- Made the legacy-upgrade systemd regression independent of an already
+  installed Mazzy VPN by verifying package units, drop-ins, executable and
+  inert target fixtures inside an isolated root. The signed Desktop workflow
+  now publishes a versioned SHA-256 manifest after updater-signature audit.
+- Expanded systemd, package-payload, updater-consent and release supply-chain
+  regressions. The shell suite now passes 103 cases.
+- Prevented duplicate Desktop/WebView/tray instances; a repeated launch now
+  focuses the existing dashboard.
+- Reduced external health probes from roughly every 20 seconds to once per
+  minute, including a reset drop-in for legacy `/etc/systemd/system` timers,
+  and corrected
+  recovery diagnostics to distinguish a rejected systemd action from an
+  unverified post-restart egress.
+- Classified missing optional profile-country metadata and single-provider
+  GeoIP degradation as partial verification when route, DNS and leak checks
+  pass, instead of reporting a healthy VPN route as a risk.
+- Added a privacy-bounded, `1,000,000`-byte rotating Desktop lifecycle log with
+  operation outcomes and diagnostic aggregates but no profile data, endpoints,
+  credentials, configurations or IP addresses.
+- Kept a verified pending Desktop update available after a download/install
+  error so the consent dialog can retry without silently changing versions.
+
 ## 1.4.0 / Desktop 0.4.0 - 2026-08-03
 
 - Added explicit credential-free `verify-service` and

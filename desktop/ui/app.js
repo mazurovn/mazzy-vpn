@@ -178,6 +178,18 @@ Object.assign(translations.ru, {
   apiReady: "АКТИВЕН", services: "СЛУЖБЫ", serviceControl: "Управление службами",
   notifications: "Уведомления", notificationsHint: "Запланировано; в этой версии недоступно",
   privacyMode: "Скрывать публичный IP", privacyModeHint: "Применяется к экрану обзора",
+  checkUpdates: "Проверить обновления", automaticUpdateChecks: "Автопроверка обновлений",
+  automaticUpdateChecksHint: "Показывает диалог; ничего не устанавливает без подтверждения",
+  updateAvailable: "Доступно обновление", currentDesktopVersion: "Текущая версия",
+  availableDesktopVersion: "Новая версия", signedUpdate: "ПОДПИСАННОЕ ОБНОВЛЕНИЕ",
+  signedUpdateHint: "Артефакт проверяется встроенным публичным ключом. AppImage обновляет Desktop; системный engine при необходимости обновляется отдельно через Install/Repair.",
+  updateDialogInstallHint: "Версия {version} готова к безопасной загрузке. Установка начнётся только после вашего подтверждения.",
+  updateDialogPackageHint: "Версия {version} доступна. Эта установка управляется DEB/RPM, поэтому пакет нужно выбрать на странице релиза.",
+  updateLater: "Позже", installUpdate: "Скачать и установить", openRelease: "Открыть релиз",
+  checkingForUpdates: "Проверяем обновления", upToDate: "Установлена последняя версия",
+  updateDownloading: "Загрузка подписанного обновления", updateInstalling: "Установка обновления",
+  updateInstalled: "Обновление установлено",
+  restartNow: "Перезапустить", updateCheckFailed: "Не удалось проверить обновления",
   installed: "УСТАНОВЛЕНО", missing: "НЕТ", updateRequired: "НУЖНО ОБНОВИТЬ",
   ready: "ГОТОВО", confirmLiveTest: "Живой тест временно изменит VPN-маршрут и затем выполнит rollback. Продолжить?",
   confirmRemove: "Удалить выбранный VPN-профиль?", confirmRepair: "Запустить системную установку и исправление зависимостей?",
@@ -196,6 +208,7 @@ Object.assign(translations.ru, {
   observedLocation: "Фактическая локация", profileLocationMatch: "Совпадение с профилем",
   systemEgress: "Системный IPv4 egress", ipv6Leak: "IPv6-утечка", dnsRouting: "DNS-маршрут",
   speedSample: "Контрольная проверка скорости", verified: "СЕТЕВОЙ EGRESS ПОДТВЕРЖДЁН", warning: "ЕСТЬ РИСКИ",
+  partiallyVerified: "ПРОВЕРЕНО ЧАСТИЧНО", profileCountryMissing: "СТРАНА ПРОФИЛЯ НЕ УКАЗАНА",
   failed: "НЕ РАБОТАЕТ", matches: "СОВПАДАЕТ", mismatch: "НЕ СОВПАДАЕТ", unknown: "НЕИЗВЕСТНО",
   sameEgress: "Через VPN", differentEgress: "Маршрут отличается", noLeak: "Не обнаружена",
   potentialLeak: "ВОЗМОЖНА", fullTunnelDns: "Через VPN", partialDns: "Не подтверждён полностью",
@@ -265,6 +278,18 @@ Object.assign(translations.en, {
   services: "SERVICES", serviceControl: "Service control",
   notifications: "Notifications", notificationsHint: "Planned; unavailable in this preview",
   privacyMode: "Hide public IP", privacyModeHint: "Applied to Dashboard",
+  checkUpdates: "Check for updates", automaticUpdateChecks: "Automatic update checks",
+  automaticUpdateChecksHint: "Shows a dialog; nothing is installed without confirmation",
+  updateAvailable: "Update available", currentDesktopVersion: "Current version",
+  availableDesktopVersion: "New version", signedUpdate: "SIGNED UPDATE",
+  signedUpdateHint: "The artifact is verified with the embedded public key. AppImage updates Desktop; update the system engine separately through Install/Repair when requested.",
+  updateDialogInstallHint: "Version {version} is ready for a secure download. Installation starts only after you confirm.",
+  updateDialogPackageHint: "Version {version} is available. This installation is managed by DEB/RPM, so choose the package on the release page.",
+  updateLater: "Later", installUpdate: "Download and install", openRelease: "Open release",
+  checkingForUpdates: "Checking for updates", upToDate: "You have the latest version",
+  updateDownloading: "Downloading signed update", updateInstalling: "Installing update",
+  updateInstalled: "Update installed",
+  restartNow: "Restart", updateCheckFailed: "Unable to check for updates",
   installed: "INSTALLED", missing: "MISSING", updateRequired: "UPDATE REQUIRED", ready: "READY",
   confirmLiveTest: "The live test temporarily changes VPN routes and then rolls back. Continue?",
   confirmRemove: "Remove the selected VPN profile?", confirmRepair: "Run system installation and dependency repair?",
@@ -283,6 +308,7 @@ Object.assign(translations.en, {
   observedLocation: "Observed location", profileLocationMatch: "Profile location match",
   systemEgress: "System IPv4 egress", ipv6Leak: "IPv6 leak", dnsRouting: "DNS routing",
   speedSample: "Bounded speed sample", verified: "NETWORK EGRESS VERIFIED", warning: "RISKS FOUND",
+  partiallyVerified: "PARTIALLY VERIFIED", profileCountryMissing: "PROFILE COUNTRY NOT SET",
   failed: "FAILED", matches: "MATCH", mismatch: "MISMATCH", unknown: "UNKNOWN",
   sameEgress: "Through VPN", differentEgress: "Route differs", noLeak: "Not detected",
   potentialLeak: "POTENTIAL", fullTunnelDns: "Through VPN", partialDns: "Not fully confirmed",
@@ -316,11 +342,24 @@ Object.assign(translations.de, {
   observedLocation: "Ermittelter Standort", profileLocationMatch: "Profilstandort stimmt",
   systemEgress: "System-IPv4-Egress", ipv6Leak: "IPv6-Leck", dnsRouting: "DNS-Route",
   speedSample: "Begrenzter Geschwindigkeitstest", verified: "NETZWERK-EGRESS BESTÄTIGT", warning: "RISIKEN GEFUNDEN",
+  partiallyVerified: "TEILWEISE BESTÄTIGT", profileCountryMissing: "PROFILLAND FEHLT",
   failed: "FEHLGESCHLAGEN", matches: "STIMMT", mismatch: "ABWEICHUNG", unknown: "UNBEKANNT",
   sameEgress: "Über VPN", differentEgress: "Route weicht ab", noLeak: "Nicht erkannt",
   potentialLeak: "MÖGLICH", fullTunnelDns: "Über VPN", partialDns: "Nicht vollständig bestätigt",
   speedNotRun: "Nicht gestartet", verificationDisclaimer: "Websites können auch Kontoregion, Cookies, Browsersprache, WebRTC und Gerätestandort verwenden.",
-  startService: "Starten", restartService: "Neu starten", stopService: "Stoppen", currentState: "Aktuell"
+  startService: "Starten", restartService: "Neu starten", stopService: "Stoppen", currentState: "Aktuell",
+  checkUpdates: "Nach Updates suchen", automaticUpdateChecks: "Automatische Update-Prüfung",
+  automaticUpdateChecksHint: "Zeigt einen Dialog; ohne Bestätigung wird nichts installiert",
+  updateAvailable: "Update verfügbar", currentDesktopVersion: "Aktuelle Version",
+  availableDesktopVersion: "Neue Version", signedUpdate: "SIGNIERTES UPDATE",
+  signedUpdateHint: "Das Artefakt wird mit dem eingebetteten öffentlichen Schlüssel geprüft. AppImage aktualisiert Desktop; die System-Engine wird bei Bedarf separat über Install/Repair aktualisiert.",
+  updateDialogInstallHint: "Version {version} kann sicher geladen werden. Die Installation beginnt erst nach Ihrer Bestätigung.",
+  updateDialogPackageHint: "Version {version} ist verfügbar. Diese Installation wird von DEB/RPM verwaltet; wählen Sie das Paket auf der Release-Seite.",
+  updateLater: "Später", installUpdate: "Herunterladen und installieren", openRelease: "Release öffnen",
+  checkingForUpdates: "Updates werden geprüft", upToDate: "Die neueste Version ist installiert",
+  updateDownloading: "Signiertes Update wird geladen", updateInstalling: "Update wird installiert",
+  updateInstalled: "Update installiert",
+  restartNow: "Neu starten", updateCheckFailed: "Update-Prüfung fehlgeschlagen"
 });
 
 Object.assign(translations.zh, {
@@ -335,11 +374,24 @@ Object.assign(translations.zh, {
   observedLocation: "实际位置", profileLocationMatch: "与配置位置匹配",
   systemEgress: "系统 IPv4 出口", ipv6Leak: "IPv6 泄漏", dnsRouting: "DNS 路由",
   speedSample: "有限测速样本", verified: "网络出口已验证", warning: "发现风险",
+  partiallyVerified: "部分验证", profileCountryMissing: "配置未设置国家",
   failed: "失败", matches: "匹配", mismatch: "不匹配", unknown: "未知",
   sameEgress: "通过 VPN", differentEgress: "路由不同", noLeak: "未发现",
   potentialLeak: "可能泄漏", fullTunnelDns: "通过 VPN", partialDns: "未完全确认",
   speedNotRun: "未运行", verificationDisclaimer: "网站还可能使用账户地区、Cookie、浏览器语言、WebRTC 和设备位置。",
-  startService: "启动", restartService: "重启", stopService: "停止", currentState: "当前"
+  startService: "启动", restartService: "重启", stopService: "停止", currentState: "当前",
+  checkUpdates: "检查更新", automaticUpdateChecks: "自动检查更新",
+  automaticUpdateChecksHint: "仅显示确认对话框；未经确认不会安装",
+  updateAvailable: "有可用更新", currentDesktopVersion: "当前版本",
+  availableDesktopVersion: "新版本", signedUpdate: "已签名更新",
+  signedUpdateHint: "更新包会使用内置公钥验证。AppImage 更新 Desktop；如有提示，请通过 Install/Repair 单独更新系统引擎。",
+  updateDialogInstallHint: "版本 {version} 可安全下载。只有确认后才会开始安装。",
+  updateDialogPackageHint: "版本 {version} 可用。此安装由 DEB/RPM 管理，请在发布页面选择软件包。",
+  updateLater: "稍后", installUpdate: "下载并安装", openRelease: "打开发布页面",
+  checkingForUpdates: "正在检查更新", upToDate: "已安装最新版本",
+  updateDownloading: "正在下载已签名更新", updateInstalling: "正在安装更新",
+  updateInstalled: "更新已安装",
+  restartNow: "重新启动", updateCheckFailed: "无法检查更新"
 });
 
 Object.assign(translations.ja, {
@@ -354,11 +406,24 @@ Object.assign(translations.ja, {
   observedLocation: "検出された場所", profileLocationMatch: "プロファイル位置との一致",
   systemEgress: "システム IPv4 出口", ipv6Leak: "IPv6 リーク", dnsRouting: "DNS ルート",
   speedSample: "制限付き速度サンプル", verified: "ネットワーク出口を確認済み", warning: "リスクあり",
+  partiallyVerified: "一部確認済み", profileCountryMissing: "プロファイルの国が未設定",
   failed: "失敗", matches: "一致", mismatch: "不一致", unknown: "不明",
   sameEgress: "VPN 経由", differentEgress: "ルートが異なる", noLeak: "検出なし",
   potentialLeak: "可能性あり", fullTunnelDns: "VPN 経由", partialDns: "完全には未確認",
   speedNotRun: "未実行", verificationDisclaimer: "サイトはアカウント地域、Cookie、ブラウザー言語、WebRTC、端末位置も使用できます。",
-  startService: "開始", restartService: "再起動", stopService: "停止", currentState: "現在"
+  startService: "開始", restartService: "再起動", stopService: "停止", currentState: "現在",
+  checkUpdates: "更新を確認", automaticUpdateChecks: "更新の自動確認",
+  automaticUpdateChecksHint: "確認ダイアログを表示し、許可なくインストールしません",
+  updateAvailable: "更新があります", currentDesktopVersion: "現在のバージョン",
+  availableDesktopVersion: "新しいバージョン", signedUpdate: "署名済み更新",
+  signedUpdateHint: "更新ファイルは内蔵の公開鍵で検証します。AppImage は Desktop を更新し、必要な system engine は Install/Repair で別途更新します。",
+  updateDialogInstallHint: "バージョン {version} を安全にダウンロードできます。確認後にのみインストールします。",
+  updateDialogPackageHint: "バージョン {version} があります。このインストールは DEB/RPM 管理のため、リリースページでパッケージを選択してください。",
+  updateLater: "後で", installUpdate: "ダウンロードしてインストール", openRelease: "リリースを開く",
+  checkingForUpdates: "更新を確認中", upToDate: "最新バージョンです",
+  updateDownloading: "署名済み更新をダウンロード中", updateInstalling: "更新をインストール中",
+  updateInstalled: "更新をインストールしました",
+  restartNow: "再起動", updateCheckFailed: "更新を確認できませんでした"
 });
 
 Object.assign(translations.ko, {
@@ -373,11 +438,24 @@ Object.assign(translations.ko, {
   observedLocation: "관측 위치", profileLocationMatch: "프로필 위치 일치",
   systemEgress: "시스템 IPv4 출구", ipv6Leak: "IPv6 유출", dnsRouting: "DNS 경로",
   speedSample: "제한된 속도 샘플", verified: "네트워크 이그레스 확인됨", warning: "위험 발견",
+  partiallyVerified: "부분 확인됨", profileCountryMissing: "프로필 국가 미설정",
   failed: "실패", matches: "일치", mismatch: "불일치", unknown: "알 수 없음",
   sameEgress: "VPN 경유", differentEgress: "경로 다름", noLeak: "감지 안 됨",
   potentialLeak: "가능성 있음", fullTunnelDns: "VPN 경유", partialDns: "완전히 확인되지 않음",
   speedNotRun: "실행 안 함", verificationDisclaimer: "사이트는 계정 지역, 쿠키, 브라우저 언어, WebRTC 및 기기 위치도 사용할 수 있습니다.",
-  startService: "시작", restartService: "다시 시작", stopService: "중지", currentState: "현재"
+  startService: "시작", restartService: "다시 시작", stopService: "중지", currentState: "현재",
+  checkUpdates: "업데이트 확인", automaticUpdateChecks: "자동 업데이트 확인",
+  automaticUpdateChecksHint: "확인 대화상자만 표시하며 승인 없이 설치하지 않습니다",
+  updateAvailable: "업데이트 사용 가능", currentDesktopVersion: "현재 버전",
+  availableDesktopVersion: "새 버전", signedUpdate: "서명된 업데이트",
+  signedUpdateHint: "업데이트 파일은 내장 공개 키로 검증합니다. AppImage는 Desktop을 업데이트하며 필요한 시스템 엔진은 Install/Repair에서 별도로 업데이트합니다.",
+  updateDialogInstallHint: "버전 {version}을 안전하게 다운로드할 수 있습니다. 확인한 후에만 설치합니다.",
+  updateDialogPackageHint: "버전 {version}을 사용할 수 있습니다. 이 설치는 DEB/RPM으로 관리되므로 릴리스 페이지에서 패키지를 선택하세요.",
+  updateLater: "나중에", installUpdate: "다운로드 및 설치", openRelease: "릴리스 열기",
+  checkingForUpdates: "업데이트 확인 중", upToDate: "최신 버전이 설치되어 있습니다",
+  updateDownloading: "서명된 업데이트 다운로드 중", updateInstalling: "업데이트 설치 중",
+  updateInstalled: "업데이트 설치됨",
+  restartNow: "다시 시작", updateCheckFailed: "업데이트를 확인할 수 없습니다"
 });
 
 const $ = (selector) => document.querySelector(selector);
@@ -395,6 +473,7 @@ const state = {
     ? previewLanguage
     : localStorage.getItem("mazzy-language") || "ru",
   hideIp: documentationPreview ? false : localStorage.getItem("mazzy-hide-ip") !== "false",
+  autoUpdateChecks: localStorage.getItem("mazzy-auto-update-check") !== "false",
   page: "dashboard",
   status: null,
   profiles: [],
@@ -406,6 +485,13 @@ const state = {
   installation: null,
   agentIntegrations: null,
   platformInfo: null,
+  updateInfo: null,
+  updateChecking: false,
+  updateInstalling: false,
+  updateDownloadFinished: false,
+  updateInstalled: false,
+  updateDownloaded: 0,
+  updateTotal: null,
   lastSignature: "",
   lastActiveProfileSignature: "",
   events: [],
@@ -428,11 +514,129 @@ function applyLanguage() {
   });
   if (state.status) renderStatus(state.status);
   renderProfiles();
+  renderUpdateDialog();
   renderProbeCheckedAt();
   renderVerification();
   if (state.installation) renderInstallation(state.installation);
   if (state.agentIntegrations) renderAgentIntegrations(state.agentIntegrations);
   renderAbout();
+}
+
+function updateMessage(key, version) {
+  return t(key).replace("{version}", version || "—");
+}
+
+function renderUpdateDialog() {
+  const dialog = $("#update-dialog");
+  const info = state.updateInfo;
+  if (!dialog || !info) return;
+  $("#update-current-version").textContent = info.current_version || "—";
+  $("#update-available-version").textContent = info.version || "—";
+  $("#update-dialog-hint").textContent = updateMessage(
+    info.install_supported ? "updateDialogInstallHint" : "updateDialogPackageHint",
+    info.version
+  );
+  const action = $("#update-action-button");
+  action.disabled = state.updateInstalling;
+  action.textContent = state.updateInstalled ? t("restartNow")
+    : info.install_supported ? t("installUpdate") : t("openRelease");
+  $("#update-later-button").disabled = state.updateInstalling;
+
+  const progress = $("#update-progress");
+  progress.hidden = !state.updateInstalling && !state.updateInstalled;
+  const bar = $("#update-progress-bar");
+  if (state.updateTotal && state.updateTotal > 0) {
+    bar.max = state.updateTotal;
+    bar.value = Math.min(state.updateDownloaded, state.updateTotal);
+  } else if (state.updateInstalling) {
+    bar.removeAttribute("value");
+  } else {
+    bar.max = 1;
+    bar.value = 1;
+  }
+  $("#update-progress-label").textContent = state.updateInstalled
+    ? t("updateInstalled")
+    : state.updateDownloadFinished ? t("updateInstalling") : t("updateDownloading");
+}
+
+function showUpdateDialog(info) {
+  state.updateInfo = info;
+  state.updateInstalling = false;
+  state.updateDownloadFinished = false;
+  state.updateInstalled = false;
+  state.updateDownloaded = 0;
+  state.updateTotal = null;
+  renderUpdateDialog();
+  const dialog = $("#update-dialog");
+  if (!dialog.open) dialog.showModal();
+}
+
+async function checkForUpdates(manual = false) {
+  if (!invoke || state.updateChecking || state.updateInstalling) return;
+  state.updateChecking = true;
+  const button = $("#check-update-button");
+  button.disabled = true;
+  button.textContent = t("checkingForUpdates");
+  try {
+    const info = await invoke("check_for_update");
+    if (info) showUpdateDialog(info);
+    else if (manual) showToast(t("upToDate"));
+  } catch (error) {
+    if (manual) showToast(`${t("updateCheckFailed")}: ${error}`, true);
+  } finally {
+    state.updateChecking = false;
+    button.disabled = false;
+    button.textContent = t("checkUpdates");
+  }
+}
+
+async function runPendingUpdateAction() {
+  if (!invoke || !state.updateInfo || state.updateInstalling) return;
+  if (state.updateInstalled) {
+    await invoke("restart_application");
+    return;
+  }
+  if (!state.updateInfo.install_supported) {
+    try {
+      await invoke("open_update_release");
+      $("#update-dialog").close();
+    } catch (error) {
+      showToast(String(error), true);
+    }
+    return;
+  }
+  state.updateInstalling = true;
+  state.updateDownloadFinished = false;
+  state.updateDownloaded = 0;
+  state.updateTotal = null;
+  renderUpdateDialog();
+  try {
+    await invoke("install_update");
+    state.updateInstalled = true;
+    showToast(t("updateInstalled"));
+  } catch (error) {
+    showToast(String(error), true);
+    state.updateDownloadFinished = false;
+    state.updateDownloaded = 0;
+    state.updateTotal = null;
+  } finally {
+    state.updateInstalling = false;
+    renderUpdateDialog();
+  }
+}
+
+function handleUpdateProgress(payload) {
+  if (!payload || typeof payload.event !== "string") return;
+  if (payload.event === "started") {
+    state.updateTotal = Number(payload.content_length) || null;
+  } else if (payload.event === "progress") {
+    state.updateDownloaded += Math.max(0, Number(payload.chunk_length) || 0);
+  } else if (payload.event === "finished") {
+    state.updateDownloadFinished = true;
+  } else if (payload.event === "installed") {
+    state.updateInstalled = true;
+  }
+  renderUpdateDialog();
 }
 
 function setMiniState(selector, enabled, activeLabel = "enabled", inactiveLabel = "disabled") {
@@ -567,7 +771,7 @@ function documentationPreviewData() {
       available: true,
       generated_at: Math.floor(Date.now() / 1000),
       product: "Mazzy VPN",
-      version: "1.4.0",
+      version: "1.4.1",
       service_state: "active",
       desired: "up",
       internet: "up",
@@ -652,8 +856,8 @@ function documentationPreviewData() {
     installation: {
       engine_installed: true,
       package_managed: true,
-      installed_version: "1.4.0",
-      bundled_version: "1.4.0",
+      installed_version: "1.4.1",
+      bundled_version: "1.4.1",
       bundled_installer: true,
       needs_install: false,
       service_installed: true,
@@ -708,7 +912,7 @@ function documentationPreviewData() {
     platform: {
       functional: true,
       os: "linux",
-      desktop_version: "0.4.0",
+      desktop_version: "0.4.1",
       author: "Nik m (@mazurovn)",
       license: "AGPL-3.0-or-later"
     }
@@ -757,6 +961,14 @@ function renderDocumentationPreview() {
   addEvent(t("checkAllLocations"), "4/5 · 24–46 ms", "success",
     formatProbeOutput(fixture.probe));
   showPage(previewParameters.get("page") || "dashboard");
+  if (previewParameters.get("update") === "available") {
+    showUpdateDialog({
+      current_version: "0.4.1",
+      version: "0.4.2",
+      install_supported: true,
+      installation_method: "signed-in-app"
+    });
+  }
 }
 
 function setServiceControlState(service, enabled) {
@@ -821,6 +1033,34 @@ function verificationOutput(result) {
   ].join("\n");
 }
 
+function limitedConfidenceVerification(result) {
+  const nonRiskFindings = new Set([
+    "verify.geo.expected-country-unavailable",
+    "verify.geo.single-provider"
+  ]);
+  return result?.verdict === "warning"
+    && result?.tunnel?.active === true
+    && result?.ipv4?.same_egress === true
+    && result?.ipv6?.potential_leak === false
+    && result?.dns?.state === "vpn-full-tunnel"
+    && Array.isArray(result?.findings)
+    && result.findings.length > 0
+    && result.findings.every((finding) => nonRiskFindings.has(finding));
+}
+
+function verificationPresentation(result) {
+  if (limitedConfidenceVerification(result)) {
+    return { key: "partiallyVerified", css: "partial", severity: "warning", eventType: "warning" };
+  }
+  const verdict = result?.verdict || "failed";
+  return {
+    key: verdict,
+    css: verdict,
+    severity: verdict === "warning" ? "warning" : verdict,
+    eventType: verdict === "verified" ? "success" : verdict === "warning" ? "warning" : "error"
+  };
+}
+
 function renderVerification() {
   const card = $("#verification-card");
   if (!card) return;
@@ -839,10 +1079,13 @@ function renderVerification() {
     $("#verification-note").textContent = t("verificationDisclaimer");
     return;
   }
-  const verdict = result.verdict || "failed";
-  card.className = `glass verification-card ${verdict}`;
-  badge.textContent = t(verdict);
-  badge.className = `health-badge ${verdict === "verified" ? "ok" : verdict === "failed" ? "bad" : ""}`;
+  const presentation = verificationPresentation(result);
+  card.className = `glass verification-card ${presentation.css}`;
+  badge.textContent = t(presentation.key);
+  const badgeState = presentation.css === "verified" ? "ok"
+    : presentation.css === "failed" ? "bad"
+      : presentation.css === "partial" || presentation.css === "warning" ? "warn" : "";
+  badge.className = `health-badge ${badgeState}`.trim();
   const provider = result?.geo?.providers?.[0] || {};
   const location = [provider.country, provider.city].filter(Boolean).join(" · ");
   $("#verified-location").textContent = location
@@ -853,7 +1096,9 @@ function renderVerification() {
     mismatch: t("mismatch"),
     unknown: t("unknown")
   };
-  $("#verified-profile-match").textContent = matches[result?.geo?.country_match] || t("unknown");
+  $("#verified-profile-match").textContent = result?.findings?.includes("verify.geo.expected-country-unavailable")
+    ? t("profileCountryMissing")
+    : matches[result?.geo?.country_match] || t("unknown");
   $("#verified-route").textContent = result?.ipv4?.same_egress ? t("sameEgress") : t("differentEgress");
   $("#verified-ipv6").textContent = result?.ipv6?.potential_leak ? t("potentialLeak") : t("noLeak");
   $("#verified-dns").textContent = result?.dns?.state === "vpn-full-tunnel"
@@ -886,20 +1131,21 @@ async function verifyConnection(includeSpeed = false) {
     state.verification = result;
     renderVerification();
     const success = result?.verdict !== "failed";
+    const presentation = verificationPresentation(result);
     const output = verificationOutput(result);
     showOperationResult({
       success,
-      severity: result?.verdict === "warning" ? "warning" : result?.verdict,
+      severity: presentation.severity,
       action: "verify",
       output
     }, title);
     addEvent(
-      t(result?.verdict || "failed"),
+      t(presentation.key),
       `${result?.geo?.observed_country_code || t("unknown")} · ${result?.dns?.state || "unknown"}`,
-      result?.verdict === "verified" ? "success" : result?.verdict === "warning" ? "warning" : "error",
+      presentation.eventType,
       output
     );
-    showToast(t(result?.verdict || "failed"), result?.verdict === "failed");
+    showToast(t(presentation.key), result?.verdict === "failed");
     if (result?.verdict === "failed") showPage("diagnostics");
     return result;
   } catch (error) {
@@ -1489,6 +1735,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     localStorage.setItem("mazzy-hide-ip", String(state.hideIp));
     if (state.status) renderStatus(state.status);
   });
+  $("#auto-update-toggle").checked = state.autoUpdateChecks;
+  $("#auto-update-toggle").addEventListener("change", (event) => {
+    state.autoUpdateChecks = event.target.checked;
+    localStorage.setItem("mazzy-auto-update-check", String(state.autoUpdateChecks));
+  });
+  $("#check-update-button").addEventListener("click", () => checkForUpdates(true));
+  $("#update-later-button").addEventListener("click", () => {
+    if (!state.updateInstalling) $("#update-dialog").close();
+  });
+  $("#update-action-button").addEventListener("click", runPendingUpdateAction);
+  $("#update-dialog").addEventListener("cancel", (event) => {
+    if (state.updateInstalling) event.preventDefault();
+  });
   $("#refresh-button").addEventListener("click", () => refreshStatus(true));
   $("#hide-button").addEventListener("click", async () => {
     if (invoke) await invoke("hide_main_window");
@@ -1604,6 +1863,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   if (tauri?.event?.listen) {
+    await tauri.event.listen("update-progress", ({ payload }) => {
+      handleUpdateProgress(payload);
+    });
     await tauri.event.listen("navigate-page", ({ payload }) => {
       showPage(String(payload || "dashboard"));
     });
@@ -1655,6 +1917,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await Promise.all([
     refreshStatus(false), refreshProfiles(false), refreshInstallation(), refreshAgents(false)
   ]);
+  if (state.autoUpdateChecks) void checkForUpdates(false);
   setInterval(() => refreshStatus(false), 5000);
   setInterval(() => {
     if (state.page === "agents" && !state.busy) refreshAgents(false);

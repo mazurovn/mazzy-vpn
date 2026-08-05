@@ -1,6 +1,6 @@
 [package]
 name = "mazzy-vpn-desktop"
-version = "0.4.0"
+version = "0.4.1"
 description = "AI-ready, self-healing multi-protocol VPN client and control center"
 authors = ["Nik m (@mazurovn)"]
 license = "AGPL-3.0-or-later"
@@ -12,11 +12,20 @@ rust-version = "1.88"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-log = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2.10"
 rfd = "0.15"
 sha2 = "0.10"
+
+[dev-dependencies]
+base64 = "0.22"
+minisign-verify = "0.2.5"
 
 [features]
 default = ["custom-protocol"]

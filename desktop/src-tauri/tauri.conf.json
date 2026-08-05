@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Mazzy VPN Desktop",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "identifier": "com.mazurovn.mazzy-vpn",
   "build": {
     "frontendDist": "../ui"
@@ -29,6 +29,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": false,
     "targets": "all",
     "category": "Utility",
     "shortDescription": "AI-ready, self-healing multi-protocol VPN client",
@@ -106,12 +107,14 @@
           "/usr/lib/mazzy-vpn/desktop/src-tauri/Cargo.lock": "Cargo.lock",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/Cargo.toml": "Cargo.toml",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/build.rs": "build.rs",
+          "/usr/lib/mazzy-vpn/desktop/src-tauri/examples/verify-updater-signatures.rs": "examples/verify-updater-signatures.rs",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/capabilities": "capabilities",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/icons": "icons",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/vendor": "vendor",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/src/agent_control.rs": "src/agent_control.rs",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/src/backend.rs": "src/backend.rs",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/src/main.rs": "src/main.rs",
+          "/usr/lib/mazzy-vpn/desktop/src-tauri/src/updater.rs": "src/updater.rs",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/tauri.conf.json": "tauri.conf.json",
           "/usr/lib/mazzy-vpn/desktop/ui/app.css": "../ui/app.css",
           "/usr/lib/mazzy-vpn/desktop/ui/app.js": "../ui/app.js",
@@ -137,6 +140,7 @@
           "/usr/lib/systemd/system/vpnctl-health.service": "../../systemd/vpnctl-health.service",
           "/usr/lib/systemd/system/vpnctl-health.service.d": "../../packaging/linux/systemd/vpnctl-health.service.d",
           "/usr/lib/systemd/system/vpnctl-health.timer": "../../systemd/vpnctl-health.timer",
+          "/usr/lib/systemd/system/vpnctl-health.timer.d": "../../packaging/linux/systemd/vpnctl-health.timer.d",
           "/usr/lib/systemd/system/vpnctl-test-recovery.service": "../../systemd/vpnctl-test-recovery.service",
           "/usr/lib/systemd/system/vpnctl-test-recovery.service.d": "../../packaging/linux/systemd/vpnctl-test-recovery.service.d",
           "/usr/lib/systemd/system/vpnctl.service": "../../systemd/vpnctl.service",
@@ -213,12 +217,14 @@
           "/usr/lib/mazzy-vpn/desktop/src-tauri/Cargo.lock": "Cargo.lock",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/Cargo.toml": "Cargo.toml",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/build.rs": "build.rs",
+          "/usr/lib/mazzy-vpn/desktop/src-tauri/examples/verify-updater-signatures.rs": "examples/verify-updater-signatures.rs",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/capabilities": "capabilities",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/icons": "icons",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/vendor": "vendor",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/src/agent_control.rs": "src/agent_control.rs",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/src/backend.rs": "src/backend.rs",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/src/main.rs": "src/main.rs",
+          "/usr/lib/mazzy-vpn/desktop/src-tauri/src/updater.rs": "src/updater.rs",
           "/usr/lib/mazzy-vpn/desktop/src-tauri/tauri.conf.json": "tauri.conf.json",
           "/usr/lib/mazzy-vpn/desktop/ui/app.css": "../ui/app.css",
           "/usr/lib/mazzy-vpn/desktop/ui/app.js": "../ui/app.js",
@@ -244,6 +250,7 @@
           "/usr/lib/systemd/system/vpnctl-health.service": "../../systemd/vpnctl-health.service",
           "/usr/lib/systemd/system/vpnctl-health.service.d": "../../packaging/linux/systemd/vpnctl-health.service.d",
           "/usr/lib/systemd/system/vpnctl-health.timer": "../../systemd/vpnctl-health.timer",
+          "/usr/lib/systemd/system/vpnctl-health.timer.d": "../../packaging/linux/systemd/vpnctl-health.timer.d",
           "/usr/lib/systemd/system/vpnctl-test-recovery.service": "../../systemd/vpnctl-test-recovery.service",
           "/usr/lib/systemd/system/vpnctl-test-recovery.service.d": "../../packaging/linux/systemd/vpnctl-test-recovery.service.d",
           "/usr/lib/systemd/system/vpnctl.service": "../../systemd/vpnctl.service",
@@ -295,17 +302,30 @@
       "Cargo.toml": "engine/desktop/src-tauri/Cargo.toml",
       "Cargo.lock": "engine/desktop/src-tauri/Cargo.lock",
       "build.rs": "engine/desktop/src-tauri/build.rs",
+      "examples/verify-updater-signatures.rs": "engine/desktop/src-tauri/examples/verify-updater-signatures.rs",
       "capabilities/": "engine/desktop/src-tauri/capabilities",
       "icons/": "engine/desktop/src-tauri/icons",
       "vendor/": "engine/desktop/src-tauri/vendor",
       "src/agent_control.rs": "engine/desktop/src-tauri/src/agent_control.rs",
       "src/backend.rs": "engine/desktop/src-tauri/src/backend.rs",
       "src/main.rs": "engine/desktop/src-tauri/src/main.rs",
+      "src/updater.rs": "engine/desktop/src-tauri/src/updater.rs",
       "tauri.conf.json": "engine/desktop/src-tauri/tauri.conf.json",
       "../ui/app.css": "engine/desktop/ui/app.css",
       "../ui/app.js": "engine/desktop/ui/app.js",
       "../ui/index.html": "engine/desktop/ui/index.html",
       "../ui/mazzy-vpn-logo.svg": "engine/desktop/ui/mazzy-vpn-logo.svg"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZFODE4NEQ3NEMxNUY4RkMKUldUOCtCVk0xNFNCYmtRSXJnWVNJUzdoZm8zYjBFMGpRTGNZNDdKL0txYzlKQmFWcU4vSWlnUnoK",
+      "endpoints": [
+        "https://github.com/mazurovn/mazzy-vpn/releases/download/desktop-updater/latest.json"
+      ],
+      "windows": {
+        "installMode": "basicUi"
+      }
     }
   }
 }

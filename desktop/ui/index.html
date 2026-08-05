@@ -461,8 +461,12 @@
               DEB/RPM управляют движком через package manager; AppImage использует явный bootstrap.
             </p>
           </div>
-          <button class="compact-action primary" id="bootstrap-button" type="button"
-                  data-i18n="installRepair">Установить / обновить / исправить</button>
+          <div class="heading-actions">
+            <button class="compact-action" id="check-update-button" type="button"
+                    data-i18n="checkUpdates">Проверить обновления</button>
+            <button class="compact-action primary" id="bootstrap-button" type="button"
+                    data-i18n="installRepair">Установить / обновить / исправить</button>
+          </div>
         </section>
 
         <section class="settings-grid">
@@ -537,6 +541,12 @@
               <label class="switch"><input id="privacy-toggle" type="checkbox">
                 <span></span></label>
             </div>
+            <div class="setting-row">
+              <div><strong data-i18n="automaticUpdateChecks">Автопроверка обновлений</strong>
+                <small data-i18n="automaticUpdateChecksHint">Показывает диалог; ничего не устанавливает без подтверждения</small></div>
+              <label class="switch"><input id="auto-update-toggle" type="checkbox">
+                <span></span></label>
+            </div>
           </article>
         </section>
       </div>
@@ -609,6 +619,36 @@
         <span class="platform-note" id="platform-note"></span>
       </footer>
     </main>
+
+    <dialog class="update-dialog" id="update-dialog" aria-labelledby="update-dialog-title">
+      <div class="update-dialog-shell">
+        <header>
+          <div>
+            <p class="eyebrow" data-i18n="signedUpdate">ПОДПИСАННОЕ ОБНОВЛЕНИЕ</p>
+            <h2 id="update-dialog-title" data-i18n="updateAvailable">Доступно обновление</h2>
+          </div>
+        </header>
+        <p class="update-dialog-hint" id="update-dialog-hint"></p>
+        <dl class="update-version-list">
+          <div><dt data-i18n="currentDesktopVersion">Текущая версия</dt>
+            <dd id="update-current-version">—</dd></div>
+          <div><dt data-i18n="availableDesktopVersion">Новая версия</dt>
+            <dd id="update-available-version">—</dd></div>
+        </dl>
+        <div class="update-progress" id="update-progress" hidden>
+          <progress id="update-progress-bar" max="1"></progress>
+          <span id="update-progress-label"></span>
+        </div>
+        <p class="update-security" data-i18n="signedUpdateHint">
+          Артефакт проверяется встроенным публичным ключом до установки.
+        </p>
+        <footer class="update-dialog-actions">
+          <button class="compact-action" id="update-later-button" type="button"
+                  data-i18n="updateLater">Позже</button>
+          <button class="compact-action primary" id="update-action-button" type="button"></button>
+        </footer>
+      </div>
+    </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </body>

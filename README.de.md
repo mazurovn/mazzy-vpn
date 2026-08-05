@@ -69,7 +69,8 @@ Die Tauri-Desktop-App bietet Quick Connect, Reconnect, Disconnect, Refresh und
 Selbstdiagnose in einem modernen Fenster und im System-Tray. Unter Linux ist sie
 ein funktionsfähiger Begleiter des installierten CLI und wird als AppImage, DEB
 und RPM gebaut. macOS und Windows sind UI-Vorschauen, bis native VPN-Backends
-implementiert sind. Desktop 0.4 ist als unsignierte Vorschau veröffentlicht.
+implementiert sind. Desktop 0.4.1 bleibt eine Vorschau; installierbare
+Updater-Artefakte sind Tauri-signiert und erfordern immer eine Bestätigung.
 Issue #31 wurde mit dem geprüften Upstream-`glib`-Backport, exakter
 Quellprovenienzprüfung und grünen RustSec-, Dependabot- und CodeQL-Prüfungen
 geschlossen. Die GUI liest keine Profile oder Schlüssel. Details:
@@ -97,7 +98,7 @@ sudo mazzy-vpn autostart on
 ## Automatische Überwachung und Reparatur
 
 Systemd startet den VPN-Prozess nach jedem unerwarteten Ende neu. Unabhängig
-davon prüft der Health-Timer ungefähr alle 20 Sekunden den Sollzustand, den
+davon prüft der Health-Timer ungefähr jede Minute den Sollzustand, den
 Dienst, die VPN-Schnittstelle und echten HTTPS-Zugriff über diese Schnittstelle.
 Ein bei `DESIRED=up` inaktiver Dienst wird sofort gestartet; zwei
 aufeinanderfolgende Verkehrsfehler lösen eine Neuverbindung aus.

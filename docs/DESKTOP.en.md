@@ -13,18 +13,19 @@ engine. The Linux 0.4 bundle includes a compatible engine installer, so a
 separate CLI installation is no longer a prerequisite. CLI and TUI remain
 independent clients of the same engine and state.
 
-> **0.4 status:** the Linux control center now covers the main workflow. Its
-> release source is an unsigned preview and remains preview until the
+> **0.4 status:** the Linux control center now covers the main workflow. It
+> remains a preview until the
 > [production gates](FEATURE_PARITY.md) pass. Issue #31 is closed with the exact
 > upstream `glib` 0.18 soundness backport, verified source provenance and an
 > empty cargo-deny ignore list. Desktop 1.0 still needs a native shared service,
-> complete fallback-policy UI, six-language coverage for every screen, signed
-> updates, clean-device integration tests and migration of the remaining typed
+> complete fallback-policy UI, clean-device integration tests, operating-system
+> code signing/notarization and migration of the remaining typed
 > `pkexec` operations to the partial versioned local API.
 
-> **Version boundary:** the `desktop-v0.4.0` release source contains Dashboard,
+> **Version boundary:** the `desktop-v0.4.1` release source contains Dashboard,
 > Profiles, Diagnostics, Settings, About and diagnostics-only Agent Control.
-> Agent Control does not execute or pair provider processes.
+> It adds consent-gated, Tauri-signed updates; Agent Control does not execute or
+> pair provider processes.
 
 ## Visual tour
 
@@ -43,6 +44,10 @@ banner. They contain no operational profile, endpoint or user IP.
 |---|
 | ![Provider adapters and catalog status](images/agents-en.png) |
 
+| Signed update consent — Desktop 0.4.1 |
+|---|
+| ![Signed update versions and explicit install action](images/update-en.png) |
+
 ## Platform status
 
 | Platform | Status | Bundles |
@@ -55,7 +60,7 @@ Do not use the macOS or Windows previews as traffic-protection tools. Complete
 support requires native Network Extension/launchd and Windows service/Wintun
 backends, code signing and platform-specific integration tests.
 
-## Desktop 0.4.0 screens
+## Desktop 0.4.1 screens
 
 1. **Dashboard** — tunnel, Internet, IP, handshake, health, recovery, actual
    egress verification and tray.
@@ -68,7 +73,8 @@ backends, code signing and platform-specific integration tests.
    `test-all`, emergency recovery, complete Doctor/self-test output and bounded
    systemd logs.
 5. **Settings** — bundled/installed versions, dependency readiness,
-   install/update/repair, autostart, monitor, privacy and notifications.
+   install/update/repair, signed-update check and consent dialog, autostart,
+   monitor, privacy and notifications.
 6. **About** — Desktop/engine/platform versions, author, license, privacy and
    safe-operation rules.
 
@@ -143,6 +149,14 @@ the [research and architecture (RU)](RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru
 | Service settings | `mazzy-vpn autostart` / `monitor` |
 | Logs | `mazzy-vpn logs --lines N` |
 
+Desktop's own log is stored at
+`~/.local/share/com.mazurovn.mazzy-vpn/logs/Mazzy VPN Desktop.log` on Linux,
+`~/Library/Logs/com.mazurovn.mazzy-vpn/Mazzy VPN Desktop.log` on macOS and
+`%LOCALAPPDATA%\com.mazurovn.mazzy-vpn\logs\Mazzy VPN Desktop.log` on Windows.
+It is capped at one megabyte with `KeepOne` rotation and records only lifecycle,
+operation type/outcome, profile counts and diagnostic aggregates. Profile names,
+endpoints, keys, configurations and IP addresses are never logged there.
+
 The tray now opens Dashboard, Profiles, Diagnostics, Settings or About
 directly. It also exposes Quick Connect, Reconnect, Disconnect, actual egress
 verification, whole-list location ping, refresh, Doctor, explicit
@@ -194,6 +208,8 @@ select profiles by opaque ID only. Remaining state-changing actions use system
 `pkexec`, so the OS may
 show its standard administrator prompt. Closing the window hides the
 application to the tray; use **Quit Mazzy VPN** for a full exit.
+Starting Desktop again focuses this existing single instance instead of
+creating another WebView and tray icon.
 
 On Linux, open the tray context menu with the right mouse button. Plain-click
 events depend on the desktop environment.
@@ -213,7 +229,9 @@ systemd host and verifies the engine/API manifest.
 Existing `/etc/vpnctl` profiles and `/var/lib/vpnctl` state are not package
 payload and are deliberately preserved during upgrade and removal. A legacy
 manual `/etc/systemd/system` unit keeps its settings, while package drop-ins
-select the package-owned `/usr/bin/mazzy-vpn`. When installation is run through
+select the package-owned `/usr/bin/mazzy-vpn`, preserve recovery/restart
+invariants and reset a legacy health timer to the current one-minute interval.
+When installation is run through
 `sudo` or `pkexec`, the invoking user is added to the `mazzy-vpn` group; a new
 login may be required before the protected socket is available. The package-safe
 Repair action repeats that enrollment for packages installed by a graphical
@@ -228,17 +246,17 @@ manual 1.2 engine from shadowing the newer Desktop package.
 DEB:
 
 The commands below use the exact dot-normalized filenames intended for the
-`desktop-v0.4.0` GitHub Release page. A local `npm run build:release` output may
+`desktop-v0.4.1` GitHub Release page. A local `npm run build:release` output may
 retain spaces from the Tauri product name instead.
 
 ```bash
-sudo apt install ./Mazzy.VPN.Desktop_0.4.0_amd64.deb
+sudo apt install ./Mazzy.VPN.Desktop_0.4.1_amd64.deb
 ```
 
 RPM:
 
 ```bash
-sudo dnf install ./Mazzy.VPN.Desktop-0.4.0-1.x86_64.rpm
+sudo dnf install ./Mazzy.VPN.Desktop-0.4.1-1.x86_64.rpm
 ```
 
 For DEB/RPM, **Settings → Install / update / repair** runs package-safe
@@ -253,9 +271,9 @@ open release gates.
 AppImage:
 
 ```bash
-sha256sum -c --ignore-missing Mazzy.VPN.Desktop_0.4.0_SHA256SUMS
-chmod +x ./Mazzy.VPN.Desktop_0.4.0_amd64.AppImage
-./Mazzy.VPN.Desktop_0.4.0_amd64.AppImage
+sha256sum -c --ignore-missing Mazzy.VPN.Desktop_0.4.1_SHA256SUMS
+chmod +x ./Mazzy.VPN.Desktop_0.4.1_amd64.AppImage
+./Mazzy.VPN.Desktop_0.4.1_amd64.AppImage
 ```
 
 AppImage cannot install its own privilege helper. Check `command -v pkexec`
@@ -263,10 +281,11 @@ first and install your distribution's polkit/pkexec package manually if it is
 missing; otherwise the bundled engine bootstrap cannot start. AppImage still
 uses the explicitly authorized embedded installer and is not package-managed.
 
-Replace the sample version with the downloaded file name. Preview artifacts are
-currently unsigned and the workflow does not yet publish signed checksum or
-provenance metadata. Verify the source commit and its GitHub Actions run, but
-do not treat an unsigned hash as proof of the publisher.
+Replace the sample version with the downloaded file name. Installable updater
+artifacts carry a Tauri signature verified by the public key embedded in
+Desktop. DEB/RPM packages and platform executables still lack repository,
+Authenticode or Apple signing; verify the source commit and successful GitHub
+Actions run. See [Desktop signed updates](DESKTOP_UPDATES.md).
 
 ## Languages
 
@@ -320,5 +339,7 @@ Linux builds place AppImage, DEB and RPM bundles under
 `desktop/src-tauri/target/release/bundle/`. npm and Cargo dependencies are
 locked. The release command remaps the builder's local home directory out of
 Rust diagnostic strings. CI builds each OS on its matching GitHub runner. The
-tagged workflow first creates a draft unsigned preview; it is published only
-after platform artifacts, checksums and the Linux RustSec gate are audited.
+tagged workflow first creates a draft preview with Tauri-signed updater
+artifacts. It publishes the release and advances the fixed update feed only
+after Linux, Windows and macOS builds, metadata validation and the Linux
+RustSec/package gates pass.

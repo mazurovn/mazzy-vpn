@@ -46,7 +46,7 @@ flowchart TB
 
     subgraph Supervisor["Контроль systemd"]
         Service["vpnctl.service<br/>Restart=always"]
-        Timer["vpnctl-health.timer<br/>примерно каждые 20 секунд"]
+        Timer["vpnctl-health.timer<br/>примерно каждую минуту"]
         Health["vpnctl-health.service"]
         BootRecovery["vpnctl-test-recovery.service"]
         ApiSocket["mazzy-vpn-api.socket<br/>0660 root:mazzy-vpn"]
@@ -235,6 +235,13 @@ profile-catalog JSON caches с правами `0640 root:mazzy-vpn`. В них �
 VPN-адрес, состояния autostart/health monitor и очищенные label профилей. Пути,
 endpoint, ключи и конфигурационные директивы не экспортируются.
 
+Непривилегированный Desktop ведёт отдельный bounded lifecycle log в
+стандартном app log directory. Он ограничен `1 000 000` байт с `KeepOne` rotation и
+содержит только версию/OS при старте, повторный запуск, вид и результат
+операции, число профилей и агрегаты probe/verify/updater. Имена профилей,
+endpoint, credentials, конфигурации и IP находятся вне этой observability
+boundary.
+
 ```mermaid
 sequenceDiagram
     actor User as Пользователь
@@ -277,6 +284,33 @@ disconnect. Для mutations он сохраняет action IDs, применя�
 handlers. Завершение миграции остаётся gate версии Desktop 1.0. Сборки macOS и
 Windows пока являются preview интерфейса и не заявляются как рабочий VPN-клиент
 до реализации нативных backends.
+
+Обновления Desktop образуют отдельную непривилегированную trust boundary.
+Startup check читает только фиксированный `desktop-updater` metadata asset в
+GitHub Releases и хранит полученный Tauri `Update` только в памяти Rust.
+WebView получает текущую/новую версии и разрешённый способ установки, но не
+может передать URL или вызвать raw updater/opener plugins. Backend потребляет
+pending update только после действия в modal dialog. До установки Tauri
+проверяет artifact встроенным public key; private key хранится в release
+secrets, а CI двигает feed только после успешных Linux, Windows и macOS builds.
+Package-managed Linux установка открывает точный versioned release вместо
+подмены DEB/RPM executable на AppImage updater target.
+
+```mermaid
+sequenceDiagram
+    participant UI as диалог подтверждения
+    participant Rust as trusted updater boundary
+    participant Feed as фиксированный GitHub feed
+    participant CI as gate трёх платформ
+    UI->>Rust: check_for_update
+    Rust->>Feed: HTTPS latest.json
+    Feed-->>Rust: version + URL + signature
+    Rust-->>UI: только версии + разрешённый метод
+    UI->>Rust: install_update после явного клика
+    Rust->>Rust: проверить подпись встроенным ключом
+    Rust-->>UI: installed / требуется restart
+    CI->>Feed: обновить только после всех builds
+```
 
 Egress verification выполняет bounded HTTPS requests через выбранный
 интерфейс. Public-IP и два geo services вызываются только явной командой
@@ -448,6 +482,7 @@ sequenceDiagram
 | `/run/vpnctl` | Общий `.mutation.lock`, singleton `.health.lock`, health-счётчик и очищенный runtime log | Очищается при загрузке |
 | `/run/mazzy-vpn/status.json` | Очищенный статус для Desktop | Пересоздаётся root, `0640 root:mazzy-vpn`, без ключей и endpoint |
 | `/run/mazzy-vpn/api-v1.sock` | Versioned local API transport | Socket `0660 root:mazzy-vpn`, активируется systemd |
+| Platform app log directory / `Mazzy VPN Desktop.log` | Очищенный lifecycle и агрегаты Desktop | Пользовательский файл, `KeepOne`, максимум `1 000 000` байт; без профилей, endpoint, credentials, конфигураций и IP |
 | `vpnctl.service` | Владеет активным managed-туннелем | Долгоживущий, под контролем systemd |
 | `vpnctl-health.timer` | Планирует независимые health-проверки | Включён для автовосстановления |
 | `vpnctl-test-recovery.service` | Исправляет прерванный тест после загрузки | Boot-time oneshot |

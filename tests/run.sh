@@ -59,6 +59,7 @@ printf '%s\n' "$*" >>"${FAKE_SYSTEMCTL_LOG:?}"
 fake_activate_api_recovery() {
     printf 'activate mazzy-vpn-api-recovery.service\n' \
         >>"${FAKE_SYSTEMCTL_RECOVERY_LOG:?}"
+    [[ "${FAKE_SYSTEMCTL_RECOVERY_FAIL:-0}" != "1" ]] || return 1
     if grep -Fxq 'RemainAfterExit=yes' \
             "${FAKE_SYSTEMCTL_RECOVERY_UNIT:?}"; then
         : >"${FAKE_SYSTEMCTL_RECOVERY_ACTIVE_FILE:?}"
@@ -69,12 +70,15 @@ if [[ "${FAKE_SYSTEMCTL_MODEL_RECOVERY_DEPENDENCY:-0}" == "1" ]]; then
     case "$*" in
         "start mazzy-vpn-api-recovery.service")
             [[ -e "${FAKE_SYSTEMCTL_RECOVERY_ACTIVE_FILE:?}" ]] ||
-                fake_activate_api_recovery
+                fake_activate_api_recovery || exit 1
             ;;
         "start vpnctl.service"|"restart vpnctl.service"|\
-        "start --no-block vpnctl.service"|"restart --no-block vpnctl.service")
+        "start --no-block vpnctl.service"|"restart --no-block vpnctl.service"|\
+        "start mazzy-vpn-api.socket"|"restart mazzy-vpn-api.socket"|\
+        "start vpnctl-health.service"|"restart vpnctl-health.service"|\
+        "start vpnctl-test-recovery.service"|"restart vpnctl-test-recovery.service")
             [[ -e "${FAKE_SYSTEMCTL_RECOVERY_ACTIVE_FILE:?}" ]] ||
-                fake_activate_api_recovery
+                fake_activate_api_recovery || exit 1
             ;;
     esac
 fi
@@ -560,8 +564,8 @@ export VPNCTL_LEGACY_START="$TMP/fallback-start"
 export VPNCTL_LEGACY_STOP="$TMP/fallback-stop"
 export NO_COLOR=1
 
-"$CLI" version | grep -q '^Mazzy VPN 1\.4\.0 (mazzy-vpn; alias: vpnctl)$'
-"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.4\.0 ' ||
+"$CLI" version | grep -q '^Mazzy VPN 1\.4\.1 (mazzy-vpn; alias: vpnctl)$'
+"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.4\.1 ' ||
     fail "vpnctl compatibility wrapper is broken"
 ok "Mazzy VPN branding and compatibility alias"
 
@@ -3575,11 +3579,19 @@ ok "watchdog uses suspend-safe bounded monotonic grace and fails closed without 
 
 : >"$TMP/systemctl.log"
 FAKE_CURL_FAIL=1 "$CLI" _health-check >/dev/null 2>&1
-FAKE_CURL_FAIL=1 "$CLI" _health-check >/dev/null 2>&1
+health_recovery_failure_output="$(
+    FAKE_CURL_FAIL=1 "$CLI" _health-check 2>&1
+)"
 [[ "$(<"$VPNCTL_RUN_DIR/health.failures")" == 2 ]] ||
     fail "watchdog cleared the failure counter before threshold recovery"
 [[ "$(grep -c '^restart vpnctl.service$' "$TMP/systemctl.log")" == 1 ]] ||
     fail "watchdog did not restart exactly once at the failure threshold"
+grep -q 'VPN перезапущен, но защищённый egress не подтверждён' \
+    <<<"$health_recovery_failure_output" ||
+    fail "watchdog misclassified post-restart egress failure"
+if grep -q 'systemd отклонил команду' <<<"$health_recovery_failure_output"; then
+    fail "watchdog reported a successful systemd restart as rejected"
+fi
 if grep -q '^reset-failed .*vpnctl.service' "$TMP/systemctl.log"; then
     fail "automatic watchdog recovery reset the systemd start limiter"
 fi
@@ -3814,13 +3826,19 @@ grep -q '^StartLimitIntervalSec=600$' \
     fail "service start-limit interval is not the tested ten-minute window"
 grep -q '^StartLimitBurst=5$' "$stage/etc/systemd/system/vpnctl.service" ||
     fail "service start-limit burst is not bounded to five attempts"
-grep -q '^OnUnitActiveSec=20s$' "$stage/etc/systemd/system/vpnctl-health.timer" ||
-    fail "health timer interval is not the expected 20 seconds"
+grep -q '^OnUnitActiveSec=60s$' "$stage/etc/systemd/system/vpnctl-health.timer" ||
+    fail "health timer interval is not the expected 60 seconds"
 [[ -f "$stage/etc/systemd/system/vpnctl-test-recovery.service" ]] ||
     fail "test recovery unit not staged"
 [[ -f "$stage/etc/systemd/system/mazzy-vpn-api-recovery.service" ]] ||
     fail "API action recovery unit not staged"
-grep -q '^Before=vpnctl-test-recovery.service vpnctl.service vpnctl-health.service mazzy-vpn-api.socket$' \
+grep -q '^DefaultDependencies=no$' \
+    "$stage/etc/systemd/system/mazzy-vpn-api-recovery.service" ||
+    fail "API recovery retains default basic.target ordering and can cycle with sockets.target"
+grep -q '^Requires=local-fs.target$' \
+    "$stage/etc/systemd/system/mazzy-vpn-api-recovery.service" ||
+    fail "early API recovery does not require its filesystem dependency"
+grep -q '^Before=shutdown.target vpnctl-test-recovery.service vpnctl.service vpnctl-health.service mazzy-vpn-api.socket$' \
     "$stage/etc/systemd/system/mazzy-vpn-api-recovery.service" ||
     fail "API recovery is not ordered before every mutating/socket-activated consumer"
 grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
@@ -3858,6 +3876,18 @@ grep -q '^SocketGroup=mazzy-vpn$' "$stage/etc/systemd/system/mazzy-vpn-api.socke
     fail "local API socket is not restricted to the mazzy-vpn group"
 grep -q '^DirectoryMode=0750$' "$stage/etc/systemd/system/mazzy-vpn-api.socket" ||
     fail "local API socket directory is not group-restricted"
+grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
+    "$stage/etc/systemd/system/mazzy-vpn-api.socket" ||
+    fail "local API socket can start without successful boot recovery"
+grep -q '^After=mazzy-vpn-api-recovery.service$' \
+    "$stage/etc/systemd/system/mazzy-vpn-api.socket" ||
+    fail "local API socket is not ordered after boot recovery"
+grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
+    "$stage/etc/systemd/system/vpnctl-health.service" ||
+    fail "health remediation can run after boot recovery fails"
+grep -q '^After=network-online.target mazzy-vpn-api-recovery.service vpnctl.service$' \
+    "$stage/etc/systemd/system/vpnctl-health.service" ||
+    fail "health remediation is not serialized after boot recovery"
 grep -q '^NoNewPrivileges=yes$' \
     "$stage/etc/systemd/system/mazzy-vpn-api@.service" ||
     fail "local API request service is missing process hardening"
@@ -3938,6 +3968,7 @@ for destination in (
     "/usr/lib/systemd/system/mazzy-vpn-api@.service.d",
     "/usr/lib/systemd/system/vpnctl.service",
     "/usr/lib/systemd/system/vpnctl.service.d",
+    "/usr/lib/systemd/system/vpnctl-health.timer.d",
     "/usr/lib/tmpfiles.d/mazzy-vpn.conf",
 ):
     assert destination in files
@@ -4004,6 +4035,7 @@ for package_dropin in \
     "$ROOT/packaging/linux/systemd/mazzy-vpn-api-recovery.service.d/10-package-exec.conf" \
     "$ROOT/packaging/linux/systemd/mazzy-vpn-api@.service.d/10-package-exec.conf" \
     "$ROOT/packaging/linux/systemd/vpnctl-health.service.d/10-package-exec.conf" \
+    "$ROOT/packaging/linux/systemd/vpnctl-health.timer.d/10-package-interval.conf" \
     "$ROOT/packaging/linux/systemd/vpnctl-test-recovery.service.d/10-package-exec.conf" \
     "$ROOT/packaging/linux/systemd/vpnctl.service.d/10-package-exec.conf"; do
     if [[ "$package_dropin" == *".service.d/"* ]]; then
@@ -4015,6 +4047,118 @@ for package_dropin in \
             fail "package local API documentation path is not package-managed"
     fi
 done
+grep -q '^DefaultDependencies=no$' \
+    "$ROOT/packaging/linux/systemd/mazzy-vpn-api-recovery.service.d/10-package-exec.conf" ||
+    fail "package recovery drop-in can reintroduce the sockets.target boot cycle"
+grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
+    "$ROOT/packaging/linux/systemd/mazzy-vpn-api.socket.d/10-package-docs.conf" ||
+    fail "package socket drop-in does not harden a legacy /etc unit"
+grep -q '^After=mazzy-vpn-api-recovery.service$' \
+    "$ROOT/packaging/linux/systemd/mazzy-vpn-api.socket.d/10-package-docs.conf" ||
+    fail "package socket drop-in does not serialize a legacy unit after recovery"
+grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
+    "$ROOT/packaging/linux/systemd/vpnctl.service.d/10-package-exec.conf" ||
+    fail "package runtime drop-in does not harden legacy systemd overrides"
+grep -q '^StartLimitIntervalSec=600$' \
+    "$ROOT/packaging/linux/systemd/vpnctl.service.d/10-package-exec.conf" ||
+    fail "package runtime drop-in does not bound legacy service retries"
+grep -q '^RestartPreventExitStatus=77$' \
+    "$ROOT/packaging/linux/systemd/vpnctl.service.d/10-package-exec.conf" ||
+    fail "package runtime drop-in loses permanent authentication failure handling"
+grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
+    "$ROOT/packaging/linux/systemd/vpnctl-test-recovery.service.d/10-package-exec.conf" ||
+    fail "package test recovery drop-in does not harden a legacy unit"
+grep -q '^TimeoutStartSec=60s$' \
+    "$ROOT/packaging/linux/systemd/vpnctl-test-recovery.service.d/10-package-exec.conf" ||
+    fail "package test recovery drop-in has no bounded startup budget"
+grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
+    "$ROOT/packaging/linux/systemd/vpnctl-health.service.d/10-package-exec.conf" ||
+    fail "package health drop-in does not propagate recovery failure"
+grep -q '^After=mazzy-vpn-api-recovery.service$' \
+    "$ROOT/packaging/linux/systemd/vpnctl-health.service.d/10-package-exec.conf" ||
+    fail "package health drop-in is not ordered after recovery"
+[[ "$(grep -c '^OnUnitActiveSec=$' \
+    "$ROOT/packaging/linux/systemd/vpnctl-health.timer.d/10-package-interval.conf")" == 1 ]] ||
+    fail "package health timer drop-in does not reset the legacy interval"
+grep -q '^OnUnitActiveSec=60s$' \
+    "$ROOT/packaging/linux/systemd/vpnctl-health.timer.d/10-package-interval.conf" ||
+    fail "package health timer drop-in does not enforce the one-minute interval"
+grep -q '^RandomizedDelaySec=5s$' \
+    "$ROOT/packaging/linux/systemd/vpnctl-health.timer.d/10-package-interval.conf" ||
+    fail "package health timer drop-in loses bounded jitter"
+
+effective_root="$TMP/effective-systemd-root"
+effective_etc="$effective_root/etc/systemd/system"
+effective_usr="$effective_root/usr/lib/systemd/system"
+mkdir -p "$effective_etc" "$effective_usr" "$effective_root/usr/bin"
+cp "$ROOT/mazzy-vpn" "$effective_root/usr/bin/mazzy-vpn"
+chmod 755 "$effective_root/usr/bin/mazzy-vpn"
+for effective_target in \
+    basic.target \
+    local-fs.target \
+    multi-user.target \
+    network-online.target \
+    shutdown.target \
+    sockets.target \
+    sysinit.target \
+    timers.target; do
+    printf '[Unit]\nDefaultDependencies=no\n' \
+        >"$effective_usr/$effective_target"
+done
+awk '
+    /^Requires=mazzy-vpn-api-recovery\.service$/ { next }
+    /^After=mazzy-vpn-api-recovery\.service$/ { next }
+    { print }
+' "$ROOT/systemd/mazzy-vpn-api.socket" \
+    >"$effective_etc/mazzy-vpn-api.socket"
+awk '
+    /^Requires=mazzy-vpn-api-recovery\.service$/ { next }
+    /^After=network-online\.target mazzy-vpn-api-recovery\.service vpnctl\.service$/ {
+        print "After=network-online.target vpnctl.service"
+        next
+    }
+    { print }
+' "$ROOT/systemd/vpnctl-health.service" \
+    >"$effective_etc/vpnctl-health.service"
+sed 's/^OnUnitActiveSec=.*/OnUnitActiveSec=20s/' \
+    "$ROOT/systemd/vpnctl-health.timer" \
+    >"$effective_etc/vpnctl-health.timer"
+for effective_unit in \
+    mazzy-vpn-api.socket \
+    mazzy-vpn-api@.service \
+    mazzy-vpn-api-recovery.service \
+    vpnctl-health.service \
+    vpnctl-health.timer \
+    vpnctl.service \
+    vpnctl-test-recovery.service; do
+    cp "$ROOT/systemd/$effective_unit" "$effective_usr/$effective_unit"
+done
+for effective_dropin in \
+    mazzy-vpn-api.socket.d/10-package-docs.conf \
+    mazzy-vpn-api@.service.d/10-package-exec.conf \
+    mazzy-vpn-api-recovery.service.d/10-package-exec.conf \
+    vpnctl-health.service.d/10-package-exec.conf \
+    vpnctl-health.timer.d/10-package-interval.conf \
+    vpnctl.service.d/10-package-exec.conf \
+    vpnctl-test-recovery.service.d/10-package-exec.conf; do
+    mkdir -p "$effective_usr/${effective_dropin%/*}"
+    cp "$ROOT/packaging/linux/systemd/$effective_dropin" \
+        "$effective_usr/$effective_dropin"
+done
+effective_verify_log="$TMP/effective-systemd-verify.log"
+if ! systemd-analyze --root="$effective_root" --man=no verify \
+        mazzy-vpn-api.socket \
+        mazzy-vpn-api@internal.service \
+        mazzy-vpn-api-recovery.service \
+        vpnctl-health.service \
+        vpnctl-health.timer \
+        vpnctl.service \
+        vpnctl-test-recovery.service >"$effective_verify_log" 2>&1; then
+    cat "$effective_verify_log" >&2
+    fail "legacy /etc units and package drop-ins do not form a valid systemd graph"
+fi
+ok "package drop-ins form a valid recovery graph over legacy /etc units"
+
 grep -q 'chmodSync(path, 0o755)' \
     "$ROOT/desktop/scripts/build-release.mjs" ||
     fail "release builder does not normalize package executable modes"
@@ -4029,6 +4173,10 @@ fi
 grep -Fq '[join("scripts", "build-release.mjs")]' \
     "$ROOT/desktop/scripts/tauri-audited.mjs" ||
     fail "tag release audit does not invoke the fixed release builder"
+if grep -q 'check-linux-packages.sh' \
+    "$ROOT/desktop/scripts/tauri-audited.mjs"; then
+    fail "signing credentials can reach the Linux package audit subprocess"
+fi
 ok "dependency bootstrap and package-owned lifecycle are declared safely"
 
 if "$ROOT/install.sh" --destdir "$TMP/invalid-language-stage" --no-deps \
@@ -4103,7 +4251,13 @@ grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
 grep -q '^After=network-online.target NetworkManager.service mazzy-vpn-api-recovery.service$' \
     "$ROOT/systemd/vpnctl.service" ||
     fail "runtime service is not ordered after required API boot recovery"
-grep -q '^Before=vpnctl-test-recovery.service vpnctl.service vpnctl-health.service mazzy-vpn-api.socket$' \
+grep -q '^DefaultDependencies=no$' \
+    "$ROOT/systemd/mazzy-vpn-api-recovery.service" ||
+    fail "boot API recovery can form a basic.target/sockets.target ordering cycle"
+grep -q '^Requires=local-fs.target$' \
+    "$ROOT/systemd/mazzy-vpn-api-recovery.service" ||
+    fail "boot API recovery lost its explicit filesystem requirement"
+grep -q '^Before=shutdown.target vpnctl-test-recovery.service vpnctl.service vpnctl-health.service mazzy-vpn-api.socket$' \
     "$ROOT/systemd/mazzy-vpn-api-recovery.service" ||
     fail "boot API recovery ordering drifted"
 grep -Fxq 'RemainAfterExit=yes' \
@@ -4124,6 +4278,18 @@ grep -q '^TimeoutStartSec=60s$' \
 grep -q '^WantedBy=multi-user.target$' \
     "$ROOT/systemd/mazzy-vpn-api-recovery.service" ||
     fail "boot API recovery is not enabled through the boot target"
+grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
+    "$ROOT/systemd/mazzy-vpn-api.socket" ||
+    fail "API socket no longer requires the fail-closed recovery gate"
+grep -q '^After=mazzy-vpn-api-recovery.service$' \
+    "$ROOT/systemd/mazzy-vpn-api.socket" ||
+    fail "API socket is no longer serialized after recovery"
+grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
+    "$ROOT/systemd/vpnctl-health.service" ||
+    fail "health remediation no longer propagates boot recovery failure"
+grep -q '^After=network-online.target mazzy-vpn-api-recovery.service vpnctl.service$' \
+    "$ROOT/systemd/vpnctl-health.service" ||
+    fail "health remediation is no longer serialized after recovery"
 : >"$FAKE_SYSTEMCTL_RECOVERY_LOG"
 rm -f -- "$FAKE_SYSTEMCTL_RECOVERY_ACTIVE_FILE"
 FAKE_SYSTEMCTL_MODEL_RECOVERY_DEPENDENCY=1 \
@@ -4139,6 +4305,25 @@ FAKE_SYSTEMCTL_MODEL_RECOVERY_DEPENDENCY=1 \
 [[ "$(wc -l <"$FAKE_SYSTEMCTL_RECOVERY_LOG")" == "1" ]] ||
     fail "runtime VPN service activation re-entered boot API recovery"
 ok "runtime start cannot deadlock on boot recovery"
+
+for recovery_consumer in \
+    mazzy-vpn-api.socket \
+    vpnctl.service \
+    vpnctl-health.service \
+    vpnctl-test-recovery.service; do
+    rm -f -- "$FAKE_SYSTEMCTL_RECOVERY_ACTIVE_FILE"
+    : >"$FAKE_SYSTEMCTL_RECOVERY_LOG"
+    if FAKE_SYSTEMCTL_MODEL_RECOVERY_DEPENDENCY=1 \
+        FAKE_SYSTEMCTL_RECOVERY_FAIL=1 \
+        systemctl start "$recovery_consumer"; then
+        fail "$recovery_consumer started after required API recovery failed"
+    fi
+    [[ ! -e "$FAKE_SYSTEMCTL_RECOVERY_ACTIVE_FILE" ]] ||
+        fail "$recovery_consumer retained a false successful recovery state"
+    [[ "$(wc -l <"$FAKE_SYSTEMCTL_RECOVERY_LOG")" == "1" ]] ||
+        fail "$recovery_consumer did not attempt exactly one required recovery"
+done
+ok "API recovery failure blocks every socket and mutating consumer"
 
 mkdir -p "$TMP/installbin"
 for install_command in bash dirname uname id sed grep tr cut head tail stat \

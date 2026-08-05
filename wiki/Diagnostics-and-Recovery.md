@@ -29,7 +29,7 @@ stateDiagram-v2
     [*] --> Service
     Service --> Restart5s: процесс неожиданно завершился
     Restart5s --> Service: systemd Restart=always
-    Service --> HealthTick: каждые ~20 секунд
+    Service --> HealthTick: примерно каждую минуту
     HealthTick --> Start: DESIRED=up, service inactive
     HealthTick --> Count1: interface или интернет не работает
     Count1 --> Recover: вторая последовательная ошибка
@@ -116,7 +116,7 @@ profile name or city label, and missing metadata keeps the verdict at
 `warning`.
 
 There are two recovery layers. systemd uses `Restart=always` with a five-second
-delay. Independently, a roughly 20-second health timer immediately starts an
+delay. Independently, a roughly one-minute health timer immediately starts an
 inactive desired service and restarts a locally present but unusable tunnel
 after two consecutive confirmed failures.
 

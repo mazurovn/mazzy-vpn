@@ -24,6 +24,15 @@ the shared Mazzy VPN engine.
 - The GUI never reads VPN keys. It reads sanitized status/profile caches.
   Privileged actions use typed requests, validated arguments and `pkexec`; no
   arbitrary shell command is accepted.
+- Desktop checks the fixed GitHub update feed on startup by default, but always
+  asks in a modal before download or installation. Tauri signatures are
+  verified in the Rust backend. AppImage supports in-app install; DEB/RPM opens
+  the matching release to preserve package-manager ownership.
+- Desktop is single-instance: launching it again focuses the existing window
+  instead of creating another WebView and tray icon.
+- Desktop writes a privacy-bounded, `1,000,000`-byte rotating lifecycle log to the
+  platform application log directory. It records operation names and outcomes,
+  never profile contents, endpoints, credentials or public IP addresses.
 - Desktop 1.0 remains gated on native peer identity, migration of the remaining
   privileged domains to a shared service/API, complete six-language coverage,
   a fixed Tauri/GTK RustSec dependency graph and signed clean-device release
@@ -50,7 +59,9 @@ The release command remaps the builder's home path out of Rust diagnostics.
 Full guide: [docs/DESKTOP.en.md](../docs/DESKTOP.en.md). The standalone product
 architecture and parity gates are in
 [docs/DESKTOP_ROADMAP.en.md](../docs/DESKTOP_ROADMAP.en.md) and
-[docs/FEATURE_PARITY.md](../docs/FEATURE_PARITY.md).
+[docs/FEATURE_PARITY.md](../docs/FEATURE_PARITY.md). Signed-update behavior and
+failure boundaries are documented in
+[docs/DESKTOP_UPDATES.md](../docs/DESKTOP_UPDATES.md).
 
 ## Русский
 
@@ -70,6 +81,15 @@ Mazzy VPN Desktop — Linux Control Center и системный tray на Tauri
 - GUI не читает VPN-ключи. Он использует очищенные cache состояния и профилей.
   Привилегированные действия принимаются как typed-запросы с проверенными
   аргументами и запускаются через `pkexec`; shell-строки не строятся.
+- Desktop по умолчанию проверяет фиксированный GitHub feed при запуске, но
+  всегда показывает диалог перед загрузкой или установкой. Tauri-подпись
+  проверяется в Rust backend. AppImage обновляется внутри приложения, а
+  DEB/RPM открывает соответствующий release, не обходя package manager.
+- Desktop работает в одном экземпляре: повторный запуск показывает уже
+  открытое окно, не создавая второй WebView и tray.
+- Desktop пишет ограниченный одним мегабайтом ротационный lifecycle-журнал в
+  системный каталог логов приложения. В нём есть только имена и результаты
+  операций, без профилей, endpoint, credentials и публичных IP.
 - Gate Desktop 1.0 остаётся закрыт до native peer identity, переноса остальных
   privileged domains в общий service/API, полного перевода на шесть языков,
   исправления Tauri/GTK RustSec dependency graph и подписанных clean-device
@@ -91,4 +111,6 @@ Release-команда удаляет локальный домашний пут
 Полная инструкция: [docs/DESKTOP.ru.md](../docs/DESKTOP.ru.md). Архитектура
 самостоятельного продукта и release gates:
 [docs/DESKTOP_ROADMAP.ru.md](../docs/DESKTOP_ROADMAP.ru.md) и
-[docs/FEATURE_PARITY.md](../docs/FEATURE_PARITY.md).
+[docs/FEATURE_PARITY.md](../docs/FEATURE_PARITY.md). Trust boundary, границы
+ошибок и ограничения ручного rollback обновлений описаны в
+[docs/DESKTOP_UPDATES.md](../docs/DESKTOP_UPDATES.md).

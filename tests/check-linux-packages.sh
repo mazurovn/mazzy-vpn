@@ -4,7 +4,7 @@
 set -Eeuo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-BUNDLE_ROOT="${1:-$ROOT/desktop/src-tauri/target/release/bundle}"
+BUNDLE_ROOT="${1:-}"
 TMP="$(mktemp -d)"
 trap 'rm -rf -- "$TMP"' EXIT
 
@@ -78,6 +78,7 @@ assert_gui_launch() {
 }
 
 require_command cpio
+require_command cargo
 require_command dpkg-deb
 require_command python3
 require_command rpm
@@ -86,9 +87,38 @@ require_command systemd-analyze
 require_command unsquashfs
 require_command xvfb-run
 
+if [[ -z "$BUNDLE_ROOT" ]]; then
+    BUNDLE_ROOT="$(
+        cargo metadata --format-version 1 --no-deps \
+            --manifest-path "$ROOT/desktop/src-tauri/Cargo.toml" |
+            python3 -c 'import json, sys; print(json.load(sys.stdin)["target_directory"])'
+    )/release/bundle"
+fi
+
 deb="$(single_package "$BUNDLE_ROOT/deb" '*.deb')"
 rpm_package="$(single_package "$BUNDLE_ROOT/rpm" '*.rpm')"
 appimage="$(single_package "$BUNDLE_ROOT/appimage" '*.AppImage')"
+signature_args=()
+signature_count=0
+for artifact in "$deb" "$rpm_package" "$appimage"; do
+    if [[ -s "$artifact.sig" ]]; then
+        signature_args+=("$artifact" "$artifact.sig")
+        ((signature_count += 1))
+    elif [[ -e "$artifact.sig" ]]; then
+        fail "empty updater signature: $artifact.sig"
+    fi
+done
+if ((signature_count != 0 && signature_count != 3)); then
+    fail "release artifacts contain only $signature_count of 3 updater signatures"
+fi
+if ((signature_count == 3)); then
+    cargo run --locked --quiet \
+        --manifest-path "$ROOT/desktop/src-tauri/Cargo.toml" \
+        --example verify-updater-signatures -- \
+        "$ROOT/desktop/src-tauri/tauri.conf.json" \
+        "${signature_args[@]}" ||
+        fail "updater artifact signature verification failed"
+fi
 
 deb_control="$TMP/deb-control"
 deb_root="$TMP/deb-root"
@@ -242,7 +272,9 @@ for listing in "$TMP/deb-files" "$TMP/rpm-files"; do
         /usr/lib/mazzy-vpn/desktop/src-tauri/Cargo.lock \
         /usr/lib/mazzy-vpn/desktop/src-tauri/Cargo.toml \
         /usr/lib/mazzy-vpn/desktop/src-tauri/build.rs \
+        /usr/lib/mazzy-vpn/desktop/src-tauri/examples/verify-updater-signatures.rs \
         /usr/lib/mazzy-vpn/desktop/src-tauri/capabilities/default.json \
+        /usr/lib/mazzy-vpn/desktop/src-tauri/src/updater.rs \
         /usr/lib/mazzy-vpn/desktop/src-tauri/vendor/glib-0.18.5/Cargo.toml \
         /usr/lib/mazzy-vpn/desktop/src-tauri/vendor/glib-0.18.5/PATCH-PROVENANCE.md \
         /usr/lib/mazzy-vpn/desktop/src-tauri/vendor/glib-0.18.5/src/variant_iter.rs \
@@ -256,6 +288,12 @@ for listing in "$TMP/deb-files" "$TMP/rpm-files"; do
         /usr/lib/systemd/system/mazzy-vpn-api@.service.d/10-package-exec.conf \
         /usr/lib/systemd/system/vpnctl.service \
         /usr/lib/systemd/system/vpnctl.service.d/10-package-exec.conf \
+        /usr/lib/systemd/system/vpnctl-health.service \
+        /usr/lib/systemd/system/vpnctl-health.service.d/10-package-exec.conf \
+        /usr/lib/systemd/system/vpnctl-health.timer \
+        /usr/lib/systemd/system/vpnctl-health.timer.d/10-package-interval.conf \
+        /usr/lib/systemd/system/vpnctl-test-recovery.service \
+        /usr/lib/systemd/system/vpnctl-test-recovery.service.d/10-package-exec.conf \
         /usr/lib/tmpfiles.d/mazzy-vpn.conf \
         /usr/share/bash-completion/completions/mazzy-vpn; do
         assert_line "$path" "$listing"
@@ -307,6 +345,9 @@ for extracted_root in "$deb_root" "$rpm_root"; do
     cmp -s "$ROOT/desktop/src-tauri/Cargo.lock" \
         "$extracted_root/usr/lib/mazzy-vpn/desktop/src-tauri/Cargo.lock" ||
         fail "package Cargo lockfile differs from source"
+    cmp -s "$ROOT/desktop/src-tauri/src/updater.rs" \
+        "$extracted_root/usr/lib/mazzy-vpn/desktop/src-tauri/src/updater.rs" ||
+        fail "package Desktop updater source differs from source"
     cmp -s "$ROOT/desktop/src-tauri/vendor/glib-0.18.5/src/variant_iter.rs" \
         "$extracted_root/usr/lib/mazzy-vpn/desktop/src-tauri/vendor/glib-0.18.5/src/variant_iter.rs" ||
         fail "package vendored glib backport differs from source"
@@ -348,6 +389,21 @@ for extracted_root in "$deb_root" "$rpm_root"; do
         "$ROOT/packaging/linux/systemd/mazzy-vpn-api-recovery.service.d/10-package-exec.conf" \
         "$extracted_root/usr/lib/systemd/system/mazzy-vpn-api-recovery.service.d/10-package-exec.conf" ||
         fail "package API recovery override differs from source"
+    for systemd_source in \
+        systemd/mazzy-vpn-api.socket \
+        packaging/linux/systemd/mazzy-vpn-api.socket.d/10-package-docs.conf \
+        systemd/vpnctl-health.service \
+        packaging/linux/systemd/vpnctl-health.service.d/10-package-exec.conf \
+        systemd/vpnctl-health.timer \
+        packaging/linux/systemd/vpnctl-health.timer.d/10-package-interval.conf \
+        systemd/vpnctl-test-recovery.service \
+        packaging/linux/systemd/vpnctl-test-recovery.service.d/10-package-exec.conf; do
+        package_systemd_path="${systemd_source#packaging/linux/}"
+        package_systemd_path="${package_systemd_path#systemd/}"
+        cmp -s "$ROOT/$systemd_source" \
+            "$extracted_root/usr/lib/systemd/system/$package_systemd_path" ||
+            fail "package systemd payload differs from source: $package_systemd_path"
+    done
 done
 
 for relative in \
@@ -372,6 +428,7 @@ for relative in \
     desktop/src-tauri/Cargo.lock \
     desktop/src-tauri/Cargo.toml \
     desktop/src-tauri/build.rs \
+    desktop/src-tauri/examples/verify-updater-signatures.rs \
     desktop/src-tauri/capabilities/default.json \
     desktop/src-tauri/icons/icon.png \
     desktop/src-tauri/vendor/glib-0.18.5/Cargo.toml \
@@ -380,6 +437,7 @@ for relative in \
     desktop/src-tauri/src/agent_control.rs \
     desktop/src-tauri/src/backend.rs \
     desktop/src-tauri/src/main.rs \
+    desktop/src-tauri/src/updater.rs \
     desktop/src-tauri/tauri.conf.json \
     desktop/ui/app.css \
     desktop/ui/app.js \
@@ -387,6 +445,7 @@ for relative in \
     desktop/ui/mazzy-vpn-logo.svg \
     packaging/linux/post-install.sh \
     packaging/linux/systemd/mazzy-vpn-api-recovery.service.d/10-package-exec.conf \
+    packaging/linux/systemd/vpnctl-health.timer.d/10-package-interval.conf \
     rust-toolchain.toml \
     tests/check-capabilities.py \
     tests/check-glib-backport.py \
@@ -416,6 +475,9 @@ cmp -s "$ROOT/desktop/package-lock.json" \
 cmp -s "$ROOT/desktop/src-tauri/Cargo.lock" \
     "$appimage_engine/desktop/src-tauri/Cargo.lock" ||
     fail "AppImage embedded Cargo lockfile differs from source"
+cmp -s "$ROOT/desktop/src-tauri/src/updater.rs" \
+    "$appimage_engine/desktop/src-tauri/src/updater.rs" ||
+    fail "AppImage embedded updater source differs from source"
 cmp -s "$ROOT/desktop/src-tauri/vendor/glib-0.18.5/src/variant_iter.rs" \
     "$appimage_engine/desktop/src-tauri/vendor/glib-0.18.5/src/variant_iter.rs" ||
     fail "AppImage vendored glib backport differs from source"
