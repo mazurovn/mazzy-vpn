@@ -57,7 +57,6 @@ migrate_legacy_cli() {
 }
 
 if [ "${1:-}" = --test-migrate ]; then
-    [ "$(id -u)" -ne 0 ] || exit 2
     test_root="${2:-}"
     case "$test_root" in
         /*/../*|*/..|/|"") exit 2 ;;
