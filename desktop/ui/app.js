@@ -496,6 +496,7 @@ const state = {
   updateTotal: null,
   lastSignature: "",
   lastActiveProfileSignature: "",
+  bootstrapPromptShown: false,
   events: [],
   busy: false,
   lastOperation: null
@@ -1707,7 +1708,17 @@ function renderAbout() {
 async function refreshInstallation() {
   if (!invoke) return;
   try {
-    renderInstallation(await invoke("get_installation_report"));
+    const report = await invoke("get_installation_report");
+    renderInstallation(report);
+    // A fresh Desktop install must be usable without a separately installed CLI.
+    // Ask once, then let the existing privileged bootstrap path do the work.
+    if (report?.needs_install && !state.bootstrapPromptShown && !state.busy) {
+      state.bootstrapPromptShown = true;
+      window.setTimeout(() => {
+        if (state.busy || !window.confirm(t("confirmRepair"))) return;
+        void runOperation({ kind: "bootstrap" }, t("installRepair"));
+      }, 0);
+    }
   } catch (error) {
     showToast(String(error), true);
   }

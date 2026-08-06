@@ -286,6 +286,18 @@ def main() -> None:
         fail("Desktop location checks bypass the typed Rust command")
     if 'invoke("get_agent_integrations"' not in javascript:
         fail("Desktop agent view bypasses the typed Rust diagnostics command")
+    if (
+        'report?.needs_install' not in javascript
+        or 'state.bootstrapPromptShown' not in javascript
+        or 'window.confirm(t("confirmRepair"))' not in javascript
+        or 'runOperation({ kind: "bootstrap" }, t("installRepair"))' not in javascript
+    ):
+        fail("Desktop does not offer a consent-gated first-run engine bootstrap")
+    if (
+        "let dependencies_ready = dependencies_ready();" not in rust
+        or "let dependencies_ready = missing_dependencies == 0;" in rust
+    ):
+        fail("Desktop installation report blocks on optional dependencies")
     forbidden_agent_authority = (
         "run_agent_operation",
         "runAgentOperation",

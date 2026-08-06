@@ -68,7 +68,7 @@ assert_gui_launch() {
     local label="$1"
     shift
     local log="$TMP/${label,,}-launch.log" rc=0
-    GDK_BACKEND=x11 QT_QPA_PLATFORM=xcb \
+    NO_AT_BRIDGE=1 GDK_BACKEND=x11 QT_QPA_PLATFORM=xcb \
         /usr/bin/timeout --kill-after=2s 10s \
         xvfb-run -a "$@" >"$log" 2>&1 || rc=$?
     if ((rc != 124)); then

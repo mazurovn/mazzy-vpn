@@ -2299,7 +2299,10 @@ pub fn get_installation_report(app: AppHandle) -> InstallationReport {
         .iter()
         .filter(|dependency| !dependency.installed)
         .count();
-    let dependencies_ready = missing_dependencies == 0;
+    // Alternative tunnel backends and L2TP/IPsec are optional. Keep the
+    // report consistent with the bootstrap gate: one supported backend plus
+    // the core/Desktop dependencies is enough for a usable installation.
+    let dependencies_ready = dependencies_ready();
     let service_installed = systemd_unit_installed("vpnctl.service");
     let monitor_installed = systemd_unit_installed("vpnctl-health.timer");
     let api_installed = systemd_unit_installed("mazzy-vpn-api.socket");
