@@ -1,0 +1,15 @@
+<resources>
+    <string name="app_name">Mazzy VPN</string>
+    <string name="vpn_status_idle">VPN is stopped</string>
+    <string name="vpn_status_preparing">Waiting for VPN permission</string>
+    <string name="vpn_status_connecting">Connecting</string>
+    <string name="vpn_status_connected">Connected</string>
+    <string name="vpn_status_stopping">Stopping</string>
+    <string name="vpn_status_error">VPN unavailable</string>
+    <string name="start_vpn">Start VPN</string>
+    <string name="stop_vpn">Stop VPN</string>
+    <string name="import_profile">Import profile</string>
+    <string name="profile_imported">Profile validated and imported</string>
+    <string name="profile_import_failed">Profile import failed</string>
+    <string name="vpn_notification">Mazzy VPN service</string>
+</resources>
