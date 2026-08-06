@@ -12,6 +12,26 @@ All notable changes to Mazzy VPN are documented here.
 - Synchronize the project status, installation guide, FAQ and roadmap with the
   published `v1.4.1` and `desktop-v0.4.1` releases.
 
+## 1.4.4 / Desktop 0.4.4 - 2026-08-06
+
+- Fixed first-run self-test for users without profiles: `mazzy-vpn self-test`
+  and `mazzy-vpn doctor` no longer fail when no VPN profiles are configured.
+- Improved `mazzy-vpn diagnose` and `mazzy-vpn doctor` to report local API
+  socket accessibility and `mazzy-vpn` group membership with actionable
+  guidance.
+- Made `doctor` dependency checks context-aware: protocol-specific backends
+  (OpenVPN, WireGuard, AmneziaWG, L2TP/IPsec) are WARN when unused and FAIL
+  only when a profile for that protocol is selected.
+- Hardened `install.sh` on Ubuntu: if kernel headers for the running kernel
+  are unavailable, the installer automatically falls back to the AmneziaWG
+  userspace backend instead of aborting.
+- Hardened `packaging/linux/post-install.sh` to add the current user to the
+  `mazzy-vpn` group even when `SUDO_USER`/`PKEXEC_UID` are not set (e.g. GUI
+  package managers).
+- Prevented Desktop bootstrap from running the bundled installer over a
+  package-managed engine; package-managed installs now receive an actionable
+  error pointing to the distro package manager.
+
 ## 1.4.3 / Desktop 0.4.3 - 2026-08-06
 
 - Fixed regression-suite execution under `sudo`: `tests/run.sh` now uses a

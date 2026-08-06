@@ -971,7 +971,7 @@ function renderDocumentationPreview() {
   if (previewParameters.get("update") === "available") {
     showUpdateDialog({
       current_version: "0.4.2",
-      version: "0.4.3",
+      version: "0.4.4",
       install_supported: true,
       installation_method: "signed-in-app"
     });

@@ -570,8 +570,8 @@ export VPNCTL_LEGACY_START="$TMP/fallback-start"
 export VPNCTL_LEGACY_STOP="$TMP/fallback-stop"
 export NO_COLOR=1
 
-"$CLI" version | grep -q '^Mazzy VPN 1\.4\.3 (mazzy-vpn; alias: vpnctl)$'
-"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.4\.3 ' ||
+"$CLI" version | grep -q '^Mazzy VPN 1\.4\.4 (mazzy-vpn; alias: vpnctl)$'
+"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.4\.4 ' ||
     fail "vpnctl compatibility wrapper is broken"
 ok "Mazzy VPN branding and compatibility alias"
 
