@@ -8785,9 +8785,7 @@ doctor_dependency_checks() {
 
     if selected_from_state; then
         selected_protocol="$SELECTED_PROTOCOL"
-        backend_severity="fail"
     fi
-    [[ "$selected_protocol" == l2tp ]] && l2tp_severity="fail"
 
     if [[ -S "$API_SOCKET" ]]; then
         if api_socket_accessible; then

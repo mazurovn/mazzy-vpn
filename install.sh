@@ -427,7 +427,8 @@ os_value() {
 }
 
 kernel_headers_available() {
-    local package="linux-headers-$(uname -r)"
+    local package
+    package="linux-headers-$(uname -r)"
     apt-cache show "$package" >/dev/null 2>&1
 }
 
