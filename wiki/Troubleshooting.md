@@ -122,3 +122,20 @@ service-aware failover; changing a profile remains an explicit user action.
 If Desktop has no status, refresh the cache and inspect the health timer. If the
 tray is absent, verify StatusNotifier/AppIndicator support and use right-click
 on Linux. The systemd VPN remains operational without the GUI.
+
+### IPv6 and account eligibility
+
+For an active managed tunnel Mazzy installs `mazzy_vpn_ipv6_guard`. IPv4 is
+unchanged; IPv6 is allowed only through loopback or the VPN interface. If
+nftables cannot install the guard, tunnel startup fails closed.
+
+```bash
+ip -6 route
+mazzy-vpn verify --timeout 10 --json
+nft list table inet mazzy_vpn_ipv6_guard
+```
+
+Meta HTTP 403 and Antigravity eligibility errors are not equivalent to an IPv6
+location leak. They can depend on account country, staged rollout, cookies,
+provider policy, or VPN address reputation. Mazzy can prove transport egress
+and block IPv6 leaks, but cannot change provider-side account eligibility.

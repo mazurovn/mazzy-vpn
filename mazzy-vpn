@@ -47,6 +47,7 @@ HEALTH_STARTUP_GRACE_SECONDS="${VPNCTL_HEALTH_STARTUP_GRACE_SECONDS:-60}"
 HEALTH_REQUIRE_DEFAULT_EGRESS="${VPNCTL_HEALTH_REQUIRE_DEFAULT_EGRESS:-auto}"
 HEALTH_FALLBACK_PROBE_URL="${VPNCTL_HEALTH_FALLBACK_PROBE_URL:-https://1.1.1.1/cdn-cgi/trace}"
 TRANSITION_GUARD_TABLE="mazzy_vpn_transition"
+IPV6_GUARD_TABLE="${VPNCTL_IPV6_GUARD_TABLE:-mazzy_vpn_ipv6_guard}"
 TRANSITION_READY_TIMEOUT="${VPNCTL_TRANSITION_READY_TIMEOUT:-20}"
 TRANSITION_READY_PROBE_URL="https://1.1.1.1/cdn-cgi/trace"
 TRANSITION_READY_PROBE_URL_V6="https://[2606:4700:4700::1111]/cdn-cgi/trace"
@@ -2897,6 +2898,42 @@ transition_guard_remove() {
     nft delete table inet "$TRANSITION_GUARD_TABLE" >/dev/null 2>&1
 }
 
+ipv6_guard_installed() {
+    command -v nft >/dev/null 2>&1 &&
+        nft list table inet "$IPV6_GUARD_TABLE" >/dev/null 2>&1
+}
+
+ipv6_guard_remove() {
+    command -v nft >/dev/null 2>&1 || return 0
+    ipv6_guard_installed || return 0
+    nft delete table inet "$IPV6_GUARD_TABLE" >/dev/null 2>&1
+}
+
+ipv6_guard_install() {
+    local interface="${1:-}" definition=""
+    [[ "$interface" =~ ^[A-Za-z0-9_.:-]{1,64}$ ]] || return 1
+    command -v nft >/dev/null 2>&1 || return 1
+    definition="$({
+        if ipv6_guard_installed; then
+            printf 'delete table inet %s\n' "$IPV6_GUARD_TABLE"
+        fi
+        printf 'table inet %s {\n' "$IPV6_GUARD_TABLE"
+        printf '    chain output {\n'
+        printf '        type filter hook output priority -140; policy drop;\n'
+        printf '        meta nfproto ipv4 accept\n'
+        printf '        oifname "lo" accept\n'
+        printf '        oifname "%s" accept\n' "$interface"
+        printf '    }\n'
+        printf '    chain forward {\n'
+        printf '        type filter hook forward priority -140; policy drop;\n'
+        printf '        meta nfproto ipv4 accept\n'
+        printf '        oifname "%s" accept\n' "$interface"
+        printf '    }\n'
+        printf '}\n'
+    })"
+    printf '%s' "$definition" | nft -f - >/dev/null
+}
+
 transition_guard_restore_fail_closed() {
     local definition
     command -v nft >/dev/null 2>&1 || return 1
@@ -3675,9 +3712,20 @@ probe_locations_json() (
     mapfile -t protocols < <(requested_protocols "$requested") || return 2
     tmp="$(mktemp -d "${TMPDIR:-/tmp}/mazzy-vpn-probe.XXXXXX")" || return 1
     umask 077
+    kill_probe_process_tree() {
+        local parent="$1" child
+        while read -r child; do
+            [[ "$child" =~ ^[0-9]+$ ]] || continue
+            kill_probe_process_tree "$child"
+        done < <(
+            ps -eo pid=,ppid= 2>/dev/null |
+                awk -v parent="$parent" '$2 == parent { print $1 }'
+        )
+        kill "$parent" 2>/dev/null || true
+    }
     trap '
         for pid in "${pids[@]:-}"; do
-            kill "$pid" 2>/dev/null || true
+            kill_probe_process_tree "$pid"
         done
         wait 2>/dev/null || true
         rm -rf -- "$tmp"
@@ -4310,9 +4358,11 @@ cmd_disconnect() (
     health_reset
     if systemctl_quiet stop "$SERVICE_NAME"; then
         transition_guard_release || warn "Не удалось полностью снять transition guard"
+        ipv6_guard_remove || warn "Не удалось снять IPv6 leak guard"
         say "VPN отключён."
     else
         transition_guard_release || warn "Не удалось полностью снять transition guard"
+        ipv6_guard_remove || warn "Не удалось снять IPv6 leak guard"
         warn "Сервис уже остановлен или не установлен."
     fi
 )
@@ -9549,6 +9599,7 @@ run_quick_service() {
         rm -f "$runtime"
     }
     stop_quick() {
+        ipv6_guard_remove >/dev/null 2>&1 || true
         exit 0
     }
     trap cleanup_quick EXIT
@@ -9678,6 +9729,11 @@ service_run() {
         info "TEST: расширенное логирование включено; deadline=$deadline"
         info "TEST: $(protocol_title "$SELECTED_PROTOCOL") / $(profile_name "$SELECTED_PROFILE")"
     fi
+
+    ipv6_guard_install "$(interface_for_protocol "$SELECTED_PROTOCOL")" || {
+        error "Не удалось установить постоянный IPv6 leak guard"
+        return 1
+    }
 
     case "$SELECTED_PROTOCOL" in
         amneziawg|wireguard)
