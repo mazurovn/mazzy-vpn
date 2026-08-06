@@ -601,14 +601,16 @@ fn package_managed_cli(cli_path: &Path) -> bool {
 fn engine_not_ready_error() -> String {
     "Mazzy VPN engine is installed, but its local API socket is not reachable. \
      If you just installed the package, log out and log back in so the \
-     'mazzy-vpn' group is applied, then retry.".into()
+     'mazzy-vpn' group is applied, then retry."
+        .into()
 }
 
 fn package_missing_dependencies_error() -> String {
     "The package-managed Mazzy VPN engine is installed, but one or more \
      protocol backends are missing. Install the recommended packages for \
      your distribution (e.g. openvpn, wireguard-tools, amneziawg-tools) and \
-     log out and back in so the 'mazzy-vpn' group is applied.".into()
+     log out and back in so the 'mazzy-vpn' group is applied."
+        .into()
 }
 
 pub(crate) fn clean_output(output: &Output) -> String {
@@ -2151,7 +2153,23 @@ fn dependencies() -> Vec<DependencyState> {
 }
 
 fn dependencies_ready() -> bool {
-    dependencies().iter().all(|dependency| dependency.installed)
+    // A desktop installation is usable when core runtime dependencies and at
+    // least one supported tunnel backend are present. Optional L2TP/IPsec
+    // packages must not block an AmneziaWG/OpenVPN/WireGuard installation.
+    let states = dependencies();
+    let core_ready = states
+        .iter()
+        .filter(|dependency| {
+            dependency.required_for == "core" || dependency.required_for == "Desktop"
+        })
+        .all(|dependency| dependency.installed);
+    let tunnel_backend_ready = states.iter().any(|dependency| {
+        matches!(
+            dependency.id,
+            "openvpn" | "wireguard-tools" | "amneziawg-tools" | "amneziawg-backend"
+        ) && dependency.installed
+    });
+    core_ready && tunnel_backend_ready
 }
 
 #[tauri::command]

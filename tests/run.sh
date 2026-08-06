@@ -6,6 +6,15 @@ set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 CLI="$ROOT/mazzy-vpn"
 COMPAT_CLI="$ROOT/vpnctl"
+pass=0
+fail() {
+    printf 'FAIL: %s\n' "$*" >&2
+    exit 1
+}
+ok() {
+    pass=$((pass + 1))
+    printf 'ok %d - %s\n' "$pass" "$*"
+}
 if ((EUID == 0)); then
     secure_tmp_root="/root/mazzy-vpn-test-tmp"
     install -d -o root -g root -m 700 "$secure_tmp_root" ||
@@ -16,16 +25,6 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 REAL_PYTHON3="$(command -v python3)"
 export REAL_PYTHON3
-
-pass=0
-fail() {
-    printf 'FAIL: %s\n' "$*" >&2
-    exit 1
-}
-ok() {
-    pass=$((pass + 1))
-    printf 'ok %d - %s\n' "$pass" "$*"
-}
 
 mkdir -p "$TMP/config/openvpn" "$TMP/config/wireguard" "$TMP/state" \
     "$TMP/run" "$TMP/fakebin"

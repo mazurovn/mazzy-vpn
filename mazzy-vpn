@@ -3776,7 +3776,7 @@ probe_locations_json() (
 
 probe_result_ok() {
     jq -e '
-        .summary.total >= 0
+        .summary.total > 0
         and .summary.unreachable == 0
         and .summary.invalid == 0
     ' <<<"$1" >/dev/null 2>&1

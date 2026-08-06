@@ -505,9 +505,9 @@ install_debian_dependencies() {
         echo "Предупреждение: один из APT-репозиториев не обновился." >&2
         echo "Продолжаю с успешно обновлёнными индексами; doctor покажет остаточные проблемы." >&2
     fi
-    if ! run env DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"; then
-        echo "Предупреждение: не все рекомендуемые пакеты установлены; doctor покажет остаточные проблемы." >&2
-    fi
+    # Core runtime dependencies are required for a truthful successful install.
+    # Optional AmneziaWG handling below is deliberately separate.
+    run env DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}" || return 1
 
     if ! amnezia_ready; then
         if [[ "$(os_value ID)" == "ubuntu" ]]; then
