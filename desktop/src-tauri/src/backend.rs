@@ -26,6 +26,7 @@ const LOCAL_CLI_PATH: &str = "/usr/local/bin/mazzy-vpn";
 pub(crate) const TIMEOUT_PATH: &str = "/usr/bin/timeout";
 pub(crate) const PKEXEC_PATH: &str = "/usr/bin/pkexec";
 const PROFILES_FILE: &str = "/run/mazzy-vpn/profiles.json";
+const STATUS_FILE: &str = "/run/mazzy-vpn/status.json";
 const API_SOCKET: &str = "/run/mazzy-vpn/api-v1.sock";
 const MAX_OUTPUT_BYTES: usize = 512 * 1024;
 const MAX_OUTPUT_STREAM_BYTES: usize = MAX_OUTPUT_BYTES / 2;
@@ -599,7 +600,18 @@ fn package_managed_cli(cli_path: &Path) -> bool {
 }
 
 fn engine_not_ready_error() -> String {
-    "Mazzy VPN engine is installed, but its local API is still starting. Wait a few seconds and retry; no privileged fallback was started from the desktop.".into()
+    "Mazzy VPN engine is installed, but its local API socket is not reachable. \
+     If you just installed the package, log out and log back in so the \
+     'mazzy-vpn' group is applied, then retry."
+        .into()
+}
+
+fn package_missing_dependencies_error() -> String {
+    "The package-managed Mazzy VPN engine is installed, but one or more \
+     protocol backends are missing. Install the recommended packages for \
+     your distribution (e.g. openvpn, wireguard-tools, amneziawg-tools) and \
+     log out and back in so the 'mazzy-vpn' group is applied."
+        .into()
 }
 
 pub(crate) fn clean_output(output: &Output) -> String {
@@ -1747,8 +1759,15 @@ fn wait_for_local_api() -> bool {
         if attempt > 0 {
             thread::sleep(std::time::Duration::from_millis(*delay_ms));
         }
-        if UnixStream::connect(API_SOCKET).is_ok() {
-            return true;
+        match UnixStream::connect(API_SOCKET) {
+            Ok(_) => return true,
+            Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+                // The socket exists and is listening, but the current desktop
+                // process has not yet received the mazzy-vpn group. Treat the
+                // API as ready and let the caller fall back to pkexec.
+                return true;
+            }
+            Err(_) => continue,
         }
     }
     false
@@ -1806,15 +1825,32 @@ fn try_execute_local_api(_: &OperationRequest) -> Option<OperationResult> {
 
 pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> OperationResult {
     if matches!(request, OperationRequest::Bootstrap) {
-        if Path::new(SYSTEM_CLI_PATH).is_file() && !wait_for_local_api() {
-            return OperationResult {
-                success: false,
-                action: "bootstrap".into(),
-                output: engine_not_ready_error(),
-                code: None,
-            };
-        }
-        if Path::new(SYSTEM_CLI_PATH).is_file() {
+        let system_installed = Path::new(SYSTEM_CLI_PATH).is_file();
+        let local_installed = Path::new(LOCAL_CLI_PATH).is_file();
+        let dependencies_ready = dependencies_ready(selected_protocol_from_status().as_deref());
+        let installer = engine_root(app).join("install.sh");
+        let embedded_installer_available = installer.is_file();
+
+        // Package-managed engine: never run the bundled installer, because that
+        // would duplicate units under /usr/local and leave the package copy
+        // untouched. Report missing dependencies with actionable instructions.
+        if system_installed {
+            if !dependencies_ready {
+                return OperationResult {
+                    success: false,
+                    action: "bootstrap".into(),
+                    output: package_missing_dependencies_error(),
+                    code: None,
+                };
+            }
+            if !wait_for_local_api() {
+                return OperationResult {
+                    success: false,
+                    action: "bootstrap".into(),
+                    output: engine_not_ready_error(),
+                    code: None,
+                };
+            }
             return timed_operation_result(
                 "bootstrap".into(),
                 bounded_output(
@@ -1826,8 +1862,25 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
                 true,
             );
         }
-        let installer = engine_root(app).join("install.sh");
-        if !installer.is_file() {
+
+        // Manual/local engine: the bundled installer can bootstrap missing
+        // backend dependencies so the desktop stays self-contained.
+        if local_installed && !dependencies_ready && embedded_installer_available {
+            return timed_operation_result(
+                "bootstrap".into(),
+                bounded_output(
+                    Command::new(TIMEOUT_PATH)
+                        .args(["--kill-after=30s", "1800s", PKEXEC_PATH])
+                        .arg("/bin/bash")
+                        .arg(&installer)
+                        .arg("--yes")
+                        .arg("--skip-tests"),
+                ),
+                true,
+            );
+        }
+
+        if !embedded_installer_available {
             return OperationResult {
                 success: false,
                 action: "bootstrap".into(),
@@ -1835,13 +1888,14 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
                 code: None,
             };
         }
+
         return timed_operation_result(
             "bootstrap".into(),
             bounded_output(
                 Command::new(TIMEOUT_PATH)
                     .args(["--kill-after=30s", "1800s", PKEXEC_PATH])
                     .arg("/bin/bash")
-                    .arg(installer)
+                    .arg(&installer)
                     .arg("--yes")
                     .arg("--skip-tests"),
             ),
@@ -2099,6 +2153,61 @@ fn dependencies() -> Vec<DependencyState> {
         .collect()
 }
 
+fn selected_protocol_from_status() -> Option<String> {
+    let contents = fs::read_to_string(STATUS_FILE).ok()?;
+    let status: Value = serde_json::from_str(&contents).ok()?;
+    status
+        .get("protocol")
+        .and_then(Value::as_str)
+        .filter(|protocol| !protocol.is_empty())
+        .map(str::to_owned)
+}
+
+fn dependencies_ready(selected_protocol: Option<&str>) -> bool {
+    // A desktop installation is usable when core runtime dependencies and at
+    // least one supported tunnel backend are present. Optional L2TP/IPsec
+    // packages must not block an AmneziaWG/OpenVPN/WireGuard installation.
+    let states = dependencies();
+    let core_ready = states
+        .iter()
+        .filter(|dependency| {
+            dependency.required_for == "core" || dependency.required_for == "Desktop"
+        })
+        .all(|dependency| dependency.installed);
+    let tunnel_backend_ready = match selected_protocol {
+        Some("openvpn") => states.iter().any(|d| d.id == "openvpn" && d.installed),
+        Some("wireguard") => {
+            states
+                .iter()
+                .filter(|d| d.id == "wireguard-tools")
+                .all(|d| d.installed)
+                && states
+                    .iter()
+                    .any(|d| d.id == "wireguard-tools" && d.installed)
+        }
+        Some("amneziawg") => {
+            states
+                .iter()
+                .filter(|d| matches!(d.id, "amneziawg-tools" | "amneziawg-backend"))
+                .all(|d| d.installed)
+                && states
+                    .iter()
+                    .any(|d| d.id == "amneziawg-tools" && d.installed)
+        }
+        Some("l2tp") => states
+            .iter()
+            .filter(|d| d.required_for == "L2TP/IPsec")
+            .all(|d| d.installed),
+        _ => states.iter().any(|d| {
+            matches!(
+                d.id,
+                "openvpn" | "wireguard-tools" | "amneziawg-tools" | "amneziawg-backend"
+            ) && d.installed
+        }),
+    };
+    core_ready && tunnel_backend_ready
+}
+
 #[tauri::command]
 pub fn get_profiles() -> Value {
     let response = profile_cache_response(fs::read_to_string(PROFILES_FILE));
@@ -2226,7 +2335,10 @@ pub fn get_installation_report(app: AppHandle) -> InstallationReport {
         .iter()
         .filter(|dependency| !dependency.installed)
         .count();
-    let dependencies_ready = missing_dependencies == 0;
+    // Alternative tunnel backends and L2TP/IPsec are optional. Keep the
+    // report consistent with the bootstrap gate: one supported backend plus
+    // the core/Desktop dependencies is enough for a usable installation.
+    let dependencies_ready = dependencies_ready(selected_protocol_from_status().as_deref());
     let service_installed = systemd_unit_installed("vpnctl.service");
     let monitor_installed = systemd_unit_installed("vpnctl-health.timer");
     let api_installed = systemd_unit_installed("mazzy-vpn-api.socket");
@@ -2439,8 +2551,9 @@ mod tests {
     #[test]
     fn engine_not_ready_error_explains_the_safe_fallback() {
         let message = engine_not_ready_error();
-        assert!(message.contains("local API is still starting"));
-        assert!(message.contains("no privileged fallback"));
+        assert!(message.contains("local API socket is not reachable"));
+        assert!(message.contains("log out and log back in"));
+        assert!(message.contains("mazzy-vpn"));
         assert!(!message.contains("pkexec"));
     }
 

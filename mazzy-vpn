@@ -6,7 +6,7 @@ set -uo pipefail
 PRODUCT_NAME="Mazzy VPN"
 CLI_COMMAND="mazzy-vpn"
 COMPAT_COMMAND="vpnctl"
-VERSION="1.4.2"
+VERSION="1.4.4"
 
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd -- "$(dirname -- "$SELF")" && pwd)"
@@ -47,6 +47,7 @@ HEALTH_STARTUP_GRACE_SECONDS="${VPNCTL_HEALTH_STARTUP_GRACE_SECONDS:-60}"
 HEALTH_REQUIRE_DEFAULT_EGRESS="${VPNCTL_HEALTH_REQUIRE_DEFAULT_EGRESS:-auto}"
 HEALTH_FALLBACK_PROBE_URL="${VPNCTL_HEALTH_FALLBACK_PROBE_URL:-https://1.1.1.1/cdn-cgi/trace}"
 TRANSITION_GUARD_TABLE="mazzy_vpn_transition"
+IPV6_GUARD_TABLE="${VPNCTL_IPV6_GUARD_TABLE:-mazzy_vpn_ipv6_guard}"
 TRANSITION_READY_TIMEOUT="${VPNCTL_TRANSITION_READY_TIMEOUT:-20}"
 TRANSITION_READY_PROBE_URL="https://1.1.1.1/cdn-cgi/trace"
 TRANSITION_READY_PROBE_URL_V6="https://[2606:4700:4700::1111]/cdn-cgi/trace"
@@ -753,6 +754,19 @@ check_warn() {
 check_fail() {
     CHECK_FAIL=$((CHECK_FAIL + 1))
     printf '%s[FAIL]%s %s\n' "$C_RED" "$C_RESET" "$*"
+}
+
+current_user_in_group() {
+    local group="${1:-}" user
+    user="${SUDO_USER:-${USER:-}}"
+    [[ -n "$user" ]] || user="$(id -un 2>/dev/null || true)"
+    [[ -n "$group" && -n "$user" ]] || return 1
+    id -nG "$user" 2>/dev/null | tr ' ' '\n' | grep -Fxq "$group"
+}
+
+api_socket_accessible() {
+    [[ -S "$API_SOCKET" ]] || return 1
+    [[ -r "$API_SOCKET" && -w "$API_SOCKET" ]] || return 1
 }
 
 api_manifest_path() {
@@ -2884,6 +2898,42 @@ transition_guard_remove() {
     nft delete table inet "$TRANSITION_GUARD_TABLE" >/dev/null 2>&1
 }
 
+ipv6_guard_installed() {
+    command -v nft >/dev/null 2>&1 &&
+        nft list table inet "$IPV6_GUARD_TABLE" >/dev/null 2>&1
+}
+
+ipv6_guard_remove() {
+    command -v nft >/dev/null 2>&1 || return 0
+    ipv6_guard_installed || return 0
+    nft delete table inet "$IPV6_GUARD_TABLE" >/dev/null 2>&1
+}
+
+ipv6_guard_install() {
+    local interface="${1:-}" definition=""
+    [[ "$interface" =~ ^[A-Za-z0-9_.:-]{1,64}$ ]] || return 1
+    command -v nft >/dev/null 2>&1 || return 1
+    definition="$({
+        if ipv6_guard_installed; then
+            printf 'delete table inet %s\n' "$IPV6_GUARD_TABLE"
+        fi
+        printf 'table inet %s {\n' "$IPV6_GUARD_TABLE"
+        printf '    chain output {\n'
+        printf '        type filter hook output priority -140; policy drop;\n'
+        printf '        meta nfproto ipv4 accept\n'
+        printf '        oifname "lo" accept\n'
+        printf '        oifname "%s" accept\n' "$interface"
+        printf '    }\n'
+        printf '    chain forward {\n'
+        printf '        type filter hook forward priority -140; policy drop;\n'
+        printf '        meta nfproto ipv4 accept\n'
+        printf '        oifname "%s" accept\n' "$interface"
+        printf '    }\n'
+        printf '}\n'
+    })"
+    printf '%s' "$definition" | nft -f - >/dev/null
+}
+
 transition_guard_restore_fail_closed() {
     local definition
     command -v nft >/dev/null 2>&1 || return 1
@@ -3662,9 +3712,23 @@ probe_locations_json() (
     mapfile -t protocols < <(requested_protocols "$requested") || return 2
     tmp="$(mktemp -d "${TMPDIR:-/tmp}/mazzy-vpn-probe.XXXXXX")" || return 1
     umask 077
+    # The function is called from the EXIT trap below; ShellCheck cannot
+    # resolve that indirect invocation in a subshell.
+    # shellcheck disable=SC2317,SC2329
+    kill_probe_process_tree() {
+        local parent="$1" child
+        while read -r child; do
+            [[ "$child" =~ ^[0-9]+$ ]] || continue
+            kill_probe_process_tree "$child"
+        done < <(
+            ps -eo pid=,ppid= 2>/dev/null |
+                awk -v parent="$parent" '$2 == parent { print $1 }'
+        )
+        kill "$parent" 2>/dev/null || true
+    }
     trap '
         for pid in "${pids[@]:-}"; do
-            kill "$pid" 2>/dev/null || true
+            kill_probe_process_tree "$pid"
         done
         wait 2>/dev/null || true
         rm -rf -- "$tmp"
@@ -4297,9 +4361,11 @@ cmd_disconnect() (
     health_reset
     if systemctl_quiet stop "$SERVICE_NAME"; then
         transition_guard_release || warn "Не удалось полностью снять transition guard"
+        ipv6_guard_remove || warn "Не удалось снять IPv6 leak guard"
         say "VPN отключён."
     else
         transition_guard_release || warn "Не удалось полностью снять transition guard"
+        ipv6_guard_remove || warn "Не удалось снять IPv6 leak guard"
         warn "Сервис уже остановлен или не установлен."
     fi
 )
@@ -8619,12 +8685,36 @@ api_dispatch() {
 }
 
 check_command() {
-    local command="$1" label="${2:-$1}"
+    local command="$1" label="${2:-$1}" severity="${3:-fail}"
     if command -v "$command" >/dev/null 2>&1; then
         check_ok "$label: $(command -v "$command")"
     else
-        check_fail "$label не установлен"
+        case "$severity" in
+            warn) check_warn "$label не установлен" ;;
+            *) check_fail "$label не установлен" ;;
+        esac
     fi
+}
+
+protocol_backend_available() {
+    local protocol="$1"
+    case "$protocol" in
+        openvpn)
+            command -v openvpn >/dev/null 2>&1
+            ;;
+        wireguard)
+            command -v wg >/dev/null 2>&1 &&
+                command -v wg-quick >/dev/null 2>&1
+            ;;
+        amneziawg)
+            command -v awg >/dev/null 2>&1 &&
+                command -v awg-quick >/dev/null 2>&1
+            ;;
+        l2tp)
+            command -v nmcli >/dev/null 2>&1
+            ;;
+        *) return 1 ;;
+    esac
 }
 
 check_active_connection() {
@@ -8685,8 +8775,23 @@ cmd_diagnose() {
         check_fail "DNS-разрешение не работает"
     fi
 
+    if [[ -S "$API_SOCKET" ]]; then
+        if api_socket_accessible; then
+            check_ok "Local API socket доступен: $API_SOCKET"
+        else
+            check_warn "Local API socket существует, но текущий пользователь не может к нему подключиться"
+            if current_user_in_group mazzy-vpn; then
+                check_warn "Пользователь в группе mazzy-vpn, но права на сокет ещё не применились; попробуйте перелогиниться"
+            else
+                check_warn "Пользователь не входит в группу mazzy-vpn; для работы Desktop выполните: sudo usermod -a -G mazzy-vpn $(id -un) и перелогиньтесь"
+            fi
+        fi
+    else
+        check_warn "Local API socket не найден ($API_SOCKET); сервис может быть не запущен"
+    fi
+
     if ! selected_from_state; then
-        check_fail "Активный профиль не выбран"
+        check_warn "Активный профиль не выбран"
     else
         protocol="$SELECTED_PROTOCOL"
         profile="$SELECTED_PROFILE"
@@ -8703,6 +8808,9 @@ cmd_diagnose() {
                 check_fail "Не удаётся разрешить адрес VPN-сервера: $endpoint_host"
             fi
         fi
+        if ! protocol_backend_available "$protocol"; then
+            check_fail "Backend для $(protocol_title "$protocol") не установлен"
+        fi
         check_active_connection "$protocol"
     fi
 
@@ -8711,6 +8819,8 @@ cmd_diagnose() {
 }
 
 doctor_dependency_checks() {
+    local selected_protocol=""
+
     check_command bash
     check_command ip "iproute2"
     check_command nft "nftables transition guard"
@@ -8725,12 +8835,22 @@ doctor_dependency_checks() {
     check_command sha256sum "opaque profile IDs (sha256sum)"
     check_command getent "DNS resolver (getent)"
     check_command ping "ICMP ping"
-    check_command openvpn
-    check_command wg
-    check_command wg-quick
-    check_command awg
-    check_command awg-quick
-    check_command nmcli "NetworkManager"
+
+    if selected_from_state; then
+        selected_protocol="$SELECTED_PROTOCOL"
+    fi
+
+    if [[ -S "$API_SOCKET" ]]; then
+        if api_socket_accessible; then
+            check_ok "Local API socket доступен: $API_SOCKET"
+        elif current_user_in_group mazzy-vpn; then
+            check_warn "Local API socket существует, но текущий процесс ещё не получил группу mazzy-vpn; перелогинитесь"
+        else
+            check_warn "Local API socket недоступен; добавьте пользователя в группу mazzy-vpn и перелогинитесь"
+        fi
+    else
+        check_warn "Local API socket не найден ($API_SOCKET)"
+    fi
 
     if command -v resolvectl >/dev/null 2>&1 || command -v resolvconf >/dev/null 2>&1; then
         check_ok "DNS-интеграция доступна"
@@ -8738,12 +8858,25 @@ doctor_dependency_checks() {
         check_warn "Нет resolvectl/resolvconf; DNS VPN может не применяться"
     fi
 
+    check_command openvpn "OpenVPN" \
+        "$([[ "$selected_protocol" == openvpn ]] && printf fail || printf warn)"
+    check_command wg "WireGuard wg" \
+        "$([[ "$selected_protocol" == wireguard ]] && printf fail || printf warn)"
+    check_command wg-quick "WireGuard wg-quick" \
+        "$([[ "$selected_protocol" == wireguard ]] && printf fail || printf warn)"
+    check_command awg "AmneziaWG awg" \
+        "$([[ "$selected_protocol" == amneziawg ]] && printf fail || printf warn)"
+    check_command awg-quick "AmneziaWG awg-quick" \
+        "$([[ "$selected_protocol" == amneziawg ]] && printf fail || printf warn)"
+
     if amnezia_kernel_available; then
         check_ok "AmneziaWG backend: модуль ядра"
     elif amnezia_userspace_available; then
         check_ok "AmneziaWG backend: amneziawg-go (userspace)"
-    else
+    elif [[ "$selected_protocol" == amneziawg ]]; then
         check_fail "AmneziaWG backend отсутствует: нет модуля ядра и amneziawg-go"
+    else
+        check_warn "AmneziaWG backend отсутствует: нет модуля ядра и amneziawg-go"
     fi
     if broken_current_amnezia_ppa; then
         check_warn "Amnezia PPA не публикует текущий Ubuntu suite; userspace backend продолжит работать"
@@ -8761,7 +8894,7 @@ doctor_dependency_checks() {
            2>/dev/null | grep -q .; then
         check_ok "Плагин NetworkManager L2TP установлен"
     else
-        check_fail "Плагин NetworkManager L2TP не установлен"
+        check_warn "Плагин NetworkManager L2TP не установлен"
     fi
 
     if command -v charon >/dev/null 2>&1 ||
@@ -8772,20 +8905,20 @@ doctor_dependency_checks() {
            -print -quit 2>/dev/null | grep -q .; then
         check_ok "IPsec backend установлен"
     else
-        check_fail "IPsec backend (strongSwan/Libreswan) не установлен"
+        check_warn "IPsec backend (strongSwan/Libreswan) не установлен"
     fi
 
     if command -v pppd >/dev/null 2>&1; then
         check_ok "PPP backend установлен"
     else
-        check_fail "pppd не установлен"
+        check_warn "pppd не установлен"
     fi
 
     if command -v xl2tpd >/dev/null 2>&1 ||
        command -v kl2tpd >/dev/null 2>&1; then
         check_ok "L2TP transport установлен"
     else
-        check_fail "L2TP transport (go-l2tp/xl2tpd) не установлен"
+        check_warn "L2TP transport (go-l2tp/xl2tpd) не установлен"
     fi
 }
 
@@ -9469,6 +9602,7 @@ run_quick_service() {
         rm -f "$runtime"
     }
     stop_quick() {
+        ipv6_guard_remove >/dev/null 2>&1 || true
         exit 0
     }
     trap cleanup_quick EXIT
@@ -9598,6 +9732,11 @@ service_run() {
         info "TEST: расширенное логирование включено; deadline=$deadline"
         info "TEST: $(protocol_title "$SELECTED_PROTOCOL") / $(profile_name "$SELECTED_PROFILE")"
     fi
+
+    ipv6_guard_install "$(interface_for_protocol "$SELECTED_PROTOCOL")" || {
+        error "Не удалось установить постоянный IPv6 leak guard"
+        return 1
+    }
 
     case "$SELECTED_PROTOCOL" in
         amneziawg|wireguard)

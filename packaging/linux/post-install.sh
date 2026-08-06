@@ -57,7 +57,6 @@ migrate_legacy_cli() {
 }
 
 if [ "${1:-}" = --test-migrate ]; then
-    [ "$(id -u)" -ne 0 ] || exit 2
     test_root="${2:-}"
     case "$test_root" in
         /*/../*|*/..|/|"") exit 2 ;;
@@ -105,11 +104,19 @@ grant_installer_access() {
         access_user="$(getent passwd "$PKEXEC_UID" | cut -d: -f1 || true)"
     fi
 
+    if [ -z "$access_user" ]; then
+        access_user="$(logname 2>/dev/null || true)"
+        case "$access_user" in
+            ""|root|*[!A-Za-z0-9_.-]*) access_user="" ;;
+        esac
+    fi
+
     if [ -n "$access_user" ] &&
        id "$access_user" >/dev/null 2>&1 &&
        ! id -nG "$access_user" | tr ' ' '\n' | grep -Fxq mazzy-vpn; then
         usermod -a -G mazzy-vpn "$access_user"
     fi
+
 }
 
 activate_services() {

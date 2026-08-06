@@ -12,6 +12,41 @@ All notable changes to Mazzy VPN are documented here.
 - Synchronize the project status, installation guide, FAQ and roadmap with the
   published `v1.4.1` and `desktop-v0.4.1` releases.
 
+## 1.4.4 / Desktop 0.4.4 - 2026-08-06
+
+- Fixed first-run self-test for users without profiles: `mazzy-vpn self-test`
+  and `mazzy-vpn doctor` no longer fail when no VPN profiles are configured.
+- Improved `mazzy-vpn diagnose` and `mazzy-vpn doctor` to report local API
+  socket accessibility and `mazzy-vpn` group membership with actionable
+  guidance.
+- Made `doctor` dependency checks context-aware: protocol-specific backends
+  (OpenVPN, WireGuard, AmneziaWG, L2TP/IPsec) are WARN when unused and FAIL
+  only when a profile for that protocol is selected.
+- Hardened `install.sh` on Ubuntu: if kernel headers for the running kernel
+  are unavailable, the installer automatically falls back to the AmneziaWG
+  userspace backend instead of aborting.
+- Hardened `packaging/linux/post-install.sh` to add the current user to the
+  `mazzy-vpn` group even when `SUDO_USER`/`PKEXEC_UID` are not set (e.g. GUI
+  package managers).
+- Prevented Desktop bootstrap from running the bundled installer over a
+  package-managed engine; package-managed installs now receive an actionable
+  error pointing to the distro package manager.
+
+## 1.4.3 / Desktop 0.4.3 - 2026-08-06
+
+- Fixed regression-suite execution under `sudo`: `tests/run.sh` now uses a
+  root-owned `TMPDIR` so profile permission validation succeeds, and the package
+  lifecycle test helpers (`post-install.sh --test-migrate` and
+  `post-remove.sh --test-restore`) no longer require a non-root caller.
+- Made Desktop self-contained on distributions without an AmneziaWG PPA: the
+  bundled installer is re-run from the Desktop bootstrap flow when the engine is
+  installed but a backend dependency is missing, so the AmneziaWG userspace
+  fallback and other protocol backends are bootstrapped automatically.
+- Improved the Desktop "local API is still starting" error: the socket is now
+  treated as ready when it exists but the desktop process lacks the `mazzy-vpn`
+  group, allowing `pkexec` fallback and telling the user to log out and back in
+  if the group was just added.
+
 ## 1.4.2 / Desktop 0.4.2 - 2026-08-05
 
 - Fixed Desktop startup recovery when the local API socket or profile cache is

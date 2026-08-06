@@ -426,6 +426,12 @@ os_value() {
     ' /etc/os-release
 }
 
+kernel_headers_available() {
+    local package
+    package="linux-headers-$(uname -r)"
+    apt-cache show "$package" >/dev/null 2>&1
+}
+
 amnezia_ppa_supports_current_ubuntu() {
     local codename
     case "${VPNCTL_AMNEZIA_PPA_AVAILABLE:-auto}" in
@@ -499,7 +505,9 @@ install_debian_dependencies() {
         echo "Предупреждение: один из APT-репозиториев не обновился." >&2
         echo "Продолжаю с успешно обновлёнными индексами; doctor покажет остаточные проблемы." >&2
     fi
-    run env DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}"
+    # Core runtime dependencies are required for a truthful successful install.
+    # Optional AmneziaWG handling below is deliberately separate.
+    run env DEBIAN_FRONTEND=noninteractive apt-get install -y "${packages[@]}" || return 1
 
     if ! amnezia_ready; then
         if [[ "$(os_value ID)" == "ubuntu" ]]; then
@@ -514,13 +522,19 @@ install_debian_dependencies() {
                 return 0
             fi
             if confirm "Добавить PPA и установить amneziawg?"; then
-                run apt-get install -y software-properties-common python3-launchpadlib gnupg2 \
-                    "linux-headers-$(uname -r)"
-                run add-apt-repository -y ppa:amnezia/ppa
-                run apt-get update ||
-                    echo "Не все APT-репозитории обновились; проверяю доступный пакет."
-                run apt-get install -y amneziawg ||
-                    echo "Kernel backend AmneziaWG не установился; можно повторить с userspace backend."
+                if ! kernel_headers_available; then
+                    echo "Kernel headers для $(uname -r) недоступны; использую userspace backend."
+                    install_amnezia_userspace ||
+                        echo "AmneziaWG userspace установить не удалось; остальные протоколы установлены."
+                else
+                    run apt-get install -y software-properties-common python3-launchpadlib gnupg2 \
+                        "linux-headers-$(uname -r)"
+                    run add-apt-repository -y ppa:amnezia/ppa
+                    run apt-get update ||
+                        echo "Не все APT-репозитории обновились; проверяю доступный пакет."
+                    run apt-get install -y amneziawg ||
+                        echo "Kernel backend AmneziaWG не установился; можно повторить с userspace backend."
+                fi
             else
                 echo "AmneziaWG пропущен; doctor продолжит сообщать об этой зависимости."
             fi

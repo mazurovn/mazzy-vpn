@@ -6,11 +6,6 @@ set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 CLI="$ROOT/mazzy-vpn"
 COMPAT_CLI="$ROOT/vpnctl"
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
-REAL_PYTHON3="$(command -v python3)"
-export REAL_PYTHON3
-
 pass=0
 fail() {
     printf 'FAIL: %s\n' "$*" >&2
@@ -20,6 +15,16 @@ ok() {
     pass=$((pass + 1))
     printf 'ok %d - %s\n' "$pass" "$*"
 }
+if ((EUID == 0)); then
+    secure_tmp_root="/root/mazzy-vpn-test-tmp"
+    install -d -o root -g root -m 700 "$secure_tmp_root" ||
+        fail "cannot create secure TMPDIR for root"
+    export TMPDIR="$secure_tmp_root"
+fi
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+REAL_PYTHON3="$(command -v python3)"
+export REAL_PYTHON3
 
 mkdir -p "$TMP/config/openvpn" "$TMP/config/wireguard" "$TMP/state" \
     "$TMP/run" "$TMP/fakebin"
@@ -564,8 +569,8 @@ export VPNCTL_LEGACY_START="$TMP/fallback-start"
 export VPNCTL_LEGACY_STOP="$TMP/fallback-stop"
 export NO_COLOR=1
 
-"$CLI" version | grep -q '^Mazzy VPN 1\.4\.2 (mazzy-vpn; alias: vpnctl)$'
-"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.4\.2 ' ||
+"$CLI" version | grep -q '^Mazzy VPN 1\.4\.4 (mazzy-vpn; alias: vpnctl)$'
+"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.4\.4 ' ||
     fail "vpnctl compatibility wrapper is broken"
 ok "Mazzy VPN branding and compatibility alias"
 
