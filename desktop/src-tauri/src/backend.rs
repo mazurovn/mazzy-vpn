@@ -604,6 +604,13 @@ fn engine_not_ready_error() -> String {
      'mazzy-vpn' group is applied, then retry.".into()
 }
 
+fn package_missing_dependencies_error() -> String {
+    "The package-managed Mazzy VPN engine is installed, but one or more \
+     protocol backends are missing. Install the recommended packages for \
+     your distribution (e.g. openvpn, wireguard-tools, amneziawg-tools) and \
+     log out and back in so the 'mazzy-vpn' group is applied.".into()
+}
+
 pub(crate) fn clean_output(output: &Output) -> String {
     let mut bytes = output.stdout.clone();
     if !output.stderr.is_empty() {
@@ -1817,15 +1824,45 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
     if matches!(request, OperationRequest::Bootstrap) {
         let system_installed = Path::new(SYSTEM_CLI_PATH).is_file();
         let local_installed = Path::new(LOCAL_CLI_PATH).is_file();
-        let engine_installed = system_installed || local_installed;
         let dependencies_ready = dependencies_ready();
         let installer = engine_root(app).join("install.sh");
         let embedded_installer_available = installer.is_file();
 
-        // Engine scripts are present but a backend dependency (e.g. AmneziaWG
-        // userspace fallback on Ubuntu without PPA) is missing. Re-run the
-        // bundled installer so the desktop package becomes self-contained.
-        if engine_installed && !dependencies_ready && embedded_installer_available {
+        // Package-managed engine: never run the bundled installer, because that
+        // would duplicate units under /usr/local and leave the package copy
+        // untouched. Report missing dependencies with actionable instructions.
+        if system_installed {
+            if !dependencies_ready {
+                return OperationResult {
+                    success: false,
+                    action: "bootstrap".into(),
+                    output: package_missing_dependencies_error(),
+                    code: None,
+                };
+            }
+            if !wait_for_local_api() {
+                return OperationResult {
+                    success: false,
+                    action: "bootstrap".into(),
+                    output: engine_not_ready_error(),
+                    code: None,
+                };
+            }
+            return timed_operation_result(
+                "bootstrap".into(),
+                bounded_output(
+                    Command::new(TIMEOUT_PATH)
+                        .args(["--kill-after=30s", "1800s", PKEXEC_PATH])
+                        .arg(SYSTEM_CLI_PATH)
+                        .args(["doctor", "--fix"]),
+                ),
+                true,
+            );
+        }
+
+        // Manual/local engine: the bundled installer can bootstrap missing
+        // backend dependencies so the desktop stays self-contained.
+        if local_installed && !dependencies_ready && embedded_installer_available {
             return timed_operation_result(
                 "bootstrap".into(),
                 bounded_output(
@@ -1835,28 +1872,6 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
                         .arg(&installer)
                         .arg("--yes")
                         .arg("--skip-tests"),
-                ),
-                true,
-            );
-        }
-
-        if system_installed && !wait_for_local_api() {
-            return OperationResult {
-                success: false,
-                action: "bootstrap".into(),
-                output: engine_not_ready_error(),
-                code: None,
-            };
-        }
-
-        if system_installed {
-            return timed_operation_result(
-                "bootstrap".into(),
-                bounded_output(
-                    Command::new(TIMEOUT_PATH)
-                        .args(["--kill-after=30s", "1800s", PKEXEC_PATH])
-                        .arg(SYSTEM_CLI_PATH)
-                        .args(["doctor", "--fix"]),
                 ),
                 true,
             );
