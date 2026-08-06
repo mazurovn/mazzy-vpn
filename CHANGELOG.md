@@ -12,6 +12,21 @@ All notable changes to Mazzy VPN are documented here.
 - Synchronize the project status, installation guide, FAQ and roadmap with the
   published `v1.4.1` and `desktop-v0.4.1` releases.
 
+## 1.4.3 / Desktop 0.4.3 - 2026-08-06
+
+- Fixed regression-suite execution under `sudo`: `tests/run.sh` now uses a
+  root-owned `TMPDIR` so profile permission validation succeeds, and the package
+  lifecycle test helpers (`post-install.sh --test-migrate` and
+  `post-remove.sh --test-restore`) no longer require a non-root caller.
+- Made Desktop self-contained on distributions without an AmneziaWG PPA: the
+  bundled installer is re-run from the Desktop bootstrap flow when the engine is
+  installed but a backend dependency is missing, so the AmneziaWG userspace
+  fallback and other protocol backends are bootstrapped automatically.
+- Improved the Desktop "local API is still starting" error: the socket is now
+  treated as ready when it exists but the desktop process lacks the `mazzy-vpn`
+  group, allowing `pkexec` fallback and telling the user to log out and back in
+  if the group was just added.
+
 ## 1.4.2 / Desktop 0.4.2 - 2026-08-05
 
 - Fixed Desktop startup recovery when the local API socket or profile cache is
