@@ -3509,7 +3509,7 @@ cmd_validate() {
         done
     done
     printf '\nИтог: profiles=%d passed=%d failed=%d\n' "$total" "$passed" "$failed"
-    ((failed == 0))
+    ((total > 0 && failed == 0))
 }
 
 profile_transport() {

@@ -31,14 +31,17 @@ object ManagedProfileContractValidator {
         }
         require(profile.endpoint.port in 1..65535) { "invalid_endpoint_port" }
         require(profile.protocolSpecificCredentials()) { "invalid_credentials" }
-        require(profile.tls.keys.none { it == "insecure" && profile.tls[it] == true }) { "insecure_tls" }
+        require(
+            !profile.tls.containsKey("insecure") || profile.tls["insecure"] is Boolean &&
+                profile.tls["insecure"] == false
+        ) { "insecure_tls" }
         // Parse the root a second time only to enforce the schema's closed root object.
         val keys = org.json.JSONObject(json).keys().asSequence().toSet()
         require(keys == rootKeys) { "unknown_or_missing_root_key" }
         profile
     }
 
-    private fun ManagedProfile.protocolSpecificCredentials(): Boolean = when (protocol) {
+    private fun ManagedProfile.protocolSpecificCredentials(): Boolean = when (protocol.lowercase(Locale.ROOT)) {
         "vless" -> credentials.keys == setOf("uuid") && credentials["uuid"]!!.matches(
             Regex("^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$")
         )

@@ -294,10 +294,12 @@ def main() -> None:
     ):
         fail("Desktop does not offer a consent-gated first-run engine bootstrap")
     if (
-        "let dependencies_ready = dependencies_ready();" not in rust
+        "dependencies_ready(selected_protocol_from_status().as_deref())" not in rust
         or "let dependencies_ready = missing_dependencies == 0;" in rust
     ):
-        fail("Desktop installation report blocks on optional dependencies")
+        fail("Desktop installation report does not check the selected backend")
+    if 'const STATUS_FILE: &str = "/run/mazzy-vpn/status.json";' not in rust:
+        fail("Desktop selected-backend readiness does not use the status cache")
     forbidden_agent_authority = (
         "run_agent_operation",
         "runAgentOperation",

@@ -19,4 +19,20 @@ class ManagedProfileTest {
 
     @Test(expected = IllegalArgumentException::class)
     fun rejectsOversizedImport() = ManagedProfileContractValidator.validate(valid + " ".repeat(ManagedProfileContractValidator.MAX_IMPORT_BYTES))
+
+    @Test
+    fun normalizesProtocolBeforeCredentialValidation() {
+        val mixedCase = valid.replace("\"protocol\":\"vless\"", "\"protocol\":\"VLESS\"")
+        assertEquals("VLESS", ManagedProfileContractValidator.validate(mixedCase).getOrThrow().protocol)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsStringTlsInsecureFlag() {
+        ManagedProfileContractValidator.validate(valid.replace("\"insecure\":false", "\"insecure\":\"false\""))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun rejectsNumericTlsInsecureFlag() {
+        ManagedProfileContractValidator.validate(valid.replace("\"insecure\":false", "\"insecure\":1"))
+    }
 }

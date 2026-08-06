@@ -26,6 +26,7 @@ const LOCAL_CLI_PATH: &str = "/usr/local/bin/mazzy-vpn";
 pub(crate) const TIMEOUT_PATH: &str = "/usr/bin/timeout";
 pub(crate) const PKEXEC_PATH: &str = "/usr/bin/pkexec";
 const PROFILES_FILE: &str = "/run/mazzy-vpn/profiles.json";
+const STATUS_FILE: &str = "/run/mazzy-vpn/status.json";
 const API_SOCKET: &str = "/run/mazzy-vpn/api-v1.sock";
 const MAX_OUTPUT_BYTES: usize = 512 * 1024;
 const MAX_OUTPUT_STREAM_BYTES: usize = MAX_OUTPUT_BYTES / 2;
@@ -1826,7 +1827,7 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
     if matches!(request, OperationRequest::Bootstrap) {
         let system_installed = Path::new(SYSTEM_CLI_PATH).is_file();
         let local_installed = Path::new(LOCAL_CLI_PATH).is_file();
-        let dependencies_ready = dependencies_ready();
+        let dependencies_ready = dependencies_ready(selected_protocol_from_status().as_deref());
         let installer = engine_root(app).join("install.sh");
         let embedded_installer_available = installer.is_file();
 
@@ -2152,7 +2153,17 @@ fn dependencies() -> Vec<DependencyState> {
         .collect()
 }
 
-fn dependencies_ready() -> bool {
+fn selected_protocol_from_status() -> Option<String> {
+    let contents = fs::read_to_string(STATUS_FILE).ok()?;
+    let status: Value = serde_json::from_str(&contents).ok()?;
+    status
+        .get("protocol")
+        .and_then(Value::as_str)
+        .filter(|protocol| !protocol.is_empty())
+        .map(str::to_owned)
+}
+
+fn dependencies_ready(selected_protocol: Option<&str>) -> bool {
     // A desktop installation is usable when core runtime dependencies and at
     // least one supported tunnel backend are present. Optional L2TP/IPsec
     // packages must not block an AmneziaWG/OpenVPN/WireGuard installation.
@@ -2163,12 +2174,37 @@ fn dependencies_ready() -> bool {
             dependency.required_for == "core" || dependency.required_for == "Desktop"
         })
         .all(|dependency| dependency.installed);
-    let tunnel_backend_ready = states.iter().any(|dependency| {
-        matches!(
-            dependency.id,
-            "openvpn" | "wireguard-tools" | "amneziawg-tools" | "amneziawg-backend"
-        ) && dependency.installed
-    });
+    let tunnel_backend_ready = match selected_protocol {
+        Some("openvpn") => states.iter().any(|d| d.id == "openvpn" && d.installed),
+        Some("wireguard") => {
+            states
+                .iter()
+                .filter(|d| d.id == "wireguard-tools")
+                .all(|d| d.installed)
+                && states
+                    .iter()
+                    .any(|d| d.id == "wireguard-tools" && d.installed)
+        }
+        Some("amneziawg") => {
+            states
+                .iter()
+                .filter(|d| matches!(d.id, "amneziawg-tools" | "amneziawg-backend"))
+                .all(|d| d.installed)
+                && states
+                    .iter()
+                    .any(|d| d.id == "amneziawg-tools" && d.installed)
+        }
+        Some("l2tp") => states
+            .iter()
+            .filter(|d| d.required_for == "L2TP/IPsec")
+            .all(|d| d.installed),
+        _ => states.iter().any(|d| {
+            matches!(
+                d.id,
+                "openvpn" | "wireguard-tools" | "amneziawg-tools" | "amneziawg-backend"
+            ) && d.installed
+        }),
+    };
     core_ready && tunnel_backend_ready
 }
 
@@ -2302,7 +2338,7 @@ pub fn get_installation_report(app: AppHandle) -> InstallationReport {
     // Alternative tunnel backends and L2TP/IPsec are optional. Keep the
     // report consistent with the bootstrap gate: one supported backend plus
     // the core/Desktop dependencies is enough for a usable installation.
-    let dependencies_ready = dependencies_ready();
+    let dependencies_ready = dependencies_ready(selected_protocol_from_status().as_deref());
     let service_installed = systemd_unit_installed("vpnctl.service");
     let monitor_installed = systemd_unit_installed("vpnctl-health.timer");
     let api_installed = systemd_unit_installed("mazzy-vpn-api.socket");

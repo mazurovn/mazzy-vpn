@@ -25,6 +25,8 @@ assert "android.permission.INTERNET" in manifest
 assert "startForeground" in service
 assert "establish()" not in service, "foundation must not fake a tunnel"
 assert "insecure_tls" in validator and "unsupported_protocol" in validator
+assert "protocol.lowercase(Locale.ROOT)" in validator
+assert "profile.tls[\"insecure\"] is Boolean" in validator
 assert (ANDROID / "app/src/test/java/com/mazzy/vpn/core/ManagedProfileTest.kt").exists()
 assert "15" in (ROOT / "docs/ANDROID_ARCHITECTURE.en.md").read_text()
 assert "15" in (ROOT / "docs/ANDROID_ARCHITECTURE.ru.md").read_text()
