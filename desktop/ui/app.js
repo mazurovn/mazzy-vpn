@@ -972,7 +972,7 @@ function renderDocumentationPreview() {
   if (previewParameters.get("update") === "available") {
     showUpdateDialog({
       current_version: "0.4.5",
-      version: "0.4.5",
+      version: "0.4.6",
       install_supported: true,
       installation_method: "signed-in-app"
     });
