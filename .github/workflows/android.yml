@@ -1,0 +1,27 @@
+# Copyright (C) 2026 Nik m (@mazurovn)
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+name: Android contract
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Validate Android contract
+        run: python3 tests/check-android-contract.py
+
+      - name: Validate Android build when the toolchain is present
+        run: tests/check-android-build.sh

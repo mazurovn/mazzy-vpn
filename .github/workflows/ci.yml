@@ -26,7 +26,8 @@ jobs:
             packaging/linux/post-install.sh \
             packaging/linux/pre-remove.sh \
             packaging/linux/post-remove.sh \
-            tests/run.sh tests/audit-public.sh tests/check-linux-packages.sh
+            tests/run.sh tests/audit-public.sh tests/check-linux-packages.sh \
+            tests/check-android-build.sh
           bash -n setup_amnezia_vpn.sh stop_amnezia_vpn.sh
           bash -n runtime/mazzy-sing-box-adapter
           bash -n completions/mazzy-vpn completions/vpnctl
@@ -37,7 +38,8 @@ jobs:
             packaging/linux/post-install.sh \
             packaging/linux/pre-remove.sh \
             packaging/linux/post-remove.sh \
-            tests/run.sh tests/audit-public.sh tests/check-linux-packages.sh
+            tests/run.sh tests/audit-public.sh tests/check-linux-packages.sh \
+            tests/check-android-build.sh
           shellcheck setup_amnezia_vpn.sh stop_amnezia_vpn.sh
           shellcheck runtime/mazzy-sing-box-adapter
           shellcheck completions/mazzy-vpn completions/vpnctl
@@ -58,6 +60,11 @@ jobs:
           python3 tests/check-api-contract.py
           python3 tests/check-desktop-ui.py
           python3 tests/check-planner-examples.py
+
+      - name: Android release audit contract
+        run: |
+          python3 tests/check-android-contract.py
+          tests/check-android-build.sh
 
       - name: Public repository audit
         run: |
