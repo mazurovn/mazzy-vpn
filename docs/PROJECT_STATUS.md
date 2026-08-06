@@ -13,10 +13,10 @@ This page records the verified resumption point.
 
 ## Verified release baseline
 
-- The current release candidate is CLI/TUI `v1.4.5` and Tauri-signed Desktop
+- The current published release is CLI/TUI `v1.4.5` and Tauri-signed Desktop
   preview `desktop-v0.4.5`. The installation and validation audit was merged
-  through PR #56 after CI, Desktop and CodeQL passed. The Desktop release
-  remains a prerelease because Windows and macOS
+  through PR #57 after CI, Desktop and CodeQL passed. Both release pages are
+  published; Desktop remains a prerelease because Windows and macOS
   do not yet have native VPN backends or operating-system code signing.
 - Patch source `1.4.5` / Desktop `0.4.5` fixes the reboot-time API/profile
   boot ordering cycle and carries critical recovery policy through package

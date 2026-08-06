@@ -1,5 +1,20 @@
 # Глубокий аудит установки и Desktop-релиза 2026-08-07
 
+## Итог после выпуска
+
+Релизный коммит после squash-merge PR #57: `fdded55d`. Опубликованы CLI/TUI
+[`v1.4.5`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.5) и
+Desktop [`desktop-v0.4.5`](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.5)
+как prerelease с DEB, RPM, AppImage, Windows MSI/NSIS, macOS DMG/app и
+подписями/checksum.
+
+Все подписи updater-артефактов проверены `verify-updater-signatures`. Первый
+`publish-update-feed` упал на GitHub draft asset URL `untagged-*` с HTTP 404
+после успешной сборки. Draft был опубликован после проверки всех трёх
+платформ, затем canonical `latest.json` и SHA-256 manifest загружены повторно.
+Это и было причиной, почему сборки были зелёными, а release page долго не
+становилась опубликованной.
+
 ## Итог
 
 До этого цикла рабочий код не доходил до пользователя в виде рабочего
