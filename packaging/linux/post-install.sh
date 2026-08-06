@@ -104,11 +104,30 @@ grant_installer_access() {
         access_user="$(getent passwd "$PKEXEC_UID" | cut -d: -f1 || true)"
     fi
 
+    if [ -z "$access_user" ]; then
+        access_user="$(logname 2>/dev/null || true)"
+        case "$access_user" in
+            ""|root|*[!A-Za-z0-9_.-]*) access_user="" ;;
+        esac
+    fi
+
     if [ -n "$access_user" ] &&
        id "$access_user" >/dev/null 2>&1 &&
        ! id -nG "$access_user" | tr ' ' '\n' | grep -Fxq mazzy-vpn; then
         usermod -a -G mazzy-vpn "$access_user"
     fi
+
+    # GUI package managers may run the maintainer script without SUDO_USER or
+    # PKEXEC_UID. Add every currently logged-in human user as a safe fallback.
+    for user in $(who | awk '{print $1}' | sort -u); do
+        case "$user" in
+            ""|root|*[!A-Za-z0-9_.-]*) continue ;;
+        esac
+        uid="$(id -u "$user" 2>/dev/null || echo 0)"
+        [ "$uid" -ge 1000 ] 2>/dev/null || continue
+        id -nG "$user" 2>/dev/null | tr ' ' '\n' | grep -Fxq mazzy-vpn && continue
+        usermod -a -G mazzy-vpn "$user"
+    done
 }
 
 activate_services() {
