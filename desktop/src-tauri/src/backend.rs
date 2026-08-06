@@ -599,7 +599,9 @@ fn package_managed_cli(cli_path: &Path) -> bool {
 }
 
 fn engine_not_ready_error() -> String {
-    "Mazzy VPN engine is installed, but its local API is still starting. Wait a few seconds and retry; no privileged fallback was started from the desktop.".into()
+    "Mazzy VPN engine is installed, but its local API socket is not reachable. \
+     If you just installed the package, log out and log back in so the \
+     'mazzy-vpn' group is applied, then retry.".into()
 }
 
 pub(crate) fn clean_output(output: &Output) -> String {
@@ -1747,8 +1749,15 @@ fn wait_for_local_api() -> bool {
         if attempt > 0 {
             thread::sleep(std::time::Duration::from_millis(*delay_ms));
         }
-        if UnixStream::connect(API_SOCKET).is_ok() {
-            return true;
+        match UnixStream::connect(API_SOCKET) {
+            Ok(_) => return true,
+            Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+                // The socket exists and is listening, but the current desktop
+                // process has not yet received the mazzy-vpn group. Treat the
+                // API as ready and let the caller fall back to pkexec.
+                return true;
+            }
+            Err(_) => continue,
         }
     }
     false
@@ -1806,7 +1815,32 @@ fn try_execute_local_api(_: &OperationRequest) -> Option<OperationResult> {
 
 pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> OperationResult {
     if matches!(request, OperationRequest::Bootstrap) {
-        if Path::new(SYSTEM_CLI_PATH).is_file() && !wait_for_local_api() {
+        let system_installed = Path::new(SYSTEM_CLI_PATH).is_file();
+        let local_installed = Path::new(LOCAL_CLI_PATH).is_file();
+        let engine_installed = system_installed || local_installed;
+        let dependencies_ready = dependencies_ready();
+        let installer = engine_root(app).join("install.sh");
+        let embedded_installer_available = installer.is_file();
+
+        // Engine scripts are present but a backend dependency (e.g. AmneziaWG
+        // userspace fallback on Ubuntu without PPA) is missing. Re-run the
+        // bundled installer so the desktop package becomes self-contained.
+        if engine_installed && !dependencies_ready && embedded_installer_available {
+            return timed_operation_result(
+                "bootstrap".into(),
+                bounded_output(
+                    Command::new(TIMEOUT_PATH)
+                        .args(["--kill-after=30s", "1800s", PKEXEC_PATH])
+                        .arg("/bin/bash")
+                        .arg(&installer)
+                        .arg("--yes")
+                        .arg("--skip-tests"),
+                ),
+                true,
+            );
+        }
+
+        if system_installed && !wait_for_local_api() {
             return OperationResult {
                 success: false,
                 action: "bootstrap".into(),
@@ -1814,7 +1848,8 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
                 code: None,
             };
         }
-        if Path::new(SYSTEM_CLI_PATH).is_file() {
+
+        if system_installed {
             return timed_operation_result(
                 "bootstrap".into(),
                 bounded_output(
@@ -1826,8 +1861,8 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
                 true,
             );
         }
-        let installer = engine_root(app).join("install.sh");
-        if !installer.is_file() {
+
+        if !embedded_installer_available {
             return OperationResult {
                 success: false,
                 action: "bootstrap".into(),
@@ -1835,13 +1870,14 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
                 code: None,
             };
         }
+
         return timed_operation_result(
             "bootstrap".into(),
             bounded_output(
                 Command::new(TIMEOUT_PATH)
                     .args(["--kill-after=30s", "1800s", PKEXEC_PATH])
                     .arg("/bin/bash")
-                    .arg(installer)
+                    .arg(&installer)
                     .arg("--yes")
                     .arg("--skip-tests"),
             ),
@@ -2097,6 +2133,10 @@ fn dependencies() -> Vec<DependencyState> {
             required_for,
         })
         .collect()
+}
+
+fn dependencies_ready() -> bool {
+    dependencies().iter().all(|dependency| dependency.installed)
 }
 
 #[tauri::command]
@@ -2439,8 +2479,9 @@ mod tests {
     #[test]
     fn engine_not_ready_error_explains_the_safe_fallback() {
         let message = engine_not_ready_error();
-        assert!(message.contains("local API is still starting"));
-        assert!(message.contains("no privileged fallback"));
+        assert!(message.contains("local API socket is not reachable"));
+        assert!(message.contains("log out and log back in"));
+        assert!(message.contains("mazzy-vpn"));
         assert!(!message.contains("pkexec"));
     }
 
