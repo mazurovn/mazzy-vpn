@@ -1,6 +1,6 @@
-# Mazzy VPN 1.4.2 / Desktop 0.4.2
+# Mazzy VPN 1.4.5 / Desktop 0.4.5
 
-Release source prepared 2026-08-05 by [Nik m (@mazurovn)](https://github.com/mazurovn).
+Release source prepared 2026-08-07 by [Nik m (@mazurovn)](https://github.com/mazurovn).
 This release source is not published yet; tags and GitHub Releases are created
 only after the release gates pass.
 
@@ -53,7 +53,7 @@ only after the release gates pass.
 - Release helpers no longer accept caller-controlled cargo commands or
   filesystem roots. Downloaded updater artifacts are selected from a bounded
   local inventory, signature files use local sequence names, and the workflow
-  publishes `Mazzy.VPN.Desktop_0.4.2_SHA256SUMS` only after updater signatures
+  publishes `Mazzy.VPN.Desktop_0.4.5_SHA256SUMS` only after updater signatures
   pass. The systemd upgrade regression now runs in an isolated root and cannot
   pass merely because an older Mazzy VPN package is installed on the host.
 - The cross-platform UI audit sends generated JavaScript to Node over stdin,

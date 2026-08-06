@@ -67,7 +67,7 @@ def translations(javascript: str) -> dict[str, dict[str, str]]:
         text=True,
         encoding="utf-8",
         errors="strict",
-        timeout=10,
+        timeout=30,
     )
     value = json.loads(result.stdout)
     if not isinstance(value, dict):
