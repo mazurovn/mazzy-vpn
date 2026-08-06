@@ -12,6 +12,17 @@ All notable changes to Mazzy VPN are documented here.
 - Synchronize the project status, installation guide, FAQ and roadmap with the
   published `v1.4.1` and `desktop-v0.4.1` releases.
 
+## 1.4.5 / Desktop 0.4.5 - 2026-08-07
+
+- Added an explicit first-run Desktop installation/repair dialog; the bundled
+  engine is never installed silently.
+- Made Desktop dependency readiness protocol-aware so a selected backend is
+  checked instead of accepting an unrelated installed backend.
+- Hardened Android managed-profile validation for mixed-case protocols and
+  non-boolean `tls.insecure` values.
+- Restored fail-closed validation for an empty profile catalog and completed
+  Linux package, headless GUI and cross-platform release audits.
+
 ## 1.4.4 / Desktop 0.4.4 - 2026-08-06
 
 - Fixed first-run self-test for users without profiles: `mazzy-vpn self-test`
