@@ -3712,6 +3712,9 @@ probe_locations_json() (
     mapfile -t protocols < <(requested_protocols "$requested") || return 2
     tmp="$(mktemp -d "${TMPDIR:-/tmp}/mazzy-vpn-probe.XXXXXX")" || return 1
     umask 077
+    # The function is called from the EXIT trap below; ShellCheck cannot
+    # resolve that indirect invocation in a subshell.
+    # shellcheck disable=SC2317,SC2329
     kill_probe_process_tree() {
         local parent="$1" child
         while read -r child; do
@@ -8816,7 +8819,7 @@ cmd_diagnose() {
 }
 
 doctor_dependency_checks() {
-    local selected_protocol="" backend_severity="warn" l2tp_severity="warn"
+    local selected_protocol=""
 
     check_command bash
     check_command ip "iproute2"
