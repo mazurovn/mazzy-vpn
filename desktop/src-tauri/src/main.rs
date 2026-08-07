@@ -330,7 +330,21 @@ fn platform_info() -> PlatformInfo {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn configure_linux_desktop_environment() {
+    if std::env::var_os("NO_AT_BRIDGE").is_none() {
+        // Some distributions ship an accessibility bridge that can segfault
+        // during GTK startup. The UI remains usable without that bridge.
+        unsafe {
+            std::env::set_var("NO_AT_BRIDGE", "1");
+        }
+    }
+}
+
 fn main() {
+    #[cfg(target_os = "linux")]
+    configure_linux_desktop_environment();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             log::info!(target: "mazzy_vpn_desktop::lifecycle", "single_instance.focus_existing");

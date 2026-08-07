@@ -85,6 +85,8 @@ def desktop_version() -> str:
     versions = {package["version"], tauri["version"], match.group(1)}
     if len(versions) != 1:
         fail(f"Desktop versions drifted: {sorted(versions)}")
+    if 'configure_linux_desktop_environment();' not in MAIN.read_text():
+        fail("Linux Desktop must configure the accessibility bridge before Tauri startup")
     return versions.pop()
 
 
