@@ -2,6 +2,29 @@
 
 ## Итог
 
+Релизный коммит после squash-merge PR #57: `fdded55d`. Опубликованы CLI/TUI
+[`v1.4.5`](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.5) и
+Desktop [`desktop-v0.4.5`](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.5)
+как prerelease с DEB, RPM, AppImage, Windows MSI/NSIS, macOS DMG/app и
+подписями/checksum.
+
+Все подписи updater-артефактов проверены командой из release workflow:
+
+```bash
+mapfile -d '' -t updater_signature_args \
+  < <(python3 tests/prepare-updater-signature-audit.py)
+cargo run --locked --quiet --manifest-path desktop/src-tauri/Cargo.toml \
+  --example verify-updater-signatures -- desktop/src-tauri/tauri.conf.json \
+  "${updater_signature_args[@]}"
+```
+
+Первый
+`publish-update-feed` упал на GitHub draft asset URL `untagged-*` с HTTP 404
+после успешной сборки. Draft был опубликован после проверки всех трёх
+платформ, затем canonical `latest.json` и SHA-256 manifest загружены повторно.
+Это и было причиной, почему сборки были зелёными, а release page долго не
+становилась опубликованной.
+
 До этого цикла рабочий код не доходил до пользователя в виде рабочего
 релиза. На проверенной машине были установлены `mazzy-vpn-desktop 0.4.1` и
 CLI `1.4.1`. Git tag `v1.4.4` существовал, но опубликованного CLI release не
