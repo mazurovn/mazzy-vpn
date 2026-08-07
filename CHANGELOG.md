@@ -4,6 +4,10 @@ All notable changes to Mazzy VPN are documented here.
 
 ## Unreleased
 
+- Set a Linux-safe accessibility environment before Tauri/GTK startup to
+  prevent a distribution `libatk-bridge` segmentation fault from crashing
+  Desktop at launch.
+
 - Canonicalize Tauri draft-release API asset URLs from the downloaded signed
   artifact inventory before updater verification and publication. The corrected
   manifest is uploaded while the versioned release is still a draft, and the

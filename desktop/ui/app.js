@@ -920,7 +920,7 @@ function documentationPreviewData() {
     platform: {
       functional: true,
       os: "linux",
-      desktop_version: "0.4.5",
+      desktop_version: "0.4.6",
       author: "Nik m (@mazurovn)",
       license: "AGPL-3.0-or-later"
     }
@@ -971,8 +971,8 @@ function renderDocumentationPreview() {
   showPage(previewParameters.get("page") || "dashboard");
   if (previewParameters.get("update") === "available") {
     showUpdateDialog({
-      current_version: "0.4.5",
-      version: "0.4.6",
+      current_version: "0.4.6",
+      version: "0.4.7",
       install_supported: true,
       installation_method: "signed-in-app"
     });
