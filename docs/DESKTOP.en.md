@@ -13,6 +13,13 @@ engine. The Linux 0.4 bundle includes a compatible engine installer, so a
 separate CLI installation is no longer a prerequisite. CLI and TUI remain
 independent clients of the same engine and state.
 
+On Linux, Desktop checks runtime readiness before its first status/profile
+load. If the protected backend is missing or stopped, it launches the embedded
+bootstrap automatically; the native PolicyKit dialog is the authorization
+boundary. Bootstrap starts the local API and grants only the invoking user a
+per-user runtime ACL, so the current GUI session works immediately even before a new
+login applies `mazzy-vpn` group membership.
+
 > **0.4 status:** the Linux control center now covers the main workflow. It
 > remains a preview until the
 > [production gates](FEATURE_PARITY.md) pass. Issue #31 is closed with the exact
@@ -100,7 +107,9 @@ speed checks never run in the background.
 The UI reads `/run/mazzy-vpn/status.json` every five seconds and reads the
 sanitized profile library from `/run/mazzy-vpn/profiles.json`. The root engine
 atomically recreates both files as `0640 root:mazzy-vpn` inside a
-`0750 root:mazzy-vpn` directory. They contain no endpoint, profile path,
+`0750 root:mazzy-vpn` directory. First-run repair adds a named read-only ACL
+for the invoking Desktop user and read/write access only to the protected API
+socket; it does not make the cache or socket public. The caches contain no endpoint, profile path,
 private key, username, password or configuration directive. Rust deserializes
 both caches into closed `deny_unknown_fields` types and checks their internal
 invariants before exposing data to the WebView. The active row is matched by
@@ -232,10 +241,11 @@ manual `/etc/systemd/system` unit keeps its settings, while package drop-ins
 select the package-owned `/usr/bin/mazzy-vpn`, preserve recovery/restart
 invariants and reset a legacy health timer to the current one-minute interval.
 When installation is run through
-`sudo` or `pkexec`, the invoking user is added to the `mazzy-vpn` group; a new
-login may be required before the protected socket is available. The package-safe
-Repair action repeats that enrollment for packages installed by a graphical
-package manager that did not preserve the invoking-user environment.
+`sudo` or `pkexec`, the invoking user is added to the `mazzy-vpn` group. Desktop
+bootstrap also grants a narrow runtime ACL to the current session, so a new
+login is no longer required for immediate GUI access. The package-safe Repair
+action repeats that enrollment for packages installed by a graphical package
+manager that did not preserve the invoking-user environment.
 
 Package installation also detects trusted root-owned legacy Mazzy VPN commands
 under `/usr/local/bin`, preserves private reversible backups and replaces those
@@ -276,10 +286,11 @@ chmod +x ./Mazzy.VPN.Desktop_0.4.1_amd64.AppImage
 ./Mazzy.VPN.Desktop_0.4.1_amd64.AppImage
 ```
 
-AppImage cannot install its own privilege helper. Check `command -v pkexec`
-first and install your distribution's polkit/pkexec package manually if it is
-missing; otherwise the bundled engine bootstrap cannot start. AppImage still
-uses the explicitly authorized embedded installer and is not package-managed.
+AppImage includes the CLI engine and starts its bootstrap automatically; no
+standalone CLI download or launch is required. The native PolicyKit dialog
+still authorizes system installation. Check `command -v pkexec` first and
+install your distribution's polkit/pkexec package manually if it is missing;
+an AppImage cannot supply the operating system's privilege broker itself.
 
 Replace the sample version with the downloaded file name. Installable updater
 artifacts carry a Tauri signature verified by the public key embedded in

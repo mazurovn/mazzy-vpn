@@ -6,7 +6,7 @@ set -uo pipefail
 PRODUCT_NAME="Mazzy VPN"
 CLI_COMMAND="mazzy-vpn"
 COMPAT_COMMAND="vpnctl"
-VERSION="1.4.5"
+VERSION="1.4.6"
 
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd -- "$(dirname -- "$SELF")" && pwd)"
@@ -38,6 +38,7 @@ API_RECOVERY_SERVICE="${VPNCTL_API_RECOVERY_SERVICE:-mazzy-vpn-api-recovery.serv
 API_SOCKET_UNIT="${VPNCTL_API_SOCKET_UNIT:-mazzy-vpn-api.socket}"
 API_SERVICE_UNIT="${VPNCTL_API_SERVICE_UNIT:-mazzy-vpn-api@.service}"
 RUNTIME_READER_GROUP="${VPNCTL_RUNTIME_READER_GROUP:-mazzy-vpn}"
+RUNTIME_READER_CALLER=""
 API_SOCKET="${VPNCTL_API_SOCKET:-/run/mazzy-vpn/api-v1.sock}"
 API_CLIENT_MAX_RESPONSE_BYTES="${VPNCTL_API_CLIENT_MAX_RESPONSE_BYTES:-65536}"
 API_CLIENT_COMPLETION_GRACE_SECONDS="${VPNCTL_API_CLIENT_COMPLETION_GRACE_SECONDS:-60}"
@@ -8832,6 +8833,7 @@ doctor_dependency_checks() {
     check_command jq "JSON API runtime (jq)"
     check_command python3 "CLOCK_MONOTONIC startup grace"
     check_command socat "local API client transport (socat)"
+    check_command setfacl "Desktop session ACL (setfacl)"
     check_command sha256sum "opaque profile IDs (sha256sum)"
     check_command getent "DNS resolver (getent)"
     check_command ping "ICMP ping"
@@ -9054,12 +9056,31 @@ ensure_runtime_reader_access() {
     [[ "$caller" =~ ^[A-Za-z_][A-Za-z0-9_.-]*$ && "$caller" != root ]] ||
         return 0
     id "$caller" >/dev/null 2>&1 || return 0
+    RUNTIME_READER_CALLER="$caller"
     if ! id -nG "$caller" | tr ' ' '\n' |
         grep -Fxq "$RUNTIME_READER_GROUP"; then
         usermod -a -G "$RUNTIME_READER_GROUP" "$caller" ||
             return 1
-        info "Пользователь '$caller' добавлен в группу $RUNTIME_READER_GROUP; нужен повторный вход в сеанс"
+        info "Пользователь '$caller' добавлен в группу $RUNTIME_READER_GROUP"
     fi
+}
+
+grant_runtime_reader_session_access() {
+    local caller="$1" target
+    [[ "$caller" =~ ^[A-Za-z_][A-Za-z0-9_.-]*$ && "$caller" != root ]] ||
+        return 0
+    command -v setfacl >/dev/null 2>&1 || return 1
+    [[ -d "$DASHBOARD_DIR" ]] || return 1
+    setfacl -m "u:$caller:r-x,d:u:$caller:rwx" "$DASHBOARD_DIR" || return 1
+    for target in "$DASHBOARD_FILE" "$PROFILES_FILE"; do
+        if [[ -e "$target" ]]; then
+            setfacl -m "u:$caller:r" "$target" || return 1
+        fi
+    done
+    if [[ -S "$API_SOCKET" ]]; then
+        setfacl -m "u:$caller:rw" "$API_SOCKET" || return 1
+    fi
+    return 0
 }
 
 doctor_fix() {
@@ -9068,7 +9089,7 @@ doctor_fix() {
     mkdir -p "$STATE_DIR" "$RUN_DIR"
     chmod 700 "$STATE_DIR" "$RUN_DIR"
     ensure_runtime_reader_access ||
-        warn "Не удалось предоставить вызывающему пользователю доступ к local API"
+        warn "Не удалось добавить вызывающего пользователя в группу local API"
 
     for protocol in amneziawg wireguard openvpn l2tp; do
         load_profiles "$protocol"
@@ -9097,6 +9118,8 @@ doctor_fix() {
 
     if systemd_available; then
         systemctl daemon-reload || true
+        systemctl_quiet enable "$API_RECOVERY_SERVICE" || true
+        systemctl_quiet enable --now "$API_SOCKET_UNIT" || true
         systemctl_quiet enable "$TEST_RECOVERY_SERVICE" || true
         systemctl_quiet enable --now "$HEALTH_TIMER" || true
         if [[ "$(state_get DESIRED 2>/dev/null || true)" == "up" ]] &&
@@ -9106,6 +9129,9 @@ doctor_fix() {
             systemctl_quiet start "$SERVICE_NAME" || true
         fi
     fi
+    write_dashboard_cache || warn "Не удалось обновить Desktop cache"
+    grant_runtime_reader_session_access "$RUNTIME_READER_CALLER" ||
+        warn "Не удалось выдать текущему Desktop-сеансу ACL local API; потребуется повторный вход"
 }
 
 cmd_api_clear_recovery() {

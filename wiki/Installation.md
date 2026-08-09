@@ -56,10 +56,11 @@ Installable updater artifacts имеют Tauri-подписи, которые п
 public key. Это не заменяет Authenticode, Apple notarization, подпись RPM или
 APT-репозитория; SHA-256 manifest остаётся отдельной проверкой целостности.
 
-Desktop 0.4 release source содержит совместимые installer/engine resources. На экране Settings
-он проверяет установленную версию и зависимости и после явного системного
-разрешения устанавливает, обновляет или восстанавливает engine. Поэтому сначала
-устанавливать CLI вручную не требуется. Статус preview сохраняется до закрытия
+Desktop 0.4 release source содержит совместимые installer/engine resources.
+До первой загрузки данных он проверяет установленную версию и зависимости и,
+если backend не готов, автоматически запускает bootstrap после штатного
+разрешения PolicyKit. Поэтому сначала устанавливать или запускать CLI вручную
+не требуется. Статус preview сохраняется до закрытия
 критериев [[Desktop Full Application Plan]]. Issue #31 закрыт проверенным
 `glib` backport; сверяйте downloads с `Mazzy.VPN.Desktop_0.4.1_SHA256SUMS`.
 
@@ -133,10 +134,11 @@ Tauri signatures verified by the embedded public key. This does not replace
 Authenticode, Apple notarization, RPM signing or APT repository signing; the
 SHA-256 manifest remains a separate integrity check.
 
-The Desktop 0.4 release source contains compatible installer/engine resources. Its Settings screen
-checks the installed version and dependencies and, after explicit system
-authorization, installs, updates or repairs the engine. A prior manual CLI
-installation is therefore not required. The package remains a preview until
+The Desktop 0.4 release source contains compatible installer/engine resources.
+Before the first data load it checks the installed version and dependencies
+and automatically starts bootstrap when the backend is not ready; the native
+PolicyKit dialog authorizes system changes. A prior manual CLI installation or
+launch is therefore not required. The package remains a preview until
 the [[Desktop Full Application Plan]] release criteria are complete. Issue #31
 is closed with a verified `glib` backport; verify downloads with
 `Mazzy.VPN.Desktop_0.4.1_SHA256SUMS`.

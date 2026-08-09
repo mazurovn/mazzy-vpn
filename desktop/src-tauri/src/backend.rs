@@ -251,14 +251,21 @@ pub struct DependencyState {
 pub struct InstallationReport {
     pub engine_installed: bool,
     pub package_managed: bool,
+    pub engine_source: &'static str,
     pub installed_version: Option<String>,
     pub bundled_version: Option<String>,
+    pub bundled_cli: bool,
     pub bundled_installer: bool,
+    pub runtime_ready: bool,
+    pub startup_repair_needed: bool,
     pub needs_install: bool,
     pub service_installed: bool,
     pub monitor_installed: bool,
     pub api_installed: bool,
     pub api_socket_available: bool,
+    pub api_socket_accessible: bool,
+    pub status_cache_available: bool,
+    pub profile_cache_available: bool,
     pub dependencies_ready: bool,
     pub missing_dependencies: usize,
     pub dependencies: Vec<DependencyState>,
@@ -601,17 +608,61 @@ fn package_managed_cli(cli_path: &Path) -> bool {
 
 fn engine_not_ready_error() -> String {
     "Mazzy VPN engine is installed, but its local API socket is not reachable. \
-     If you just installed the package, log out and log back in so the \
-     'mazzy-vpn' group is applied, then retry."
+     Desktop could not start the service or grant this session access. \
+     Retry Install / Repair and inspect the diagnostic output."
         .into()
 }
 
 fn package_missing_dependencies_error() -> String {
-    "The package-managed Mazzy VPN engine is installed, but one or more \
-     protocol backends are missing. Install the recommended packages for \
-     your distribution (e.g. openvpn, wireguard-tools, amneziawg-tools) and \
-     log out and back in so the 'mazzy-vpn' group is applied."
+    "The embedded Desktop bootstrap could not install one or more required \
+     protocol backends. Inspect the package-manager output above, then retry \
+     Install / Repair."
         .into()
+}
+
+fn engine_source(cli_path: Option<&Path>, bundled_cli: bool) -> &'static str {
+    match cli_path {
+        Some(path) if path == Path::new(SYSTEM_CLI_PATH) => "package",
+        Some(_) => "local",
+        None if bundled_cli => "embedded",
+        None => "missing",
+    }
+}
+
+#[derive(Clone, Copy)]
+struct EngineStartupReadiness {
+    engine_installed: bool,
+    dependencies_ready: bool,
+    service_installed: bool,
+    monitor_installed: bool,
+    api_installed: bool,
+    api_socket_available: bool,
+    api_socket_accessible: bool,
+    status_cache_available: bool,
+    profile_cache_available: bool,
+}
+
+fn engine_startup_repair_needed(readiness: EngineStartupReadiness) -> bool {
+    let EngineStartupReadiness {
+        engine_installed,
+        dependencies_ready,
+        service_installed,
+        monitor_installed,
+        api_installed,
+        api_socket_available,
+        api_socket_accessible,
+        status_cache_available,
+        profile_cache_available,
+    } = readiness;
+    !engine_installed
+        || !dependencies_ready
+        || !service_installed
+        || !monitor_installed
+        || !api_installed
+        || !api_socket_available
+        || !api_socket_accessible
+        || !status_cache_available
+        || !profile_cache_available
 }
 
 pub(crate) fn clean_output(output: &Output) -> String {
@@ -820,6 +871,11 @@ fn engine_root(app: &AppHandle) -> PathBuf {
             .join("../..")
             .to_path_buf()
     }
+}
+
+fn embedded_cli_path(app: &AppHandle) -> Option<PathBuf> {
+    let path = engine_root(app).join("mazzy-vpn");
+    path.is_file().then_some(path)
 }
 
 fn api_identifier(kind: &str) -> String {
@@ -1773,6 +1829,34 @@ fn wait_for_local_api() -> bool {
     false
 }
 
+#[cfg(target_os = "linux")]
+fn local_api_accessible() -> bool {
+    UnixStream::connect(API_SOCKET).is_ok()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn local_api_accessible() -> bool {
+    false
+}
+
+#[cfg(target_os = "linux")]
+fn wait_for_accessible_local_api() -> bool {
+    for (attempt, delay_ms) in API_STARTUP_RETRY_DELAYS_MS.iter().enumerate() {
+        if attempt > 0 {
+            thread::sleep(std::time::Duration::from_millis(*delay_ms));
+        }
+        if local_api_accessible() {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(not(target_os = "linux"))]
+fn wait_for_accessible_local_api() -> bool {
+    false
+}
+
 #[cfg(not(target_os = "linux"))]
 fn wait_for_local_api() -> bool {
     true
@@ -1825,47 +1909,86 @@ fn try_execute_local_api(_: &OperationRequest) -> Option<OperationResult> {
 
 pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> OperationResult {
     if matches!(request, OperationRequest::Bootstrap) {
+        if !cfg!(target_os = "linux") {
+            return OperationResult {
+                success: false,
+                action: "bootstrap".into(),
+                output: "The native Mazzy VPN backend is not implemented on this OS yet".into(),
+                code: None,
+            };
+        }
         let system_installed = Path::new(SYSTEM_CLI_PATH).is_file();
         let local_installed = Path::new(LOCAL_CLI_PATH).is_file();
-        let dependencies_ready = dependencies_ready(selected_protocol_from_status().as_deref());
-        let installer = engine_root(app).join("install.sh");
+        let initial_dependencies_ready =
+            dependencies_ready(selected_protocol_from_status().as_deref());
+        let root = engine_root(app);
+        let installer = root.join("install.sh");
+        let embedded_cli = embedded_cli_path(app);
         let embedded_installer_available = installer.is_file();
 
-        // Package-managed engine: never run the bundled installer, because that
-        // would duplicate units under /usr/local and leave the package copy
-        // untouched. Report missing dependencies with actionable instructions.
+        // A package owns its installed files, but Desktop owns readiness. Use
+        // the bundled CLI for repair when available so a current Desktop can
+        // start an older installed API without copying package files into
+        // /usr/local. doctor --fix uses the package installer in deps-only mode.
         if system_installed {
+            let repair = if let Some(cli) = embedded_cli {
+                timed_operation_result(
+                    "bootstrap".into(),
+                    bounded_output(
+                        Command::new(TIMEOUT_PATH)
+                            .args(["--kill-after=30s", "1800s", PKEXEC_PATH, "/bin/bash"])
+                            .arg(cli)
+                            .args(["doctor", "--fix"]),
+                    ),
+                    true,
+                )
+            } else {
+                timed_operation_result(
+                    "bootstrap".into(),
+                    bounded_output(
+                        Command::new(TIMEOUT_PATH)
+                            .args(["--kill-after=30s", "1800s", PKEXEC_PATH])
+                            .arg(SYSTEM_CLI_PATH)
+                            .args(["doctor", "--fix"]),
+                    ),
+                    true,
+                )
+            };
+            let dependencies_ready = dependencies_ready(selected_protocol_from_status().as_deref());
             if !dependencies_ready {
                 return OperationResult {
                     success: false,
                     action: "bootstrap".into(),
-                    output: package_missing_dependencies_error(),
-                    code: None,
+                    output: format!(
+                        "{}\n\n{}",
+                        repair.output,
+                        package_missing_dependencies_error()
+                    ),
+                    code: repair.code,
                 };
             }
-            if !wait_for_local_api() {
+            if !wait_for_accessible_local_api() {
                 return OperationResult {
                     success: false,
                     action: "bootstrap".into(),
-                    output: engine_not_ready_error(),
-                    code: None,
+                    output: format!("{}\n\n{}", repair.output, engine_not_ready_error()),
+                    code: repair.code,
                 };
             }
-            return timed_operation_result(
-                "bootstrap".into(),
-                bounded_output(
-                    Command::new(TIMEOUT_PATH)
-                        .args(["--kill-after=30s", "1800s", PKEXEC_PATH])
-                        .arg(SYSTEM_CLI_PATH)
-                        .args(["doctor", "--fix"]),
+            return OperationResult {
+                success: true,
+                action: "bootstrap".into(),
+                output: format!(
+                    "Mazzy VPN Desktop started the embedded engine and protected local API.\n\n{}",
+                    repair.output
                 ),
-                true,
-            );
+                code: Some(0),
+            };
         }
 
         // Manual/local engine: the bundled installer can bootstrap missing
         // backend dependencies so the desktop stays self-contained.
-        if local_installed && !dependencies_ready && embedded_installer_available {
+        if local_installed && !initial_dependencies_ready && embedded_installer_available {
             return timed_operation_result(
                 "bootstrap".into(),
                 bounded_output(
@@ -2064,6 +2187,12 @@ fn dependencies() -> Vec<DependencyState> {
             "PolicyKit authorization",
             "Desktop",
             command_available("pkexec"),
+        ),
+        (
+            "acl",
+            "Per-session local API access",
+            "Desktop",
+            command_available("setfacl"),
         ),
         (
             "jq",
@@ -2329,6 +2458,7 @@ pub fn get_installation_report(app: AppHandle) -> InstallationReport {
     let installed_version = cli_path.and_then(installed_version);
     let package_managed = cli_path == Some(Path::new(SYSTEM_CLI_PATH));
     let bundled_version = bundled_version(&root);
+    let bundled_cli = root.join("mazzy-vpn").is_file();
     let engine_installed = installed_version.is_some();
     let dependencies = dependencies();
     let missing_dependencies = dependencies
@@ -2343,23 +2473,46 @@ pub fn get_installation_report(app: AppHandle) -> InstallationReport {
     let monitor_installed = systemd_unit_installed("vpnctl-health.timer");
     let api_installed = systemd_unit_installed("mazzy-vpn-api.socket");
     let api_socket_available = Path::new(API_SOCKET).exists();
-    let needs_install = !engine_installed
-        || installed_version != bundled_version
-        || !dependencies_ready
-        || !service_installed
-        || !monitor_installed
-        || !api_installed;
+    let api_socket_accessible = local_api_accessible();
+    let status_cache_available = fs::read_to_string(STATUS_FILE)
+        .ok()
+        .and_then(|contents| sanitize_status_cache(&contents).ok())
+        .is_some();
+    let profile_cache_available = fs::read_to_string(PROFILES_FILE)
+        .ok()
+        .and_then(|contents| sanitize_profile_cache(&contents).ok())
+        .is_some();
+    let startup_repair_needed = engine_startup_repair_needed(EngineStartupReadiness {
+        engine_installed,
+        dependencies_ready,
+        service_installed,
+        monitor_installed,
+        api_installed,
+        api_socket_available,
+        api_socket_accessible,
+        status_cache_available,
+        profile_cache_available,
+    });
+    let runtime_ready = !startup_repair_needed;
+    let needs_install = startup_repair_needed || installed_version != bundled_version;
     InstallationReport {
         engine_installed,
         package_managed,
+        engine_source: engine_source(cli_path, bundled_cli),
         installed_version,
         bundled_version,
+        bundled_cli,
         bundled_installer: root.join("install.sh").is_file(),
+        runtime_ready,
+        startup_repair_needed,
         needs_install,
         service_installed,
         monitor_installed,
         api_installed,
         api_socket_available,
+        api_socket_accessible,
+        status_cache_available,
+        profile_cache_available,
         dependencies_ready,
         missing_dependencies,
         dependencies,
@@ -2508,6 +2661,7 @@ mod tests {
             "systemd",
             "journalctl",
             "pkexec",
+            "acl",
             "jq",
             "socat",
             "openvpn",
@@ -2537,6 +2691,44 @@ mod tests {
             Some(Path::new(LOCAL_CLI_PATH))
         );
         assert_eq!(select_cli_path(false, false), None);
+        assert_eq!(
+            engine_source(Some(Path::new(SYSTEM_CLI_PATH)), true),
+            "package"
+        );
+        assert_eq!(
+            engine_source(Some(Path::new(LOCAL_CLI_PATH)), true),
+            "local"
+        );
+        assert_eq!(engine_source(None, true), "embedded");
+        assert_eq!(engine_source(None, false), "missing");
+    }
+
+    #[test]
+    fn startup_readiness_requires_an_accessible_api() {
+        let ready = EngineStartupReadiness {
+            engine_installed: true,
+            dependencies_ready: true,
+            service_installed: true,
+            monitor_installed: true,
+            api_installed: true,
+            api_socket_available: true,
+            api_socket_accessible: true,
+            status_cache_available: true,
+            profile_cache_available: true,
+        };
+        assert!(!engine_startup_repair_needed(ready));
+        assert!(engine_startup_repair_needed(EngineStartupReadiness {
+            api_socket_accessible: false,
+            ..ready
+        }));
+        assert!(engine_startup_repair_needed(EngineStartupReadiness {
+            engine_installed: false,
+            ..ready
+        }));
+        assert!(engine_startup_repair_needed(EngineStartupReadiness {
+            status_cache_available: false,
+            ..ready
+        }));
     }
 
     #[cfg(target_os = "linux")]
@@ -2552,8 +2744,7 @@ mod tests {
     fn engine_not_ready_error_explains_the_safe_fallback() {
         let message = engine_not_ready_error();
         assert!(message.contains("local API socket is not reachable"));
-        assert!(message.contains("log out and log back in"));
-        assert!(message.contains("mazzy-vpn"));
+        assert!(message.contains("Retry Install / Repair"));
         assert!(!message.contains("pkexec"));
     }
 
@@ -2897,7 +3088,7 @@ mod tests {
             "schema_version": 1,
             "generated_at": 1,
             "product": "Mazzy VPN",
-            "version": "1.4.5",
+            "version": "1.4.6",
             "language": "en",
             "selected": true,
             "service_state": "active",

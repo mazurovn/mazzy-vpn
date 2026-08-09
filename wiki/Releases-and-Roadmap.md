@@ -1,5 +1,18 @@
 # Релизы и roadmap
 
+## 1.4.6 / Desktop 0.4.7 — самостоятельный запуск Linux Desktop
+
+- Linux Desktop запускает встроенный engine до первого чтения статуса и
+  профилей; отдельная установка или предварительный запуск CLI больше не нужны;
+- системные зависимости и units устанавливаются/исправляются после native
+  PolicyKit authorization, затем Desktop запускает local API, обновляет caches
+  и выдаёт текущему GUI-сеансу минимальный ACL без повторного входа;
+- существующий package-managed или `/usr/local` CLI остаётся совместимым и
+  использует тот же API/state; package-owned файлы не перезаписываются;
+- DEB/RPM зависят от `acl`, а release gate проверяет embedded payload,
+  lifecycle и изолированный GUI launch;
+- Windows/macOS остаются UI-only previews без native VPN backend и OS signing.
+
 ## 1.4.1 / Desktop 0.4.1 — recovery и подписанные обновления
 
 - исправлен systemd boot cycle локального API и перенесены recovery/restart

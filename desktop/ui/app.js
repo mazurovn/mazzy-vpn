@@ -496,7 +496,7 @@ const state = {
   updateTotal: null,
   lastSignature: "",
   lastActiveProfileSignature: "",
-  bootstrapPromptShown: false,
+  engineStartupAttempted: false,
   events: [],
   busy: false,
   lastOperation: null
@@ -779,7 +779,7 @@ function documentationPreviewData() {
       available: true,
       generated_at: Math.floor(Date.now() / 1000),
       product: "Mazzy VPN",
-      version: "1.4.5",
+      version: "1.4.6",
       service_state: "active",
       desired: "up",
       internet: "up",
@@ -864,14 +864,17 @@ function documentationPreviewData() {
     installation: {
       engine_installed: true,
       package_managed: true,
-      installed_version: "1.4.5",
-      bundled_version: "1.4.5",
+      installed_version: "1.4.6",
+      bundled_version: "1.4.6",
       bundled_installer: true,
       needs_install: false,
       service_installed: true,
       monitor_installed: true,
       api_installed: true,
       api_socket_available: true,
+      api_socket_accessible: true,
+      status_cache_available: true,
+      profile_cache_available: true,
       dependencies_ready: true,
       missing_dependencies: 0,
       dependencies: [
@@ -920,7 +923,7 @@ function documentationPreviewData() {
     platform: {
       functional: true,
       os: "linux",
-      desktop_version: "0.4.6",
+      desktop_version: "0.4.7",
       author: "Nik m (@mazurovn)",
       license: "AGPL-3.0-or-later"
     }
@@ -971,8 +974,8 @@ function renderDocumentationPreview() {
   showPage(previewParameters.get("page") || "dashboard");
   if (previewParameters.get("update") === "available") {
     showUpdateDialog({
-      current_version: "0.4.6",
-      version: "0.4.7",
+      current_version: "0.4.7",
+      version: "0.4.8",
       install_supported: true,
       installation_method: "signed-in-app"
     });
@@ -1576,7 +1579,7 @@ function renderInstallation(report) {
     : t("embeddedInstall");
   $("#service-installed").textContent = report?.service_installed ? t("installed") : t("missing");
   $("#monitor-installed").textContent = report?.monitor_installed ? t("installed") : t("missing");
-  $("#api-installed").textContent = report?.api_socket_available
+  $("#api-installed").textContent = report?.api_socket_accessible
     ? t("apiReady")
     : (report?.api_installed ? t("installed") : t("missing"));
   const badge = $("#installation-badge");
@@ -1591,6 +1594,7 @@ function renderInstallation(report) {
       ping: "ICMP ping", getent: "DNS-резолвер",
       systemd: "systemd и временные службы", journalctl: "системный журнал",
       pkexec: "авторизация PolicyKit", jq: "среда JSON API",
+      acl: "доступ Desktop к локальному API",
       socat: "клиент локального API", "dns-integration": "интеграция DNS",
       "wireguard-tools": "инструменты WireGuard",
       "amneziawg-tools": "инструменты AmneziaWG",
@@ -1705,22 +1709,27 @@ function renderAbout() {
   $("#about-license").textContent = info?.license || "AGPL-3.0-or-later";
 }
 
-async function refreshInstallation() {
+async function refreshInstallation(startEmbeddedEngine = false) {
   if (!invoke) return;
   try {
     const report = await invoke("get_installation_report");
     renderInstallation(report);
-    // A fresh Desktop install must be usable without a separately installed CLI.
-    // Ask once, then let the existing privileged bootstrap path do the work.
-    if (report?.needs_install && !state.bootstrapPromptShown && !state.busy) {
-      state.bootstrapPromptShown = true;
-      window.setTimeout(() => {
-        if (state.busy || !window.confirm(t("confirmRepair"))) return;
-        void runOperation({ kind: "bootstrap" }, t("installRepair"));
-      }, 0);
+    // Start the bundled engine before the first status/profile reads. PolicyKit
+    // remains the native authorization boundary for privileged host changes.
+    if (startEmbeddedEngine
+        && state.platformInfo?.functional
+        && report?.startup_repair_needed
+        && report?.bundled_cli
+        && report?.bundled_installer
+        && !state.engineStartupAttempted
+        && !state.busy) {
+      state.engineStartupAttempted = true;
+      return runOperation({ kind: "bootstrap" }, t("installRepair"));
     }
+    return report;
   } catch (error) {
     showToast(String(error), true);
+    return null;
   }
 }
 
@@ -1975,8 +1984,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     $("#platform-note").textContent = platform?.functional ? "" : t("preview");
     renderAbout();
   }
+  await refreshInstallation(true);
   await Promise.all([
-    refreshStatus(false), refreshProfiles(false), refreshInstallation(), refreshAgents(false)
+    refreshStatus(false), refreshProfiles(false), refreshAgents(false)
   ]);
   if (state.autoUpdateChecks) void checkForUpdates(false);
   setInterval(() => {

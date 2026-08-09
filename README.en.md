@@ -15,10 +15,12 @@ It is a client and control plane rather than a hosted VPN subscription. Use
 profiles from your VPN provider or organization; Mazzy VPN requires no project
 account and collects no telemetry.
 
-The current release source line is [CLI/TUI 1.4.5](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.5)
-and the [Desktop 0.4.5 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.5).
+The current release source line is [CLI/TUI 1.4.6](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.6)
+and the [Desktop 0.4.7 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.7).
 A version is published only when its linked tag and GitHub Release page exist.
-Linux Desktop is a functional control center; Windows and macOS artifacts are
+Linux Desktop bundles and starts its compatible engine without requiring a
+separately installed or running CLI. Existing CLI installations remain
+compatible. Windows and macOS artifacts are
 UI previews without native VPN backends or OS code signing. Installable updater
 artifacts are Tauri-signed and always require consent. Issue #31 is closed with the reviewed
 upstream `glib` backport, exact source-provenance verification and clean

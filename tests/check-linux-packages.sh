@@ -69,6 +69,7 @@ assert_gui_launch() {
     shift
     local log="$TMP/${label,,}-launch.log" rc=0
     NO_AT_BRIDGE=1 GDK_BACKEND=x11 QT_QPA_PLATFORM=xcb \
+        dbus-run-session -- \
         /usr/bin/timeout --kill-after=2s 10s \
         xvfb-run -a "$@" >"$log" 2>&1 || rc=$?
     if ((rc != 124)); then
@@ -79,6 +80,7 @@ assert_gui_launch() {
 
 require_command cpio
 require_command cargo
+require_command dbus-run-session
 require_command dpkg-deb
 require_command python3
 require_command rpm
@@ -247,7 +249,7 @@ rpm --dbpath "$rpm_db" -qp --requires "$rpm_package" >"$TMP/rpm-requires"
 rpm --dbpath "$rpm_db" -qp --recommends "$rpm_package" >"$TMP/rpm-recommends"
 
 for dependency in \
-    bash diffutils findutils grep iproute2 jq nftables pkexec procps python3 sed socat systemd \
+    acl bash diffutils findutils grep iproute2 jq nftables pkexec procps python3 sed socat systemd \
     util-linux; do
     assert_dependency "$dependency" "$TMP/deb-depends"
 done
@@ -255,7 +257,7 @@ for dependency in netcat-openbsd network-manager-l2tp openvpn wireguard-tools; d
     assert_dependency "$dependency" "$TMP/deb-recommends"
 done
 for dependency in \
-    bash diffutils findutils gawk grep iproute jq nftables polkit procps-ng python3 sed socat \
+    acl bash diffutils findutils gawk grep iproute jq nftables polkit procps-ng python3 sed socat \
     systemd util-linux; do
     assert_dependency "$dependency" "$TMP/rpm-requires"
 done

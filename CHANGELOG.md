@@ -4,10 +4,27 @@ All notable changes to Mazzy VPN are documented here.
 
 ## Unreleased
 
+## 1.4.6 / Desktop 0.4.7 - 2026-08-09
+
+- Make Linux Desktop start its bundled engine before the first status/profile
+  load. A clean AppImage now opens the native PolicyKit authorization flow,
+  installs/repairs the shared backend, starts the protected local API and grants
+  the current GUI session a per-user ACL; users no longer need to install or run
+  the standalone CLI first or log out after bootstrap. Existing package-managed
+  and `/usr/local` CLI clients keep using the same API and state.
+- Make package-managed Desktop repair the installed engine in place instead of
+  copying bundled files over distribution-owned paths.
+- Report the engine source, embedded CLI, current-session API accessibility and
+  cache readiness separately so startup recovery is based on usable runtime
+  state rather than file presence alone.
+- Add `acl` to Linux package dependencies and verify autonomous startup,
+  package lifecycle and isolated single-instance GUI smoke tests.
+
+## Desktop 0.4.6 - 2026-08-07
+
 - Set a Linux-safe accessibility environment before Tauri/GTK startup to
   prevent a distribution `libatk-bridge` segmentation fault from crashing
   Desktop at launch.
-
 - Canonicalize Tauri draft-release API asset URLs from the downloaded signed
   artifact inventory before updater verification and publication. The corrected
   manifest is uploaded while the versioned release is still a draft, and the
