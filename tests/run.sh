@@ -4371,6 +4371,8 @@ grep -q 'ensure_runtime_reader_access' "$ROOT/mazzy-vpn" ||
     fail "package repair cannot enroll the invoking user into the local API group"
 grep -q 'grant_runtime_reader_session_access' "$ROOT/mazzy-vpn" ||
     fail "package repair cannot grant immediate current-session local API access"
+grep -q 'grant_desktop_runtime_access ||' "$ROOT/install.sh" ||
+    fail "installer can fail after a best-effort Desktop session ACL error"
 API_SOCKET_START_PATTERN="enable --now \"\$API_SOCKET_UNIT\""
 grep -Fq "$API_SOCKET_START_PATTERN" "$ROOT/mazzy-vpn" ||
     fail "Desktop engine repair does not start the protected local API"

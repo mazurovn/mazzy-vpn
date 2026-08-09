@@ -1954,6 +1954,9 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
                     true,
                 )
             };
+            if !repair.success {
+                return repair;
+            }
             let dependencies_ready = dependencies_ready(selected_protocol_from_status().as_deref());
             if !dependencies_ready {
                 return OperationResult {
@@ -1982,7 +1985,7 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
                     "Mazzy VPN Desktop started the embedded engine and protected local API.\n\n{}",
                     repair.output
                 ),
-                code: Some(0),
+                code: repair.code,
             };
         }
 

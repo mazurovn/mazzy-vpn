@@ -322,8 +322,10 @@ def main() -> None:
         or "|| !profile_cache_available" not in rust
         or "wait_for_accessible_local_api()" not in rust
         or "embedded_cli_path(app)" not in rust
+        or "if !repair.success" not in rust
+        or "return repair;" not in rust
     ):
-        fail("Desktop startup readiness does not include the embedded CLI and accessible API")
+        fail("Desktop startup readiness or repair failure reporting is incomplete")
     forbidden_agent_authority = (
         "run_agent_operation",
         "runAgentOperation",

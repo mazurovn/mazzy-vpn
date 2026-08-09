@@ -859,7 +859,8 @@ if [[ -z "$DESTDIR" && $DEPS_ONLY -eq 0 ]]; then
     fi
     run systemctl restart vpnctl-health.timer
     run /usr/local/bin/mazzy-vpn _refresh-dashboard-cache
-    grant_desktop_runtime_access
+    grant_desktop_runtime_access ||
+        echo "Не удалось выдать текущему Desktop-сеансу ACL local API; потребуется повторный вход." >&2
     if ((DRY_RUN)); then
         echo
         echo "Dry-run завершён: изменения не применялись."
