@@ -569,8 +569,8 @@ export VPNCTL_LEGACY_START="$TMP/fallback-start"
 export VPNCTL_LEGACY_STOP="$TMP/fallback-stop"
 export NO_COLOR=1
 
-"$CLI" version | grep -q '^Mazzy VPN 1\.4\.5 (mazzy-vpn; alias: vpnctl)$'
-"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.4\.5 ' ||
+"$CLI" version | grep -q '^Mazzy VPN 1\.4\.6 (mazzy-vpn; alias: vpnctl)$'
+"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.4\.6 ' ||
     fail "vpnctl compatibility wrapper is broken"
 ok "Mazzy VPN branding and compatibility alias"
 
@@ -4369,7 +4369,16 @@ grep -q 'report?.package_managed' "$ROOT/desktop/ui/app.js" ||
     fail "Desktop ignores package-managed installation state"
 grep -q 'ensure_runtime_reader_access' "$ROOT/mazzy-vpn" ||
     fail "package repair cannot enroll the invoking user into the local API group"
-ok "Desktop package state and unavailable notifications are represented honestly"
+grep -q 'grant_runtime_reader_session_access' "$ROOT/mazzy-vpn" ||
+    fail "package repair cannot grant immediate current-session local API access"
+grep -q 'grant_desktop_runtime_access ||' "$ROOT/install.sh" ||
+    fail "installer can fail after a best-effort Desktop session ACL error"
+API_SOCKET_START_PATTERN="enable --now \"\$API_SOCKET_UNIT\""
+grep -Fq "$API_SOCKET_START_PATTERN" "$ROOT/mazzy-vpn" ||
+    fail "Desktop engine repair does not start the protected local API"
+grep -q 'await refreshInstallation(true);' "$ROOT/desktop/ui/app.js" ||
+    fail "Desktop does not start its embedded engine before initial data loading"
+ok "Desktop self-start, package state and unavailable notifications are represented honestly"
 
 grep -q 'id="location-health-button"' "$ROOT/desktop/ui/index.html" ||
     fail "Desktop profile list has no batch location check"

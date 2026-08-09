@@ -47,6 +47,8 @@ core, даже когда GUI закрыт.
 default-branch security checks и tagged release artifacts прошли.
 
 - встроенный installer engine с проверкой версий и готовности зависимостей;
+- автоматический запуск embedded engine до первой загрузки состояния, запуск
+  local API и точечный ACL текущему Desktop-сеансу после PolicyKit authorization;
 - безопасный импорт одного/нескольких файлов и папки с определением протокола;
 - очищенный cache библиотеки профилей с поиском, локацией и выбором;
 - connect, validate, probe, transactional test, test-all и emergency;

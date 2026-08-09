@@ -1,6 +1,6 @@
 [package]
 name = "mazzy-vpn-desktop"
-version = "0.4.6"
+version = "0.4.7"
 description = "AI-ready, self-healing multi-protocol VPN client and control center"
 authors = ["Nik m (@mazurovn)"]
 license = "AGPL-3.0-or-later"

@@ -1,8 +1,40 @@
-# Mazzy VPN 1.4.5 / Desktop 0.4.5
+# Mazzy VPN 1.4.6 / Desktop 0.4.7
 
-Release source prepared 2026-08-07 by [Nik m (@mazurovn)](https://github.com/mazurovn).
+Release source prepared 2026-08-09 by [Nik m (@mazurovn)](https://github.com/mazurovn).
 This release source is not published yet; tags and GitHub Releases are created
 only after the release gates pass.
+
+## Self-contained Linux Desktop
+
+- Linux Desktop now starts or repairs its bundled Mazzy VPN engine before its
+  first status and profile reads. A separately installed or already running CLI
+  is no longer a prerequisite.
+- Native PolicyKit remains the privilege boundary. After authorization,
+  Desktop installs or repairs system dependencies and units, starts the local
+  API, refreshes the read-only caches and grants the current GUI session the
+  minimum ACL required to use them without logging out.
+- Package-managed `/usr/bin/mazzy-vpn` remains preferred when present and is
+  repaired in place through `doctor --fix`; Desktop never overwrites
+  distribution-owned files with its embedded copy. A compatible
+  `/usr/local/bin/mazzy-vpn` also remains supported.
+- Readiness now distinguishes engine source, bundled CLI availability, service
+  units, protocol dependencies, socket existence and accessibility, and both
+  status/profile caches. This prevents file-presence checks from reporting a
+  broken startup as ready.
+- DEB and RPM packages declare the `acl` dependency. The package audit verifies
+  embedded payloads, dependency metadata, lifecycle behavior and an isolated
+  GUI launch even when another Desktop instance is active.
+
+## Compatibility and boundaries
+
+- CLI/TUI `1.4.6` and Desktop `0.4.7` use the same protected local API and
+  state, so users can continue using either surface or both.
+- Functional Linux connection backends remain AmneziaWG, WireGuard, OpenVPN
+  and L2TP/IPsec. No modern-protocol readiness claim changes.
+- Windows and macOS remain UI-only previews without native VPN backends or
+  operating-system code signing. Android remains unavailable.
+
+# Previous 1.4.5 / Desktop 0.4.5 notes
 
 ## Startup recovery fixes
 

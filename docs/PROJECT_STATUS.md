@@ -2,7 +2,7 @@
 
 Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
-Last synchronized: 2026-08-07.
+Last synchronized: 2026-08-09.
 
 This file is the persistent handoff after interrupted Codex sessions. GitHub
 issues and release gates in [`capabilities.json`](capabilities.json) remain the
@@ -13,20 +13,16 @@ This page records the verified resumption point.
 
 ## Verified release baseline
 
-- The current published release is CLI/TUI `v1.4.5` and Tauri-signed Desktop
-  preview `desktop-v0.4.5`. The installation and validation audit was merged
-  through PR #57 after CI, Desktop and CodeQL passed. Both release pages are
-  published; Desktop remains a prerelease because Windows and macOS
+- The current release line is CLI/TUI `v1.4.6` and Tauri-signed Desktop preview
+  `desktop-v0.4.7`. Linux Desktop contains and starts its compatible engine
+  before the first data load, while an existing package-managed or local CLI
+  remains compatible. Desktop remains a prerelease because Windows and macOS
   do not yet have native VPN backends or operating-system code signing.
-- Patch source `1.4.5` / Desktop `0.4.5` fixes the reboot-time API/profile
-  boot ordering cycle and carries critical recovery policy through package
-  drop-ins when legacy `/etc/systemd/system` units shadow package units. It
-  also adds a consent-gated Tauri-signed updater with a fixed GitHub feed;
-  DEB/RPM remains package-manager owned. Both patch releases and the signed
-  fixed `desktop-updater` feed were published on 2026-08-05. Evidence is in
-  [`AUDIT_2026-08-04_SYSTEMD_HOTFIX.ru.md`](AUDIT_2026-08-04_SYSTEMD_HOTFIX.ru.md).
-  Runtime evidence and the Desktop/health recovery follow-up are recorded in
-  [`AUDIT_2026-08-05_RUNTIME_INCIDENT.ru.md`](AUDIT_2026-08-05_RUNTIME_INCIDENT.ru.md).
+- Patch source `1.4.6` / Desktop `0.4.7` makes the Linux Desktop startup path
+  self-contained: PolicyKit-authorized bootstrap installs or repairs the shared
+  backend, starts the protected local API, refreshes read-only caches and grants
+  the current GUI session a minimal per-user ACL. Package-managed engines are
+  repaired in place and are never overwritten by the bundled CLI.
 - Linux CLI/TUI is functional. Linux Desktop remains a preview; AppImage, DEB
   and RPM are functional control-center bundles. Installable updater artifacts
   are Tauri-signed, while package-repository and OS code-signing gates remain
@@ -39,7 +35,7 @@ This page records the verified resumption point.
   proc-macro and `unic` transitive graph. They are maintenance debt, not proof
   of an exploitable issue; migration off the legacy GTK3 graph remains a
   Desktop production gate.
-- Windows and macOS 0.4.5 artifacts remain UI previews without native VPN
+- Windows and macOS 0.4.7 artifacts remain UI previews without native VPN
   backends or OS code signing. They must not be described as functional VPN
   clients; a Tauri updater signature does not change that boundary.
 - Android and iOS clients are planned and have no application source or
@@ -98,8 +94,8 @@ This page records the verified resumption point.
 
 Published release links:
 
-- <https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.5>
-- <https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.5>
+- <https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.6>
+- <https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.7>
 
 ## Community and documentation baseline
 

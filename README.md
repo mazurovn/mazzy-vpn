@@ -13,7 +13,7 @@
   <a href="LICENSE"><img alt="License: AGPL-3.0-or-later" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-8f7dff"></a>
   <a href="https://github.com/mazurovn/mazzy-vpn/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mazurovn/mazzy-vpn/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Linux" src="https://img.shields.io/badge/platform-Linux-65e7ff">
-  <a href="https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.5"><img alt="Release 1.4.5" src="https://img.shields.io/badge/release-1.4.5-ef70ff"></a>
+  <a href="https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.6"><img alt="Release 1.4.6" src="https://img.shields.io/badge/release-1.4.6-ef70ff"></a>
 </p>
 
 Mazzy VPN is an open-source AI-ready VPN client for Linux with Desktop, tray,
@@ -28,10 +28,10 @@ Mazzy VPN is a client and control plane, not a hosted VPN subscription. Bring
 profiles from a VPN provider or your organization. No account, telemetry or
 project-hosted server is required.
 
-The current release source line is [CLI/TUI 1.4.5](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.5)
-and [Desktop 0.4.5](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.5).
+The current release source line is [CLI/TUI 1.4.6](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.6)
+and [Desktop 0.4.7](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.7).
 A version is published only when its linked tag and GitHub Release page exist.
-Desktop 0.4.5 is a preview with consent-gated, Tauri-signed updater artifacts:
+Desktop 0.4.7 is a preview with consent-gated, Tauri-signed updater artifacts:
 Linux provides a functional control center, while Windows and macOS artifacts
 remain UI previews without native VPN backends or OS code signing.
 Issue #31 is closed with the reviewed upstream `glib` backport, an exact
@@ -74,8 +74,10 @@ sing-box config renderer. Their connection adapters remain explicitly
   and installer, checks dependencies, imports and manages profiles, exposes
   sortable whole-list ping, fastest-location selection, actual egress/location
   verification, transactional tests, clickable events, Doctor output, logs
-  and clear service settings, and can repair its own engine after explicit
-  authorization. AppImage, DEB and RPM remain
+  and clear service settings, and starts or repairs its embedded engine through
+  native PolicyKit authorization without a separately installed or running CLI.
+  An existing package-managed or `/usr/local` CLI remains compatible and shares
+  the same protected local API and state. AppImage, DEB and RPM remain
   previews until the versioned local API and all Desktop 1.0 release gates are
   complete; macOS and Windows still require native VPN backends.
 - Quick connection through the saved default profile: `mazzy-vpn quick`.

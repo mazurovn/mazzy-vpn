@@ -293,13 +293,20 @@ def main() -> None:
         fail("Desktop location checks bypass the typed Rust command")
     if 'invoke("get_agent_integrations"' not in javascript:
         fail("Desktop agent view bypasses the typed Rust diagnostics command")
+    startup_start = javascript.find("async function refreshInstallation(startEmbeddedEngine = false)")
+    startup_end = javascript.find("\nasync function refreshStatus", startup_start)
+    startup_flow = javascript[startup_start:startup_end]
     if (
-        'report?.needs_install' not in javascript
-        or 'state.bootstrapPromptShown' not in javascript
-        or 'window.confirm(t("confirmRepair"))' not in javascript
-        or 'runOperation({ kind: "bootstrap" }, t("installRepair"))' not in javascript
+        startup_start < 0
+        or startup_end < 0
+        or "report?.startup_repair_needed" not in startup_flow
+        or "report?.bundled_cli" not in startup_flow
+        or "state.engineStartupAttempted" not in startup_flow
+        or 'runOperation({ kind: "bootstrap" }, t("installRepair"))' not in startup_flow
+        or "window.confirm" in startup_flow
+        or "await refreshInstallation(true);" not in javascript
     ):
-        fail("Desktop does not offer a consent-gated first-run engine bootstrap")
+        fail("Desktop does not automatically start its embedded engine before data loading")
     if (
         "dependencies_ready(selected_protocol_from_status().as_deref())" not in rust
         or "let dependencies_ready = missing_dependencies == 0;" in rust
@@ -307,6 +314,18 @@ def main() -> None:
         fail("Desktop installation report does not check the selected backend")
     if 'const STATUS_FILE: &str = "/run/mazzy-vpn/status.json";' not in rust:
         fail("Desktop selected-backend readiness does not use the status cache")
+    if (
+        "engine_startup_repair_needed(" not in rust
+        or "|| !api_socket_available" not in rust
+        or "|| !api_socket_accessible" not in rust
+        or "|| !status_cache_available" not in rust
+        or "|| !profile_cache_available" not in rust
+        or "wait_for_accessible_local_api()" not in rust
+        or "embedded_cli_path(app)" not in rust
+        or "if !repair.success" not in rust
+        or "return repair;" not in rust
+    ):
+        fail("Desktop startup readiness or repair failure reporting is incomplete")
     forbidden_agent_authority = (
         "run_agent_operation",
         "runAgentOperation",

@@ -16,6 +16,7 @@ LIVE_TEST=0
 PREFLIGHT_REGRESSION_DEFERRED=0
 CONFIG_SOURCE=""
 FORCE_CONFIGS=0
+DESKTOP_ACCESS_CALLER=""
 INSTALL_LANG="${VPNCTL_INSTALL_LANG:-${VPNCTL_LANG:-}}"
 LANG_EXPLICIT=0
 AWG_TOOLS_VERSION="1.0.20260618-2"
@@ -498,7 +499,7 @@ install_amnezia_userspace() {
 }
 
 install_debian_dependencies() {
-    local -a packages=(iproute2 nftables curl ca-certificates openvpn wireguard-tools
+    local -a packages=(acl iproute2 nftables curl ca-certificates openvpn wireguard-tools
         network-manager network-manager-l2tp strongswan xl2tpd iputils-ping
         netcat-openbsd jq python3 socat)
     if ! run apt-get update; then
@@ -546,7 +547,7 @@ install_debian_dependencies() {
 }
 
 install_fedora_dependencies() {
-    run dnf install -y iproute nftables curl ca-certificates openvpn wireguard-tools \
+    run dnf install -y acl iproute nftables curl ca-certificates openvpn wireguard-tools \
         NetworkManager NetworkManager-l2tp strongswan xl2tpd iputils jq python3 socat
     if ! amnezia_ready && confirm "Включить COPR amneziavpn/amneziawg?"; then
         run dnf install -y dnf-plugins-core
@@ -556,7 +557,7 @@ install_fedora_dependencies() {
 }
 
 install_arch_dependencies() {
-    run pacman -S --needed --noconfirm iproute2 nftables curl ca-certificates openvpn \
+    run pacman -S --needed --noconfirm acl iproute2 nftables curl ca-certificates openvpn \
         wireguard-tools networkmanager-l2tp strongswan xl2tpd iputils jq python socat
     if ! amnezia_ready; then
         echo "AmneziaWG отсутствует. Установите amneziawg-tools и совместимый модуль из AUR вручную."
@@ -564,7 +565,7 @@ install_arch_dependencies() {
 }
 
 install_suse_dependencies() {
-    run zypper --non-interactive install iproute2 nftables curl ca-certificates openvpn \
+    run zypper --non-interactive install acl iproute2 nftables curl ca-certificates openvpn \
         wireguard-tools NetworkManager-l2tp strongswan xl2tpd iputils jq python3 socat
     if ! amnezia_ready; then
         echo "AmneziaWG отсутствует; автоматическая установка для openSUSE не поддерживается."
@@ -619,7 +620,27 @@ configure_api_access() {
     if [[ -n "$caller" ]] && ! id -nG "$caller" | tr ' ' '\n' | grep -Fxq mazzy-vpn; then
         run usermod -a -G mazzy-vpn "$caller"
         echo "Пользователь '$caller' добавлен в группу mazzy-vpn."
-        echo "Для доступа к local API может потребоваться повторный вход в сеанс."
+    fi
+    DESKTOP_ACCESS_CALLER="$caller"
+}
+
+grant_desktop_runtime_access() {
+    local caller="$DESKTOP_ACCESS_CALLER" target
+    [[ "$caller" =~ ^[A-Za-z_][A-Za-z0-9_.-]*$ && "$caller" != root ]] ||
+        return 0
+    command -v setfacl >/dev/null 2>&1 || {
+        echo "Не найден setfacl; текущему Desktop-сеансу потребуется повторный вход." >&2
+        return 1
+    }
+    [[ -d /run/mazzy-vpn ]] || return 0
+    run setfacl -m "u:$caller:r-x,d:u:$caller:rwx" /run/mazzy-vpn
+    for target in /run/mazzy-vpn/status.json /run/mazzy-vpn/profiles.json; do
+        if [[ -e "$target" ]]; then
+            run setfacl -m "u:$caller:r" "$target"
+        fi
+    done
+    if [[ -S /run/mazzy-vpn/api-v1.sock ]]; then
+        run setfacl -m "u:$caller:rw" /run/mazzy-vpn/api-v1.sock
     fi
 }
 
@@ -838,6 +859,8 @@ if [[ -z "$DESTDIR" && $DEPS_ONLY -eq 0 ]]; then
     fi
     run systemctl restart vpnctl-health.timer
     run /usr/local/bin/mazzy-vpn _refresh-dashboard-cache
+    grant_desktop_runtime_access ||
+        echo "Не удалось выдать текущему Desktop-сеансу ACL local API; потребуется повторный вход." >&2
     if ((DRY_RUN)); then
         echo
         echo "Dry-run завершён: изменения не применялись."

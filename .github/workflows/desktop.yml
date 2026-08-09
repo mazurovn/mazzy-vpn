@@ -190,7 +190,7 @@ jobs:
           tagName: desktop-v__VERSION__
           releaseName: "Mazzy VPN Desktop v__VERSION__ (preview)"
           releaseBody: |
-            Mazzy VPN Desktop 0.4.2 is a functional Linux control-center preview bundled with the compatible Mazzy VPN 1.4.2 engine. Installable updater artifacts carry a Tauri signature and the application always asks before download or installation.
+            Mazzy VPN Desktop 0.4.7 is a functional Linux control-center preview bundled with the compatible Mazzy VPN 1.4.6 engine. It starts or repairs that engine before the first status/profile read, so a separately installed or running CLI is not required. Existing package-managed and local CLI installations remain compatible and share the protected local API and state. Native PolicyKit authorization is still required for privileged host changes. Installable updater artifacts carry a Tauri signature and the application always asks before download or installation.
 
             The Linux build includes deterministic read-only protocol planning, a 13-protocol catalog, closed managed-profile import for nine modern protocols, a gated sing-box renderer foundation for six, durable local API recovery and a fail-closed dual-stack transition guard. Linux connection lifecycle remains implemented only for AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec; modern protocol render/import support is not advertised as working connect/TUN/DNS/routing/rollback support.
 
