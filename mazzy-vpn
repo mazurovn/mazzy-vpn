@@ -4999,10 +4999,10 @@ provider_registry_json() {
             ($google_countries|codes) as $google
             | ($antigravity_countries|codes) as $antigravity
             | ($openai_countries|codes) as $openai
-            | .providers |= map(. + {supported_countries:
+            | .providers |= map((. + {supported_countries:
                 (if .country_set == "google" then $google
                  elif .country_set == "antigravity" then $antigravity
-                 elif .country_set == "openai" then $openai else [] end)
+                 elif .country_set == "openai" then $openai else [] end)})
                 | del(.country_set))
             ' "$metadata"
         return
