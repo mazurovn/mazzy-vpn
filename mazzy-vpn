@@ -8301,6 +8301,12 @@ api_restore_state() {
         sync -f "$STATE_DIR" || return 1
     fi
 
+    # Observe the host networking planes after the service transition.  These
+    # are deliberately read-only and fail closed only when the platform tool
+    # is present; minimal containers without iproute/nft still use the API
+    # dashboard check below.
+    api_observe_network_planes || return 1
+
     health_reset
     if [[ "$recovery_mode" == "boot" ]]; then
         # The boot recovery unit is ordered before vpnctl.service. Waiting for
@@ -8324,6 +8330,22 @@ api_restore_state() {
     # Require the bounded observed-state refresh before reporting completed;
     # otherwise the caller must remain in recovery-required mode.
     api_refresh_dashboard_bounded
+}
+
+api_observe_network_planes() {
+    local route dns firewall
+    if command -v ip >/dev/null 2>&1; then
+        route="$(timeout 1 ip -j route show table main 2>/dev/null || true)"
+        [[ -z "$route" ]] || jq -e 'type == "array"' <<<"$route" >/dev/null || return 1
+    fi
+    if command -v resolvectl >/dev/null 2>&1; then
+        dns="$(timeout 1 resolvectl status 2>/dev/null || true)"
+    fi
+    if command -v nft >/dev/null 2>&1; then
+        firewall="$(timeout 1 nft -j list ruleset 2>/dev/null || true)"
+        [[ -z "$firewall" ]] || jq -e 'type == "object"' <<<"$firewall" >/dev/null || return 1
+    fi
+    return 0
 }
 
 api_store_completed_action() {
