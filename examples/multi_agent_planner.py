@@ -6,6 +6,8 @@
 Input shape:
 {
   "workload": "llm-streaming",
+  "provider": "antigravity",             # optional
+  "required_country": "AT",              # optional
   "workers": [
     {"worker_id": "probe-eu", "candidates": [{"profile_id": "...", "evidence": {...}}]}
   ]
@@ -33,12 +35,19 @@ from mazzy_planner_client import (
 
 
 IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$")
+PROVIDER_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{1,63}$")
+COUNTRY_CODE = re.compile(r"^[A-Z]{2}$")
 WORKLOADS = {"general", "llm-streaming", "api-calls", "video", "split-routing"}
 
 
 def build_planner_payload(report: dict[str, Any]) -> dict[str, Any]:
-    if set(report) != {"workload", "workers"}:
-        raise PlannerClientError("coordinator input must contain workload and workers")
+    required_keys = {"workload", "workers"}
+    allowed_keys = required_keys | {"provider", "required_country"}
+    if not required_keys.issubset(report) or not set(report).issubset(allowed_keys):
+        raise PlannerClientError(
+            "coordinator input must contain workload/workers and only optional "
+            "provider/required_country"
+        )
     workload = report["workload"]
     workers = report["workers"]
     if workload not in WORKLOADS:
@@ -82,7 +91,21 @@ def build_planner_payload(report: dict[str, Any]) -> dict[str, Any]:
 
     if len(candidates) > 128:
         raise PlannerClientError("coordinator produced more than 128 candidates")
-    return {"workload": workload, "candidates": candidates}
+    payload: dict[str, Any] = {"workload": workload, "candidates": candidates}
+    if "provider" in report:
+        provider = report["provider"]
+        if not isinstance(provider, str) or PROVIDER_ID.fullmatch(provider) is None:
+            raise PlannerClientError("provider is not a safe registry identifier")
+        payload["provider"] = provider
+    if "required_country" in report:
+        required_country = report["required_country"]
+        if (
+            not isinstance(required_country, str)
+            or COUNTRY_CODE.fullmatch(required_country) is None
+        ):
+            raise PlannerClientError("required_country must be uppercase ISO alpha-2")
+        payload["required_country"] = required_country
+    return payload
 
 
 def main() -> int:

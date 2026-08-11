@@ -7222,8 +7222,10 @@ api_profile_runtime_path() {
 
 api_planner_candidate_result() {
     local candidate="$1" registry="$2" weights="$3" rollback_storage_ready="$4"
-    local deadline_end_ms="$5" workload="$6" validation_rc=0
-    local profile_id profile_record="" protocol="" file_name="" profile_path=""
+    local deadline_end_ms="$5" workload="$6" provider_id="$7"
+    local provider_countries="$8" required_country="$9" validation_rc=0
+    local profile_id profile_record="" protocol="" file_name="" profile_country=""
+    local profile_path=""
     local support="" kind="" censorship_resistance="" active_probe_resistance=""
     local transports='[]'
     local backend_ready=false profile_valid=false secrets_secure=false
@@ -7240,12 +7242,13 @@ api_planner_candidate_result() {
                 (.protocol | type == "string" and length > 0)
                 and (.file_name | type == "string" and length > 0)
             )
-            | [.protocol, .file_name]
+            | [.protocol, .file_name, (.country_code // "")]
             | @tsv
         ' "$PROFILES_FILE" 2>/dev/null || true
     )"
     if [[ -n "$profile_record" ]]; then
-        IFS=$'\t' read -r protocol file_name <<<"$profile_record"
+        IFS=$'\t' read -r protocol file_name profile_country <<<"$profile_record"
+        [[ "$profile_country" =~ ^[A-Z]{2}$ ]] || profile_country=""
     fi
     if [[ -n "$protocol" ]]; then
         support="$(jq -r --arg protocol "$protocol" '
@@ -7290,6 +7293,10 @@ api_planner_candidate_result() {
             --argjson evidence "$(jq -c '.evidence' <<<"$candidate")" \
             --argjson weights "$weights" \
             --arg workload "$workload" \
+            --arg provider "$provider_id" \
+            --arg required_country "$required_country" \
+            --arg profile_country "$profile_country" \
+            --argjson provider_countries "$provider_countries" \
             --arg kind "$kind" \
             --arg censorship_resistance "$censorship_resistance" \
             --arg active_probe_resistance "$active_probe_resistance" \
@@ -7383,7 +7390,14 @@ api_planner_candidate_result() {
                 $active_probe_resistance
             ) as $censorship_level
             | workload_level($workload; $kind; $transports) as $workload_level
-            | [
+            | ($provider == ""
+                or (
+                    $profile_country != ""
+                    and ($provider_countries | index($profile_country)) != null
+                )) as $provider_country_supported
+            | ($required_country == ""
+                or $profile_country == $required_country) as $required_country_match
+            | ([
                 {
                     id: "backend-ready",
                     passed: $backend_ready,
@@ -7425,7 +7439,31 @@ api_planner_candidate_result() {
                         else "planner.gate.platform-unsupported" end
                     )
                 }
-            ] as $gates
+            ]
+            + if $provider == "" then [] else [{
+                id: "provider-country-supported",
+                passed: $provider_country_supported,
+                reason_code: (
+                    if $profile_country == ""
+                    then "planner.gate.profile-country-unavailable"
+                    elif $provider_country_supported
+                    then "planner.gate.provider-country-supported"
+                    else "planner.gate.provider-country-unsupported"
+                    end
+                )
+            }] end
+            + if $required_country == "" then [] else [{
+                id: "required-country-match",
+                passed: $required_country_match,
+                reason_code: (
+                    if $profile_country == ""
+                    then "planner.gate.profile-country-unavailable"
+                    elif $required_country_match
+                    then "planner.gate.required-country-match"
+                    else "planner.gate.required-country-mismatch"
+                    end
+                )
+            }] end) as $gates
             | [
                 {
                     id: "recent-success",
@@ -7524,7 +7562,8 @@ api_planner_candidate_result() {
 api_planner_result() {
     local request="$1" deadline_ms="$2" deadline_started_ms="$3"
     local registry weights rollback_storage_ready=false remaining_ms deadline_end_ms
-    local candidate result candidates ranked workload rc=0
+    local candidate result candidates ranked workload provider_id required_country rc=0
+    local provider provider_countries='[]'
     local -a candidate_results=()
     registry="$(protocol_registry_path)" || return 1
     weights="$(jq -c '
@@ -7533,6 +7572,15 @@ api_planner_result() {
         | from_entries
     ' "$registry")" || return 1
     workload="$(jq -r '.payload.workload' <<<"$request")" || return 1
+    provider_id="$(jq -r '.payload.provider // ""' <<<"$request")" || return 1
+    required_country="$(
+        jq -r '.payload.required_country // ""' <<<"$request"
+    )" || return 1
+    if [[ -n "$provider_id" ]]; then
+        provider="$(provider_registry_get "$provider_id")" || return 1
+        provider_countries="$(jq -c '.supported_countries' <<<"$provider")" ||
+            return 1
+    fi
     deadline_end_ms=$((deadline_started_ms + deadline_ms))
     remaining_ms="$(api_deadline_remaining_ms "$deadline_end_ms")" || return 1
     ((remaining_ms > 0)) || return 124
@@ -7545,7 +7593,8 @@ api_planner_result() {
         ((remaining_ms > 0)) || return 124
         result="$(api_planner_candidate_result \
             "$candidate" "$registry" "$weights" "$rollback_storage_ready" \
-            "$deadline_end_ms" "$workload")"
+            "$deadline_end_ms" "$workload" "$provider_id" \
+            "$provider_countries" "$required_country")"
         rc=$?
         ((rc == 0)) || return "$rc"
         candidate_results+=("$result")
@@ -7582,7 +7631,9 @@ api_planner_result() {
         --arg catalog_version "$(jq -r '.catalog_version' "$registry")" \
         --argjson policy_version "$(jq '.orchestration.policy_version' "$registry")" \
         --arg evaluated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-        --arg workload "$(jq -r '.payload.workload' <<<"$request")" '
+        --arg workload "$workload" \
+        --arg provider "$provider_id" \
+        --arg required_country "$required_country" '
         . as $candidates
         |
         {
@@ -7592,6 +7643,10 @@ api_planner_result() {
             evaluated_at: $evaluated_at,
             dry_run: true,
             workload: $workload,
+            provider: (if $provider == "" then null else $provider end),
+            required_country: (
+                if $required_country == "" then null else $required_country end
+            ),
             ordered_profile_ids: [
                 $candidates[] | select(.eligible) | .profile_id
             ],
@@ -8738,8 +8793,12 @@ api_dispatch() {
                 and ((.deadline_ms | floor) == .deadline_ms)
                 and .deadline_ms >= 100
                 and .deadline_ms <= 30000
-                and ((.payload | keys) - ["candidates", "workload"] | length) == 0
-                and (.payload | length) == 2
+                and ((.payload | keys) - [
+                    "candidates", "provider", "required_country", "workload"
+                ] | length) == 0
+                and (.payload | has("workload") and has("candidates"))
+                and (.payload | length) >= 2
+                and (.payload | length) <= 4
                 and (.payload.workload | type == "string")
                 and (
                     .payload.workload == "general"
@@ -8747,6 +8806,22 @@ api_dispatch() {
                     or .payload.workload == "api-calls"
                     or .payload.workload == "video"
                     or .payload.workload == "split-routing"
+                )
+                and (
+                    (.payload | has("provider") | not)
+                    or (
+                        (.payload.provider | type == "string")
+                        and (.payload.provider | test(
+                            "^[A-Za-z0-9][A-Za-z0-9._:-]{1,63}$"
+                        ))
+                    )
+                )
+                and (
+                    (.payload | has("required_country") | not)
+                    or (
+                        (.payload.required_country | type == "string")
+                        and (.payload.required_country | test("^[A-Z]{2}$"))
+                    )
                 )
                 and (.payload.candidates | type == "array")
                 and (.payload.candidates | length) >= 1
@@ -8808,6 +8883,13 @@ api_dispatch() {
                     == (.payload.candidates | length)
                 )
             ' <<<"$request" >/dev/null 2>&1; then
+                api_error_response "$request_id" invalid-request \
+                    api.planner.payload-invalid false false
+                return
+            fi
+            provider_id="$(jq -r '.payload.provider // ""' <<<"$request")"
+            if [[ -n "$provider_id" ]] &&
+               ! provider_registry_has "$provider_id"; then
                 api_error_response "$request_id" invalid-request \
                     api.planner.payload-invalid false false
                 return

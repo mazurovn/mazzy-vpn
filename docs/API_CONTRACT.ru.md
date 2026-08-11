@@ -146,12 +146,19 @@ endpoint, credential, profile и backend config отсутствуют. Исто
 
 `planner.evaluate` — read-only оценка с обязательным ограниченным deadline.
 Payload содержит workload и 1–128 уникальных opaque profile IDs с полным
-ограниченным evidence object. Пять hard gates вычисляет server из текущего
+ограниченным evidence object. Необязательные `provider` и `required_country`
+добавляют country policy без доверия к стране candidate от caller. Server берёт
+страну каждого профиля из защищённого profile catalog, а доступность provider —
+из versioned provider registry. Пять базовых hard gates вычисляет server из текущего
 локального состояния, а не caller: backend готов, профиль валиден, файл профиля
 доступен только backend, защищённый rollback storage готов и Linux support имеет
 статус `implemented`. Storage gate подтверждает только готовность места для
 journal/snapshot; возможность rollback конкретного кандидата остаётся частью
-будущего execution. Score и rank получает только кандидат, прошедший все gates.
+будущего execution. Требование provider добавляет gate
+`provider-country-supported`, а требование страны — `required-country-match`.
+Неподдерживаемые exits и профили без известной страны остаются в диагностическом
+списке с `eligible=false`, `score=null`, `rank=null` и никогда не попадают в
+`ordered_profile_ids`. Score и rank получает только кандидат, прошедший все gates.
 
 Policy v1 выделяет 30 баллов recent outcome, 25 censorship fit, 20
 reachability, 15 latency/loss и 10 workload fit. Наблюдаемое health evidence
@@ -169,6 +176,8 @@ failover. Candidate validation получает тот же абсолютный
 ```bash
 jq -n --arg profile_id "$PROFILE_ID" '{
   workload: "llm-streaming",
+  provider: "antigravity",
+  required_country: "AT",
   candidates: [{
     profile_id: $profile_id,
     evidence: {

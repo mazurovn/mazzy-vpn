@@ -144,12 +144,20 @@ backend configuration. Its source of truth is
 
 `planner.evaluate` is a read-only, deadline-bounded evaluation. The payload
 contains a workload and 1–128 unique opaque profile IDs, each with a complete
-bounded evidence object. The server, not the caller, computes these five hard
+bounded evidence object. Optional `provider` and `required_country` fields add
+country policy without accepting a caller-supplied candidate country. The
+server resolves each profile country from its protected profile catalog and
+provider availability from the versioned provider registry. The server, not
+the caller, computes these five baseline hard
 gates from current local state: backend ready, profile valid, backend-only
 profile storage, protected rollback storage ready and Linux support implemented.
 The storage gate proves only that a secure journal/snapshot location can be
-used; candidate-specific rollback remains an execution concern. Only candidates
-that pass every gate receive a score and rank.
+used; candidate-specific rollback remains an execution concern. A provider
+requirement adds the `provider-country-supported` gate; a required country adds
+the `required-country-match` gate. Unsupported or unknown-country exits remain
+in the diagnostic candidate list with `eligible=false`, `score=null` and
+`rank=null`, and never appear in `ordered_profile_ids`. Only candidates that
+pass every gate receive a score and rank.
 
 The policy-v1 score is 30 points for recent outcome, 25 for censorship fit, 20
 for reachability, 15 for latency/loss and 10 for workload fit. Observed health
@@ -168,6 +176,8 @@ payload up to 64 KiB on stdin and bounds the expanded explanation response to
 ```bash
 jq -n --arg profile_id "$PROFILE_ID" '{
   workload: "llm-streaming",
+  provider: "antigravity",
+  required_country: "AT",
   candidates: [{
     profile_id: $profile_id,
     evidence: {
