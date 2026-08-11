@@ -8,7 +8,12 @@ DESKTOP="$ROOT/desktop"
 TARGET_DIR="${CARGO_TARGET_DIR:-$DESKTOP/src-tauri/target}"
 OUT_DIR="${1:-$TARGET_DIR/release/bundle/appimage}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/mazzy-appimage.XXXXXX")"
-trap 'rm -rf -- "$WORK"' EXIT
+LOCK="${TMPDIR:-/tmp}/mazzy-vpn-appimage-build.lock"
+if ! mkdir "$LOCK" 2>/dev/null; then
+  die() { echo "manual-appimage: $*" >&2; exit 1; }
+  die "another AppImage build is already running ($LOCK)"
+fi
+trap 'rmdir -- "$LOCK" 2>/dev/null || true; rm -rf -- "$WORK"' EXIT
 
 die() { echo "manual-appimage: $*" >&2; exit 1; }
 command -v cargo >/dev/null || die "cargo is required"
@@ -19,9 +24,14 @@ VERSION="$(sed -n 's/.*"version": "\([0-9.]*\)".*/\1/p' "$DESKTOP/src-tauri/taur
 [[ -n "$VERSION" ]] || die "cannot determine Desktop version"
 mkdir -p "$OUT_DIR"
 
-# Build only DEB: linuxdeploy is deliberately not invoked.
-(cd "$DESKTOP" && cargo tauri build --bundles deb --ci)
-DEB="$(find "$TARGET_DIR/release/bundle/deb" -maxdepth 1 -type f -name '*.deb' -print -quit)"
+# Build only DEB when no existing artifact was supplied: linuxdeploy is
+# deliberately not invoked.  Reusing a verified DEB also makes AppImage
+# repackaging independent from Cargo locks and parallel release jobs.
+DEB="${MAZZY_DEB_PATH:-}"
+if [[ -z "$DEB" ]]; then
+  (cd "$DESKTOP" && npm exec --offline -- tauri build --bundles deb --ci)
+  DEB="$(find "$TARGET_DIR/release/bundle/deb" -maxdepth 1 -type f -name '*.deb' -print -quit)"
+fi
 [[ -s "$DEB" ]] || die "Tauri DEB build did not produce an artifact"
 
 APPDIR="$WORK/Mazzy VPN Desktop.AppDir"
@@ -66,7 +76,9 @@ fi
 mkdir -p "$OUT_DIR"
 OUTPUT="$OUT_DIR/Mazzy VPN Desktop-${VERSION}-x86_64.AppImage"
 rm -f "$OUTPUT"
-ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$TOOL" "$APPDIR" "$OUTPUT"
+timeout "${MAZZY_APPIMAGETOOL_TIMEOUT_SEC:-180}s" \
+  env ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 "$TOOL" "$APPDIR" "$OUTPUT" \
+  || die "appimagetool timed out or failed (linuxdeploy GTK scan was bypassed)"
 [[ -s "$OUTPUT" ]] || die "appimagetool produced no artifact"
 chmod 755 "$OUTPUT"
 echo "$OUTPUT"
