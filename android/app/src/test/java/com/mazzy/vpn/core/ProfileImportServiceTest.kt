@@ -23,12 +23,28 @@ class ProfileImportServiceTest {
         assertEquals("old-secret", secrets.values["profile:vless-test:uuid"])
     }
 
+    @Test fun recoversDurableJournalBeforeNextImport() {
+        val docs = FakeDocuments().apply {
+            journal = "{\"document\":\"old\",\"secrets\":{\"uuid\":\"old-secret\"}}"
+            current = "partial"
+        }
+        val secrets = FakeSecrets().apply { values["profile:vless-test:uuid"] = "new-secret" }
+        ProfileImportService(docs, secrets).importProfile(document.toByteArray())
+        assertEquals("old", docs.recovered)
+        assertEquals("123e4567-e89b-12d3-a456-426614174000", secrets.values["profile:vless-test:uuid"])
+    }
+
     private class FakeDocuments : ProfileDocumentStore {
         var current: String? = null
+        var recovered: String? = null
+        var journal: String? = null
         var fail = false
         override fun read(profileId: String) = current
         override fun replaceAtomically(profileId: String, document: String) { if (fail) throw IllegalStateException("write failed"); current = document }
-        override fun restore(profileId: String, document: String?) { current = document }
+        override fun restore(profileId: String, document: String?) { current = document; recovered = document }
+        override fun writeImportJournal(profileId: String, value: String) { journal = value }
+        override fun readImportJournal(profileId: String) = journal
+        override fun clearImportJournal(profileId: String) { journal = null }
     }
 
     private class FakeSecrets : SecureSecretStore {

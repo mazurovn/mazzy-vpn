@@ -19,4 +19,15 @@ class SharedPreferencesDocumentStore(context: Context) : ProfileDocumentStore {
         if (document == null) editor.remove(profileId) else editor.putString(profileId, document)
         check(editor.commit()) { "profile-document-restore-failed" }
     }
+
+    override fun writeImportJournal(profileId: String, journal: String) {
+        check(preferences.edit().putString("__journal__:$profileId", journal).commit())
+    }
+
+    override fun readImportJournal(profileId: String): String? =
+        preferences.getString("__journal__:$profileId", null)
+
+    override fun clearImportJournal(profileId: String) {
+        check(preferences.edit().remove("__journal__:$profileId").commit())
+    }
 }
