@@ -8314,6 +8314,8 @@ api_restore_state() {
     if [[ "$previous_desired" == "up" ]]; then
         timeout --kill-after=5s "${rollback_timeout}s" \
             systemctl start "$SERVICE_NAME" || return 1
+        timeout --kill-after=5s "${rollback_timeout}s" \
+            systemctl is-active --quiet "$SERVICE_NAME" || return 1
     else
         timeout --kill-after=5s "${rollback_timeout}s" \
             systemctl stop "$SERVICE_NAME" || return 1

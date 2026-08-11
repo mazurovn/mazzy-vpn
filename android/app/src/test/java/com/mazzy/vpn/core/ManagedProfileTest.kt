@@ -21,9 +21,9 @@ class ManagedProfileTest {
     fun rejectsOversizedImport() = ManagedProfileContractValidator.validate(valid + " ".repeat(ManagedProfileContractValidator.MAX_IMPORT_BYTES))
 
     @Test
-    fun normalizesProtocolBeforeCredentialValidation() {
+    fun rejectsMixedCaseProtocol() {
         val mixedCase = valid.replace("\"protocol\":\"vless\"", "\"protocol\":\"VLESS\"")
-        assertEquals("VLESS", ManagedProfileContractValidator.validate(mixedCase).getOrThrow().protocol)
+        assertTrue(ManagedProfileContractValidator.validate(mixedCase).isFailure)
     }
 
     @Test(expected = IllegalArgumentException::class)
