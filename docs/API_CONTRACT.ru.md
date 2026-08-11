@@ -221,7 +221,8 @@ configuration. По умолчанию `include_speed=false`; 5-МБ transfer н
 запускается неявно.
 
 `tests.verify-service-egress` — отдельный read-only query. Его strict payload
-содержит ровно `service` (`notebooklm`, `openai` или `all`) и целый
+содержит ровно `service` (`notebooklm`, `openai`, `google`, `antigravity` или
+`all`) и целый
 `timeout_seconds` от 3 до 15. Engine отправляет credential-free HEAD только на
 встроенный HTTPS allowlist, привязывает запрос к выбранному VPN interface,
 отключает redirects и proxy environment и ограничивает response headers.
@@ -230,10 +231,19 @@ reachability, egress eligibility, reason code и необязательный HT
 NotebookLM доверяет только точным redirects unsupported-location и home.
 OpenAI считает 401 или 405 с точным `Allow: POST` достижением auth boundary;
 403 означает edge denial, а 429, 5xx и неизвестные ответы остаются
+indeterminate. Google (`generativelanguage.googleapis.com`) и Antigravity
+(`daily-cloudcode-pa.googleapis.com`) считают 401, 403 или 404 достигнутым
+boundary (eligible), 429 — rate-limited, 5xx — unavailable, остальные ответы —
 indeterminate. Network error даёт unreachable/indeterminate. URL, headers,
 body, address, account и credentials не возвращаются и не сохраняются. Query
 не используется health recovery или planner и не доказывает authentication,
 subscription, organization или content access.
+
+Provider identity, отображаемое имя, HTTPS probe endpoints, поддерживаемые
+страны ISO 3166-1 alpha-2, reason-code prefix и probe strategy берутся из
+встроенного provider registry версии схемы 1. Доступность Google основана на
+официальном списке регионов Gemini API, Antigravity — на его официальном geo
+FAQ. CLI probe framework выбирает провайдеров только через этот registry.
 
 Установленные CLI и TUI используют socket без `sudo` для status, списка
 профилей, batch endpoint probe, egress verification, connect, quick, reconnect
