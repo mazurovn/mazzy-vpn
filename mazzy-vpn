@@ -8300,7 +8300,7 @@ api_find_profile() {
 }
 
 api_restore_state() {
-    local snapshot="$1" existed="$2" recovery_mode="${3:-runtime}"
+    local snapshot="$1" existed="$2" recovery_mode="${3:-runtime}" network_snapshot="${4:-${snapshot}.network}"
     local previous_desired="" tmp rollback_timeout
     if [[ "$existed" == true ]]; then
         mkdir -p -- "$STATE_DIR" || return 1
@@ -8347,7 +8347,42 @@ api_restore_state() {
     # A rollback is not complete merely because systemctl accepted the job.
     # Require the bounded observed-state refresh before reporting completed;
     # otherwise the caller must remain in recovery-required mode.
-    api_refresh_dashboard_bounded
+    api_refresh_dashboard_bounded || return 1
+    # A state-file restore alone is not a rollback proof.  When a pre-action
+    # network snapshot exists, compare the observable planes byte-for-byte and
+    # fail closed on drift (route/DNS/firewall).  Older journals without this
+    # sidecar remain compatible but cannot claim the stronger guarantee.
+    if [[ -r "$network_snapshot" ]]; then
+        api_compare_network_snapshot "$network_snapshot" || return 1
+    fi
+}
+
+api_capture_network_snapshot() {
+    local output="$1" route='' dns='' firewall=''
+    if command -v ip >/dev/null 2>&1; then
+        route="$(timeout 2 ip -j route show table main 2>/dev/null || true)"
+        [[ -n "$route" ]] || route='[]'
+        jq -e 'type == "array"' <<<"$route" >/dev/null || return 1
+    else route='__unavailable__'; fi
+    if command -v resolvectl >/dev/null 2>&1; then
+        dns="$(timeout 2 resolvectl status 2>/dev/null || true)"
+    else dns='__unavailable__'; fi
+    if command -v nft >/dev/null 2>&1; then
+        firewall="$(timeout 2 nft -j list ruleset 2>/dev/null || true)"
+        [[ -n "$firewall" ]] || firewall='{}'
+        jq -e 'type == "object"' <<<"$firewall" >/dev/null || return 1
+    else firewall='__unavailable__'; fi
+    jq -cn --arg route "$route" --arg dns "$dns" --arg firewall "$firewall" \
+        '{route:$route,dns:$dns,firewall:$firewall}' >"$output"
+}
+
+api_compare_network_snapshot() {
+    local expected="$1" actual="${expected}.actual"
+    api_capture_network_snapshot "$actual" || return 1
+    cmp -s -- "$expected" "$actual"
+    local rc=$?
+    rm -f -- "$actual"
+    return "$rc"
 }
 
 api_observe_network_planes() {
@@ -8552,7 +8587,7 @@ api_run_lifecycle_action() {
     local request="$1" request_id="$2" operation="$3" action_id="$4"
     local deadline_ms="$5" deadline_started_ms="$6" deadline_end_ms remaining_ms
     local fingerprint record_file stored_fingerprint stored_state
-    local outcome profile_id protocol profile snapshot snapshot_existed=false
+    local outcome profile_id protocol profile snapshot snapshot_existed=false network_snapshot
     local duration output_file rc rollback_state audit_outcome running_record
 
     deadline_end_ms=$((deadline_started_ms + deadline_ms))
@@ -8694,6 +8729,7 @@ api_run_lifecycle_action() {
     fi
 
     snapshot="$API_ACTION_DIR/.snapshot.$action_id"
+    network_snapshot="$snapshot.network"
     if [[ -r "$STATE_FILE" ]]; then
         install -m 600 "$STATE_FILE" "$snapshot" || {
             api_error_response "$request_id" internal-error api.snapshot.failed true true
@@ -8712,6 +8748,16 @@ api_run_lifecycle_action() {
         api_error_response "$request_id" internal-error api.snapshot.failed true true
         return
     }
+    api_capture_network_snapshot "$network_snapshot" || {
+        rm -f -- "$snapshot" "$network_snapshot"
+        api_error_response "$request_id" internal-error api.snapshot.network-failed true true
+        return
+    }
+    api_sync_file_and_parent "$network_snapshot" || {
+        rm -f -- "$snapshot" "$network_snapshot"
+        api_error_response "$request_id" internal-error api.snapshot.network-failed true true
+        return
+    }
 
     running_record="$(
         jq -cn \
@@ -8724,16 +8770,17 @@ api_run_lifecycle_action() {
                 state: "running",
                 operation: $operation,
                 started_at: $started_at,
-                snapshot_existed: $snapshot_existed
+                snapshot_existed: $snapshot_existed,
+                network_snapshot: true
             }'
     )"
     api_write_record "$record_file" "$running_record" || {
-        rm -f -- "$snapshot"
+        rm -f -- "$snapshot" "$network_snapshot"
         api_error_response "$request_id" internal-error api.journal.unavailable true true
         return
     }
     if ! api_audit_event "$action_id" "$operation" approved started; then
-        rm -f -- "$record_file" "$snapshot"
+        rm -f -- "$record_file" "$snapshot" "$network_snapshot"
         api_error_response "$request_id" internal-error \
             api.audit.unavailable true true
         return
@@ -8747,7 +8794,7 @@ api_run_lifecycle_action() {
     if ((remaining_ms <= 0)); then
         if api_complete_unstarted_timeout \
             "$request_id" "$action_id" "$operation" "$record_file" "$fingerprint"; then
-            rm -f -- "$snapshot"
+            rm -f -- "$snapshot" "$network_snapshot"
             api_sync_parent "$snapshot" || true
         fi
         return
