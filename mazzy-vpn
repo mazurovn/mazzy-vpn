@@ -5004,6 +5004,7 @@ provider_registry_json() {
                  elif .country_set == "antigravity" then $antigravity
                  elif .country_set == "openai" then $openai else [] end)})
                 | del(.country_set))
+            | del(.catalog_version)
             ' "$metadata"
         return
     fi
