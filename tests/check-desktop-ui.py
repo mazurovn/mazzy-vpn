@@ -318,8 +318,8 @@ def main() -> None:
         "engine_startup_repair_needed(" not in rust
         or "|| !api_socket_available" not in rust
         or "|| !api_socket_accessible" not in rust
-        or "|| !status_cache_available" not in rust
-        or "|| !profile_cache_available" not in rust
+        or "status_cache_available: _" not in rust
+        or "profile_cache_available: _" not in rust
         or "wait_for_accessible_local_api()" not in rust
         or "embedded_cli_path(app)" not in rust
         or "if !repair.success" not in rust

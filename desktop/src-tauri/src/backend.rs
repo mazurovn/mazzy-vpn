@@ -651,8 +651,8 @@ fn engine_startup_repair_needed(readiness: EngineStartupReadiness) -> bool {
         api_installed,
         api_socket_available,
         api_socket_accessible,
-        status_cache_available,
-        profile_cache_available,
+        status_cache_available: _,
+        profile_cache_available: _,
     } = readiness;
     !engine_installed
         || !dependencies_ready
@@ -661,8 +661,6 @@ fn engine_startup_repair_needed(readiness: EngineStartupReadiness) -> bool {
         || !api_installed
         || !api_socket_available
         || !api_socket_accessible
-        || !status_cache_available
-        || !profile_cache_available
 }
 
 pub(crate) fn clean_output(output: &Output) -> String {
@@ -1810,20 +1808,24 @@ fn send_local_api_for_read_only(request: &Value) -> Result<Value, LocalApiError>
 }
 
 #[cfg(target_os = "linux")]
+fn api_capabilities_request() -> Value {
+    json!({
+        "api_version": "1.0",
+        "request_id": api_identifier("desktop-health"),
+        "operation": "api.capabilities",
+        "deadline_ms": 1_000,
+        "payload": {}
+    })
+}
+
+#[cfg(target_os = "linux")]
 fn wait_for_local_api() -> bool {
     for (attempt, delay_ms) in API_STARTUP_RETRY_DELAYS_MS.iter().enumerate() {
         if attempt > 0 {
             thread::sleep(std::time::Duration::from_millis(*delay_ms));
         }
-        match UnixStream::connect(API_SOCKET) {
-            Ok(_) => return true,
-            Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
-                // The socket exists and is listening, but the current desktop
-                // process has not yet received the mazzy-vpn group. Treat the
-                // API as ready and let the caller fall back to pkexec.
-                return true;
-            }
-            Err(_) => continue,
+        if local_api_accessible() {
+            return true;
         }
     }
     false
@@ -1831,7 +1833,18 @@ fn wait_for_local_api() -> bool {
 
 #[cfg(target_os = "linux")]
 fn local_api_accessible() -> bool {
-    UnixStream::connect(API_SOCKET).is_ok()
+    let request = api_capabilities_request();
+    match send_local_api(&request) {
+        Ok(response) => {
+            response.get("status").and_then(Value::as_str) == Some("ok")
+                && response
+                    .get("result")
+                    .and_then(|result| result.get("operations"))
+                    .and_then(Value::as_array)
+                    .is_some_and(|operations| !operations.is_empty())
+        }
+        Err(_) => false,
+    }
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -2728,7 +2741,7 @@ mod tests {
             engine_installed: false,
             ..ready
         }));
-        assert!(engine_startup_repair_needed(EngineStartupReadiness {
+        assert!(!engine_startup_repair_needed(EngineStartupReadiness {
             status_cache_available: false,
             ..ready
         }));

@@ -1218,7 +1218,8 @@ cmd_protocols_managed_validate() {
                         | index($fingerprint) != null)
                  else true end)
             and (if $protocol == "shadowsocks2022" or $protocol == "mieru" then
-                    .enabled == false and .server_name == ""
+                 .enabled == false and .server_name == ""
+                    and ((.alpn // []) | length == 0)
                     and (has("utls_fingerprint") | not)
                     and (has("reality_public_key") | not)
                     and (has("reality_short_id") | not)
@@ -8317,7 +8318,10 @@ api_restore_state() {
         timeout --kill-after=5s "${rollback_timeout}s" \
             systemctl stop "$SERVICE_NAME" || return 1
     fi
-    api_refresh_dashboard_bounded || true
+    # A rollback is not complete merely because systemctl accepted the job.
+    # Require the bounded observed-state refresh before reporting completed;
+    # otherwise the caller must remain in recovery-required mode.
+    api_refresh_dashboard_bounded
 }
 
 api_store_completed_action() {
