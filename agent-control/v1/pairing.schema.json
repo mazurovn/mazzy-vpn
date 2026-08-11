@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mazurovn/mazzy-vpn/agent-control/v1/pairing.schema.json",
+  "title": "Mazzy LAN-mTLS paired client grant v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "paired", "fingerprint", "actor_id", "source_channel", "scopes", "origins", "created_at", "revoked"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "paired": {"const": true},
+    "fingerprint": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "actor_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{3,128}$"},
+    "source_channel": {"enum": ["desktop-first-party", "web-first-party", "cli-first-party", "telegram-mini-app"]},
+    "scopes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"enum": ["vpn.status", "vpn.select", "vpn.connect", "vpn.disconnect", "vpn.verify", "planner.evaluate", "region.check"]}
+    },
+    "origins": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^https://[A-Za-z0-9.-]+(?::[1-9][0-9]{0,4})?$"}
+    },
+    "created_at": {"type": "string", "format": "date-time"},
+    "revoked": {"type": "boolean"}
+  }
+}

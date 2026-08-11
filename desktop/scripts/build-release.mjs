@@ -58,6 +58,7 @@ const runtimeExecutables = process.platform === "win32"
   ? []
   : [
     join("..", "mazzy-vpn"),
+    join("..", "mazzy-agentd"),
     join("..", "vpnctl"),
     join("..", "install.sh"),
     join("..", "setup_amnezia_vpn.sh"),

@@ -275,6 +275,7 @@ find "$rpm_root" -type f -o -type l |
 for listing in "$TMP/deb-files" "$TMP/rpm-files"; do
     for path in \
         /usr/bin/mazzy-vpn \
+        /usr/bin/mazzy-agentd \
         /usr/bin/mazzyvpn \
         /usr/bin/vpnctl \
         /usr/lib/mazzy-vpn/api/v1/manifest.json \
@@ -282,6 +283,14 @@ for listing in "$TMP/deb-files" "$TMP/rpm-files"; do
         /usr/lib/mazzy-vpn/agent-control/v1/schema.json \
         /usr/lib/mazzy-vpn/agent-control/v1/envelope.schema.json \
         /usr/lib/mazzy-vpn/agent-control/v1/command.schema.json \
+        /usr/lib/mazzy-vpn/agent-control/v1/ack.schema.json \
+        /usr/lib/mazzy-vpn/agent-control/v1/approval.schema.json \
+        /usr/lib/mazzy-vpn/agent-control/v1/approval-request.schema.json \
+        /usr/lib/mazzy-vpn/agent-control/v1/error.schema.json \
+        /usr/lib/mazzy-vpn/agent-control/v1/event.schema.json \
+        /usr/lib/mazzy-vpn/agent-control/v1/pairing.schema.json \
+        /usr/lib/mazzy-vpn/agent-control/v1/result.schema.json \
+        /usr/lib/mazzy-vpn/agent-control/v1/transport-error.schema.json \
         /usr/lib/mazzy-vpn/docs/TARGET_ARCHITECTURE_2026-08-02.ru.md \
         /usr/lib/mazzy-vpn/docs/RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md \
         /usr/lib/mazzy-vpn/docs/R0_MUTATION_SINGLE_FLIGHT.ru.md \
@@ -308,6 +317,8 @@ for listing in "$TMP/deb-files" "$TMP/rpm-files"; do
         /usr/lib/mazzy-vpn/desktop/ui/mazzy-vpn-logo.svg \
         /usr/lib/mazzy-vpn/rust-toolchain.toml \
         /usr/lib/systemd/system/mazzy-vpn-api.socket \
+        /usr/lib/systemd/user/mazzy-agentd.service \
+        /usr/lib/systemd/user/mazzy-agentd.service.d/10-package-exec.conf \
         /usr/lib/systemd/system/mazzy-vpn-api.socket.d/10-package-docs.conf \
         /usr/lib/systemd/system/mazzy-vpn-api-recovery.service \
         /usr/lib/systemd/system/mazzy-vpn-api-recovery.service.d/10-package-exec.conf \
@@ -336,10 +347,14 @@ done
 for extracted_root in "$deb_root" "$rpm_root"; do
     [[ "$(stat -c '%a' "$extracted_root/usr/bin/mazzy-vpn")" == 755 ]] ||
         fail "package engine mode is not exactly 0755"
+    [[ "$(stat -c '%a' "$extracted_root/usr/bin/mazzy-agentd")" == 755 ]] ||
+        fail "package agent daemon mode is not exactly 0755"
     [[ "$(stat -c '%a' "$extracted_root/usr/bin/vpnctl")" == 755 ]] ||
         fail "package compatibility command mode is not exactly 0755"
     cmp -s "$ROOT/mazzy-vpn" "$extracted_root/usr/bin/mazzy-vpn" ||
         fail "package engine differs from source"
+    cmp -s "$ROOT/mazzy-agentd" "$extracted_root/usr/bin/mazzy-agentd" ||
+        fail "package agent daemon differs from source"
     cmp -s "$ROOT/api/v1/manifest.json" \
         "$extracted_root/usr/lib/mazzy-vpn/api/v1/manifest.json" ||
         fail "package API manifest differs from source"
@@ -360,6 +375,13 @@ for extracted_root in "$deb_root" "$rpm_root"; do
     cmp -s "$ROOT/agent-control/v1/registry.json" \
         "$extracted_root/usr/lib/mazzy-vpn/agent-control/v1/registry.json" ||
         fail "package agent-control registry differs from source"
+    cmp -s "$ROOT/systemd/user/mazzy-agentd.service" \
+        "$extracted_root/usr/lib/systemd/user/mazzy-agentd.service" ||
+        fail "package agent daemon user unit differs from source"
+    cmp -s \
+        "$ROOT/packaging/linux/systemd/user/mazzy-agentd.service.d/10-package-exec.conf" \
+        "$extracted_root/usr/lib/systemd/user/mazzy-agentd.service.d/10-package-exec.conf" ||
+        fail "package agent daemon executable override differs from source"
     cmp -s "$ROOT/desktop/ui/app.css" \
         "$extracted_root/usr/lib/mazzy-vpn/desktop/ui/app.css" ||
         fail "package Desktop CSS differs from source"
@@ -435,12 +457,21 @@ done
 
 for relative in \
     mazzy-vpn \
+    mazzy-agentd \
     install.sh \
     api/v1/manifest.json \
     agent-control/v1/registry.json \
     agent-control/v1/schema.json \
     agent-control/v1/envelope.schema.json \
     agent-control/v1/command.schema.json \
+    agent-control/v1/ack.schema.json \
+    agent-control/v1/approval.schema.json \
+    agent-control/v1/approval-request.schema.json \
+    agent-control/v1/error.schema.json \
+    agent-control/v1/event.schema.json \
+    agent-control/v1/pairing.schema.json \
+    agent-control/v1/result.schema.json \
+    agent-control/v1/transport-error.schema.json \
     protocols/v1/registry.json \
     protocols/v1/schema.json \
     protocols/v1/managed-profile.schema.json \
@@ -479,10 +510,13 @@ for relative in \
     tests/check-linux-packages.sh \
     tests/check-protocol-registry.py \
     tests/check-agent-control-registry.py \
+    tests/check-agentd.py \
     tests/check-managed-protocol-adapter.py \
     tests/check-runtime-adapter-registry.py \
     tests/run.sh \
     systemd/mazzy-vpn-api-recovery.service \
+    systemd/user/mazzy-agentd.service \
+    packaging/linux/systemd/user/mazzy-agentd.service.d/10-package-exec.conf \
     systemd/vpnctl.service \
     wiki/Desktop-Dashboard-and-Tray.md; do
     [[ -f "$appimage_engine/$relative" ]] ||
@@ -490,8 +524,12 @@ for relative in \
 done
 [[ "$(stat -c '%a' "$appimage_engine/mazzy-vpn")" == 755 ]] ||
     fail "AppImage embedded engine mode is not exactly 0755"
+[[ "$(stat -c '%a' "$appimage_engine/mazzy-agentd")" == 755 ]] ||
+    fail "AppImage embedded mazzy-agentd mode is not exactly 0755"
 cmp -s "$ROOT/mazzy-vpn" "$appimage_engine/mazzy-vpn" ||
     fail "AppImage embedded engine differs from source"
+cmp -s "$ROOT/mazzy-agentd" "$appimage_engine/mazzy-agentd" ||
+    fail "AppImage embedded mazzy-agentd differs from source"
 cmp -s "$ROOT/desktop/ui/app.css" "$appimage_engine/desktop/ui/app.css" ||
     fail "AppImage embedded Desktop CSS differs from source"
 cmp -s "$ROOT/desktop/ui/app.js" "$appimage_engine/desktop/ui/app.js" ||

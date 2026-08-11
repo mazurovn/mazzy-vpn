@@ -144,10 +144,11 @@ Agent-control catalog является отдельным слоем обрат�
 CLI, Desktop и Telegram. В Desktop 0.4 есть обнаружение Codex/Claude
 и catalog diagnostics без исполняемых действий. Provider start/pair/stop
 отсутствует в renderer и Tauri IPC до реализации native approval, trusted
-executable resolution и process-tree containment. Это не планируемый first-party
-`mazzy-agentd`: семь каталогизированных network adapters, включая iroh,
-Web/Telegram и сам `mazzy-agentd` пока не
-release-ready; diagnostics не скрывает этот blocker.
+executable resolution и process-tree containment. Отдельно упакованный Linux
+`mazzy-agentd` реализует paired local LAN-WSS egress capability slice. Это не
+делает Desktop launcher’ом агентов: остальные шесть adapters, relay/E2EE,
+Web/Telegram clients и agent-provider lifecycle остаются planned. Diagnostics
+разделяет наличие binary и готовый configured/running instance.
 
 После установки status, list/dashboard и lifecycle-команды CLI/TUI используют
 защищённый `/run/mazzy-vpn/api-v1.sock` без `sudo`. Установщик добавляет

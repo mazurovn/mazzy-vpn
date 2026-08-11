@@ -36,6 +36,12 @@
         "l2tp"
       ]
     },
+    "ProviderId": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]+$"
+    },
     "Authorization": {
       "enum": [
         "none",
@@ -46,10 +52,12 @@
     },
     "QueryOperation": {
       "enum": [
+        "api.capabilities",
         "status.get",
         "profiles.list",
         "protocols.list",
         "planner.evaluate",
+        "region.check",
         "profiles.inspect-import",
         "tests.validate",
         "tests.probe",
@@ -183,7 +191,7 @@
           ]
         },
         "provider": {
-          "$ref": "#/$defs/Identifier"
+          "$ref": "#/$defs/ProviderId"
         },
         "required_country": {
           "type": "string",
@@ -198,6 +206,22 @@
           "items": {
             "$ref": "#/$defs/PlannerCandidateInput"
           }
+        }
+      }
+    },
+    "RegionCheckRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider"],
+      "properties": {
+        "provider": {
+          "$ref": "#/$defs/ProviderId"
+        },
+        "target_country": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 2,
+          "pattern": "^[A-Z]{2}$"
         }
       }
     },
@@ -299,6 +323,9 @@
         },
         {
           "$ref": "#/$defs/PlannerRequest"
+        },
+        {
+          "$ref": "#/$defs/RegionCheckRequest"
         },
         {
           "$ref": "#/$defs/TestRequest"
@@ -417,6 +444,42 @@
               "operation": {"const": "tests.verify-service-egress"}
             }
           }
+        },
+        {
+          "if": {
+            "required": ["operation"],
+            "properties": {
+              "operation": {"const": "region.check"}
+            }
+          },
+          "then": {
+            "required": ["deadline_ms"],
+            "properties": {
+              "deadline_ms": {
+                "type": "integer",
+                "minimum": 100,
+                "maximum": 20000
+              },
+              "payload": {
+                "$ref": "#/$defs/RegionCheckRequest"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["payload"],
+            "properties": {
+              "payload": {
+                "$ref": "#/$defs/RegionCheckRequest"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "operation": {"const": "region.check"}
+            }
+          }
         }
       ]
     },
@@ -533,6 +596,30 @@
         }
       }
     },
+    "ApiCapabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "api_version", "engine_version", "operations"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "api_version": {"$ref": "#/$defs/ApiVersion"},
+        "engine_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$"
+          }
+        }
+      }
+    },
     "PublicStatus": {
       "type": "object",
       "additionalProperties": false,
@@ -609,6 +696,12 @@
         },
         "protocol": {
           "$ref": "#/$defs/Protocol"
+        },
+        "country_code": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 2,
+          "pattern": "^[A-Z]{2}$"
         },
         "selected": {
           "type": "boolean"
@@ -741,7 +834,9 @@
             "profile-valid",
             "secrets-readable-only-by-backend",
             "rollback-storage-ready",
-            "platform-supported"
+            "platform-supported",
+            "provider-country-supported",
+            "required-country-match"
           ]
         },
         "passed": {
@@ -880,7 +975,7 @@
         },
         "provider": {
           "oneOf": [
-            {"$ref": "#/$defs/Identifier"},
+            {"$ref": "#/$defs/ProviderId"},
             {"type": "null"}
           ]
         },
@@ -906,6 +1001,81 @@
           }
         }
       }
+    },
+    "RegionCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "provider",
+        "egress_country",
+        "system_timezone",
+        "timezone_country",
+        "supported_by_provider",
+        "country_consistent",
+        "account_region_hint",
+        "verdict",
+        "mismatches"
+      ],
+      "properties": {
+        "schema_version": {"const": 1},
+        "provider": {"$ref": "#/$defs/ProviderId"},
+        "egress_country": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Z]{2}$"
+        },
+        "system_timezone": {
+          "type": ["string", "null"],
+          "maxLength": 96,
+          "pattern": "^(?:UTC|GMT|[A-Za-z0-9._+-]+(?:/[A-Za-z0-9._+-]+)+)$"
+        },
+        "timezone_country": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Z]{2}$"
+        },
+        "supported_by_provider": {"type": "boolean"},
+        "country_consistent": {"type": "boolean"},
+        "account_region_hint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "verdict": {"enum": ["ready", "not-ready"]},
+        "mismatches": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "region.egress.ip-unavailable",
+              "region.egress.providers-disagree",
+              "region.egress.country-unavailable",
+              "region.timezone.unavailable",
+              "region.timezone.country-unmapped",
+              "region.provider.country-unsupported",
+              "region.country.egress-timezone-mismatch",
+              "region.target.country-unsupported",
+              "region.target.egress-mismatch",
+              "region.target.timezone-mismatch"
+            ]
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"verdict": {"const": "ready"}},
+            "required": ["verdict"]
+          },
+          "then": {
+            "properties": {
+              "supported_by_provider": {"const": true},
+              "country_consistent": {"const": true},
+              "mismatches": {"maxItems": 0}
+            }
+          }
+        }
+      ]
     },
     "TestResult": {
       "type": "object",
@@ -1740,6 +1910,9 @@
     "ResponseResult": {
       "oneOf": [
         {
+          "$ref": "#/$defs/ApiCapabilities"
+        },
+        {
           "$ref": "#/$defs/PublicStatus"
         },
         {
@@ -1750,6 +1923,9 @@
         },
         {
           "$ref": "#/$defs/PlannerEvaluation"
+        },
+        {
+          "$ref": "#/$defs/RegionCheck"
         },
         {
           "$ref": "#/$defs/TestResult"

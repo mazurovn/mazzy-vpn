@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mazurovn/mazzy-vpn/agent-control/v1/ack.schema.json",
+  "title": "Mazzy agent egress durable receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "protocol", "message_type", "command_id", "session_id", "phase", "duplicate", "recorded_at"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "protocol": {"const": "mazzy-agent-egress/1"},
+    "message_type": {"const": "receipt"},
+    "command_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{16,128}$"},
+    "session_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{16,128}$"},
+    "phase": {"const": "DURABLY_RECEIVED"},
+    "duplicate": {"type": "boolean"},
+    "recorded_at": {"type": "string", "format": "date-time"}
+  }
+}

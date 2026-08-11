@@ -800,6 +800,19 @@ cmd_api_info() {
         die "Не удалось прочитать API contract manifest"
 }
 
+api_capabilities_result() {
+    local manifest
+    manifest="$(api_manifest_path)" || return 1
+    jq -c --arg engine_version "$VERSION" '
+        {
+            schema_version: 1,
+            api_version: .api_version,
+            engine_version: $engine_version,
+            operations: ([.operations[].name] | unique | sort)
+        }
+    ' "$manifest"
+}
+
 protocol_registry_path() {
     local candidate
     if [[ -n "$PROTOCOL_REGISTRY_DIR" ]]; then
@@ -855,6 +868,17 @@ agent_control_registry_path() {
         fi
     done
     return 1
+}
+
+agent_runtime_path() {
+    local runtime="$1" candidate
+    if [[ "$runtime" == mazzy-agentd ]]; then
+        candidate="$SCRIPT_DIR/mazzy-agentd"
+        [[ -f "$candidate" && -x "$candidate" ]] || return 1
+        printf '%s\n' "$candidate"
+        return 0
+    fi
+    command -v "$runtime" 2>/dev/null
 }
 
 cmd_protocols_list() {
@@ -1546,27 +1570,49 @@ cmd_agent_transports_list() {
 }
 
 cmd_agent_transports_diagnose() {
-    local registry runtime available_json='{}'
+    local registry runtime runtime_path output available_json='{}' ready_json='{}' details_json='{}'
     registry="$(agent_control_registry_path)" ||
         die "Agent-control registry не найден; переустановите $PRODUCT_NAME"
     while IFS= read -r runtime; do
-        if command -v "$runtime" >/dev/null 2>&1; then
+        if runtime_path="$(agent_runtime_path "$runtime" 2>/dev/null)"; then
             available_json="$(jq -c --arg runtime "$runtime" \
                 '. + {($runtime): true}' <<<"$available_json")" || return 1
+            if [[ "$runtime" == mazzy-agentd ]] &&
+               output="$("$runtime_path" diagnose --json 2>/dev/null)" &&
+               jq -e '.schema_version == 1 and (.runtime_ready | type == "boolean")' \
+                   <<<"$output" >/dev/null; then
+                ready_json="$(jq -c --arg runtime "$runtime" \
+                    --argjson ready "$(jq '.runtime_ready' <<<"$output")" \
+                    '. + {($runtime): $ready}' <<<"$ready_json")" || return 1
+                details_json="$(jq -c --arg runtime "$runtime" \
+                    --argjson details "$output" \
+                    '. + {($runtime): $details}' <<<"$details_json")" || return 1
+            else
+                ready_json="$(jq -c --arg runtime "$runtime" \
+                    '. + {($runtime): false}' <<<"$ready_json")" || return 1
+            fi
         else
             available_json="$(jq -c --arg runtime "$runtime" \
                 '. + {($runtime): false}' <<<"$available_json")" || return 1
+            ready_json="$(jq -c --arg runtime "$runtime" \
+                '. + {($runtime): false}' <<<"$ready_json")" || return 1
         fi
     done < <(jq -r '[.transports[].runtime_probes[]] | unique[]' "$registry")
     jq -c --arg generated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-        --argjson available "$available_json" '
+        --argjson available "$available_json" \
+        --argjson ready "$ready_json" --argjson details "$details_json" '
         {
             schema_version: 1,
             generated_at: $generated_at,
             layer,
             runtimes: ([
                 .transports[].runtime_probes[]
-            ] | unique | map({id: ., available: ($available[.] // false)})),
+            ] | unique | map({
+                id: .,
+                available: ($available[.] // false),
+                ready: ($ready[.] // false),
+                diagnostics: ($details[.] // null)
+            })),
             transports: [
                 .transports[] |
                 {
@@ -1583,7 +1629,7 @@ cmd_agent_transports_diagnose() {
                     runtime_ready: (
                         .support.linux == "implemented"
                         and (.runtime_probes | length) > 0
-                        and all(.runtime_probes[]; $available[.] // false)
+                        and all(.runtime_probes[]; $ready[.] // false)
                     )
                 }
             ],
@@ -4494,6 +4540,22 @@ interface_for_protocol() {
     esac
 }
 
+observed_managed_egress_interface() {
+    local interface
+    interface="$(
+        LC_ALL=C ip -o -4 route get 1.1.1.1 2>/dev/null |
+            awk '{
+                for (i = 1; i <= NF; i++) {
+                    if ($i == "dev") { print $(i + 1); exit }
+                }
+            }'
+    )"
+    [[ "$interface" == vpnaw0 || "$interface" == vpnwg0 ||
+       "$interface" == vpnovpn0 || "$interface" =~ ^ppp[0-9]+$ ]] || return 1
+    ip link show "$interface" >/dev/null 2>&1 || return 1
+    printf '%s\n' "$interface"
+}
+
 latest_handshake() {
     local protocol="$1" interface="$2" tool
     [[ "$protocol" == "amneziawg" ]] && tool=awg || tool=wg
@@ -5466,6 +5528,8 @@ verify_service_egress_json() {
             interface="$(interface_for_protocol "$protocol")"
         fi
     fi
+    [[ -n "$interface" ]] ||
+        interface="$(observed_managed_egress_interface 2>/dev/null || true)"
     for service_id in "${services[@]}"; do
         result="$(service_probe_one_json \
             "$service_id" "$interface" "$timeout_seconds")" || return 1
@@ -5501,7 +5565,6 @@ cmd_verify_service() {
     local requested=all scope_seen=false timeout_seconds=5 json_output=false
     local payload response result
     local deadline_ms
-    local -a original_args=("$@")
     while (($#)); do
         case "$1" in
             all)
@@ -5560,7 +5623,6 @@ cmd_verify_service() {
         fi
         result="$(jq -c '.result' <<<"$response")"
     else
-        require_profile_access verify-service "${original_args[@]}"
         result="$(verify_service_egress_json "$requested" "$timeout_seconds")" ||
             die "Не удалось завершить service egress verification"
     fi
@@ -7150,14 +7212,19 @@ api_profiles_result() {
     jq -c '{
         profiles: [
             (.profiles // [])[] |
+            . as $profile |
             {
-                profile_id: .profile_id,
-                display_name: .name,
-                protocol: .protocol,
-                selected: (.selected // false),
+                profile_id: $profile.profile_id,
+                display_name: $profile.name,
+                protocol: $profile.protocol,
+                selected: ($profile.selected // false),
                 validation: "unknown",
                 source_kind: "system"
             }
+            + if (($profile.country_code // "") | test("^[A-Z]{2}$"))
+              then {country_code: $profile.country_code}
+              else {}
+              end
         ]
     }' "$PROFILES_FILE"
 }
@@ -7763,6 +7830,72 @@ api_verify_result() {
         ' <<<"$result" >/dev/null 2>&1 || return 1
         printf '%s\n' "$result"
     } 10>"$API_ACTION_DIR/.verify.lock"
+}
+
+api_region_result() {
+    local request="$1" deadline_ms="$2" provider target_country duration
+    local result result_file rc=0
+    mkdir -p -- "$API_ACTION_DIR" || return 1
+    chmod 700 -- "$API_ACTION_DIR" || return 1
+    {
+        flock -n 10 || return 75
+        provider="$(jq -r '.payload.provider' <<<"$request")"
+        target_country="$(jq -r '.payload.target_country // ""' <<<"$request")"
+        duration="$(api_timeout_seconds_from_ms "$deadline_ms")" || return 1
+        result_file="$(mktemp "${API_ACTION_DIR}/.region-result.XXXXXX")" ||
+            return 1
+        VPNCTL_API_CLIENT_DISABLE=1 \
+            timeout --kill-after=2s "${duration}s" \
+                "$SELF" _region-check-json "$provider" "$target_country" \
+                >"$result_file" 10>&- || rc=$?
+        case "$rc" in
+            0) ;;
+            124|137) rm -f -- "$result_file"; return 124 ;;
+            *) rm -f -- "$result_file"; return 1 ;;
+        esac
+        result="$(<"$result_file")"
+        rm -f -- "$result_file"
+        jq -e --arg provider "$provider" '
+            .schema_version == 1
+            and .provider == $provider
+            and ((keys | sort) == [
+                "account_region_hint", "country_consistent", "egress_country",
+                "mismatches", "provider", "schema_version",
+                "supported_by_provider", "system_timezone",
+                "timezone_country", "verdict"
+            ])
+            and (
+                .egress_country == null
+                or (.egress_country | test("^[A-Z]{2}$"))
+            )
+            and (
+                .system_timezone == null
+                or (.system_timezone | test(
+                    "^(UTC|GMT|[A-Za-z0-9._+-]+(/[A-Za-z0-9._+-]+)+)$"
+                ))
+            )
+            and (
+                .timezone_country == null
+                or (.timezone_country | test("^[A-Z]{2}$"))
+            )
+            and (.supported_by_provider | type == "boolean")
+            and (.country_consistent | type == "boolean")
+            and (.account_region_hint | type == "string" and length <= 255)
+            and (.verdict == "ready" or .verdict == "not-ready")
+            and (.mismatches | type == "array" and length <= 8)
+            and ((.mismatches | unique | length) == (.mismatches | length))
+            and all(.mismatches[]; test("^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"))
+            and (
+                if .verdict == "ready" then
+                    .country_consistent == true
+                    and .supported_by_provider == true
+                    and .mismatches == []
+                else true
+                end
+            )
+        ' <<<"$result" >/dev/null 2>&1 || return 1
+        printf '%s\n' "$result"
+    } 10>"$API_ACTION_DIR/.region.lock"
 }
 
 api_service_verify_result() {
@@ -8735,7 +8868,7 @@ api_dispatch() {
     fi
     operation="$(jq -r '.operation // ""' <<<"$request")"
     case "$operation" in
-        status.get|profiles.list|protocols.list)
+        api.capabilities|status.get|profiles.list|protocols.list)
             if jq -e 'has("action_id") or has("authorization")' \
                 <<<"$request" >/dev/null 2>&1; then
                 api_error_response "$request_id" invalid-request \
@@ -8759,7 +8892,13 @@ api_dispatch() {
                 return
             fi
             deadline_ms="$(jq -r '.deadline_ms // ""' <<<"$request")"
-            if [[ "$operation" == status.get ]]; then
+            if [[ "$operation" == api.capabilities ]]; then
+                result="$(api_capabilities_result)" || {
+                    api_error_response "$request_id" backend-unavailable \
+                        api.capabilities.unavailable true false
+                    return
+                }
+            elif [[ "$operation" == status.get ]]; then
                 result="$(api_status_result "$deadline_ms")" || {
                     api_error_response "$request_id" backend-unavailable \
                         api.status.unavailable true false
@@ -8777,6 +8916,64 @@ api_dispatch() {
                         api.protocols.unavailable true false
                     return
                 }
+            fi
+            api_ok_response "$request_id" "$result"
+            ;;
+        region.check)
+            if jq -e 'has("action_id") or has("authorization")' \
+                <<<"$request" >/dev/null 2>&1; then
+                api_error_response "$request_id" invalid-request \
+                    api.query.mutation-fields false false
+                return
+            fi
+            if ! jq -e '
+                has("deadline_ms")
+                and (.deadline_ms | type == "number")
+                and ((.deadline_ms | floor) == .deadline_ms)
+                and .deadline_ms >= 100
+                and .deadline_ms <= 20000
+                and (.payload | type == "object")
+                and ((.payload | keys) - ["provider", "target_country"] | length) == 0
+                and (.payload | has("provider"))
+                and (.payload | length) >= 1
+                and (.payload | length) <= 2
+                and (.payload.provider | type == "string")
+                and (.payload.provider | test(
+                    "^[A-Za-z0-9][A-Za-z0-9._:-]{1,63}$"
+                ))
+                and (
+                    (.payload | has("target_country") | not)
+                    or (
+                        (.payload.target_country | type == "string")
+                        and (.payload.target_country | test("^[A-Z]{2}$"))
+                    )
+                )
+            ' <<<"$request" >/dev/null 2>&1; then
+                api_error_response "$request_id" invalid-request \
+                    api.region.payload-invalid false false
+                return
+            fi
+            provider_id="$(jq -r '.payload.provider' <<<"$request")"
+            if ! provider_registry_has "$provider_id"; then
+                api_error_response "$request_id" invalid-request \
+                    api.region.payload-invalid false false
+                return
+            fi
+            deadline_ms="$(jq -r '.deadline_ms' <<<"$request")"
+            result="$(api_region_result "$request" "$deadline_ms")"
+            rc=$?
+            if ((rc == 124)); then
+                api_error_response "$request_id" deadline-exceeded \
+                    api.region.deadline true false
+                return
+            elif ((rc == 75)); then
+                api_error_response "$request_id" busy \
+                    api.region.busy true false
+                return
+            elif ((rc != 0)); then
+                api_error_response "$request_id" backend-unavailable \
+                    api.region.unavailable true false
+                return
             fi
             api_ok_response "$request_id" "$result"
             ;;
@@ -11051,6 +11248,15 @@ main() {
             [[ "$2" == true || "$2" == false ]] ||
                 die "Internal verify speed flag is invalid"
             verify_connection_json "$1" "$2"
+            ;;
+        _region-check-json)
+            [[ $# -eq 2 ]] ||
+                die "Internal region check requires provider and target country"
+            provider_registry_has "$1" ||
+                die "Internal region check provider is invalid"
+            [[ -z "$2" || "$2" =~ ^[A-Z]{2}$ ]] ||
+                die "Internal region check target country is invalid"
+            region_check_json "$1" "$2"
             ;;
         _verify-service-egress-json)
             [[ $# -eq 2 ]] ||

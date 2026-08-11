@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mazurovn/mazzy-vpn/agent-control/v1/result.schema.json",
+  "title": "Mazzy agent egress operation result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "protocol", "message_type", "command_id", "session_id", "phase", "status", "completed_at", "capability", "result", "error"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "protocol": {"const": "mazzy-agent-egress/1"},
+    "message_type": {"const": "result"},
+    "command_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{16,128}$"},
+    "session_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{16,128}$"},
+    "phase": {"enum": ["COMPLETED", "FAILED", "IN_DOUBT"]},
+    "status": {"enum": ["completed", "failed", "in_doubt"]},
+    "completed_at": {"type": "string", "format": "date-time"},
+    "capability": {"enum": ["vpn.status", "vpn.select", "vpn.connect", "vpn.disconnect", "vpn.verify", "planner.evaluate", "region.check"]},
+    "result": {"type": ["object", "null"], "maxProperties": 64},
+    "error": {
+      "oneOf": [
+        {"$ref": "error.schema.json"},
+        {"type": "null"}
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "completed"}}, "required": ["status"]},
+      "then": {"properties": {"phase": {"const": "COMPLETED"}, "result": {"type": "object"}, "error": {"type": "null"}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "failed"}}, "required": ["status"]},
+      "then": {"properties": {"phase": {"const": "FAILED"}, "result": {"type": "null"}, "error": {"$ref": "error.schema.json"}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "in_doubt"}}, "required": ["status"]},
+      "then": {"properties": {"phase": {"const": "IN_DOUBT"}, "result": {"type": "null"}, "error": {"$ref": "error.schema.json"}}}
+    }
+  ]
+}

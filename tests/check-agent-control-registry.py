@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Validate the reverse agent-control contract without claiming runtime support."""
+"""Validate reverse agent-control contracts and audited LAN-WSS Linux support."""
 
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -60,8 +61,11 @@ def validate_support(owner: str, support: object) -> None:
         fail(f"{owner}: incomplete support matrix")
     if not set(support.values()).issubset(STATUSES):
         fail(f"{owner}: invalid support status")
-    if any(support[platform] == "implemented" for platform in PLATFORMS):
-        fail(f"{owner}: runtime is overclaimed before an audited implementation exists")
+    implemented = {
+        platform for platform in PLATFORMS if support[platform] == "implemented"
+    }
+    if implemented and not (owner == "lan-wss" and implemented == {"linux"}):
+        fail(f"{owner}: runtime is overclaimed beyond audited LAN-WSS Linux support")
 
 
 def main() -> None:
@@ -69,14 +73,49 @@ def main() -> None:
     schema = load(CONTRACT_DIR / "schema.json")
     envelope = load(CONTRACT_DIR / "envelope.schema.json")
     command = load(CONTRACT_DIR / "command.schema.json")
+    ack = load(CONTRACT_DIR / "ack.schema.json")
+    result_schema = load(CONTRACT_DIR / "result.schema.json")
+    event = load(CONTRACT_DIR / "event.schema.json")
+    error = load(CONTRACT_DIR / "error.schema.json")
+    pairing = load(CONTRACT_DIR / "pairing.schema.json")
+    approval = load(CONTRACT_DIR / "approval.schema.json")
+    approval_request = load(CONTRACT_DIR / "approval-request.schema.json")
+    transport_error = load(CONTRACT_DIR / "transport-error.schema.json")
+    user_unit = (ROOT / "systemd" / "user" / "mazzy-agentd.service").read_text(
+        encoding="utf-8"
+    )
     if schema.get("additionalProperties") is not False:
         fail("agent-control registry schema is not closed")
     if envelope.get("additionalProperties") is not False:
         fail("agent-control envelope schema is not closed")
     if command.get("additionalProperties") is not False:
         fail("agent-control command schema is not closed")
+    for name, contract in {
+        "ack": ack,
+        "result": result_schema,
+        "event": event,
+        "error": error,
+        "pairing": pairing,
+        "approval": approval,
+        "approval-request": approval_request,
+        "transport-error": transport_error,
+    }.items():
+        if contract.get("additionalProperties") is not False:
+            fail(f"agent-control {name} schema is not closed")
     if registry.get("schema_version") != 1:
         fail("unsupported agent-control registry schema")
+    for required_unit_line in {
+        "UMask=0077",
+        "NoNewPrivileges=yes",
+        "ProtectSystem=strict",
+        "ProtectHome=read-only",
+        "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
+        "ConditionPathExists=%h/.config/mazzy-agentd/server.key",
+    }:
+        if required_unit_line not in user_unit:
+            fail(f"mazzy-agentd user service lost hardening: {required_unit_line}")
+    if "--listen 127.0.0.1" not in user_unit or "--api-socket /run/mazzy-vpn/api-v1.sock" not in user_unit:
+        fail("mazzy-agentd user service exposes an unsafe or untyped boundary")
     if registry.get("layer") != "reverse-agent-control":
         fail("agent-control registry is mixed with the VPN data plane")
     if set(registry.get("platforms", [])) != PLATFORMS:
@@ -97,6 +136,25 @@ def main() -> None:
         source = transport.get("source")
         if not isinstance(source, str) or not source.startswith("https://"):
             fail(f"{transport_id}: primary source URL is missing")
+    lan = by_id["lan-wss"]
+    if lan.get("runtime_probes") != ["mazzy-agentd"]:
+        fail("lan-wss: runtime probe is not the owned daemon")
+    if lan.get("support", {}).get("diagnostics") != "implemented":
+        fail("lan-wss: implemented Linux slice lacks diagnostics")
+    evidence = lan.get("evidence")
+    if evidence != {
+        "id": "agentd-lan-wss-linux-2026-08-11",
+        "package_version": "0.1.0",
+        "test_matrix": "tests/check-agentd.py",
+        "reviewed_at": "2026-08-11",
+    }:
+        fail("lan-wss: implementation evidence is missing or inconsistent")
+    if any(
+        transport.get("evidence") is not None
+        for transport_id, transport in by_id.items()
+        if transport_id != "lan-wss"
+    ):
+        fail("planned transport carries unearned implementation evidence")
 
     channels = registry.get("ingress_channels")
     if not isinstance(channels, list):
@@ -141,7 +199,7 @@ def main() -> None:
     if not {
         "runtime-ready",
         "paired-peer-authorized",
-        "e2ee-envelope-valid",
+        "end-to-end-channel-valid",
         "anti-replay-valid",
         "channel-risk-policy-valid",
         "no-vpn-route-loop",
@@ -163,45 +221,59 @@ def main() -> None:
     if not isinstance(command_rules, list):
         fail("agent-control command policy is missing")
     serialized_rules = json.dumps(command_rules, sort_keys=True)
+    if "^approval-[a-f0-9]{32}$" not in serialized_rules:
+        fail("high-risk command schema does not require a trusted approval proof id")
+    if approval_request.get("properties", {}).get("message_type", {}).get(
+        "const"
+    ) != "approval-request" or "confirmation_id" in approval_request.get(
+        "properties", {}
+    ).get("confirmation", {}).get("properties", {}):
+        fail("approval request is not a distinct proof-free local contract")
     for capability, required_risk in {
-        "agent.status": "read-only",
-        "agent.list": "read-only",
-        "session.list": "read-only",
-        "artifact.list": "read-only",
-        "session.pause": "low",
-        "session.cancel": "low",
-        "session.create": "medium",
-        "session.prompt": "medium",
-        "artifact.get": "medium",
-        "permission.respond": "high",
+        "vpn.status": "read-only",
+        "vpn.select": "low",
+        "vpn.connect": "high",
+        "vpn.disconnect": "high",
+        "vpn.verify": "read-only",
+        "planner.evaluate": "read-only",
+        "region.check": "read-only",
     }.items():
         if capability not in serialized_rules or required_risk not in serialized_rules:
             fail(f"{capability}: command schema does not pin its risk")
-    telegram_rule = next(
+    if set(capabilities) != {
+        "vpn.status", "vpn.select", "vpn.connect", "vpn.disconnect",
+        "vpn.verify", "planner.evaluate", "region.check",
+    }:
+        fail("egress command schema and mazzy-agentd capability surface drifted")
+    planner_agent_bound = next(
         (
-            rule.get("then", {}).get("properties", {})
+            rule.get("then", {})
+            .get("properties", {})
+            .get("arguments", {})
+            .get("allOf")
             for rule in command_rules
             if rule.get("if", {})
             .get("properties", {})
-            .get("source_channel", {})
+            .get("capability", {})
             .get("const")
-            == "telegram-bot"
+            == "planner.evaluate"
         ),
         None,
     )
-    if not isinstance(telegram_rule, dict):
-        fail("Telegram Bot command policy is missing")
-    telegram_capabilities = set(telegram_rule.get("capability", {}).get("enum", []))
-    if telegram_capabilities != {
-        "agent.status",
-        "agent.list",
-        "session.list",
-        "session.pause",
-        "session.cancel",
-    }:
-        fail("Telegram Bot command capabilities exceed the low-risk allowlist")
-    if telegram_rule.get("arguments", {}).get("maxProperties") != 0:
-        fail("Telegram Bot may carry command arguments")
+    if (
+        not isinstance(planner_agent_bound, list)
+        or not any(
+            item.get("properties", {}).get("candidates", {}).get("maxItems") == 16
+            for item in planner_agent_bound
+            if isinstance(item, dict)
+        )
+    ):
+        fail("agent planner input is not bounded below the LAN-WSS response cap")
+    source_channels = set(
+        command.get("properties", {}).get("source_channel", {}).get("enum", [])
+    )
+    if "telegram-bot" in source_channels:
+        fail("gateway-visible Telegram Bot entered the direct egress command protocol")
     if "iroh" in {
         item.get("id")
         for item in load(ROOT / "protocols" / "v1" / "registry.json").get(
@@ -224,6 +296,7 @@ def main() -> None:
     diagnosis = subprocess.run(
         [str(ROOT / "mazzy-vpn"), "agent-transports", "diagnose", "--json"],
         cwd=ROOT,
+        env={**os.environ, "PATH": f"{ROOT}:{os.environ.get('PATH', '')}"},
         check=False,
         capture_output=True,
         text=True,
@@ -232,8 +305,25 @@ def main() -> None:
     if diagnosis.returncode != 0:
         fail("CLI agent transport diagnostics failed")
     diagnosed = json.loads(diagnosis.stdout)
-    if any(item.get("runtime_ready") for item in diagnosed.get("transports", [])):
-        fail("agent transport diagnostics overclaim runtime readiness")
+    ready = {
+        item.get("id")
+        for item in diagnosed.get("transports", [])
+        if item.get("runtime_ready")
+    }
+    if ready:
+        fail("unconfigured agent transport was incorrectly reported runtime-ready")
+    runtime_by_id = {
+        item.get("id"): item for item in diagnosed.get("runtimes", [])
+        if isinstance(item, dict)
+    }
+    agentd_runtime = runtime_by_id.get("mazzy-agentd", {})
+    if agentd_runtime.get("available") is not True or agentd_runtime.get(
+        "ready"
+    ) is not False:
+        fail("agent transport diagnostics lost installed-vs-configured readiness")
+    diagnostics = agentd_runtime.get("diagnostics")
+    if not isinstance(diagnostics, dict) or diagnostics.get("runtime_ready") is not False:
+        fail("mazzy-agentd diagnostics are absent or overclaim readiness")
 
     print(
         f"AGENT CONTROL REGISTRY OK: {len(transports)} transports, "

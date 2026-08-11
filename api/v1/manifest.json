@@ -18,10 +18,12 @@
     }
   ],
   "domains": [
+    "api",
     "status",
     "profiles",
     "protocols",
     "planner",
+    "region",
     "lifecycle",
     "tests",
     "services",
@@ -29,6 +31,16 @@
     "settings"
   ],
   "operations": [
+    {
+      "name": "api.capabilities",
+      "domain": "api",
+      "kind": "query",
+      "authorization": "none",
+      "action_id_required": false,
+      "deadline_required": false,
+      "audit_event": false,
+      "rollback": "not-applicable"
+    },
     {
       "name": "status.get",
       "domain": "status",
@@ -62,6 +74,16 @@
     {
       "name": "planner.evaluate",
       "domain": "planner",
+      "kind": "query",
+      "authorization": "none",
+      "action_id_required": false,
+      "deadline_required": true,
+      "audit_event": false,
+      "rollback": "not-applicable"
+    },
+    {
+      "name": "region.check",
+      "domain": "region",
       "kind": "query",
       "authorization": "none",
       "action_id_required": false,

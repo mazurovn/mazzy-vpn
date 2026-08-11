@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mazurovn/mazzy-vpn/agent-control/v1/error.schema.json",
+  "title": "Mazzy agent egress safe error v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["code", "message_key", "retryable"],
+  "properties": {
+    "code": {
+      "enum": [
+        "provider_unavailable", "provider_auth_required",
+        "unsupported_protocol_version", "unsupported_capability",
+        "session_not_found", "session_conflict", "permission_denied",
+        "permission_timeout", "approval_invalid", "rate_limited",
+        "transport_closed", "replay_rejected", "replay_exhausted",
+        "revoked_device", "policy_denied", "in_doubt",
+        "provider_internal_error", "invalid_request", "backend_unavailable",
+        "not_found", "conflict", "busy", "deadline_exceeded",
+        "validation_failed", "operation_failed", "rollback_failed",
+        "internal_error"
+      ]
+    },
+    "message_key": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]+$"
+    },
+    "retryable": {"type": "boolean"}
+  }
+}

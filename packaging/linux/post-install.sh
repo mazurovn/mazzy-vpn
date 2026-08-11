@@ -56,6 +56,56 @@ migrate_legacy_cli() {
     done
 }
 
+migrate_legacy_agentd() {
+    root="$1"
+    legacy="$root/usr/local/bin/mazzy-agentd"
+    package_agentd="$root/usr/bin/mazzy-agentd"
+    backup_dir="$root/var/lib/vpnctl/package-migration"
+    backup="$backup_dir/mazzy-agentd.pre-package"
+    expected_owner=root:root
+    [ "$root" = / ] || expected_owner="$(id -un):$(id -gn)"
+
+    [ -x "$package_agentd" ] || return 1
+    if [ -L "$legacy" ] && [ "$(readlink "$legacy")" = /usr/bin/mazzy-agentd ]; then
+        return 0
+    fi
+    if [ ! -f "$legacy" ] || [ -L "$legacy" ]; then
+        return 0
+    fi
+    owner_mode="$(stat -c '%U:%G:%a' "$legacy" 2>/dev/null || true)"
+    case "$owner_mode" in
+        "$expected_owner":*[2367][0-7]|"$expected_owner":[0-7]*[2367])
+            printf '%s\n' "Mazzy VPN: unsafe legacy agent daemon permissions left unchanged: $legacy" >&2
+            return 0
+            ;;
+        "$expected_owner":*) ;;
+        *)
+            printf '%s\n' "Mazzy VPN: unowned legacy agent daemon left unchanged: $legacy" >&2
+            return 0
+            ;;
+    esac
+    if ! grep -Fqx '# SPDX-License-Identifier: AGPL-3.0-or-later' "$legacy" ||
+       ! grep -Fqx 'PROTOCOL = "mazzy-agent-egress/1"' "$legacy" ||
+       ! grep -Eq '^VERSION = "[0-9]+\.[0-9]+\.[0-9]+"$' "$legacy"; then
+        printf '%s\n' "Mazzy VPN: unrelated /usr/local command left unchanged: $legacy" >&2
+        return 0
+    fi
+    if [ "$root" = / ]; then
+        install -d -o root -g root -m 700 "$backup_dir"
+    else
+        install -d -m 700 "$backup_dir"
+    fi
+    if [ -e "$backup" ]; then
+        printf '%s\n' "Mazzy VPN: existing migration backup prevents replacing $legacy" >&2
+        return 0
+    fi
+    mv "$legacy" "$backup"
+    if ! ln -s /usr/bin/mazzy-agentd "$legacy"; then
+        mv "$backup" "$legacy"
+        return 1
+    fi
+}
+
 if [ "${1:-}" = --test-migrate ]; then
     test_root="${2:-}"
     case "$test_root" in
@@ -64,6 +114,7 @@ if [ "${1:-}" = --test-migrate ]; then
         *) exit 2 ;;
     esac
     migrate_legacy_cli "$test_root"
+    migrate_legacy_agentd "$test_root"
     exit
 fi
 
@@ -145,6 +196,7 @@ activate_services() {
 }
 
 verify_payload() {
+    test -x /usr/bin/mazzy-agentd
     test -x /usr/lib/mazzy-vpn/runtime/mazzy-sing-box-adapter
     test -r /usr/lib/mazzy-vpn/protocols/v1/managed-profile.schema.json
     test -r /usr/lib/mazzy-vpn/runtime/v1/adapter-registry.json
@@ -157,6 +209,17 @@ verify_payload() {
         cmp -s - /usr/lib/mazzy-vpn/runtime/v1/adapter-registry.json
     /usr/bin/mazzy-vpn agent-transports list --json |
         cmp -s - /usr/lib/mazzy-vpn/agent-control/v1/registry.json
+    /usr/bin/mazzy-agentd --version | grep -Eq '^mazzy-agentd [0-9]+\.[0-9]+\.[0-9]+$'
+    printf '%s\n' '{"api_version":"1.0","request_id":"request-package-capabilities","operation":"api.capabilities","deadline_ms":1000,"payload":{}}' |
+        /usr/bin/mazzy-vpn _api-dispatch |
+        jq -e '
+            .status == "ok"
+            and ([
+                "status.get", "profiles.list", "planner.evaluate",
+                "lifecycle.connect", "lifecycle.disconnect",
+                "tests.verify-service-egress", "region.check"
+            ] - .result.operations | length) == 0
+        ' >/dev/null
 }
 
 ensure_access_group
@@ -164,4 +227,5 @@ ensure_state_layout
 grant_installer_access
 verify_payload
 migrate_legacy_cli /
+migrate_legacy_agentd /
 activate_services

@@ -81,6 +81,7 @@
         ],
         "files": {
           "/usr/bin/mazzy-vpn": "../../mazzy-vpn",
+          "/usr/bin/mazzy-agentd": "../../mazzy-agentd",
           "/usr/bin/mazzyvpn": "../../vpnctl",
           "/usr/bin/vpnctl": "../../vpnctl",
           "/usr/lib/mazzy-vpn/AUTHORS.md": "../../AUTHORS.md",
@@ -133,6 +134,8 @@
           "/usr/lib/mazzy-vpn/vpnctl": "../../vpnctl",
           "/usr/lib/mazzy-vpn/wiki": "../../wiki",
           "/usr/lib/systemd/system/mazzy-vpn-api.socket": "../../systemd/mazzy-vpn-api.socket",
+          "/usr/lib/systemd/user/mazzy-agentd.service": "../../systemd/user/mazzy-agentd.service",
+          "/usr/lib/systemd/user/mazzy-agentd.service.d": "../../packaging/linux/systemd/user/mazzy-agentd.service.d",
           "/usr/lib/systemd/system/mazzy-vpn-api.socket.d": "../../packaging/linux/systemd/mazzy-vpn-api.socket.d",
           "/usr/lib/systemd/system/mazzy-vpn-api-recovery.service": "../../systemd/mazzy-vpn-api-recovery.service",
           "/usr/lib/systemd/system/mazzy-vpn-api-recovery.service.d": "../../packaging/linux/systemd/mazzy-vpn-api-recovery.service.d",
@@ -192,6 +195,7 @@
         ],
         "files": {
           "/usr/bin/mazzy-vpn": "../../mazzy-vpn",
+          "/usr/bin/mazzy-agentd": "../../mazzy-agentd",
           "/usr/bin/mazzyvpn": "../../vpnctl",
           "/usr/bin/vpnctl": "../../vpnctl",
           "/usr/lib/mazzy-vpn/AUTHORS.md": "../../AUTHORS.md",
@@ -244,6 +248,8 @@
           "/usr/lib/mazzy-vpn/vpnctl": "../../vpnctl",
           "/usr/lib/mazzy-vpn/wiki": "../../wiki",
           "/usr/lib/systemd/system/mazzy-vpn-api.socket": "../../systemd/mazzy-vpn-api.socket",
+          "/usr/lib/systemd/user/mazzy-agentd.service": "../../systemd/user/mazzy-agentd.service",
+          "/usr/lib/systemd/user/mazzy-agentd.service.d": "../../packaging/linux/systemd/user/mazzy-agentd.service.d",
           "/usr/lib/systemd/system/mazzy-vpn-api.socket.d": "../../packaging/linux/systemd/mazzy-vpn-api.socket.d",
           "/usr/lib/systemd/system/mazzy-vpn-api-recovery.service": "../../systemd/mazzy-vpn-api-recovery.service",
           "/usr/lib/systemd/system/mazzy-vpn-api-recovery.service.d": "../../packaging/linux/systemd/mazzy-vpn-api-recovery.service.d",
@@ -269,6 +275,7 @@
     },
     "resources": {
       "../../mazzy-vpn": "engine/mazzy-vpn",
+      "../../mazzy-agentd": "engine/mazzy-agentd",
       "../../vpnctl": "engine/vpnctl",
       "../../install.sh": "engine/install.sh",
       "../../setup_amnezia_vpn.sh": "engine/setup_amnezia_vpn.sh",

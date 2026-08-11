@@ -8,11 +8,13 @@ restore_legacy_cli() {
     legacy_dir="$root/usr/local/bin"
     backup_dir="$root/var/lib/vpnctl/package-migration"
 
-    for name in mazzy-vpn vpnctl mazzyvpn; do
+    for name in mazzy-vpn vpnctl mazzyvpn mazzy-agentd; do
         legacy="$legacy_dir/$name"
         backup="$backup_dir/$name.pre-package"
+        package_target=/usr/bin/mazzy-vpn
+        [ "$name" = mazzy-agentd ] && package_target=/usr/bin/mazzy-agentd
         [ -f "$backup" ] || continue
-        if [ -L "$legacy" ] && [ "$(readlink "$legacy")" = /usr/bin/mazzy-vpn ]; then
+        if [ -L "$legacy" ] && [ "$(readlink "$legacy")" = "$package_target" ]; then
             rm -f "$legacy"
         elif [ -e "$legacy" ] || [ -L "$legacy" ]; then
             printf '%s\n' "Mazzy VPN: $legacy changed after installation; backup retained at $backup" >&2

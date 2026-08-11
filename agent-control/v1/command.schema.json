@@ -4,14 +4,17 @@
   "title": "Mazzy agent-control command v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "command_id", "session_id", "actor_id", "source_channel", "capability", "target_id", "issued_at", "expires_at", "risk", "confirmation", "arguments"],
+  "required": ["schema_version", "protocol", "message_type", "command_id", "session_id", "actor_id", "source_channel", "sequence", "capability", "target_id", "issued_at", "expires_at", "risk", "confirmation", "arguments"],
   "properties": {
     "schema_version": {"const": 1},
+    "protocol": {"const": "mazzy-agent-egress/1"},
+    "message_type": {"const": "command"},
     "command_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{16,128}$"},
     "session_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{16,128}$"},
     "actor_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{3,128}$"},
-    "source_channel": {"enum": ["desktop-first-party", "web-first-party", "cli-first-party", "telegram-bot", "telegram-mini-app"]},
-    "capability": {"enum": ["agent.status", "agent.list", "session.list", "session.create", "session.prompt", "session.pause", "session.cancel", "permission.respond", "artifact.list", "artifact.get"]},
+    "source_channel": {"enum": ["desktop-first-party", "web-first-party", "cli-first-party", "telegram-mini-app"]},
+    "sequence": {"type": "integer", "minimum": 0},
+    "capability": {"enum": ["vpn.status", "vpn.select", "vpn.connect", "vpn.disconnect", "vpn.verify", "planner.evaluate", "region.check"]},
     "target_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$"},
     "issued_at": {"type": "string", "format": "date-time"},
     "expires_at": {"type": "string", "format": "date-time"},
@@ -22,7 +25,7 @@
       "required": ["required", "method"],
       "properties": {
         "required": {"type": "boolean"},
-        "method": {"enum": ["none", "local-ui", "paired-device", "webauthn", "totp"]},
+        "method": {"enum": ["none", "paired-device"]},
         "confirmation_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{16,128}$"}
       }
     },
@@ -31,44 +34,24 @@
   "allOf": [
     {
       "if": {
-        "properties": {"capability": {"enum": ["agent.status", "agent.list", "session.list", "artifact.list"]}},
+        "properties": {"capability": {"enum": ["vpn.status", "vpn.verify", "planner.evaluate", "region.check"]}},
         "required": ["capability"]
       },
       "then": {"properties": {"risk": {"const": "read-only"}}}
     },
     {
       "if": {
-        "properties": {"capability": {"enum": ["session.pause", "session.cancel"]}},
+        "properties": {"capability": {"const": "vpn.select"}},
         "required": ["capability"]
       },
       "then": {"properties": {"risk": {"const": "low"}}}
     },
     {
       "if": {
-        "properties": {"capability": {"enum": ["session.create", "session.prompt", "artifact.get"]}},
-        "required": ["capability"]
-      },
-      "then": {"properties": {"risk": {"const": "medium"}}}
-    },
-    {
-      "if": {
-        "properties": {"capability": {"const": "permission.respond"}},
+        "properties": {"capability": {"enum": ["vpn.connect", "vpn.disconnect"]}},
         "required": ["capability"]
       },
       "then": {"properties": {"risk": {"const": "high"}}}
-    },
-    {
-      "if": {
-        "properties": {"source_channel": {"const": "telegram-bot"}},
-        "required": ["source_channel"]
-      },
-      "then": {
-        "properties": {
-          "capability": {"enum": ["agent.status", "agent.list", "session.list", "session.pause", "session.cancel"]},
-          "risk": {"enum": ["read-only", "low"]},
-          "arguments": {"maxProperties": 0}
-        }
-      }
     },
     {
       "if": {"properties": {"risk": {"const": "high"}}, "required": ["risk"]},
@@ -77,7 +60,101 @@
           "confirmation": {
             "properties": {
               "required": {"const": true},
-              "method": {"enum": ["local-ui", "paired-device", "webauthn", "totp"]}
+              "method": {"const": "paired-device"},
+              "confirmation_id": {"pattern": "^approval-[a-f0-9]{32}$"}
+            },
+            "required": ["confirmation_id"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"capability": {"enum": ["vpn.status", "vpn.connect", "vpn.disconnect"]}},
+        "required": ["capability"]
+      },
+      "then": {
+        "properties": {
+          "target_id": {"const": "egress"},
+          "arguments": {"type": "object", "additionalProperties": false, "maxProperties": 0}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"capability": {"const": "vpn.select"}}, "required": ["capability"]},
+      "then": {
+        "properties": {
+          "target_id": {"const": "egress"},
+          "arguments": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["country"],
+            "properties": {
+              "country": {"type": "string", "pattern": "^[A-Z]{2}$"},
+              "provider": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,63}$"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"capability": {"const": "vpn.verify"}}, "required": ["capability"]},
+      "then": {
+        "properties": {
+          "target_id": {"const": "egress"},
+          "arguments": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["provider"],
+            "properties": {
+              "provider": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,63}$"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"capability": {"const": "region.check"}}, "required": ["capability"]},
+      "then": {
+        "properties": {
+          "target_id": {"const": "egress"},
+          "arguments": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["provider"],
+            "properties": {
+              "provider": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{1,63}$"},
+              "target_country": {"type": "string", "pattern": "^[A-Z]{2}$"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"capability": {"const": "planner.evaluate"}}, "required": ["capability"]},
+      "then": {
+        "properties": {
+          "target_id": {"const": "egress"},
+          "arguments": {
+            "allOf": [
+              {"$ref": "../../api/v1/schema.json#/$defs/PlannerRequest"},
+              {"properties": {"candidates": {"maxItems": 16}}}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"capability": {"enum": ["vpn.connect", "vpn.disconnect"]}},
+        "required": ["capability"]
+      },
+      "then": {
+        "properties": {
+          "confirmation": {
+            "properties": {
+              "required": {"const": true},
+              "method": {"const": "paired-device"}
             },
             "required": ["confirmation_id"]
           }

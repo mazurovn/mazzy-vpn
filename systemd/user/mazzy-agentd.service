@@ -1,0 +1,28 @@
+[Unit]
+Description=Mazzy Agent LAN-WSS egress capability owner
+Documentation=file:/usr/lib/mazzy-vpn/docs/AGENT_CONTROL_ARCHITECTURE.en.md
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=%h/.config/mazzy-agentd/server.crt
+ConditionPathExists=%h/.config/mazzy-agentd/server.key
+ConditionPathExists=%h/.config/mazzy-agentd/client-ca.crt
+
+[Service]
+Type=simple
+UMask=0077
+ExecStartPre=/usr/bin/mkdir -p %h/.local/state/mazzy-agentd
+ExecStart=/usr/local/bin/mazzy-agentd serve --state-dir %h/.local/state/mazzy-agentd --listen 127.0.0.1 --port 9443 --certificate %h/.config/mazzy-agentd/server.crt --private-key %h/.config/mazzy-agentd/server.key --client-ca %h/.config/mazzy-agentd/client-ca.crt --api-socket /run/mazzy-vpn/api-v1.sock
+Restart=on-failure
+RestartSec=3s
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/state/mazzy-agentd
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=default.target

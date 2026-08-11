@@ -68,7 +68,19 @@
           }
         },
         "support": {"$ref": "#/$defs/PlatformSupport"},
+        "evidence": {"$ref": "#/$defs/ImplementationEvidence"},
         "source": {"type": "string", "format": "uri"}
+      }
+    },
+    "ImplementationEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "package_version", "test_matrix", "reviewed_at"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]+$"},
+        "package_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "test_matrix": {"const": "tests/check-agentd.py"},
+        "reviewed_at": {"type": "string", "format": "date"}
       }
     },
     "IngressChannel": {

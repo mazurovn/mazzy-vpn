@@ -1606,6 +1606,31 @@ profile_id="$(
     fail "Desktop profile cache is not group-restricted"
 ok "sanitized Desktop profile library cache"
 
+api_capabilities_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-capabilities-0001",
+        operation: "api.capabilities",
+        deadline_ms: 1000,
+        payload: {}
+    }'
+)"
+api_capabilities_response="$(
+    printf '%s\n' "$api_capabilities_request" | "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "ok"
+    and .result.schema_version == 1
+    and .result.api_version == "1.0"
+    and (.result.engine_version | type == "string")
+    and ([
+        "status.get", "profiles.list", "planner.evaluate",
+        "lifecycle.connect", "lifecycle.disconnect",
+        "tests.verify-service-egress", "region.check"
+    ] - .result.operations | length) == 0
+' <<<"$api_capabilities_response" >/dev/null ||
+    fail "local API capability attestation is incomplete or invalid"
+
 api_status_request="$(
     jq -cn '{
         api_version: "1.0",
@@ -1653,6 +1678,7 @@ jq -e --arg profile_id "$profile_id" '
         .profile_id == $profile_id
         and .display_name == "Test Server"
         and .protocol == "openvpn"
+        and .country_code == "BE"
         and .selected == true
     )
 ' <<<"$api_profiles_response" >/dev/null ||
@@ -1687,6 +1713,63 @@ if jq -e '
 ' <<<"$api_protocols_response" >/dev/null; then
     fail "local API protocols.list leaked a frontend-forbidden field"
 fi
+
+api_region_request="$(
+    jq -cn '{
+        api_version: "1.0",
+        request_id: "request-region-0001",
+        operation: "region.check",
+        deadline_ms: 20000,
+        payload: {provider: "antigravity", target_country: "AT"}
+    }'
+)"
+api_region_response="$(
+    printf '%s\n' "$api_region_request" |
+        FAKE_GEO_COUNTRY=AT FAKE_SYSTEM_TIMEZONE=Europe/Vienna \
+            "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "ok"
+    and .result.provider == "antigravity"
+    and .result.egress_country == "AT"
+    and .result.system_timezone == "Europe/Vienna"
+    and .result.timezone_country == "AT"
+    and .result.supported_by_provider == true
+    and .result.country_consistent == true
+    and .result.verdict == "ready"
+    and .result.mismatches == []
+' <<<"$api_region_response" >/dev/null ||
+    fail "local API region.check did not preserve the ready invariant"
+api_region_invalid_response="$(
+    jq -c '
+        .request_id = "request-region-invalid-0001"
+        | .payload.provider = "unknown"
+    ' <<<"$api_region_request" | "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "error"
+    and .error.code == "invalid-request"
+    and .error.message_key == "api.region.payload-invalid"
+' <<<"$api_region_invalid_response" >/dev/null ||
+    fail "local API region.check accepted an unknown provider"
+api_region_utc_response="$(
+    jq -c '
+        .request_id = "request-region-utc-0001"
+        | .payload = {provider: "antigravity"}
+    ' <<<"$api_region_request" |
+        FAKE_GEO_COUNTRY=AT FAKE_SYSTEM_TIMEZONE=UTC "$CLI" _api-dispatch
+)"
+jq -e '
+    .status == "ok"
+    and .result.system_timezone == "UTC"
+    and .result.timezone_country == null
+    and .result.verdict == "not-ready"
+    and (.result.mismatches | index("region.timezone.country-unmapped")) != null
+' <<<"$api_region_utc_response" >/dev/null ||
+    fail "local API region.check rejected a valid UTC timezone observation"
+rm -f -- "$VPNCTL_API_ACTION_DIR/.region.lock"
+rmdir -- "$VPNCTL_API_ACTION_DIR" ||
+    fail "local API region.check left unexpected action artifacts"
 
 chmod 700 "$VPNCTL_STATE_DIR"
 [[ ! -e "$VPNCTL_API_ACTION_DIR" ]] ||
@@ -2059,6 +2142,16 @@ jq -e '
     )
 ' <<<"$planner_max_response" >/dev/null ||
     fail "planner CLI did not handle the documented 128-candidate bound"
+planner_agent_payload="$(jq -c '.candidates = .candidates[:16]' <<<"$planner_max_payload")"
+planner_agent_response="$(
+    printf '%s\n' "$planner_agent_payload" |
+        VPNCTL_API_CLIENT_FORCE=1 \
+        "$CLI" planner evaluate --stdin --json
+)"
+[[ "$(printf '%s' "$planner_agent_response" | wc -c)" -le 48000 ]] ||
+    fail "16-candidate planner result exceeds the LAN-WSS local API cap"
+jq -e '(.candidates | length) == 16' <<<"$planner_agent_response" >/dev/null ||
+    fail "bounded agent planner fixture lost candidates"
 ok "deterministic agent-safe protocol planner"
 
 api_probe_request="$(
@@ -4013,6 +4106,10 @@ ok "disconnect"
 stage="$TMP/stage"
 "$ROOT/install.sh" --destdir "$stage" --no-deps --lang de >/dev/null
 [[ -x "$stage/usr/local/bin/mazzy-vpn" ]] || fail "Mazzy VPN binary was not staged"
+[[ -x "$stage/usr/local/bin/mazzy-agentd" ]] ||
+    fail "Mazzy agent daemon was not staged"
+cmp -s "$ROOT/mazzy-agentd" "$stage/usr/local/bin/mazzy-agentd" ||
+    fail "staged Mazzy agent daemon differs from source"
 [[ "$(readlink "$stage/usr/local/bin/vpnctl")" == "mazzy-vpn" ]] ||
     fail "vpnctl alias was not staged"
 [[ "$(readlink "$stage/usr/local/bin/mazzyvpn")" == "mazzy-vpn" ]] ||
@@ -4057,6 +4154,13 @@ stage="$TMP/stage"
    -f "$stage/usr/local/lib/mazzy-vpn/AUTHORS.md" &&
    -f "$stage/usr/local/lib/mazzy-vpn/PRIVACY.md" ]] ||
     fail "six-language and architecture documentation was not staged"
+[[ -f "$stage/usr/local/lib/mazzy-vpn/agent-control/v1/approval-request.schema.json" ]] ||
+    fail "agent approval-request contract was not staged"
+[[ -f "$stage/usr/local/lib/systemd/user/mazzy-agentd.service" ]] ||
+    fail "Mazzy agent daemon user unit was not staged"
+grep -Fqx 'ExecStart=/usr/local/bin/mazzy-agentd serve --state-dir %h/.local/state/mazzy-agentd --listen 127.0.0.1 --port 9443 --certificate %h/.config/mazzy-agentd/server.crt --private-key %h/.config/mazzy-agentd/server.key --client-ca %h/.config/mazzy-agentd/client-ca.crt --api-socket /run/mazzy-vpn/api-v1.sock' \
+    "$stage/usr/local/lib/systemd/user/mazzy-agentd.service" ||
+    fail "staged Mazzy agent daemon user unit does not use the source-install binary"
 cmp -s "$ROOT/api/v1/manifest.json" \
     "$stage/usr/local/lib/mazzy-vpn/api/v1/manifest.json" ||
     fail "staged API manifest differs from the source contract"
@@ -4225,6 +4329,7 @@ assert deb["files"] == rpm["files"]
 files = deb["files"]
 for destination in (
     "/usr/bin/mazzy-vpn",
+    "/usr/bin/mazzy-agentd",
     "/usr/bin/vpnctl",
     "/usr/lib/mazzy-vpn/api",
     "/usr/lib/mazzy-vpn/desktop/src-tauri/tauri.conf.json",
@@ -4234,6 +4339,8 @@ for destination in (
     "/usr/lib/mazzy-vpn/protocols",
     "/usr/lib/mazzy-vpn/wiki",
     "/usr/lib/systemd/system/mazzy-vpn-api.socket",
+    "/usr/lib/systemd/user/mazzy-agentd.service",
+    "/usr/lib/systemd/user/mazzy-agentd.service.d",
     "/usr/lib/systemd/system/mazzy-vpn-api.socket.d",
     "/usr/lib/systemd/system/mazzy-vpn-api@.service",
     "/usr/lib/systemd/system/mazzy-vpn-api@.service.d",
@@ -4269,48 +4376,60 @@ mkdir -p "$legacy_migration_root/usr/local/bin" \
     "$legacy_migration_root/var/lib/vpnctl"
 install -m 755 "$ROOT/mazzy-vpn" \
     "$legacy_migration_root/usr/bin/mazzy-vpn"
+install -m 755 "$ROOT/mazzy-agentd" \
+    "$legacy_migration_root/usr/bin/mazzy-agentd"
 install -m 744 "$ROOT/mazzy-vpn" \
     "$legacy_migration_root/usr/local/bin/mazzy-vpn"
 install -m 755 "$ROOT/mazzy-vpn" \
     "$legacy_migration_root/usr/local/bin/vpnctl"
 install -m 700 "$ROOT/mazzy-vpn" \
     "$legacy_migration_root/usr/local/bin/mazzyvpn"
-declare -A legacy_modes=([mazzy-vpn]=744 [vpnctl]=755 [mazzyvpn]=700)
-legacy_checksum="$(sha256sum \
-    "$legacy_migration_root/usr/local/bin/mazzy-vpn" | awk '{print $1}')"
+install -m 744 "$ROOT/mazzy-agentd" \
+    "$legacy_migration_root/usr/local/bin/mazzy-agentd"
+declare -A legacy_modes=([mazzy-vpn]=744 [vpnctl]=755 [mazzyvpn]=700 [mazzy-agentd]=744)
+declare -A legacy_checksums
+for legacy_name in mazzy-vpn vpnctl mazzyvpn mazzy-agentd; do
+    legacy_checksums[$legacy_name]="$(sha256sum \
+        "$legacy_migration_root/usr/local/bin/$legacy_name" | awk '{print $1}')"
+done
 "$ROOT/packaging/linux/post-install.sh" --test-migrate \
     "$legacy_migration_root"
-for legacy_name in mazzy-vpn vpnctl mazzyvpn; do
+for legacy_name in mazzy-vpn vpnctl mazzyvpn mazzy-agentd; do
+    package_target=/usr/bin/mazzy-vpn
+    [[ "$legacy_name" == mazzy-agentd ]] && package_target=/usr/bin/mazzy-agentd
     [[ "$(readlink "$legacy_migration_root/usr/local/bin/$legacy_name")" == \
-        /usr/bin/mazzy-vpn ]] ||
+        "$package_target" ]] ||
         fail "package migration did not redirect legacy $legacy_name"
     [[ -f "$legacy_migration_root/var/lib/vpnctl/package-migration/$legacy_name.pre-package" ]] ||
         fail "package migration did not preserve legacy $legacy_name"
 done
 "$ROOT/packaging/linux/post-remove.sh" --test-restore \
     "$legacy_migration_root"
-for legacy_name in mazzy-vpn vpnctl mazzyvpn; do
+for legacy_name in mazzy-vpn vpnctl mazzyvpn mazzy-agentd; do
     [[ ! -L "$legacy_migration_root/usr/local/bin/$legacy_name" ]] ||
         fail "package removal left a legacy $legacy_name symlink"
     [[ "$(sha256sum "$legacy_migration_root/usr/local/bin/$legacy_name" | awk '{print $1}')" == \
-        "$legacy_checksum" ]] ||
+        "${legacy_checksums[$legacy_name]}" ]] ||
         fail "package removal did not restore legacy $legacy_name"
     [[ "$(stat -c %a "$legacy_migration_root/usr/local/bin/$legacy_name")" == \
         "${legacy_modes[$legacy_name]}" ]] ||
         fail "package removal did not restore legacy $legacy_name permissions"
 done
-ok "package lifecycle migrates and restores trusted legacy CLI copies"
+ok "package lifecycle migrates and restores trusted legacy executables"
 
 for package_dropin in \
     "$ROOT/packaging/linux/systemd/mazzy-vpn-api.socket.d/10-package-docs.conf" \
     "$ROOT/packaging/linux/systemd/mazzy-vpn-api-recovery.service.d/10-package-exec.conf" \
     "$ROOT/packaging/linux/systemd/mazzy-vpn-api@.service.d/10-package-exec.conf" \
+    "$ROOT/packaging/linux/systemd/user/mazzy-agentd.service.d/10-package-exec.conf" \
     "$ROOT/packaging/linux/systemd/vpnctl-health.service.d/10-package-exec.conf" \
     "$ROOT/packaging/linux/systemd/vpnctl-health.timer.d/10-package-interval.conf" \
     "$ROOT/packaging/linux/systemd/vpnctl-test-recovery.service.d/10-package-exec.conf" \
     "$ROOT/packaging/linux/systemd/vpnctl.service.d/10-package-exec.conf"; do
     if [[ "$package_dropin" == *".service.d/"* ]]; then
-        grep -q '^ExecStart=/usr/bin/mazzy-vpn ' "$package_dropin" ||
+        expected_exec=/usr/bin/mazzy-vpn
+        [[ "$package_dropin" == *mazzy-agentd* ]] && expected_exec=/usr/bin/mazzy-agentd
+        grep -q "^ExecStart=$expected_exec " "$package_dropin" ||
             fail "package systemd override does not use the package-managed engine"
     fi
     if [[ "$package_dropin" == *"mazzy-vpn-api"* ]]; then
@@ -4684,6 +4803,10 @@ ok "protocol registry and AI orchestration policy"
 python3 "$ROOT/tests/check-agent-control-registry.py" >/dev/null ||
     fail "agent-control transport registry and security policy are inconsistent"
 ok "reverse agent-control transports and ingress policy"
+
+python3 "$ROOT/tests/check-agentd.py" >/dev/null ||
+    fail "mazzy-agentd LAN-WSS egress capability conformance failed"
+ok "mazzy-agentd LAN-WSS select/connect/verify/region-check flow"
 
 grep -q 'agent_control::get_agent_integrations' "$ROOT/desktop/src-tauri/src/main.rs" ||
     fail "Desktop agent diagnostics are not exposed through a typed command"

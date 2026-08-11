@@ -129,8 +129,10 @@ renderer и Tauri invoke не содержат start/pair/stop или pairing st
 command-bound approval, trusted executable resolution и process-tree
 containment остаются R0 prerequisites для будущей lifecycle authority.
 
-Это partial read-only provider discovery. Собственный
-`mazzy-agentd`, E2EE reverse WSS/iroh, Web и Telegram ещё не реализованы. См.
+В Desktop это по-прежнему partial read-only provider discovery. Отдельно
+упакованный Linux `mazzy-agentd` реализует только paired local LAN-WSS egress
+capability slice; reverse WSS/iroh, Web/Telegram clients и agent-provider
+lifecycle остаются planned. См.
 [исследование и архитектуру](RESEARCH_AGENT_REMOTE_CONTROL_2026-08-02.ru.md).
 
 ## Действия в окне и tray

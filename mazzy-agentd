@@ -1,0 +1,2408 @@
+#!/usr/bin/env python3
+# Copyright (C) 2026 Nik m (@mazurovn)
+# SPDX-License-Identifier: AGPL-3.0-or-later
+"""Mazzy Agent egress capability daemon for the paired LAN-WSS path."""
+
+from __future__ import annotations
+
+import argparse
+import base64
+from contextlib import contextmanager
+import datetime as dt
+import fcntl
+import hashlib
+import ipaddress
+import json
+import os
+import re
+import secrets
+import socket
+import sqlite3
+import ssl
+import stat
+import struct
+import sys
+import threading
+from pathlib import Path
+from typing import Any, Callable
+
+
+VERSION = "0.1.0"
+PROTOCOL = "mazzy-agent-egress/1"
+WS_PATH = "/v1/agent"
+MAX_HTTP_BYTES = 16_384
+MAX_FRAME_BYTES = 60_000
+MAX_API_BYTES = 48_000
+MAX_COMMAND_TTL_SECONDS = 60
+CAPABILITIES = {
+    "vpn.status",
+    "vpn.select",
+    "vpn.connect",
+    "vpn.disconnect",
+    "vpn.verify",
+    "planner.evaluate",
+    "region.check",
+}
+REQUIRED_LOCAL_API_OPERATIONS = {
+    "status.get",
+    "profiles.list",
+    "planner.evaluate",
+    "lifecycle.connect",
+    "lifecycle.disconnect",
+    "tests.verify-service-egress",
+    "region.check",
+}
+RISK = {
+    "vpn.status": "read-only",
+    "vpn.select": "low",
+    "vpn.connect": "high",
+    "vpn.disconnect": "high",
+    "vpn.verify": "read-only",
+    "planner.evaluate": "read-only",
+    "region.check": "read-only",
+}
+RISK_LEVEL = {"read-only": 0, "low": 1, "medium": 2, "high": 3}
+CHANNEL_CEILING = {
+    "desktop-first-party": "low",
+    "web-first-party": "high",
+    "cli-first-party": "high",
+    "telegram-bot": "low",
+    "telegram-mini-app": "high",
+}
+SAFE_ID = re.compile(r"^[A-Za-z0-9._:-]{16,128}$")
+APPROVAL_ID = re.compile(r"^approval-[a-f0-9]{32}$")
+SAFE_ACTOR = re.compile(r"^[A-Za-z0-9._:-]{3,128}$")
+SAFE_PROVIDER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{1,63}$")
+SAFE_PROFILE_ID = re.compile(r"^profile-[a-f0-9]{32}$")
+API_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]+$")
+COUNTRY = re.compile(r"^[A-Z]{2}$")
+ORIGIN = re.compile(r"^https://[A-Za-z0-9.-]+(?::[1-9][0-9]{0,4})?$")
+MESSAGE_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$")
+TIMEZONE = re.compile(r"^(?:UTC|GMT|[A-Za-z0-9._+-]+(?:/[A-Za-z0-9._+-]+)+)$")
+REGION_MISMATCHES = {
+    "region.egress.ip-unavailable",
+    "region.egress.providers-disagree",
+    "region.egress.country-unavailable",
+    "region.timezone.unavailable",
+    "region.timezone.country-unmapped",
+    "region.provider.country-unsupported",
+    "region.country.egress-timezone-mismatch",
+    "region.target.country-unsupported",
+    "region.target.egress-mismatch",
+    "region.target.timezone-mismatch",
+}
+FORBIDDEN_KEYS = re.compile(
+    r"^(password|credentials?|secret|endpoint|path|file_path|config|private_key|preshared_key)$",
+    re.IGNORECASE,
+)
+
+
+class AgentError(RuntimeError):
+    def __init__(
+        self,
+        code: str,
+        message_key: str,
+        retryable: bool = False,
+        *,
+        commit_state: bool = False,
+    ):
+        super().__init__(message_key)
+        self.code = code
+        self.message_key = message_key
+        self.retryable = retryable
+        self.commit_state = commit_state
+
+
+def utc_now() -> dt.datetime:
+    return dt.datetime.now(dt.timezone.utc)
+
+
+def timestamp(value: dt.datetime | None = None) -> str:
+    current = value or utc_now()
+    return current.isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def parse_timestamp(value: object) -> dt.datetime:
+    if not isinstance(value, str) or len(value) > 40:
+        raise AgentError("invalid_request", "agent.command.timestamp-invalid")
+    try:
+        parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise AgentError(
+            "invalid_request", "agent.command.timestamp-invalid"
+        ) from error
+    if parsed.tzinfo is None:
+        raise AgentError("invalid_request", "agent.command.timestamp-invalid")
+    return parsed.astimezone(dt.timezone.utc)
+
+
+def valid_timestamp(value: object) -> bool:
+    try:
+        parse_timestamp(value)
+    except AgentError:
+        return False
+    return True
+
+
+def valid_identifier(value: object) -> bool:
+    return bool(
+        isinstance(value, str)
+        and 8 <= len(value) <= 128
+        and API_IDENTIFIER.fullmatch(value)
+    )
+
+
+def valid_nonnegative_integer(value: object, maximum: int | None = None) -> bool:
+    return bool(
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        and value >= 0
+        and (maximum is None or value <= maximum)
+    )
+
+
+def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise AgentError("invalid_request", "agent.command.duplicate-key")
+        result[key] = value
+    return result
+
+
+def strict_json(raw: bytes, label: str) -> dict[str, Any]:
+    try:
+        value = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=reject_duplicate_keys,
+            parse_constant=lambda item: (_ for _ in ()).throw(ValueError(item)),
+        )
+    except AgentError:
+        raise
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+        raise AgentError("invalid_request", f"{label}.json-invalid") from error
+    if not isinstance(value, dict):
+        raise AgentError("invalid_request", f"{label}.object-required")
+    return value
+
+
+def canonical_json(value: object) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def approval_digest(command: dict[str, Any]) -> str:
+    projection = json.loads(canonical_json(command))
+    confirmation = projection.get("confirmation")
+    if isinstance(confirmation, dict):
+        confirmation.pop("confirmation_id", None)
+    return hashlib.sha256(canonical_json(projection).encode("utf-8")).hexdigest()
+
+
+def contains_forbidden_key(value: object) -> bool:
+    if isinstance(value, dict):
+        return any(
+            FORBIDDEN_KEYS.fullmatch(str(key)) or contains_forbidden_key(item)
+            for key, item in value.items()
+        )
+    if isinstance(value, list):
+        return any(contains_forbidden_key(item) for item in value)
+    return False
+
+
+def default_state_dir() -> Path:
+    base = os.environ.get("XDG_STATE_HOME")
+    if base:
+        return Path(base) / "mazzy-agentd"
+    return Path.home() / ".local" / "state" / "mazzy-agentd"
+
+
+def default_config_dir() -> Path:
+    base = os.environ.get("XDG_CONFIG_HOME")
+    if base:
+        return Path(base) / "mazzy-agentd"
+    return Path.home() / ".config" / "mazzy-agentd"
+
+
+def ensure_private_directory(path: Path) -> None:
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    info = path.lstat()
+    if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode):
+        raise AgentError("permission_denied", "agent.state.directory-unsafe")
+    if info.st_uid != os.geteuid() or stat.S_IMODE(info.st_mode) & 0o077:
+        raise AgentError("permission_denied", "agent.state.directory-unsafe")
+
+
+def require_safe_file(path: Path, *, private: bool) -> None:
+    info = path.lstat()
+    if not stat.S_ISREG(info.st_mode) or stat.S_ISLNK(info.st_mode):
+        raise AgentError("permission_denied", "agent.tls.file-unsafe")
+    if info.st_uid != os.geteuid():
+        raise AgentError("permission_denied", "agent.tls.owner-unsafe")
+    if private and stat.S_IMODE(info.st_mode) & 0o077:
+        raise AgentError("permission_denied", "agent.tls.private-key-mode-unsafe")
+
+
+def write_private_json(path: Path, value: dict[str, Any]) -> None:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags, 0o600)
+    try:
+        os.fchmod(descriptor, 0o600)
+        encoded = (canonical_json(value) + "\n").encode("utf-8")
+        with os.fdopen(descriptor, "wb", closefd=False) as output:
+            output.write(encoded)
+            output.flush()
+            os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def read_runtime_status(path: Path) -> dict[str, Any] | None:
+    try:
+        require_safe_file(path, private=True)
+        raw = path.read_bytes()
+        if len(raw) > 4096:
+            return None
+        value = strict_json(raw, "agent.daemon.status")
+    except (AgentError, OSError):
+        return None
+    if (
+        set(value) != {"schema_version", "pid", "daemon_version", "protocol", "started_at"}
+        or value.get("schema_version") != 1
+        or not isinstance(value.get("pid"), int)
+        or isinstance(value.get("pid"), bool)
+        or value["pid"] <= 0
+        or not isinstance(value.get("daemon_version"), str)
+        or value.get("protocol") != PROTOCOL
+        or not valid_timestamp(value.get("started_at"))
+    ):
+        return None
+    try:
+        os.kill(value["pid"], 0)
+    except OSError:
+        return None
+    return value
+
+
+def certificate_fingerprint(path: Path) -> str:
+    require_safe_file(path, private=False)
+    try:
+        pem = path.read_text(encoding="ascii")
+        der = ssl.PEM_cert_to_DER_cert(pem)
+    except (OSError, UnicodeError, ValueError) as error:
+        raise AgentError("invalid_request", "agent.pair.certificate-invalid") from error
+    return hashlib.sha256(der).hexdigest()
+
+
+def synchronized(method: Callable[..., Any]) -> Callable[..., Any]:
+    def wrapped(self: "Store", *args: Any, **kwargs: Any) -> Any:
+        with self.lock:
+            return method(self, *args, **kwargs)
+
+    return wrapped
+
+
+class Store:
+    def __init__(self, state_dir: Path):
+        ensure_private_directory(state_dir)
+        self.path = state_dir / "state.sqlite3"
+        self.lock = threading.RLock()
+        existed = self.path.exists()
+        self.connection = sqlite3.connect(
+            self.path, timeout=10, isolation_level=None, check_same_thread=False
+        )
+        if not existed:
+            os.chmod(self.path, 0o600)
+        require_safe_file(self.path, private=True)
+        self.connection.execute("PRAGMA journal_mode=WAL")
+        self.connection.execute("PRAGMA synchronous=FULL")
+        self.connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS grants (
+                fingerprint TEXT PRIMARY KEY,
+                actor_id TEXT NOT NULL,
+                source_channel TEXT NOT NULL,
+                scopes_json TEXT NOT NULL,
+                origins_json TEXT NOT NULL,
+                revoked INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS peer_sequences (
+                fingerprint TEXT PRIMARY KEY,
+                last_sequence INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS commands (
+                fingerprint TEXT NOT NULL,
+                command_id TEXT NOT NULL,
+                command_fingerprint TEXT NOT NULL,
+                sequence INTEGER NOT NULL,
+                capability TEXT NOT NULL,
+                state TEXT NOT NULL,
+                result_json TEXT,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (fingerprint, command_id)
+            );
+            CREATE TABLE IF NOT EXISTS egress_selections (
+                fingerprint TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                profile_id TEXT NOT NULL,
+                country TEXT NOT NULL,
+                provider TEXT,
+                verified_provider TEXT,
+                verification_eligibility TEXT,
+                connection_generation INTEGER NOT NULL DEFAULT 0,
+                verified_generation INTEGER,
+                revision INTEGER NOT NULL,
+                PRIMARY KEY (fingerprint, session_id)
+            );
+            CREATE TABLE IF NOT EXISTS host_egress_state (
+                singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                generation INTEGER NOT NULL
+            );
+            INSERT OR IGNORE INTO host_egress_state (singleton, generation)
+            VALUES (1, 0);
+            CREATE TABLE IF NOT EXISTS approvals (
+                approval_id TEXT PRIMARY KEY,
+                fingerprint TEXT NOT NULL,
+                command_digest TEXT NOT NULL,
+                command_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                capability TEXT NOT NULL,
+                selection_revision INTEGER,
+                expires_at TEXT NOT NULL,
+                used INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS audit (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                command_id TEXT NOT NULL,
+                actor_id TEXT NOT NULL,
+                capability TEXT NOT NULL,
+                outcome TEXT NOT NULL,
+                recorded_at TEXT NOT NULL
+            );
+            """
+        )
+
+    @synchronized
+    def close(self) -> None:
+        self.connection.close()
+
+    @synchronized
+    def add_grant(
+        self,
+        fingerprint: str,
+        actor_id: str,
+        source_channel: str,
+        scopes: list[str],
+        origins: list[str],
+        created_at: str,
+    ) -> None:
+        self.connection.execute(
+            """
+            INSERT INTO grants (
+                fingerprint, actor_id, source_channel, scopes_json,
+                origins_json, revoked, created_at
+            ) VALUES (?, ?, ?, ?, ?, 0, ?)
+            ON CONFLICT(fingerprint) DO UPDATE SET
+                actor_id=excluded.actor_id,
+                source_channel=excluded.source_channel,
+                scopes_json=excluded.scopes_json,
+                origins_json=excluded.origins_json,
+                revoked=0,
+                created_at=excluded.created_at
+            """,
+            (
+                fingerprint,
+                actor_id,
+                source_channel,
+                canonical_json(sorted(scopes)),
+                canonical_json(sorted(origins)),
+                created_at,
+            ),
+        )
+
+    @synchronized
+    def revoke(self, fingerprint: str) -> bool:
+        cursor = self.connection.execute(
+            "UPDATE grants SET revoked=1 WHERE fingerprint=?", (fingerprint,)
+        )
+        return cursor.rowcount == 1
+
+    @synchronized
+    def grant(self, fingerprint: str) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            """
+            SELECT actor_id, source_channel, scopes_json, origins_json, revoked
+            FROM grants WHERE fingerprint=?
+            """,
+            (fingerprint,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "actor_id": row[0],
+            "source_channel": row[1],
+            "scopes": json.loads(row[2]),
+            "origins": json.loads(row[3]),
+            "revoked": bool(row[4]),
+        }
+
+    @contextmanager
+    def execution_guard(self, fingerprint: str, capability: str):
+        with self.lock:
+            self.connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = self.connection.execute(
+                    "SELECT scopes_json, revoked FROM grants WHERE fingerprint=?",
+                    (fingerprint,),
+                ).fetchone()
+                if row is None or bool(row[1]):
+                    raise AgentError("revoked_device", "agent.pair.revoked")
+                if capability not in json.loads(row[0]):
+                    raise AgentError("policy_denied", "agent.command.scope-denied")
+                yield
+                self.connection.execute("COMMIT")
+            except AgentError as error:
+                self.connection.execute("COMMIT" if error.commit_state else "ROLLBACK")
+                raise
+            except Exception:
+                self.connection.execute("ROLLBACK")
+                raise
+
+    @synchronized
+    def prepare_command(
+        self,
+        peer: str,
+        command: dict[str, Any],
+        fingerprint: str,
+    ) -> tuple[str, dict[str, Any] | None]:
+        command_id = command["command_id"]
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            existing = self.connection.execute(
+                """
+                SELECT command_fingerprint, result_json
+                FROM commands WHERE fingerprint=? AND command_id=?
+                """,
+                (peer, command_id),
+            ).fetchone()
+            if existing is not None:
+                if existing[0] != fingerprint:
+                    raise AgentError("session_conflict", "agent.command.id-conflict")
+                self.connection.execute("COMMIT")
+                if existing[1] is not None:
+                    return "cached", json.loads(existing[1])
+                return "unresolved", None
+            last = self.connection.execute(
+                "SELECT last_sequence FROM peer_sequences WHERE fingerprint=?",
+                (peer,),
+            ).fetchone()
+            if last is not None and command["sequence"] <= last[0]:
+                raise AgentError("replay_rejected", "agent.command.sequence-replayed")
+            self.connection.execute(
+                """
+                INSERT INTO commands (
+                    fingerprint, command_id, command_fingerprint, sequence,
+                    capability, state, result_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, 'STARTED', NULL, ?)
+                """,
+                (
+                    peer,
+                    command_id,
+                    fingerprint,
+                    command["sequence"],
+                    command["capability"],
+                    timestamp(),
+                ),
+            )
+            self.connection.execute(
+                """
+                INSERT INTO peer_sequences (fingerprint, last_sequence)
+                VALUES (?, ?)
+                ON CONFLICT(fingerprint) DO UPDATE SET
+                    last_sequence=excluded.last_sequence
+                """,
+                (peer, command["sequence"]),
+            )
+            self.connection.execute("COMMIT")
+            return "new", None
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    @synchronized
+    def complete_command(
+        self,
+        peer: str,
+        command: dict[str, Any],
+        result: dict[str, Any],
+    ) -> None:
+        outcome = result["status"].upper()
+        encoded = canonical_json(result)
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            self.connection.execute(
+                """
+                UPDATE commands SET state=?, result_json=?
+                WHERE fingerprint=? AND command_id=?
+                """,
+                (outcome, encoded, peer, command["command_id"]),
+            )
+            self.connection.execute(
+                """
+                INSERT INTO audit (
+                    command_id, actor_id, capability, outcome, recorded_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    command["command_id"],
+                    command["actor_id"],
+                    command["capability"],
+                    outcome,
+                    timestamp(),
+                ),
+            )
+            self.connection.execute("COMMIT")
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    @synchronized
+    def set_selection(
+        self,
+        fingerprint: str,
+        session_id: str,
+        profile_id: str,
+        country: str,
+        provider: str | None,
+    ) -> int:
+        self.connection.execute(
+            """
+            INSERT INTO egress_selections (
+                fingerprint, session_id, profile_id, country, provider,
+                verified_provider, verification_eligibility,
+                connection_generation, verified_generation, revision
+            ) VALUES (?, ?, ?, ?, ?, NULL, NULL, 0, NULL, 1)
+            ON CONFLICT(fingerprint, session_id) DO UPDATE SET
+                profile_id=excluded.profile_id,
+                country=excluded.country,
+                provider=excluded.provider,
+                verified_provider=NULL,
+                verification_eligibility=NULL,
+                verified_generation=NULL,
+                revision=egress_selections.revision + 1
+            """,
+            (fingerprint, session_id, profile_id, country, provider),
+        )
+        row = self.connection.execute(
+            "SELECT revision FROM egress_selections WHERE fingerprint=? AND session_id=?",
+            (fingerprint, session_id),
+        ).fetchone()
+        return int(row[0])
+
+    @synchronized
+    def selection(self, fingerprint: str, session_id: str) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            """
+            SELECT profile_id, country, provider,
+                   verified_provider, verification_eligibility,
+                   connection_generation, verified_generation, revision,
+                   (SELECT generation FROM host_egress_state WHERE singleton=1)
+            FROM egress_selections WHERE fingerprint=? AND session_id=?
+            """,
+            (fingerprint, session_id),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "profile_id": row[0],
+            "country": row[1],
+            "provider": row[2],
+            "verified_provider": row[3],
+            "verification_eligibility": row[4],
+            "connection_generation": row[5],
+            "verified_generation": row[6],
+            "revision": row[7],
+            "host_generation": row[8],
+        }
+
+    @synchronized
+    def set_verification(
+        self, fingerprint: str, session_id: str, provider: str, eligibility: str
+    ) -> None:
+        cursor = self.connection.execute(
+            """
+            UPDATE egress_selections
+            SET verified_provider=?, verification_eligibility=?,
+                verified_generation=(
+                    SELECT generation FROM host_egress_state WHERE singleton=1
+                )
+            WHERE fingerprint=? AND session_id=?
+            """,
+            (provider, eligibility, fingerprint, session_id),
+        )
+        if cursor.rowcount != 1:
+            raise AgentError("session_not_found", "agent.vpn.selection-required")
+
+    @synchronized
+    def mark_connected(
+        self, fingerprint: str, session_id: str, generation: int
+    ) -> None:
+        current = self.connection.execute(
+            "SELECT generation FROM host_egress_state WHERE singleton=1"
+        ).fetchone()
+        if current is None or int(current[0]) != generation:
+            raise AgentError("session_conflict", "agent.vpn.generation-changed")
+        cursor = self.connection.execute(
+            """
+            UPDATE egress_selections SET connection_generation=?
+            WHERE fingerprint=? AND session_id=?
+            """,
+            (generation, fingerprint, session_id),
+        )
+        if cursor.rowcount != 1:
+            raise AgentError("session_not_found", "agent.vpn.selection-required")
+
+    @synchronized
+    def invalidate_host_egress(self) -> int:
+        self.connection.execute(
+            "UPDATE host_egress_state SET generation=generation + 1 WHERE singleton=1"
+        )
+        generation = int(
+            self.connection.execute(
+                "SELECT generation FROM host_egress_state WHERE singleton=1"
+            ).fetchone()[0]
+        )
+        self.connection.execute(
+            """
+            UPDATE egress_selections
+            SET verified_provider=NULL, verification_eligibility=NULL,
+                verified_generation=NULL
+            """
+        )
+        return generation
+
+    @synchronized
+    def create_approval(
+        self, fingerprint: str, command: dict[str, Any], digest: str
+    ) -> tuple[str, int | None]:
+        selection_revision = None
+        if command["capability"] == "vpn.connect":
+            selection = self.selection(fingerprint, command["session_id"])
+            if selection is None:
+                raise AgentError("session_not_found", "agent.vpn.selection-required")
+            selection_revision = int(selection["revision"])
+        approval_id = f"approval-{secrets.token_hex(16)}"
+        self.connection.execute(
+            """
+            INSERT INTO approvals (
+                approval_id, fingerprint, command_digest, command_id,
+                session_id, capability, selection_revision, expires_at,
+                used, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+            """,
+            (
+                approval_id,
+                fingerprint,
+                digest,
+                command["command_id"],
+                command["session_id"],
+                command["capability"],
+                selection_revision,
+                command["expires_at"],
+                timestamp(),
+            ),
+        )
+        return approval_id, selection_revision
+
+    @synchronized
+    def consume_approval(self, fingerprint: str, command: dict[str, Any]) -> None:
+        approval_id = command["confirmation"].get("confirmation_id")
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            row = self.connection.execute(
+                """
+                SELECT fingerprint, command_digest, command_id, session_id,
+                       capability, selection_revision, expires_at, used
+                FROM approvals WHERE approval_id=?
+                """,
+                (approval_id,),
+            ).fetchone()
+            if row is None or bool(row[7]):
+                raise AgentError("approval_invalid", "agent.approval.missing-or-used")
+            if (
+                row[0] != fingerprint
+                or row[1] != approval_digest(command)
+                or row[2] != command["command_id"]
+                or row[3] != command["session_id"]
+                or row[4] != command["capability"]
+                or parse_timestamp(row[6]) <= utc_now()
+            ):
+                raise AgentError("approval_invalid", "agent.approval.binding-invalid")
+            if row[5] is not None:
+                selection = self.connection.execute(
+                    """
+                    SELECT revision FROM egress_selections
+                    WHERE fingerprint=? AND session_id=?
+                    """,
+                    (fingerprint, command["session_id"]),
+                ).fetchone()
+                if selection is None or int(selection[0]) != int(row[5]):
+                    raise AgentError("approval_invalid", "agent.approval.selection-changed")
+            cursor = self.connection.execute(
+                "UPDATE approvals SET used=1 WHERE approval_id=? AND used=0",
+                (approval_id,),
+            )
+            if cursor.rowcount != 1:
+                raise AgentError("approval_invalid", "agent.approval.missing-or-used")
+            self.connection.execute("COMMIT")
+        except Exception:
+            self.connection.execute("ROLLBACK")
+            raise
+
+
+class LocalApi:
+    def __init__(self, socket_path: Path):
+        self.socket_path = socket_path
+
+    @staticmethod
+    def action_id(command_id: str) -> str:
+        digest = hashlib.sha256(command_id.encode("utf-8")).hexdigest()[:32]
+        return f"action-{digest}"
+
+    def call(
+        self,
+        operation: str,
+        payload: dict[str, Any],
+        command_id: str,
+        *,
+        mutation: bool = False,
+        deadline_ms: int | None = None,
+    ) -> dict[str, Any]:
+        digest = hashlib.sha256(command_id.encode("utf-8")).hexdigest()[:32]
+        request_id = f"request-{digest}"
+        request: dict[str, Any] = {
+            "api_version": "1.0",
+            "request_id": request_id,
+            "operation": operation,
+            "payload": payload,
+        }
+        if deadline_ms is not None:
+            request["deadline_ms"] = deadline_ms
+        if mutation:
+            request.update(
+                {
+                    "action_id": self.action_id(command_id),
+                    "authorization": "system-mutate",
+                }
+            )
+        encoded = (canonical_json(request) + "\n").encode("utf-8")
+        if len(encoded) > 65_536:
+            raise AgentError("invalid_request", "agent.local-api.request-too-large")
+        chunks: list[bytes] = []
+        total = 0
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+                connection.settimeout(max(5, (deadline_ms or 5_000) / 1000 + 5))
+                connection.connect(str(self.socket_path))
+                connection.sendall(encoded)
+                connection.shutdown(socket.SHUT_WR)
+                while True:
+                    chunk = connection.recv(65_536)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > MAX_API_BYTES:
+                        raise AgentError(
+                            "backend_unavailable", "agent.local-api.response-too-large"
+                        )
+                    chunks.append(chunk)
+        except AgentError:
+            raise
+        except (OSError, TimeoutError) as error:
+            raise AgentError(
+                "backend_unavailable", "agent.local-api.unavailable", True
+            ) from error
+        if not chunks:
+            raise AgentError("backend_unavailable", "agent.local-api.empty", True)
+        response = strict_json(b"".join(chunks), "agent.local-api.response")
+        if (
+            response.get("api_version") != "1.0"
+            or response.get("request_id") != request_id
+        ):
+            raise AgentError("backend_unavailable", "agent.local-api.identity-mismatch")
+        if response.get("status") != "ok":
+            error = response.get("error")
+            if not isinstance(error, dict):
+                raise AgentError("backend_unavailable", "agent.local-api.error-malformed")
+            code = str(error.get("code", "backend-unavailable")).replace("-", "_")
+            message_key = str(error.get("message_key", "agent.local-api.failed"))[:128]
+            allowed = {
+                "permission_denied",
+                "not_found",
+                "conflict",
+                "busy",
+                "deadline_exceeded",
+                "backend_unavailable",
+                "validation_failed",
+                "operation_failed",
+                "rollback_failed",
+                "internal_error",
+                "invalid_request",
+            }
+            if MESSAGE_KEY.fullmatch(message_key) is None:
+                message_key = "agent.local-api.failed"
+            raise AgentError(
+                code if code in allowed else "provider_internal_error",
+                message_key,
+                bool(error.get("retryable", False)),
+            )
+        result = response.get("result")
+        if not isinstance(result, dict) or contains_forbidden_key(result):
+            raise AgentError("backend_unavailable", "agent.local-api.result-unsafe")
+        return result
+
+
+def validate_action_result(
+    value: dict[str, Any], expected_action_id: str
+) -> dict[str, Any]:
+    required = {"action_id", "state", "state_changed", "rollback"}
+    if not required.issubset(value) or not set(value).issubset(required | {"message_key"}):
+        raise AgentError("provider_internal_error", "agent.vpn.action-result-invalid")
+    if (
+        value.get("action_id") != expected_action_id
+        or not valid_identifier(value.get("action_id"))
+        or value.get("state") not in {
+            "queued", "running", "succeeded", "failed", "timed-out",
+            "rolled-back", "rollback-failed",
+        }
+        or not isinstance(value.get("state_changed"), bool)
+        or (
+            "message_key" in value
+            and (
+                not isinstance(value["message_key"], str)
+                or MESSAGE_KEY.fullmatch(value["message_key"]) is None
+            )
+        )
+    ):
+        raise AgentError("provider_internal_error", "agent.vpn.action-result-invalid")
+    rollback = value["rollback"]
+    if (
+        not isinstance(rollback, dict)
+        or not {"required", "state"}.issubset(rollback)
+        or not set(rollback).issubset({"required", "state", "message_key"})
+        or not isinstance(rollback.get("required"), bool)
+        or rollback.get("state") not in {"not-needed", "pending", "completed", "failed"}
+        or (
+            "message_key" in rollback
+            and (
+                not isinstance(rollback["message_key"], str)
+                or MESSAGE_KEY.fullmatch(rollback["message_key"]) is None
+            )
+        )
+    ):
+        raise AgentError("provider_internal_error", "agent.vpn.action-result-invalid")
+    return value
+
+
+def lifecycle_outcome_error(outcome: dict[str, Any], operation: str) -> AgentError:
+    state = outcome["state"]
+    message_key = outcome.get("message_key")
+    if not isinstance(message_key, str) or MESSAGE_KEY.fullmatch(message_key) is None:
+        message_key = f"agent.vpn.{operation}-not-succeeded"
+    if state == "timed-out":
+        return AgentError(
+            "deadline_exceeded", message_key, True, commit_state=True
+        )
+    if state == "rollback-failed":
+        return AgentError("rollback_failed", message_key, commit_state=True)
+    return AgentError("operation_failed", message_key, commit_state=True)
+
+
+def commit_mutation_error(error: Exception) -> AgentError:
+    if isinstance(error, AgentError):
+        return AgentError(
+            error.code,
+            error.message_key,
+            error.retryable,
+            commit_state=True,
+        )
+    return AgentError(
+        "provider_internal_error",
+        "agent.vpn.mutation-result-invalid",
+        commit_state=True,
+    )
+
+
+def validate_api_capabilities(value: dict[str, Any]) -> dict[str, Any]:
+    if set(value) != {
+        "schema_version", "api_version", "engine_version", "operations"
+    } or (
+        value.get("schema_version") != 1
+        or value.get("api_version") != "1.0"
+        or not isinstance(value.get("engine_version"), str)
+        or not 1 <= len(value["engine_version"]) <= 64
+    ):
+        raise AgentError("backend_unavailable", "agent.local-api.capabilities-invalid")
+    operations = value.get("operations")
+    if (
+        not isinstance(operations, list)
+        or not 1 <= len(operations) <= 128
+        or any(
+            not isinstance(operation, str)
+            or re.fullmatch(r"[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*", operation) is None
+            for operation in operations
+        )
+        or len(operations) != len(set(operations))
+        or not REQUIRED_LOCAL_API_OPERATIONS.issubset(operations)
+    ):
+        raise AgentError("backend_unavailable", "agent.local-api.capabilities-invalid")
+    return value
+
+
+def validate_service_result(value: dict[str, Any], provider: str) -> dict[str, Any]:
+    if set(value) != {"schema_version", "checked_at", "scope", "results"} or (
+        value.get("schema_version") != 1
+        or value.get("scope") != "unauthenticated-egress"
+        or not valid_timestamp(value.get("checked_at"))
+    ):
+        raise AgentError("provider_internal_error", "agent.vpn.verify.result-invalid")
+    probes = value.get("results")
+    if not isinstance(probes, list) or len(probes) != 1:
+        raise AgentError("provider_internal_error", "agent.vpn.verify.result-invalid")
+    probe = probes[0]
+    if not isinstance(probe, dict) or set(probe) != {
+        "service_id", "probe_version", "reachability", "egress_eligibility",
+        "reason_code", "http_status",
+    }:
+        raise AgentError("provider_internal_error", "agent.vpn.verify.result-invalid")
+    if (
+        probe.get("service_id") != provider
+        or probe.get("probe_version") != 1
+        or probe.get("reachability") not in {"reachable", "unreachable"}
+        or probe.get("egress_eligibility")
+        not in {"eligible", "ineligible", "indeterminate"}
+        or not isinstance(probe.get("reason_code"), str)
+        or MESSAGE_KEY.fullmatch(probe["reason_code"]) is None
+    ):
+        raise AgentError("provider_internal_error", "agent.vpn.verify.result-invalid")
+    status = probe.get("http_status")
+    if status is not None and (
+        not isinstance(status, int) or isinstance(status, bool) or not 100 <= status <= 599
+    ):
+        raise AgentError("provider_internal_error", "agent.vpn.verify.result-invalid")
+    return value
+
+
+def validate_region_result(value: dict[str, Any], provider: str) -> dict[str, Any]:
+    required = {
+        "schema_version", "provider", "egress_country", "system_timezone",
+        "timezone_country", "supported_by_provider", "country_consistent",
+        "account_region_hint", "verdict", "mismatches",
+    }
+    if set(value) != required or value.get("schema_version") != 1 or value.get(
+        "provider"
+    ) != provider:
+        raise AgentError("provider_internal_error", "agent.region.result-invalid")
+    for country_field in ("egress_country", "timezone_country"):
+        country = value.get(country_field)
+        if country is not None and (
+            not isinstance(country, str) or COUNTRY.fullmatch(country) is None
+        ):
+            raise AgentError("provider_internal_error", "agent.region.result-invalid")
+    mismatches = value.get("mismatches")
+    timezone = value.get("system_timezone")
+    hint = value.get("account_region_hint")
+    if (
+        not isinstance(value.get("supported_by_provider"), bool)
+        or not isinstance(value.get("country_consistent"), bool)
+        or value.get("verdict") not in {"ready", "not-ready"}
+        or (
+            timezone is not None
+            and (
+                not isinstance(timezone, str)
+                or len(timezone) > 96
+                or TIMEZONE.fullmatch(timezone) is None
+            )
+        )
+        or not isinstance(hint, str)
+        or not 1 <= len(hint) <= 255
+        or not isinstance(mismatches, list)
+        or len(mismatches) > 8
+        or any(not isinstance(item, str) for item in mismatches)
+        or len(set(mismatches)) != len(mismatches)
+        or not set(mismatches).issubset(REGION_MISMATCHES)
+    ):
+        raise AgentError("provider_internal_error", "agent.region.result-invalid")
+    if value["verdict"] == "ready" and not (
+        value["supported_by_provider"] is True
+        and value["country_consistent"] is True
+        and value["egress_country"] is not None
+        and value["egress_country"] == value["timezone_country"]
+        and mismatches == []
+    ):
+        raise AgentError("provider_internal_error", "agent.region.result-invalid")
+    return value
+
+
+def validate_planner_result(value: dict[str, Any]) -> dict[str, Any]:
+    required = {
+        "schema_version", "policy_version", "catalog_version", "evaluated_at",
+        "dry_run", "workload", "provider", "required_country",
+        "ordered_profile_ids", "candidates",
+    }
+    if set(value) != required or value.get("schema_version") != 1 or value.get(
+        "policy_version"
+    ) != 1 or value.get("dry_run") is not True:
+        raise AgentError("provider_internal_error", "agent.planner.result-invalid")
+    provider = value.get("provider")
+    required_country = value.get("required_country")
+    try:
+        dt.date.fromisoformat(value.get("catalog_version", ""))
+    except (TypeError, ValueError):
+        raise AgentError(
+            "provider_internal_error", "agent.planner.result-invalid"
+        ) from None
+    if (
+        not valid_timestamp(value.get("evaluated_at"))
+        or value.get("workload") not in {
+            "general", "llm-streaming", "api-calls", "video", "split-routing"
+        }
+        or (
+            provider is not None
+            and (
+                not isinstance(provider, str)
+                or SAFE_PROVIDER.fullmatch(provider) is None
+            )
+        )
+        or (
+            required_country is not None
+            and (
+                not isinstance(required_country, str)
+                or COUNTRY.fullmatch(required_country) is None
+            )
+        )
+    ):
+        raise AgentError("provider_internal_error", "agent.planner.result-invalid")
+    ordered = value.get("ordered_profile_ids")
+    candidates = value.get("candidates")
+    if (
+        not isinstance(ordered, list)
+        or len(ordered) > 16
+        or not isinstance(candidates, list)
+        or not 1 <= len(candidates) <= 16
+    ):
+        raise AgentError("provider_internal_error", "agent.planner.result-invalid")
+    gate_ids = {
+        "backend-ready", "profile-valid", "secrets-readable-only-by-backend",
+        "rollback-storage-ready", "platform-supported",
+        "provider-country-supported", "required-country-match",
+    }
+    factor_ids = {
+        "recent-success", "censorship-fit", "reachability",
+        "latency-loss", "workload-fit",
+    }
+    candidate_ids: list[str] = []
+    for candidate in candidates:
+        allowed_candidate = {
+            "profile_id", "protocol", "eligible", "rank", "score",
+            "hard_gates", "factors", "reason_codes",
+        }
+        if (
+            not isinstance(candidate, dict)
+            or not {
+                "profile_id", "eligible", "rank", "score", "hard_gates",
+                "factors", "reason_codes",
+            }.issubset(candidate)
+            or not set(candidate).issubset(allowed_candidate)
+            or not valid_identifier(candidate.get("profile_id"))
+            or (
+                "protocol" in candidate
+                and candidate["protocol"] not in {
+                    "amneziawg", "wireguard", "openvpn", "l2tp"
+                }
+            )
+            or not isinstance(candidate.get("eligible"), bool)
+            or (
+                candidate.get("rank") is not None
+                and not (
+                    isinstance(candidate["rank"], int)
+                    and not isinstance(candidate["rank"], bool)
+                    and candidate["rank"] >= 1
+                )
+            )
+            or (
+                candidate.get("score") is not None
+                and not valid_nonnegative_integer(candidate["score"], 100)
+            )
+        ):
+            raise AgentError("provider_internal_error", "agent.planner.result-invalid")
+        gates = candidate["hard_gates"]
+        factors = candidate["factors"]
+        reasons = candidate["reason_codes"]
+        if (
+            not isinstance(gates, list)
+            or not 5 <= len(gates) <= 7
+            or not isinstance(factors, list)
+            or len(factors) != 5
+            or not isinstance(reasons, list)
+            or any(not valid_identifier(reason) for reason in reasons)
+            or len(reasons) != len(set(reasons))
+        ):
+            raise AgentError("provider_internal_error", "agent.planner.result-invalid")
+        seen_gates: set[str] = set()
+        for gate in gates:
+            if (
+                not isinstance(gate, dict)
+                or set(gate) != {"id", "passed", "reason_code"}
+                or gate.get("id") not in gate_ids
+                or gate["id"] in seen_gates
+                or not isinstance(gate.get("passed"), bool)
+                or not valid_identifier(gate.get("reason_code"))
+            ):
+                raise AgentError("provider_internal_error", "agent.planner.result-invalid")
+            seen_gates.add(gate["id"])
+        seen_factors: set[str] = set()
+        for factor in factors:
+            if (
+                not isinstance(factor, dict)
+                or set(factor) != {"id", "points", "max_points", "reason_code"}
+                or factor.get("id") not in factor_ids
+                or factor["id"] in seen_factors
+                or not valid_nonnegative_integer(factor.get("points"), 100)
+                or not (
+                    isinstance(factor.get("max_points"), int)
+                    and not isinstance(factor["max_points"], bool)
+                    and 1 <= factor["max_points"] <= 100
+                )
+                or factor["points"] > factor["max_points"]
+                or not valid_identifier(factor.get("reason_code"))
+            ):
+                raise AgentError("provider_internal_error", "agent.planner.result-invalid")
+            seen_factors.add(factor["id"])
+        candidate_ids.append(candidate["profile_id"])
+    if (
+        len(candidate_ids) != len(set(candidate_ids))
+        or any(not valid_identifier(item) for item in ordered)
+        or len(ordered) != len(set(ordered))
+        or not set(ordered).issubset(candidate_ids)
+    ):
+        raise AgentError("provider_internal_error", "agent.planner.result-invalid")
+    return value
+
+
+def validate_status_result(value: dict[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "product", "engine_version", "generated_at", "available", "connection",
+        "desired", "mode", "autostart", "health_monitor", "health_failures", "fallback",
+    }
+    if not {"product", "engine_version", "generated_at", "available", "connection"}.issubset(
+        value
+    ) or not set(value).issubset(allowed) or value.get("product") != "Mazzy VPN":
+        raise AgentError("provider_internal_error", "agent.vpn.status-result-invalid")
+    if (
+        not isinstance(value.get("engine_version"), str)
+        or len(value["engine_version"]) > 64
+        or not valid_timestamp(value.get("generated_at"))
+        or not isinstance(value.get("available"), bool)
+        or ("desired" in value and value["desired"] not in {"up", "down", "unknown"})
+        or ("mode" in value and value["mode"] not in {"normal", "test", "unknown"})
+        or ("autostart" in value and not isinstance(value["autostart"], bool))
+        or (
+            "health_monitor" in value
+            and not isinstance(value["health_monitor"], bool)
+        )
+        or (
+            "health_failures" in value
+            and not valid_nonnegative_integer(value["health_failures"])
+        )
+    ):
+        raise AgentError("provider_internal_error", "agent.vpn.status-result-invalid")
+    connection = value.get("connection")
+    allowed_connection = {
+        "state", "protocol", "profile_id", "internet_reachable", "healthy",
+        "interface", "handshake_age", "public_ip",
+    }
+    if (
+        not isinstance(connection, dict)
+        or "state" not in connection
+        or not set(connection).issubset(allowed_connection)
+        or connection.get("state") not in {
+            "disconnected", "connecting", "connected", "testing", "recovering",
+            "error", "unknown",
+        }
+        or (
+            "protocol" in connection
+            and connection["protocol"] not in {
+                "amneziawg", "wireguard", "openvpn", "l2tp"
+            }
+        )
+        or ("profile_id" in connection and not valid_identifier(connection["profile_id"]))
+        or (
+            "internet_reachable" in connection
+            and not isinstance(connection["internet_reachable"], bool)
+        )
+        or ("healthy" in connection and not isinstance(connection["healthy"], bool))
+        or (
+            "interface" in connection
+            and (
+                not isinstance(connection["interface"], str)
+                or re.fullmatch(r"[A-Za-z0-9_.:-]{1,32}", connection["interface"])
+                is None
+            )
+        )
+        or (
+            "handshake_age" in connection
+            and not valid_nonnegative_integer(connection["handshake_age"])
+        )
+    ):
+        raise AgentError("provider_internal_error", "agent.vpn.status-result-invalid")
+    if "public_ip" in connection:
+        public_ip = connection["public_ip"]
+        try:
+            if not isinstance(public_ip, str) or not 3 <= len(public_ip) <= 64:
+                raise ValueError
+            ipaddress.ip_address(public_ip)
+        except ValueError:
+            raise AgentError(
+                "provider_internal_error", "agent.vpn.status-result-invalid"
+            ) from None
+    if "fallback" in value:
+        fallback = value["fallback"]
+        if (
+            not isinstance(fallback, dict)
+            or "active" not in fallback
+            or not set(fallback).issubset({"active", "display_name"})
+            or not isinstance(fallback.get("active"), bool)
+            or (
+                "display_name" in fallback
+                and (
+                    not isinstance(fallback["display_name"], str)
+                    or not 1 <= len(fallback["display_name"]) <= 64
+                )
+            )
+        ):
+            raise AgentError("provider_internal_error", "agent.vpn.status-result-invalid")
+    return value
+
+
+def validate_evidence(value: object) -> None:
+    required = {
+        "recent_outcome",
+        "consecutive_failures",
+        "reachability",
+        "latency_ms",
+        "loss_percent",
+        "evidence_age_seconds",
+    }
+    if not isinstance(value, dict) or set(value) != required:
+        raise AgentError("invalid_request", "agent.planner.evidence-invalid")
+    if value["recent_outcome"] not in {"success", "unknown", "failure"}:
+        raise AgentError("invalid_request", "agent.planner.evidence-invalid")
+    if value["reachability"] not in {"reachable", "unknown", "unreachable"}:
+        raise AgentError("invalid_request", "agent.planner.evidence-invalid")
+    for key, maximum in {
+        "consecutive_failures": 10,
+        "loss_percent": 100,
+        "evidence_age_seconds": 86_400,
+    }.items():
+        item = value[key]
+        if not isinstance(item, int) or isinstance(item, bool) or not 0 <= item <= maximum:
+            raise AgentError("invalid_request", "agent.planner.evidence-invalid")
+    latency = value["latency_ms"]
+    if latency is not None and (
+        not isinstance(latency, int)
+        or isinstance(latency, bool)
+        or not 0 <= latency <= 60_000
+    ):
+        raise AgentError("invalid_request", "agent.planner.evidence-invalid")
+
+
+def validate_planner_payload(value: object) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise AgentError("invalid_request", "agent.planner.payload-invalid")
+    allowed = {"workload", "provider", "required_country", "candidates"}
+    if not {"workload", "candidates"}.issubset(value) or not set(value).issubset(allowed):
+        raise AgentError("invalid_request", "agent.planner.payload-invalid")
+    if value["workload"] not in {
+        "general",
+        "llm-streaming",
+        "api-calls",
+        "video",
+        "split-routing",
+    }:
+        raise AgentError("invalid_request", "agent.planner.payload-invalid")
+    if "provider" in value and (
+        not isinstance(value["provider"], str)
+        or SAFE_PROVIDER.fullmatch(value["provider"]) is None
+    ):
+        raise AgentError("invalid_request", "agent.planner.payload-invalid")
+    if "required_country" in value and (
+        not isinstance(value["required_country"], str)
+        or COUNTRY.fullmatch(value["required_country"]) is None
+    ):
+        raise AgentError("invalid_request", "agent.planner.payload-invalid")
+    candidates = value["candidates"]
+    if not isinstance(candidates, list) or not 1 <= len(candidates) <= 16:
+        raise AgentError("invalid_request", "agent.planner.payload-invalid")
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not isinstance(candidate, dict) or set(candidate) != {"profile_id", "evidence"}:
+            raise AgentError("invalid_request", "agent.planner.candidate-invalid")
+        profile_id = candidate["profile_id"]
+        if not isinstance(profile_id, str) or SAFE_PROFILE_ID.fullmatch(profile_id) is None:
+            raise AgentError("invalid_request", "agent.planner.candidate-invalid")
+        if profile_id in seen:
+            raise AgentError("invalid_request", "agent.planner.candidate-duplicate")
+        seen.add(profile_id)
+        validate_evidence(candidate["evidence"])
+    return value
+
+
+def validate_arguments(capability: str, value: object) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise AgentError("invalid_request", "agent.command.arguments-invalid")
+    if capability in {"vpn.status", "vpn.connect", "vpn.disconnect"}:
+        if value:
+            raise AgentError("invalid_request", "agent.command.arguments-must-be-empty")
+    elif capability == "vpn.select":
+        if "country" not in value or not set(value).issubset({"country", "provider"}):
+            raise AgentError("invalid_request", "agent.vpn.select.arguments-invalid")
+        if not isinstance(value["country"], str) or COUNTRY.fullmatch(value["country"]) is None:
+            raise AgentError("invalid_request", "agent.vpn.country-invalid")
+        if "provider" in value and (
+            not isinstance(value["provider"], str)
+            or SAFE_PROVIDER.fullmatch(value["provider"]) is None
+        ):
+            raise AgentError("invalid_request", "agent.vpn.provider-invalid")
+    elif capability == "vpn.verify":
+        if set(value) != {"provider"} or not isinstance(value["provider"], str):
+            raise AgentError("invalid_request", "agent.vpn.verify.arguments-invalid")
+        if SAFE_PROVIDER.fullmatch(value["provider"]) is None:
+            raise AgentError("invalid_request", "agent.vpn.provider-invalid")
+    elif capability == "region.check":
+        if "provider" not in value or not set(value).issubset(
+            {"provider", "target_country"}
+        ):
+            raise AgentError("invalid_request", "agent.region.arguments-invalid")
+        if not isinstance(value["provider"], str) or SAFE_PROVIDER.fullmatch(
+            value["provider"]
+        ) is None:
+            raise AgentError("invalid_request", "agent.vpn.provider-invalid")
+        if "target_country" in value and (
+            not isinstance(value["target_country"], str)
+            or COUNTRY.fullmatch(value["target_country"]) is None
+        ):
+            raise AgentError("invalid_request", "agent.vpn.country-invalid")
+    elif capability == "planner.evaluate":
+        return validate_planner_payload(value)
+    return value
+
+
+def validate_command(
+    command: dict[str, Any],
+    grant: dict[str, Any],
+    *,
+    approval_draft: bool = False,
+) -> dict[str, Any]:
+    required = {
+        "schema_version",
+        "protocol",
+        "message_type",
+        "command_id",
+        "session_id",
+        "actor_id",
+        "source_channel",
+        "sequence",
+        "issued_at",
+        "expires_at",
+        "capability",
+        "target_id",
+        "risk",
+        "confirmation",
+        "arguments",
+    }
+    if set(command) != required:
+        raise AgentError("invalid_request", "agent.command.shape-invalid")
+    if command["schema_version"] != 1 or command["protocol"] != PROTOCOL:
+        raise AgentError(
+            "unsupported_protocol_version", "agent.command.protocol-unsupported"
+        )
+    if command["message_type"] != "command":
+        raise AgentError("invalid_request", "agent.command.type-invalid")
+    if not isinstance(command["command_id"], str) or SAFE_ID.fullmatch(
+        command["command_id"]
+    ) is None:
+        raise AgentError("invalid_request", "agent.command.id-invalid")
+    if not isinstance(command["session_id"], str) or SAFE_ID.fullmatch(
+        command["session_id"]
+    ) is None:
+        raise AgentError("invalid_request", "agent.command.session-invalid")
+    if command["actor_id"] != grant["actor_id"] or command["source_channel"] != grant[
+        "source_channel"
+    ]:
+        raise AgentError("permission_denied", "agent.command.identity-mismatch")
+    if command["source_channel"] == "telegram-bot":
+        raise AgentError("policy_denied", "agent.command.channel-unsupported")
+    capability = command["capability"]
+    if capability not in CAPABILITIES:
+        raise AgentError("unsupported_capability", "agent.command.capability-unsupported")
+    if capability not in grant["scopes"]:
+        raise AgentError("policy_denied", "agent.command.scope-denied")
+    if command["target_id"] != "egress":
+        raise AgentError("invalid_request", "agent.command.target-invalid")
+    sequence = command["sequence"]
+    if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 0:
+        raise AgentError("invalid_request", "agent.command.sequence-invalid")
+    issued_at = parse_timestamp(command["issued_at"])
+    expires_at = parse_timestamp(command["expires_at"])
+    now = utc_now()
+    if issued_at > now + dt.timedelta(seconds=10) or expires_at <= now:
+        raise AgentError("replay_rejected", "agent.command.expired")
+    if expires_at <= issued_at or (
+        expires_at - issued_at
+    ).total_seconds() > MAX_COMMAND_TTL_SECONDS:
+        raise AgentError("invalid_request", "agent.command.ttl-invalid")
+    derived_risk = RISK[capability]
+    if command["risk"] != derived_risk:
+        raise AgentError("policy_denied", "agent.command.risk-mismatch")
+    ceiling = CHANNEL_CEILING.get(grant["source_channel"])
+    if ceiling is None or RISK_LEVEL[derived_risk] > RISK_LEVEL[ceiling]:
+        raise AgentError("policy_denied", "agent.command.channel-risk-denied")
+    confirmation = command["confirmation"]
+    if not isinstance(confirmation, dict):
+        raise AgentError("approval_invalid", "agent.command.confirmation-invalid")
+    if derived_risk == "high":
+        expected_confirmation = {"required", "method"}
+        if not approval_draft:
+            expected_confirmation.add("confirmation_id")
+        if set(confirmation) != expected_confirmation:
+            raise AgentError("approval_invalid", "agent.command.confirmation-invalid")
+        if confirmation.get("required") is not True or confirmation.get(
+            "method"
+        ) != "paired-device":
+            raise AgentError("approval_invalid", "agent.command.confirmation-invalid")
+        if not approval_draft:
+            confirmation_id = confirmation.get("confirmation_id")
+            if (
+                not isinstance(confirmation_id, str)
+                or APPROVAL_ID.fullmatch(confirmation_id) is None
+            ):
+                raise AgentError("approval_invalid", "agent.command.confirmation-invalid")
+    elif confirmation != {"required": False, "method": "none"}:
+        raise AgentError("approval_invalid", "agent.command.confirmation-invalid")
+    validate_arguments(capability, command["arguments"])
+    return command
+
+
+def receipt(command: dict[str, Any], duplicate: bool) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "protocol": PROTOCOL,
+        "message_type": "receipt",
+        "command_id": command["command_id"],
+        "session_id": command["session_id"],
+        "phase": "DURABLY_RECEIVED",
+        "duplicate": duplicate,
+        "recorded_at": timestamp(),
+    }
+
+
+def result_message(
+    command: dict[str, Any],
+    *,
+    result: dict[str, Any] | None = None,
+    error: AgentError | None = None,
+) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "protocol": PROTOCOL,
+        "message_type": "result",
+        "command_id": command["command_id"],
+        "session_id": command["session_id"],
+        "phase": "COMPLETED" if error is None else "FAILED",
+        "status": "completed" if error is None else "failed",
+        "completed_at": timestamp(),
+        "capability": command["capability"],
+        "result": result if error is None else None,
+        "error": None
+        if error is None
+        else {
+            "code": error.code,
+            "message_key": error.message_key,
+            "retryable": error.retryable,
+        },
+    }
+
+
+def in_doubt_message(command: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "protocol": PROTOCOL,
+        "message_type": "result",
+        "command_id": command["command_id"],
+        "session_id": command["session_id"],
+        "phase": "IN_DOUBT",
+        "status": "in_doubt",
+        "completed_at": timestamp(),
+        "capability": command["capability"],
+        "result": None,
+        "error": {
+            "code": "in_doubt",
+            "message_key": "agent.command.outcome-in-doubt",
+            "retryable": False,
+        },
+    }
+
+
+class CapabilityEngine:
+    def __init__(self, store: Store, api: LocalApi):
+        self.store = store
+        self.api = api
+        self.execution_lock = threading.RLock()
+        self.mutation_lock = threading.Lock()
+
+    @staticmethod
+    def unknown_evidence() -> dict[str, Any]:
+        return {
+            "recent_outcome": "unknown",
+            "consecutive_failures": 0,
+            "reachability": "unknown",
+            "latency_ms": None,
+            "loss_percent": 0,
+            "evidence_age_seconds": 0,
+        }
+
+    def execute(self, peer: str, command: dict[str, Any]) -> dict[str, Any]:
+        capability = command["capability"]
+        arguments = command["arguments"]
+        command_id = f"{peer}:{command['command_id']}"
+        session_id = command["session_id"]
+        if capability == "vpn.status":
+            return validate_status_result(
+                self.api.call("status.get", {}, command_id)
+            )
+        if capability == "planner.evaluate":
+            return validate_planner_result(
+                self.api.call(
+                    "planner.evaluate",
+                    arguments,
+                    command_id,
+                    deadline_ms=30_000,
+                )
+            )
+        if capability == "vpn.select":
+            return self.select(peer, session_id, command_id, arguments)
+        if capability == "vpn.connect":
+            return self.connect(peer, session_id, command_id)
+        if capability == "vpn.disconnect":
+            with self.mutation_lock:
+                self.store.invalidate_host_egress()
+                try:
+                    outcome = validate_action_result(
+                        self.api.call(
+                            "lifecycle.disconnect",
+                            {},
+                            command_id,
+                            mutation=True,
+                            deadline_ms=30_000,
+                        ),
+                        LocalApi.action_id(command_id),
+                    )
+                except Exception as error:
+                    raise commit_mutation_error(error) from None
+                if outcome["state"] != "succeeded":
+                    raise lifecycle_outcome_error(outcome, "disconnect")
+                return outcome
+        if capability == "vpn.verify":
+            return self.verify_provider(
+                peer, session_id, command_id, arguments["provider"]
+            )
+        if capability == "region.check":
+            provider = arguments["provider"]
+            selection = self.store.selection(peer, session_id)
+            if selection is not None:
+                self.verify_provider(
+                    peer, session_id, f"{command_id}:fresh-verify", provider
+                )
+            payload = {"provider": arguments["provider"]}
+            if "target_country" in arguments:
+                payload["target_country"] = arguments["target_country"]
+            region = validate_region_result(
+                self.api.call(
+                    "region.check", payload, command_id, deadline_ms=20_000
+                ),
+                arguments["provider"],
+            )
+            selection = self.store.selection(peer, session_id)
+            country = region.get("egress_country")
+            target_country = arguments.get("target_country")
+            workflow_ready = bool(
+                region.get("verdict") == "ready"
+                and selection
+                and selection.get("verified_provider") == provider
+                and selection.get("verification_eligibility") == "eligible"
+                and selection.get("verified_generation")
+                == selection.get("host_generation")
+                and country == selection.get("country")
+                and (target_country is None or country == target_country)
+            )
+            handoff = None
+            if workflow_ready and isinstance(country, str) and COUNTRY.fullmatch(country):
+                handoff = {
+                    "owner": "browser-agent",
+                    "action": "account-region-form",
+                    "provider": provider,
+                    "country": country,
+                    "manual_l2_required": True,
+                }
+            return {
+                "region_check": region,
+                "workflow_ready": workflow_ready,
+                "handoff": handoff,
+            }
+        raise AgentError("unsupported_capability", "agent.command.capability-unsupported")
+
+    def verify_provider(
+        self,
+        peer: str,
+        session_id: str,
+        command_id: str,
+        provider: str,
+    ) -> dict[str, Any]:
+        verification = validate_service_result(
+            self.api.call(
+                "tests.verify-service-egress",
+                {"service": provider, "timeout_seconds": 10},
+                command_id,
+                deadline_ms=12_000,
+            ),
+            provider,
+        )
+        probe = verification["results"][0]
+        eligibility = str(probe["egress_eligibility"])
+        self.store.set_verification(peer, session_id, provider, eligibility)
+        return verification
+
+    def select(
+        self,
+        peer: str,
+        session_id: str,
+        command_id: str,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        country = arguments["country"]
+        provider = arguments.get("provider")
+        profiles = self.api.call("profiles.list", {}, f"{command_id}:profiles")
+        catalog = profiles.get("profiles")
+        if not isinstance(catalog, list):
+            raise AgentError("provider_internal_error", "agent.vpn.profiles-invalid")
+        candidates: list[dict[str, Any]] = []
+        for profile in catalog:
+            if not isinstance(profile, dict) or profile.get("country_code") != country:
+                continue
+            profile_id = profile.get("profile_id")
+            if not isinstance(profile_id, str) or SAFE_PROFILE_ID.fullmatch(profile_id) is None:
+                continue
+            candidates.append(
+                {"profile_id": profile_id, "evidence": self.unknown_evidence()}
+            )
+        candidates.sort(key=lambda item: item["profile_id"])
+        if not candidates:
+            raise AgentError("session_not_found", "agent.vpn.country-profile-not-found")
+        payload: dict[str, Any] = {
+            "workload": "llm-streaming",
+            "required_country": country,
+            "candidates": candidates[:16],
+        }
+        if provider is not None:
+            payload["provider"] = provider
+        evaluation = validate_planner_result(
+            self.api.call(
+                "planner.evaluate",
+                payload,
+                f"{command_id}:planner",
+                deadline_ms=30_000,
+            )
+        )
+        ordered = evaluation.get("ordered_profile_ids")
+        if not isinstance(ordered, list) or not ordered:
+            raise AgentError("session_not_found", "agent.vpn.no-eligible-profile")
+        selected = ordered[0]
+        if not isinstance(selected, str) or SAFE_PROFILE_ID.fullmatch(selected) is None:
+            raise AgentError("provider_internal_error", "agent.vpn.planner-result-invalid")
+        revision = self.store.set_selection(
+            peer, session_id, selected, country, provider
+        )
+        return {
+            "selected": True,
+            "profile_id": selected,
+            "country": country,
+            "provider": provider,
+            "connected": False,
+            "selection_revision": revision,
+        }
+
+    def connect(self, peer: str, session_id: str, command_id: str) -> dict[str, Any]:
+        selection = self.store.selection(peer, session_id)
+        if selection is None:
+            raise AgentError("session_not_found", "agent.vpn.selection-required")
+        with self.mutation_lock:
+            generation = self.store.invalidate_host_egress()
+            try:
+                outcome = validate_action_result(
+                    self.api.call(
+                        "lifecycle.connect",
+                        {"profile_id": selection["profile_id"]},
+                        command_id,
+                        mutation=True,
+                        deadline_ms=60_000,
+                    ),
+                    LocalApi.action_id(command_id),
+                )
+                if outcome["state"] != "succeeded":
+                    raise lifecycle_outcome_error(outcome, "connect")
+                self.store.mark_connected(peer, session_id, generation)
+            except Exception as error:
+                raise commit_mutation_error(error) from None
+        return {
+            "connection": outcome,
+            "country": selection["country"],
+            "provider": selection["provider"],
+            "connection_generation": generation,
+        }
+
+
+def read_http_request(connection: ssl.SSLSocket) -> tuple[str, dict[str, str]]:
+    data = bytearray()
+    while b"\r\n\r\n" not in data:
+        chunk = connection.recv(4096)
+        if not chunk:
+            raise AgentError("transport_closed", "agent.transport.http-incomplete")
+        data.extend(chunk)
+        if len(data) > MAX_HTTP_BYTES:
+            raise AgentError("invalid_request", "agent.transport.http-too-large")
+    head, remainder = bytes(data).split(b"\r\n\r\n", 1)
+    if remainder:
+        raise AgentError("invalid_request", "agent.transport.http-pipelined")
+    try:
+        lines = head.decode("ascii").split("\r\n")
+    except UnicodeDecodeError as error:
+        raise AgentError("invalid_request", "agent.transport.http-invalid") from error
+    request_line = lines[0].split(" ")
+    if len(request_line) != 3 or request_line[0] != "GET" or request_line[2] != "HTTP/1.1":
+        raise AgentError("invalid_request", "agent.transport.http-invalid")
+    headers: dict[str, str] = {}
+    for line in lines[1:]:
+        if ":" not in line:
+            raise AgentError("invalid_request", "agent.transport.http-invalid")
+        name, value = line.split(":", 1)
+        name = name.strip().lower()
+        if name in headers:
+            raise AgentError("invalid_request", "agent.transport.header-duplicate")
+        headers[name] = value.strip()
+    return request_line[1], headers
+
+
+def websocket_accept(key: str) -> str:
+    try:
+        decoded = base64.b64decode(key, validate=True)
+    except ValueError as error:
+        raise AgentError("invalid_request", "agent.transport.websocket-key-invalid") from error
+    if len(decoded) != 16:
+        raise AgentError("invalid_request", "agent.transport.websocket-key-invalid")
+    digest = hashlib.sha1(
+        (key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii"),
+        usedforsecurity=False,
+    ).digest()
+    return base64.b64encode(digest).decode("ascii")
+
+
+def recv_exact(connection: ssl.SSLSocket, size: int) -> bytes:
+    chunks: list[bytes] = []
+    remaining = size
+    while remaining:
+        chunk = connection.recv(remaining)
+        if not chunk:
+            raise AgentError("transport_closed", "agent.transport.closed")
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
+def receive_frame(connection: ssl.SSLSocket) -> tuple[int, bytes]:
+    first, second = recv_exact(connection, 2)
+    if not first & 0x80 or first & 0x70:
+        raise AgentError("invalid_request", "agent.transport.fragmentation-unsupported")
+    opcode = first & 0x0F
+    if not second & 0x80:
+        raise AgentError("invalid_request", "agent.transport.client-frame-unmasked")
+    length = second & 0x7F
+    if length == 126:
+        length = struct.unpack("!H", recv_exact(connection, 2))[0]
+    elif length == 127:
+        length = struct.unpack("!Q", recv_exact(connection, 8))[0]
+    if length > MAX_FRAME_BYTES:
+        raise AgentError("invalid_request", "agent.transport.frame-too-large")
+    mask = recv_exact(connection, 4)
+    payload = recv_exact(connection, length)
+    return opcode, bytes(item ^ mask[index % 4] for index, item in enumerate(payload))
+
+
+def send_frame(connection: ssl.SSLSocket, opcode: int, payload: bytes) -> None:
+    if len(payload) > MAX_FRAME_BYTES:
+        raise AgentError("provider_internal_error", "agent.transport.result-too-large")
+    header = bytearray([0x80 | opcode])
+    if len(payload) < 126:
+        header.append(len(payload))
+    else:
+        header.append(126)
+        header.extend(struct.pack("!H", len(payload)))
+    connection.sendall(bytes(header) + payload)
+
+
+def send_json(connection: ssl.SSLSocket, value: dict[str, Any]) -> None:
+    send_frame(connection, 1, canonical_json(value).encode("utf-8"))
+
+
+class AgentServer:
+    def __init__(
+        self,
+        store: Store,
+        engine: CapabilityEngine,
+        context: ssl.SSLContext,
+        listen: str,
+        port: int,
+    ):
+        self.store = store
+        self.engine = engine
+        self.context = context
+        self.listen = listen
+        self.port = port
+        self.connection_slots = threading.BoundedSemaphore(32)
+
+    def serve(self) -> None:
+        family = socket.AF_INET6 if ":" in self.listen else socket.AF_INET
+        with socket.socket(family, socket.SOCK_STREAM) as listener:
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.bind((self.listen, self.port))
+            listener.listen(32)
+            while True:
+                raw, _ = listener.accept()
+                if not self.connection_slots.acquire(blocking=False):
+                    raw.close()
+                    continue
+                thread = threading.Thread(target=self.handle, args=(raw,), daemon=True)
+                thread.start()
+
+    def handle(self, raw: socket.socket) -> None:
+        connection: ssl.SSLSocket | None = None
+        upgraded = False
+        try:
+            raw.settimeout(10)
+            connection = self.context.wrap_socket(raw, server_side=True)
+            peer_der = connection.getpeercert(binary_form=True)
+            if not peer_der:
+                raise AgentError("permission_denied", "agent.pair.certificate-required")
+            peer = hashlib.sha256(peer_der).hexdigest()
+            grant = self.store.grant(peer)
+            if grant is None or grant["revoked"]:
+                connection.sendall(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n")
+                return
+            path, headers = read_http_request(connection)
+            if path != WS_PATH:
+                raise AgentError("invalid_request", "agent.transport.path-invalid")
+            if headers.get("upgrade", "").lower() != "websocket" or "upgrade" not in {
+                item.strip().lower() for item in headers.get("connection", "").split(",")
+            }:
+                raise AgentError("invalid_request", "agent.transport.upgrade-invalid")
+            if headers.get("sec-websocket-version") != "13":
+                raise AgentError("invalid_request", "agent.transport.version-invalid")
+            if "sec-websocket-extensions" in headers:
+                raise AgentError("invalid_request", "agent.transport.extensions-forbidden")
+            origin = headers.get("origin")
+            if grant["source_channel"] in {"web-first-party", "telegram-mini-app"}:
+                if origin is None or origin not in grant["origins"]:
+                    raise AgentError("policy_denied", "agent.transport.origin-denied")
+            accept = websocket_accept(headers.get("sec-websocket-key", ""))
+            connection.sendall(
+                (
+                    "HTTP/1.1 101 Switching Protocols\r\n"
+                    "Upgrade: websocket\r\n"
+                    "Connection: Upgrade\r\n"
+                    f"Sec-WebSocket-Accept: {accept}\r\n\r\n"
+                ).encode("ascii")
+            )
+            upgraded = True
+            connection.settimeout(120)
+            while True:
+                opcode, payload = receive_frame(connection)
+                if opcode == 8:
+                    send_frame(connection, 8, payload[:125])
+                    return
+                if opcode == 9:
+                    send_frame(connection, 10, payload[:125])
+                    continue
+                if opcode != 1:
+                    raise AgentError("invalid_request", "agent.transport.text-required")
+                command = strict_json(payload, "agent.command")
+                with self.engine.execution_lock:
+                    current_grant = self.store.grant(peer)
+                    if current_grant is None or current_grant["revoked"]:
+                        raise AgentError("revoked_device", "agent.pair.revoked")
+                    if current_grant["source_channel"] in {
+                        "web-first-party",
+                        "telegram-mini-app",
+                    } and origin not in current_grant["origins"]:
+                        raise AgentError("policy_denied", "agent.transport.origin-denied")
+                    validate_command(command, current_grant)
+                    command_fingerprint = hashlib.sha256(
+                        canonical_json(command).encode("utf-8")
+                    ).hexdigest()
+                    mode, cached = self.store.prepare_command(
+                        peer, command, command_fingerprint
+                    )
+                    send_json(connection, receipt(command, mode != "new"))
+                    if cached is not None:
+                        send_json(connection, cached)
+                        continue
+                    if mode == "unresolved":
+                        send_json(connection, in_doubt_message(command))
+                        continue
+                    try:
+                        if command["risk"] == "high":
+                            self.store.consume_approval(peer, command)
+                        with self.store.execution_guard(peer, command["capability"]):
+                            result = self.engine.execute(peer, command)
+                        message = result_message(command, result=result)
+                    except AgentError as error:
+                        message = result_message(command, error=error)
+                    except Exception:
+                        message = result_message(
+                            command,
+                            error=AgentError(
+                                "provider_internal_error",
+                                "agent.command.internal-error",
+                            ),
+                        )
+                    if len(canonical_json(message).encode("utf-8")) > MAX_FRAME_BYTES:
+                        message = result_message(
+                            command,
+                            error=AgentError(
+                                "provider_internal_error",
+                                "agent.command.result-too-large",
+                            ),
+                        )
+                    self.store.complete_command(peer, command, message)
+                    send_json(connection, message)
+        except (AgentError, OSError, ssl.SSLError) as error:
+            if upgraded and connection is not None:
+                safe_error = error if isinstance(error, AgentError) else AgentError(
+                    "transport_closed", "agent.transport.closed", True
+                )
+                message = {
+                    "schema_version": 1,
+                    "protocol": PROTOCOL,
+                    "message_type": "error",
+                    "error": {
+                        "code": safe_error.code,
+                        "message_key": safe_error.message_key,
+                        "retryable": safe_error.retryable,
+                    },
+                    "recorded_at": timestamp(),
+                }
+                try:
+                    send_json(connection, message)
+                except (AgentError, OSError, ssl.SSLError):
+                    pass
+        finally:
+            if connection is not None:
+                try:
+                    connection.close()
+                except OSError:
+                    pass
+            else:
+                raw.close()
+            self.connection_slots.release()
+
+
+def tls_context(certificate: Path, private_key: Path, client_ca: Path) -> ssl.SSLContext:
+    require_safe_file(certificate, private=False)
+    require_safe_file(private_key, private=True)
+    require_safe_file(client_ca, private=False)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.minimum_version = ssl.TLSVersion.TLSv1_3
+    context.maximum_version = ssl.TLSVersion.TLSv1_3
+    context.verify_mode = ssl.CERT_REQUIRED
+    context.check_hostname = False
+    context.options |= ssl.OP_NO_COMPRESSION
+    context.load_cert_chain(certificate, private_key)
+    context.load_verify_locations(cafile=client_ca)
+    return context
+
+
+def parse_scopes(values: list[str]) -> list[str]:
+    scopes = sorted(set(values))
+    if not scopes or any(scope not in CAPABILITIES for scope in scopes):
+        raise AgentError("invalid_request", "agent.pair.scope-invalid")
+    return scopes
+
+
+def command_pair(args: argparse.Namespace) -> int:
+    fingerprint = certificate_fingerprint(args.certificate)
+    if args.confirm_fingerprint.lower() != fingerprint:
+        raise AgentError("approval_invalid", "agent.pair.fingerprint-mismatch")
+    if SAFE_ACTOR.fullmatch(args.actor_id) is None:
+        raise AgentError("invalid_request", "agent.pair.actor-invalid")
+    if args.source_channel not in CHANNEL_CEILING or args.source_channel == "telegram-bot":
+        raise AgentError("invalid_request", "agent.pair.channel-invalid")
+    scopes = parse_scopes(args.scope)
+    ceiling = CHANNEL_CEILING[args.source_channel]
+    if any(RISK_LEVEL[RISK[scope]] > RISK_LEVEL[ceiling] for scope in scopes):
+        raise AgentError("policy_denied", "agent.pair.scope-risk-denied")
+    origins = sorted(set(args.origin))
+    if any(ORIGIN.fullmatch(origin) is None for origin in origins):
+        raise AgentError("invalid_request", "agent.pair.origin-invalid")
+    if args.source_channel in {"web-first-party", "telegram-mini-app"} and not origins:
+        raise AgentError("invalid_request", "agent.pair.origin-required")
+    created_at = timestamp()
+    store = Store(args.state_dir)
+    try:
+        store.add_grant(
+            fingerprint, args.actor_id, args.source_channel, scopes, origins, created_at
+        )
+    finally:
+        store.close()
+    print(
+        canonical_json(
+            {
+                "schema_version": 1,
+                "paired": True,
+                "fingerprint": fingerprint,
+                "actor_id": args.actor_id,
+                "source_channel": args.source_channel,
+                "scopes": scopes,
+                "origins": origins,
+                "created_at": created_at,
+                "revoked": False,
+            }
+        )
+    )
+    return 0
+
+
+def command_revoke(args: argparse.Namespace) -> int:
+    fingerprint = args.fingerprint.lower()
+    if re.fullmatch(r"[a-f0-9]{64}", fingerprint) is None:
+        raise AgentError("invalid_request", "agent.revoke.fingerprint-invalid")
+    store = Store(args.state_dir)
+    try:
+        revoked = store.revoke(fingerprint)
+    finally:
+        store.close()
+    if not revoked:
+        raise AgentError("session_not_found", "agent.revoke.peer-not-found")
+    print(canonical_json({"schema_version": 1, "revoked": True}))
+    return 0
+
+
+def command_approve(args: argparse.Namespace) -> int:
+    raw = sys.stdin.buffer.read(65_537)
+    if not raw or len(raw) > 65_536:
+        raise AgentError("invalid_request", "agent.approval.command-size-invalid")
+    approval_request = strict_json(raw, "agent.approval.request")
+    if approval_request.get("message_type") != "approval-request":
+        raise AgentError("invalid_request", "agent.approval.request-type-invalid")
+    command = json.loads(canonical_json(approval_request))
+    command["message_type"] = "command"
+    peer = certificate_fingerprint(args.certificate)
+    store = Store(args.state_dir)
+    try:
+        grant = store.grant(peer)
+        if grant is None or grant["revoked"]:
+            raise AgentError("revoked_device", "agent.pair.revoked")
+        validate_command(command, grant, approval_draft=True)
+        if command["risk"] != "high" or command["confirmation"].get(
+            "method"
+        ) != "paired-device":
+            raise AgentError("approval_invalid", "agent.approval.high-risk-required")
+        digest = approval_digest(command)
+        if args.confirm_digest.lower() != digest:
+            raise AgentError("approval_invalid", "agent.approval.digest-mismatch")
+        approval_id, selection_revision = store.create_approval(peer, command, digest)
+    finally:
+        store.close()
+    print(
+        canonical_json(
+            {
+                "schema_version": 1,
+                "approved": True,
+                "approval_id": approval_id,
+                "command_digest": digest,
+                "command_id": command["command_id"],
+                "session_id": command["session_id"],
+                "capability": command["capability"],
+                "selection_revision": selection_revision,
+                "expires_at": command["expires_at"],
+                "single_use": True,
+                "policy_version": 1,
+            }
+        )
+    )
+    return 0
+
+
+def command_diagnose(args: argparse.Namespace) -> int:
+    state_ready = False
+    tls_ready = False
+    api_socket_ready = False
+    daemon_active = False
+    runtime_identity_ready = False
+    daemon_version: str | None = None
+    grants = 0
+    try:
+        state_info = args.state_dir.lstat()
+        database_path = args.state_dir / "state.sqlite3"
+        if (
+            stat.S_ISDIR(state_info.st_mode)
+            and not stat.S_ISLNK(state_info.st_mode)
+            and state_info.st_uid == os.geteuid()
+            and stat.S_IMODE(state_info.st_mode) & 0o077 == 0
+        ):
+            require_safe_file(database_path, private=True)
+            database = sqlite3.connect(
+                f"file:{database_path}?mode=ro", uri=True, timeout=2
+            )
+            grants = int(database.execute(
+                "SELECT COUNT(*) FROM grants WHERE revoked=0"
+            ).fetchone()[0])
+            database.close()
+            state_ready = True
+    except (AgentError, OSError, sqlite3.Error):
+        pass
+    try:
+        require_safe_file(args.certificate, private=False)
+        require_safe_file(args.private_key, private=True)
+        require_safe_file(args.client_ca, private=False)
+        tls_ready = True
+    except (AgentError, OSError):
+        pass
+    try:
+        socket_info = args.api_socket.lstat()
+        if stat.S_ISSOCK(socket_info.st_mode) and os.access(
+            args.api_socket, os.R_OK | os.W_OK
+        ):
+            validate_api_capabilities(
+                LocalApi(args.api_socket).call(
+                    "api.capabilities",
+                    {},
+                    "agent-diagnose-capabilities",
+                    deadline_ms=1_000,
+                )
+            )
+            api_socket_ready = True
+    except (AgentError, OSError):
+        pass
+    lock_path = args.state_dir / "daemon.lock"
+    try:
+        lock_fd = os.open(lock_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        try:
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            except BlockingIOError:
+                daemon_active = True
+        finally:
+            os.close(lock_fd)
+    except OSError:
+        pass
+    if daemon_active:
+        runtime_status = read_runtime_status(args.state_dir / "daemon.status.json")
+        if runtime_status is not None:
+            daemon_version = runtime_status["daemon_version"]
+            runtime_identity_ready = daemon_version == VERSION
+    runtime_ready = bool(
+        state_ready
+        and tls_ready
+        and api_socket_ready
+        and daemon_active
+        and runtime_identity_ready
+        and grants > 0
+    )
+    result = {
+        "schema_version": 1,
+        "installed_version": VERSION,
+        "daemon_version": daemon_version,
+        "transport": "lan-wss",
+        "linux_runtime": "implemented",
+        "tls_profile": "tls-1.3-mtls-pinned-client-certificate",
+        "state_ready": state_ready,
+        "tls_ready": tls_ready,
+        "api_socket_ready": api_socket_ready,
+        "daemon_active": daemon_active,
+        "runtime_identity_ready": runtime_identity_ready,
+        "runtime_ready": runtime_ready,
+        "active_pairings": grants,
+        "capabilities": sorted(CAPABILITIES),
+        "mutation_owner": "mazzy-agentd",
+    }
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
+def command_serve(args: argparse.Namespace) -> int:
+    address = ipaddress.ip_address(args.listen)
+    if address.is_unspecified or not (
+        address.is_loopback or address.is_private or address.is_link_local
+    ):
+        raise AgentError("policy_denied", "agent.listen.public-address-denied")
+    context = tls_context(args.certificate, args.private_key, args.client_ca)
+    ensure_private_directory(args.state_dir)
+    lock_path = args.state_dir / "daemon.lock"
+    lock_fd = os.open(
+        lock_path,
+        os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0),
+        0o600,
+    )
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as error:
+        os.close(lock_fd)
+        raise AgentError("session_conflict", "agent.daemon.already-running") from error
+    store: Store | None = None
+    status_path = args.state_dir / "daemon.status.json"
+    try:
+        store = Store(args.state_dir)
+        api = LocalApi(args.api_socket)
+        engine = CapabilityEngine(store, api)
+        server = AgentServer(store, engine, context, args.listen, args.port)
+        write_private_json(
+            status_path,
+            {
+                "schema_version": 1,
+                "pid": os.getpid(),
+                "daemon_version": VERSION,
+                "protocol": PROTOCOL,
+                "started_at": timestamp(),
+            },
+        )
+        server.serve()
+    finally:
+        if store is not None:
+            store.close()
+        current_status = read_runtime_status(status_path)
+        if current_status is not None and current_status.get("pid") == os.getpid():
+            try:
+                status_path.unlink()
+            except OSError:
+                pass
+        os.close(lock_fd)
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="mazzy-agentd")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    pair = subparsers.add_parser("pair")
+    pair.add_argument("--state-dir", type=Path, default=default_state_dir())
+    pair.add_argument("--certificate", type=Path, required=True)
+    pair.add_argument("--confirm-fingerprint", required=True)
+    pair.add_argument("--actor-id", required=True)
+    pair.add_argument("--source-channel", required=True)
+    pair.add_argument("--scope", action="append", default=[], required=True)
+    pair.add_argument("--origin", action="append", default=[])
+    pair.set_defaults(handler=command_pair)
+
+    revoke = subparsers.add_parser("revoke")
+    revoke.add_argument("--state-dir", type=Path, default=default_state_dir())
+    revoke.add_argument("--fingerprint", required=True)
+    revoke.set_defaults(handler=command_revoke)
+
+    approve = subparsers.add_parser("approve")
+    approve.add_argument("--state-dir", type=Path, default=default_state_dir())
+    approve.add_argument("--certificate", type=Path, required=True)
+    approve.add_argument("--confirm-digest", required=True)
+    approve.add_argument("--stdin", action="store_true", required=True)
+    approve.add_argument("--json", action="store_true", required=True)
+    approve.set_defaults(handler=command_approve)
+
+    diagnose = subparsers.add_parser("diagnose")
+    diagnose.add_argument("--state-dir", type=Path, default=default_state_dir())
+    diagnose.add_argument(
+        "--certificate",
+        type=Path,
+        default=default_config_dir() / "server.crt",
+    )
+    diagnose.add_argument(
+        "--private-key",
+        type=Path,
+        default=default_config_dir() / "server.key",
+    )
+    diagnose.add_argument(
+        "--client-ca",
+        type=Path,
+        default=default_config_dir() / "client-ca.crt",
+    )
+    diagnose.add_argument(
+        "--api-socket", type=Path, default=Path("/run/mazzy-vpn/api-v1.sock")
+    )
+    diagnose.add_argument("--json", action="store_true", required=True)
+    diagnose.set_defaults(handler=command_diagnose)
+
+    serve = subparsers.add_parser("serve")
+    serve.add_argument("--state-dir", type=Path, default=default_state_dir())
+    serve.add_argument("--listen", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=9443)
+    serve.add_argument("--certificate", type=Path, required=True)
+    serve.add_argument("--private-key", type=Path, required=True)
+    serve.add_argument("--client-ca", type=Path, required=True)
+    serve.add_argument(
+        "--api-socket", type=Path, default=Path("/run/mazzy-vpn/api-v1.sock")
+    )
+    serve.set_defaults(handler=command_serve)
+    return parser
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+    if getattr(args, "port", 1) < 1 or getattr(args, "port", 1) > 65_535:
+        parser.error("--port must be 1..65535")
+    try:
+        return int(args.handler(args))
+    except AgentError as error:
+        print(
+            canonical_json(
+                {
+                    "status": "error",
+                    "error": {
+                        "code": error.code,
+                        "message_key": error.message_key,
+                        "retryable": error.retryable,
+                    },
+                }
+            ),
+            file=sys.stderr,
+        )
+        return 1
+    except (OSError, sqlite3.Error, ssl.SSLError):
+        print(
+            canonical_json(
+                {
+                    "status": "error",
+                    "error": {
+                        "code": "provider_internal_error",
+                        "message_key": "agent.runtime.failed",
+                        "retryable": False,
+                    },
+                }
+            ),
+            file=sys.stderr,
+        )
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
