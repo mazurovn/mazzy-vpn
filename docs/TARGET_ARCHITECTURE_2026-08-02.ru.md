@@ -28,15 +28,16 @@ Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
 разрешённых режимов маршрутизации, а только VPN daemon решает, можно ли создать
 endpoint-scoped route/DNS exception.
 
-Текущий код ещё не реализует эту целевую модель:
+Текущий код реализует только ограниченный срез этой целевой модели:
 
 - egress работает на Linux; release 1.4 R0a свёл Bash/API/direct CLI и
   health remediation на общий lock, но единого daemon owner/journal ещё нет;
-- Desktop Agent Control является diagnostics-only обнаружением Codex/Claude,
-  а не launcher или first-party `mazzy-agentd`;
-- `agent-control/v1` содержит registry, его `schema.json` meta-schema и два
-  protocol draft schema (`command`, `envelope`), но ещё не задаёт исполнимый
-  wire protocol;
+- Desktop Agent Control остаётся diagnostics-only обнаружением Codex/Claude;
+  отдельно реализован непривилегированный Linux `mazzy-agentd` для локального
+  LAN-WSS egress API без agent-provider sessions;
+- `agent-control/v1` содержит исполнимый локальный egress command/receipt/result/
+  error/pairing slice. HPKE envelope, broker protocol, PAKE и общий remote-agent
+  wire protocol остаются draft;
 - Windows/macOS остаются UI previews без VPN backend, Android/iOS приложений
   нет;
 - современные proxy protocols имеют registry/import/render foundation, но не
@@ -446,7 +447,8 @@ adapter обязан иметь reconcile/cleanup operation и проверяе�
 
 ## 10. Agent Control target: `mazzy-agentd`
 
-**Статус раздела: целевая реализация; first-party daemon ещё не создан.**
+**Статус раздела: ограниченный egress LAN-WSS slice реализован; полная
+first-party remote-agent модель остаётся целевой.**
 
 ### 10.1 Ответственность
 
@@ -866,7 +868,8 @@ regional/self-hosted mode и запрет plaintext logs.
 
 ## 18. Transport architecture
 
-**Статус раздела: целевая policy; production runtime ещё не реализован.**
+**Статус раздела: целевая policy; реализован только direct Linux LAN-WSS egress
+slice, остальные production paths ещё не реализованы.**
 
 ### 18.1 Production order
 

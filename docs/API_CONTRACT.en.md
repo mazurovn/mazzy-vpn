@@ -11,17 +11,22 @@ The published contract version is `1.0`. This is an incremental compatibility
 boundary for issue
 [#5](https://github.com/mazurovn/mazzy-vpn/issues/5). The current
 `cli-json-adapter` is explicitly `partial`: existing safe JSON status/profile
-outputs remain available, and CLI/TUI now submit v1 envelopes for `status.get`,
-`profiles.list`, `protocols.list`, `planner.evaluate`, `tests.probe`,
+outputs remain available, and CLI/TUI now submit v1 envelopes for `api.capabilities`, `status.get`,
+`profiles.list`, `protocols.list`, `planner.evaluate`, `region.check`, `tests.probe`,
 `tests.verify-egress` and `lifecycle.*` through one dispatcher. Remaining domains
 still use the compatible direct CLI control plane. Contract metadata is
 implemented. The
-socket-activated Linux transport is `partial`: it accepts `status.get`,
-`profiles.list`, `protocols.list`, `planner.evaluate`, the bounded
+socket-activated Linux transport is `partial`: it accepts `api.capabilities`, `status.get`,
+`profiles.list`, `protocols.list`, `planner.evaluate`, `region.check`, the bounded
 `tests.probe`/`tests.verify-egress` queries and the three `lifecycle.*`
 mutations. Other operations and
 non-Linux transports remain `planned`, so this still does not claim that the
 complete cross-platform daemon exists.
+
+`api.capabilities` returns a closed versioned attestation from the installed API
+engine: `api_version`, `engine_version` and its allowlisted `operations`.
+`mazzy-agentd diagnose` requires this bounded read-only round trip, so a socket
+that merely exists but is served by an older engine is not considered ready.
 
 ## Compatibility
 
@@ -158,6 +163,12 @@ the `required-country-match` gate. Unsupported or unknown-country exits remain
 in the diagnostic candidate list with `eligible=false`, `score=null` and
 `rank=null`, and never appear in `ordered_profile_ids`. Only candidates that
 pass every gate receive a score and rank.
+
+`region.check` is the deadline-bounded API form of the provider-aware readiness
+check. It derives egress country and the IANA timezone country on the backend,
+returns only stable `region.*` mismatch codes, and is `ready` only when provider
+support, egress and timezone agree. `profiles.list.country_code` is likewise
+backend-owned and never accepts a caller-provided profile location.
 
 The policy-v1 score is 30 points for recent outcome, 25 for censorship fit, 20
 for reachability, 15 for latency/loss and 10 for workload fit. Observed health

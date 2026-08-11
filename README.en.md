@@ -71,10 +71,11 @@ Telegram clients. Desktop 0.4 adds Codex/Claude discovery and
 catalog diagnostics only. Provider start/pair/stop is absent from renderer and
 Tauri IPC until native approval, trusted executable resolution and process-tree
 containment exist.
-This is not the planned first-party `mazzy-agentd`:
-all seven cataloged network
-adapters, Web/Telegram clients and `mazzy-agentd` remain non-release-ready, and
-diagnostics report that explicitly.
+The separately packaged Linux `mazzy-agentd` implements the paired local
+LAN-WSS egress capability slice. It does not make the Desktop diagnostics screen
+an agent launcher: the other six adapters, relay/E2EE, Web/Telegram clients and
+agent-provider lifecycle remain planned. Diagnostics distinguishes an installed
+binary from a configured, running instance.
 
 ## Install
 

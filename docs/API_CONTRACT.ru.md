@@ -12,17 +12,22 @@
 [#5](https://github.com/mazurovn/mazzy-vpn/issues/5). Текущий транспорт
 `cli-json-adapter` явно имеет статус `partial`: существующие безопасные JSON
 status/profile outputs доступны, а CLI/TUI уже отправляют v1 envelopes для
-`status.get`, `profiles.list`, `protocols.list`, `planner.evaluate`,
+`api.capabilities`, `status.get`, `profiles.list`, `protocols.list`, `planner.evaluate`, `region.check`,
 `tests.probe`, `tests.verify-egress` и `lifecycle.*` через единый
 dispatcher. Остальные
 домены ещё используют совместимый прямой CLI-контур. Метаданные контракта
 реализованы.
 Socket-activated Linux transport имеет статус `partial`: он принимает
-`status.get`, `profiles.list`, `protocols.list`, ограниченные queries `tests.probe` и
-`tests.verify-egress`, read-only `planner.evaluate`, а также три мутации
+`api.capabilities`, `status.get`, `profiles.list`, `protocols.list`, ограниченные queries `tests.probe` и
+`tests.verify-egress`, read-only `planner.evaluate` и `region.check`, а также три мутации
 `lifecycle.*`. Остальные операции и
 не-Linux transports пока `planned`, поэтому полный кроссплатформенный daemon ещё
 не заявлен готовым.
+
+`api.capabilities` возвращает закрытую versioned attestation фактически
+установленного API engine: `api_version`, `engine_version` и allowlisted
+`operations`. `mazzy-agentd diagnose` требует этот bounded read-only round-trip,
+поэтому один лишь существующий, но устаревший socket не считается ready.
 
 ## Совместимость
 
@@ -159,6 +164,13 @@ journal/snapshot; возможность rollback конкретного кан�
 Неподдерживаемые exits и профили без известной страны остаются в диагностическом
 списке с `eligible=false`, `score=null`, `rank=null` и никогда не попадают в
 `ordered_profile_ids`. Score и rank получает только кандидат, прошедший все gates.
+
+`region.check` — deadline-bounded API-форма provider-aware проверки готовности.
+Backend сам определяет страну egress и страну системной IANA timezone, возвращает
+только стабильные mismatch codes `region.*` и ставит `ready` лишь при полном
+согласовании provider support, egress и timezone. Поле
+`profiles.list.country_code` также принадлежит backend; caller не задаёт страну
+профиля.
 
 Policy v1 выделяет 30 баллов recent outcome, 25 censorship fit, 20
 reachability, 15 latency/loss и 10 workload fit. Наблюдаемое health evidence

@@ -237,6 +237,21 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
         fail("ResponseResult does not expose the sanitized protocol catalog")
     if "#/$defs/PlannerEvaluation" not in response_refs:
         fail("ResponseResult does not expose deterministic planner evaluation")
+    if "#/$defs/RegionCheck" not in response_refs:
+        fail("ResponseResult does not expose provider-aware region readiness")
+    if "#/$defs/ApiCapabilities" not in response_refs:
+        fail("ResponseResult does not expose typed runtime API capabilities")
+    api_capabilities = defs.get("ApiCapabilities", {})
+    if (
+        api_capabilities.get("additionalProperties") is not False
+        or set(api_capabilities.get("required", []))
+        != {"schema_version", "api_version", "engine_version", "operations"}
+        or api_capabilities.get("properties", {})
+        .get("operations", {})
+        .get("uniqueItems")
+        is not True
+    ):
+        fail("ApiCapabilities must be a closed versioned operation attestation")
 
     planner_request = defs.get("PlannerRequest", {})
     planner_request_properties = planner_request.get("properties", {})
@@ -248,7 +263,7 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
         or set(planner_request_properties)
         != {"workload", "provider", "required_country", "candidates"}
         or planner_request_properties.get("provider", {}).get("$ref")
-        != "#/$defs/Identifier"
+        != "#/$defs/ProviderId"
         or planner_request_properties.get("required_country", {}).get("pattern")
         != "^[A-Z]{2}$"
         or planner_candidates.get("minItems") != 1
@@ -260,11 +275,16 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
 
     query_request = defs.get("QueryRequest", {})
     planner_bindings = query_request.get("allOf")
-    if not isinstance(planner_bindings, list) or len(planner_bindings) != 4:
-        fail("QueryRequest must bind planner and service-egress operations")
-    operation_binding, payload_binding, service_operation_binding, service_payload_binding = (
-        planner_bindings
-    )
+    if not isinstance(planner_bindings, list) or len(planner_bindings) != 6:
+        fail("QueryRequest must bind planner, service-egress and region operations")
+    (
+        operation_binding,
+        payload_binding,
+        service_operation_binding,
+        service_payload_binding,
+        region_operation_binding,
+        region_payload_binding,
+    ) = planner_bindings
     operation_then = operation_binding.get("then", {})
     operation_properties = operation_then.get("properties", {})
     planner_deadline = operation_properties.get("deadline_ms", {})
@@ -317,6 +337,31 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
         != "tests.verify-service-egress"
     ):
         fail("service-egress schema binding must be bidirectional and deadline-bounded")
+    region_operation_then = region_operation_binding.get("then", {})
+    region_operation_properties = region_operation_then.get("properties", {})
+    if (
+        region_operation_binding.get("if", {})
+        .get("properties", {})
+        .get("operation", {})
+        .get("const")
+        != "region.check"
+        or region_operation_then.get("required") != ["deadline_ms"]
+        or region_operation_properties.get("deadline_ms", {}).get("minimum") != 100
+        or region_operation_properties.get("deadline_ms", {}).get("maximum") != 20000
+        or region_operation_properties.get("payload", {}).get("$ref")
+        != "#/$defs/RegionCheckRequest"
+        or region_payload_binding.get("if", {})
+        .get("properties", {})
+        .get("payload", {})
+        .get("$ref")
+        != "#/$defs/RegionCheckRequest"
+        or region_payload_binding.get("then", {})
+        .get("properties", {})
+        .get("operation", {})
+        .get("const")
+        != "region.check"
+    ):
+        fail("region schema binding must be bidirectional and deadline-bounded")
 
     planner_evidence = defs.get("PlannerEvidence", {})
     required_evidence = {
@@ -359,6 +404,12 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
 
     planner_candidate = defs.get("PlannerCandidate", {})
     planner_candidate_properties = planner_candidate.get("properties", {})
+    planner_gate_ids = set(
+        defs.get("PlannerGate", {})
+        .get("properties", {})
+        .get("id", {})
+        .get("enum", [])
+    )
     if (
         planner_candidate.get("additionalProperties") is not False
         or "display_name" in planner_candidate_properties
@@ -375,8 +426,63 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
         or planner_candidate_properties.get("hard_gates", {}).get("maxItems") != 7
         or planner_candidate_properties.get("factors", {}).get("minItems") != 5
         or planner_candidate_properties.get("factors", {}).get("maxItems") != 5
+        or not {
+            "provider-country-supported", "required-country-match"
+        }.issubset(planner_gate_ids)
     ):
         fail("PlannerCandidate must expose opaque IDs, bounded gates and five factors")
+
+    profile_summary = defs.get("ProfileSummary", {}).get("properties", {})
+    if profile_summary.get("country_code", {}).get("pattern") != "^[A-Z]{2}$":
+        fail("ProfileSummary does not expose a bounded backend-owned country code")
+
+    region_request = defs.get("RegionCheckRequest", {})
+    region_result = defs.get("RegionCheck", {})
+    region_mismatch_codes = {
+        "region.egress.ip-unavailable",
+        "region.egress.providers-disagree",
+        "region.egress.country-unavailable",
+        "region.timezone.unavailable",
+        "region.timezone.country-unmapped",
+        "region.provider.country-unsupported",
+        "region.country.egress-timezone-mismatch",
+        "region.target.country-unsupported",
+        "region.target.egress-mismatch",
+        "region.target.timezone-mismatch",
+    }
+    region_fields = {
+        "schema_version",
+        "provider",
+        "egress_country",
+        "system_timezone",
+        "timezone_country",
+        "supported_by_provider",
+        "country_consistent",
+        "account_region_hint",
+        "verdict",
+        "mismatches",
+    }
+    if (
+        region_request.get("additionalProperties") is not False
+        or set(region_request.get("required", [])) != {"provider"}
+        or set(region_request.get("properties", {}))
+        != {"provider", "target_country"}
+        or region_result.get("additionalProperties") is not False
+        or set(region_result.get("required", [])) != region_fields
+        or set(region_result.get("properties", {})) != region_fields
+        or set(
+            region_result.get("properties", {})
+            .get("mismatches", {})
+            .get("items", {})
+            .get("enum", [])
+        )
+        != region_mismatch_codes
+        or "UTC|GMT" not in region_result.get("properties", {})
+        .get("system_timezone", {})
+        .get("pattern", "")
+        or not region_result.get("allOf")
+    ):
+        fail("RegionCheck request/result contracts are not strict and complete")
 
     verification = defs.get("EgressVerification", {})
     verification_required = set(verification.get("required", []))

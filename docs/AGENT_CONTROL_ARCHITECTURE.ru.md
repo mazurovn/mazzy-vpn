@@ -17,16 +17,24 @@ read-only Desktop diagnostics. Экран «AI-агенты» обнаружив
 Он не запускает обнаруженные binaries, а renderer/Tauri IPC не содержат
 provider start, pair, stop или pairing state.
 
-Это **не** first-party Mazzy client-to-client gateway. Claude adapter пока
-`discovery-only`; transport runtimes, broker, Web/Telegram clients и
-`mazzy-agentd` ещё не готовы. Все семь сетевых paths остаются `planned` и не
-должны объявляться release-ready.
+Дополнительно реализован ограниченный Linux P0-срез `mazzy-agentd` для
+`lan-wss`: TLS 1.3 mTLS, явное pin-подтверждение клиентского сертификата,
+scopes/channel policy, немедленная revocation, anti-replay, durable dedupe,
+одноразовый local approval, привязанный к command digest и ревизии egress, и
+семь egress capabilities. Его защищённый канал завершается непосредственно в
+daemon; relay и промежуточных узлов нет. Поэтому HPKE envelope здесь не
+заявляется реализованным.
 
-Повторное независимое ревью выявило, что этот документ описывает правильное
-направление, но не задаёт полный исполнимый protocol: нужны отдельные
-pairing/result/event/ACK/error contracts, endpoint-derived policy, точный
-canonical crypto input, key lifecycle, path state machine и один mutation owner
-для egress. Нормативные решения и P0 blockers собраны в
+Это **не** полный first-party Mazzy gateway. Claude adapter остаётся
+`discovery-only`; broker, relay/E2EE, PAKE/QR pairing, Web/Telegram clients,
+agent-provider sessions, offline queue, resume, key rotation и остальные шесть
+transport paths остаются `planned`. Статус `linux=implemented` относится только
+к этому локальному egress LAN-WSS профилю; instance считается `runtime_ready`
+только при запущенном daemon, готовых TLS-файлах, pairing и доступном local API.
+
+Полный remote protocol по-прежнему требует canonical crypto input, key
+lifecycle, relay path state machine и provider session actors. Нормативные
+решения и оставшиеся P0 blockers собраны в
 [целевой архитектуре](TARGET_ARCHITECTURE_2026-08-02.ru.md).
 
 ## Два независимых сетевых слоя
@@ -113,6 +121,40 @@ provider lifecycle authority нельзя возвращать до доказа
 `listen`, `send`, `ack`, `resume`, `close`, `path_metrics`. Transport получает
 только зашифрованный envelope и не интерпретирует agent command.
 
+### Реализованный LAN-WSS egress profile
+
+`mazzy-agentd` устанавливается вместе с Desktop/CLI и может работать как
+`systemd --user` service. Администратор pairing заранее предоставляет
+серверный сертификат, закрытый ключ `0600` и CA доверенных client certificates
+в `~/.config/mazzy-agentd/`; ключи не попадают в command/result/audit. Явное
+pairing выполняется сравнением полного SHA-256 fingerprint:
+
+```text
+mazzy-agentd pair --certificate CLIENT.crt --confirm-fingerprint SHA256 \
+  --actor-id DEVICE --source-channel cli-first-party --scope vpn.select ...
+systemctl --user enable --now mazzy-agentd.service
+```
+
+High-risk `vpn.connect|vpn.disconnect` не может подтвердить себя по сети.
+Trusted local UI/CLI получает canonical command, показывает digest оператору и
+передаёт отдельный закрытый
+[`approval-request`](../agent-control/v1/approval-request.schema.json) без
+`confirmation_id` в `mazzy-agentd approve --stdin --json`. Daemon возвращает
+одноразовый proof, который добавляется только в финальную LAN-WSS command; proof
+привязан к peer, actor, session, capability, target, TTL и текущей revision
+выбранного egress. Любая connect/disconnect mutation увеличивает host-global
+egress generation и инвалидирует eligibility всех sessions; `region.check`
+повторяет provider probe и сверяет свежую страну с выбранной/target country перед
+browser handoff. После revocation уже открытая WSS session прекращает принимать
+команды. `diagnose --json` наблюдает состояние read-only, проверяет runtime-owned
+version record и bounded `api.capabilities` round-trip с полным набором нужных
+operations, затем разделяет наличие binary (`available`) и готовый configured
+instance (`runtime_ready`). Desktop discovery сам найденные executables не запускает
+и поэтому fail-closed не объявляет transport runtime-ready.
+LAN-WSS planner request ограничен 16 candidates: полный API сохраняет лимит 128,
+но меньшая transport-boundary гарантирует, что закрытый PlannerEvaluation помещается
+в 48 KiB local-API и 60 KiB WebSocket envelopes без усечения.
+
 ## Message и security boundary — target, не runtime
 
 [`command.schema.json`](../agent-control/v1/command.schema.json) задаёт закрытый
@@ -198,8 +240,10 @@ LLM не выбирает этот режим.
 1. **Partial в этой ветке:** embedded Desktop read-only provider discovery и
    fail-closed catalog diagnostics; executable lifecycle удалён до закрытия
    trusted approval/executable/process-group gates.
-2. Локальный непривилегированный `mazzy-agentd` с Unix-socket API, provider
-   adapters Codex app-server/Claude/ACP и read-only `status/list/events`.
+2. **Реализован ограниченный egress slice:** локальный непривилегированный
+   `mazzy-agentd`, который через защищённый Mazzy VPN Unix API выполняет только
+   типизированные VPN/planner/region capabilities. Codex/Claude/ACP sessions и
+   `status/list/events` для agent providers остаются следующей задачей.
 3. Pairing, E2EE reverse WSS, encrypted durable queue, idempotent ACK/resume и
    first-party Desktop/Web prompt + approvals.
 4. LAN WSS, затем iroh direct/relay за теми же contract tests.
@@ -208,7 +252,7 @@ LLM не выбирает этот режим.
 
 ## Release gates
 
-Runtime support нельзя повысить из `planned`, пока нет: pinned dependencies и
+Остальные runtime paths нельзя повысить из `planned`, пока нет: pinned dependencies и
 SBOM; clean install/upgrade/remove; peer revocation/key rotation; NAT and relay
 matrix; packet loss/reconnect/offline queue tests; duplicate/replay/flood tests;
 Telegram privilege tests; Desktop/Android/Web end-to-end tests; независимого

@@ -17,15 +17,22 @@ Codex and Claude Code candidates and displays discovery/catalog status for all
 seven paths. It does not execute discovered binaries, and renderer/Tauri IPC
 expose no provider start, pair, stop or pairing state.
 
-This is **not** the first-party Mazzy client-to-client gateway. The Claude
-adapter is discovery-only, while the transport runtimes, broker, Web/Telegram
-clients and `mazzy-agentd` daemon are not implemented. All seven network paths
-remain `planned` and must not be presented as release-ready.
+This branch also implements a bounded Linux P0 `mazzy-agentd` slice for
+`lan-wss`: TLS 1.3 mTLS, explicit client-certificate fingerprint confirmation,
+scopes/channel policy, immediate revocation, anti-replay, durable dedupe, a
+single-use local approval bound to the command digest and egress revision, and
+seven egress capabilities. The protected channel terminates directly at the
+daemon with no relay or intermediary; it does not claim the future HPKE envelope.
 
-The repeat independent review found that this document has the right direction
-but is not yet a complete executable protocol. Pairing, result/event/ACK/error,
-endpoint-derived policy, canonical cryptographic input, key lifecycle, path
-state machines and a single egress mutation owner are specified in the
+This is **not** the complete first-party Mazzy gateway. The Claude adapter stays
+discovery-only; broker/relay E2EE, PAKE/QR pairing, Web/Telegram clients, agent
+provider sessions, offline queue, resume, key rotation and the other six paths
+remain `planned`. `linux=implemented` is limited to this local egress LAN-WSS
+profile; an instance is `runtime_ready` only with the daemon running, valid TLS
+files, an active pairing and the protected local API available.
+
+The complete remote protocol still needs canonical cryptographic input, key
+lifecycle, relay path state machines and provider session actors, as specified in the
 [deep target architecture (RU)](TARGET_ARCHITECTURE_2026-08-02.ru.md).
 
 ## Two independent network planes
@@ -97,19 +104,48 @@ Control-plane routing relative to the egress VPN is explicit:
 control path across transactional VPN switches. An LLM cannot select this
 policy.
 
-## Separate gateway repository — target, not created
+## Separate gateway repository — target beyond the local egress slice
 
 The proposed `mazzy-agent-control` monorepo (formerly drafted as
 `mazzy-agent-gateway`) owns the unprivileged per-user `mazzy-agentd`, endpoint
 policy and event log, the opaque relay/queue, transport plugins,
 first-party Web/PWA and Telegram adapters. It must not run inside the privileged
-VPN backend. The first production slice should implement reverse WSS/H2 plus
-LAN WSS, pairing, status/list/prompt capabilities, ACK/resume, Linux agent support
-and end-to-end tests. Before network access, the local daemon must expose typed
-Codex app-server/Claude/ACP adapters over a protected local socket. iroh follows
-behind the same contract tests; WebRTC, libp2p and mesh adapters follow later.
+VPN backend. The repository-local `mazzy-agentd` is deliberately narrower: it
+owns only the paired LAN-WSS egress capability surface and delegates privileged
+network changes to the protected Mazzy VPN API. Reverse WSS/H2, agent-provider
+status/list/prompt, ACK/resume and Codex/Claude/ACP adapters belong in that
+future monorepo. iroh follows behind the same contract tests; WebRTC, libp2p and
+mesh adapters follow later.
 
-Runtime status cannot move from `planned` until pinned dependencies, SBOM,
+The remaining runtime paths cannot move from `planned` until pinned dependencies, SBOM,
 clean lifecycle tests, key rotation/revocation, NAT/relay matrices,
 loss/reconnect/replay/flood tests, channel privilege tests and an independent
 security review are complete.
+
+## Implemented LAN-WSS egress profile
+
+`mazzy-agentd` is packaged with Desktop/CLI and can run as a `systemd --user`
+service. The pairing administrator provisions a server certificate, a `0600`
+private key and the trusted client-certificate CA under
+`~/.config/mazzy-agentd/`; keys never enter commands, results or audit. Pairing
+requires explicit confirmation of the full SHA-256 client certificate
+fingerprint. High-risk `vpn.connect|vpn.disconnect` cannot self-approve over the
+network: a trusted local UI/CLI confirms the canonical command digest and creates
+a proof from a separate closed
+[`approval-request`](../agent-control/v1/approval-request.schema.json), which has
+no `confirmation_id`, with `mazzy-agentd approve --stdin --json`. The returned
+single-use proof is inserted only into the final LAN-WSS command and binds peer,
+actor, session, capability, target, TTL and the selected egress revision. Every
+connect/disconnect mutation advances a host-global egress generation and
+invalidates all session eligibility; `region.check` repeats the provider probe
+and compares the fresh country with the selected/target country before browser
+handoff. Revocation also stops commands on an already-open WSS session. Read-only
+`diagnose --json` verifies a runtime-owned version record plus a bounded
+`api.capabilities` round trip containing every required operation, and distinguishes an
+installed binary from a configured, running `runtime_ready` instance. Desktop
+discovery never executes discovered binaries and therefore reports readiness
+fail-closed.
+The LAN-WSS planner request is capped at 16 candidates: the full local API keeps
+its 128-candidate limit, while this smaller transport boundary keeps the closed
+PlannerEvaluation within the 48 KiB local-API and 60 KiB WebSocket envelopes
+without truncation.

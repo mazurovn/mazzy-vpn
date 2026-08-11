@@ -163,7 +163,7 @@ write_installed_language() {
 
 validate_source_tree() {
     local required
-    for required in mazzy-vpn install.sh LICENSE AUTHORS.md CHANGELOG.md SECURITY.md \
+    for required in mazzy-vpn mazzy-agentd install.sh LICENSE AUTHORS.md CHANGELOG.md SECURITY.md \
         PRIVACY.md \
         README.md README.ru.md README.en.md README.de.md README.zh.md \
         README.ja.md README.ko.md docs/ARCHITECTURE.en.md \
@@ -188,6 +188,11 @@ validate_source_tree() {
         agent-control/v1/registry.json agent-control/v1/schema.json \
         agent-control/v1/envelope.schema.json \
         agent-control/v1/command.schema.json \
+        agent-control/v1/ack.schema.json agent-control/v1/error.schema.json \
+        agent-control/v1/event.schema.json agent-control/v1/pairing.schema.json \
+        agent-control/v1/result.schema.json agent-control/v1/approval.schema.json \
+        agent-control/v1/approval-request.schema.json \
+        agent-control/v1/transport-error.schema.json \
         runtime/mazzy-sing-box-adapter \
         runtime/v1/adapter-registry.json runtime/v1/schema.json \
         desktop/README.md desktop/src-tauri/tauri.conf.json \
@@ -198,12 +203,13 @@ validate_source_tree() {
         packaging/linux/systemd/mazzy-vpn-api-recovery.service.d/10-package-exec.conf \
         packaging/linux/systemd/mazzy-vpn-api.socket.d/10-package-docs.conf \
         packaging/linux/systemd/mazzy-vpn-api@.service.d/10-package-exec.conf \
+        packaging/linux/systemd/user/mazzy-agentd.service.d/10-package-exec.conf \
         packaging/linux/systemd/vpnctl-health.service.d/10-package-exec.conf \
         packaging/linux/systemd/vpnctl-test-recovery.service.d/10-package-exec.conf \
         packaging/linux/systemd/vpnctl.service.d/10-package-exec.conf \
         tests/run.sh tests/audit-public.sh tests/check-capabilities.py \
         tests/check-api-contract.py tests/check-protocol-registry.py \
-        tests/check-agent-control-registry.py \
+        tests/check-agent-control-registry.py tests/check-agentd.py \
         tests/check-managed-protocol-adapter.py \
         tests/check-runtime-adapter-registry.py \
         tests/check-linux-packages.sh \
@@ -213,7 +219,8 @@ validate_source_tree() {
         systemd/vpnctl-test-recovery.service \
         systemd/mazzy-vpn-api-recovery.service \
         systemd/mazzy-vpn-api.socket systemd/mazzy-vpn-api@.service \
-        systemd/mazzy-vpn-tmpfiles.conf; do
+        systemd/mazzy-vpn-tmpfiles.conf \
+        systemd/user/mazzy-agentd.service; do
         [[ -e "$SCRIPT_DIR/$required" ]] || {
             echo "Неполный дистрибутив: отсутствует $required" >&2
             return 1
@@ -655,18 +662,20 @@ install_files() {
     local runtime_contract_dir="$runtime_dir/v1"
     local config_dir="$DESTDIR/etc/vpnctl/profiles"
     local unit_dir="$DESTDIR/etc/systemd/system"
+    local user_unit_dir="$DESTDIR/usr/local/lib/systemd/user"
     local tmpfiles_dir="$DESTDIR/usr/lib/tmpfiles.d"
     local completion_dir="$DESTDIR/usr/local/share/bash-completion/completions"
 
     run install -d -m 755 "$bin_dir" "$lib_dir" "$docs_dir" "$api_dir" \
         "$protocol_dir" "$agent_control_dir" "$runtime_dir" \
         "$runtime_contract_dir" \
-        "$unit_dir" "$tmpfiles_dir" "$completion_dir"
+        "$unit_dir" "$user_unit_dir" "$tmpfiles_dir" "$completion_dir"
     run install -d -m 700 "$DESTDIR/etc/vpnctl" "$config_dir" \
         "$config_dir/amneziawg" "$config_dir/wireguard" \
         "$config_dir/openvpn" "$config_dir/l2tp"
     write_installed_language "$DESTDIR/etc/vpnctl/locale"
     run install -m 755 "$SCRIPT_DIR/mazzy-vpn" "$bin_dir/mazzy-vpn"
+    run install -m 755 "$SCRIPT_DIR/mazzy-agentd" "$bin_dir/mazzy-agentd"
     run ln -sfn mazzy-vpn "$bin_dir/vpnctl"
     run ln -sfn mazzy-vpn "$bin_dir/mazzyvpn"
     run install -m 755 "$SCRIPT_DIR/install.sh" "$lib_dir/install.sh"
@@ -753,6 +762,22 @@ install_files() {
         "$agent_control_dir/envelope.schema.json"
     run install -m 644 "$SCRIPT_DIR/agent-control/v1/command.schema.json" \
         "$agent_control_dir/command.schema.json"
+    run install -m 644 "$SCRIPT_DIR/agent-control/v1/ack.schema.json" \
+        "$agent_control_dir/ack.schema.json"
+    run install -m 644 "$SCRIPT_DIR/agent-control/v1/error.schema.json" \
+        "$agent_control_dir/error.schema.json"
+    run install -m 644 "$SCRIPT_DIR/agent-control/v1/event.schema.json" \
+        "$agent_control_dir/event.schema.json"
+    run install -m 644 "$SCRIPT_DIR/agent-control/v1/pairing.schema.json" \
+        "$agent_control_dir/pairing.schema.json"
+    run install -m 644 "$SCRIPT_DIR/agent-control/v1/result.schema.json" \
+        "$agent_control_dir/result.schema.json"
+    run install -m 644 "$SCRIPT_DIR/agent-control/v1/approval.schema.json" \
+        "$agent_control_dir/approval.schema.json"
+    run install -m 644 "$SCRIPT_DIR/agent-control/v1/approval-request.schema.json" \
+        "$agent_control_dir/approval-request.schema.json"
+    run install -m 644 "$SCRIPT_DIR/agent-control/v1/transport-error.schema.json" \
+        "$agent_control_dir/transport-error.schema.json"
     run install -m 644 "$SCRIPT_DIR/LICENSE" "$lib_dir/LICENSE"
     run install -m 644 "$SCRIPT_DIR/AUTHORS.md" "$lib_dir/AUTHORS.md"
     run install -m 644 "$SCRIPT_DIR/CHANGELOG.md" "$lib_dir/CHANGELOG.md"
@@ -771,6 +796,8 @@ install_files() {
         "$unit_dir/mazzy-vpn-api@.service"
     run install -m 644 "$SCRIPT_DIR/systemd/mazzy-vpn-tmpfiles.conf" \
         "$tmpfiles_dir/mazzy-vpn.conf"
+    run install -m 644 "$SCRIPT_DIR/systemd/user/mazzy-agentd.service" \
+        "$user_unit_dir/mazzy-agentd.service"
     run install -m 644 "$SCRIPT_DIR/completions/mazzy-vpn" \
         "$completion_dir/mazzy-vpn"
     run ln -sfn mazzy-vpn "$completion_dir/vpnctl"
@@ -784,7 +811,7 @@ install_files() {
     copy_profiles "$SCRIPT_DIR/conf/l2tp" "$config_dir/l2tp" '*.nmconnection'
 
     if [[ -z "$DESTDIR" ]]; then
-        run chown root:root "$bin_dir/mazzy-vpn" "$lib_dir/install.sh" \
+        run chown root:root "$bin_dir/mazzy-vpn" "$bin_dir/mazzy-agentd" "$lib_dir/install.sh" \
             "$lib_dir/setup_amnezia_vpn.sh" "$lib_dir/stop_amnezia_vpn.sh" \
             "$lib_dir/README.md" "$lib_dir/README.ru.md" "$lib_dir/README.en.md" \
             "$lib_dir/README.de.md" "$lib_dir/README.zh.md" \

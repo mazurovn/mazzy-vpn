@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mazurovn/mazzy-vpn/agent-control/v1/approval.schema.json",
+  "title": "Mazzy command-bound local approval proof v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "approved", "approval_id", "command_digest", "command_id", "session_id", "capability", "selection_revision", "expires_at", "single_use", "policy_version"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "approved": {"const": true},
+    "approval_id": {"type": "string", "pattern": "^approval-[a-f0-9]{32}$"},
+    "command_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "command_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{16,128}$"},
+    "session_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{16,128}$"},
+    "capability": {"enum": ["vpn.connect", "vpn.disconnect"]},
+    "selection_revision": {"type": ["integer", "null"], "minimum": 1},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "single_use": {"const": true},
+    "policy_version": {"const": 1}
+  }
+}

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "catalog_version": "2026-08-02",
+  "catalog_version": "2026-08-11",
   "layer": "reverse-agent-control",
   "status_values": ["implemented", "partial", "planned"],
   "platforms": ["linux", "windows", "macos", "android", "web"],
@@ -9,11 +9,17 @@
       "id": "lan-wss",
       "display_name": "LAN WebSocket over TLS",
       "family": "local-stream",
-      "implementation_mode": "embedded",
-      "runtime_probes": ["mazzy-agent"],
+      "implementation_mode": "sidecar",
+      "runtime_probes": ["mazzy-agentd"],
       "paths": ["local-direct"],
-      "capabilities": {"direct": true, "relay": false, "nat_traversal": false, "browser_client": true, "self_hosted": true},
-      "support": {"contract": "implemented", "diagnostics": "planned", "linux": "planned", "windows": "planned", "macos": "planned", "android": "planned", "web": "planned"},
+      "capabilities": {"direct": true, "relay": false, "nat_traversal": false, "browser_client": false, "self_hosted": true},
+      "support": {"contract": "implemented", "diagnostics": "implemented", "linux": "implemented", "windows": "planned", "macos": "planned", "android": "planned", "web": "planned"},
+      "evidence": {
+        "id": "agentd-lan-wss-linux-2026-08-11",
+        "package_version": "0.1.0",
+        "test_matrix": "tests/check-agentd.py",
+        "reviewed_at": "2026-08-11"
+      },
       "source": "https://github.com/HelpFreedom/claude-bridge/blob/main/ARCHITECTURE.md"
     },
     {
@@ -139,7 +145,7 @@
     "hard_constraints": [
       "runtime-ready",
       "paired-peer-authorized",
-      "e2ee-envelope-valid",
+      "end-to-end-channel-valid",
       "anti-replay-valid",
       "channel-risk-policy-valid",
       "no-vpn-route-loop"
@@ -157,7 +163,7 @@
       "keep-one-warm-broker-path",
       "deduplicate-by-message-id",
       "resume-from-acknowledged-sequence",
-      "never-downgrade-e2ee"
+      "never-downgrade-confidentiality"
     ],
     "channel_rules": [
       "telegram-bot-is-low-risk-only",

@@ -116,6 +116,7 @@ fn trusted_command_name(name: &str) -> Option<&'static str> {
         "claude" => Some("claude"),
         "codex" => Some("codex"),
         "mazzy-agent" => Some("mazzy-agent"),
+        "mazzy-agentd" => Some("mazzy-agentd"),
         "mazzy-agent-transport-iroh" => Some("mazzy-agent-transport-iroh"),
         "mazzy-agent-transport-libp2p" => Some("mazzy-agent-transport-libp2p"),
         "tailscale" => Some("tailscale"),
@@ -182,13 +183,13 @@ fn transport_states() -> Result<Vec<TransportState>, String> {
                     .runtime_probes
                     .iter()
                     .all(|probe| command_available(probe));
-            let platform_implemented =
+            let _platform_implemented =
                 transport.support.get(platform).and_then(Value::as_str) == Some("implemented");
             TransportState {
                 id: transport.id,
                 display_name: transport.display_name,
                 candidate_runtime_available,
-                runtime_ready: platform_implemented && candidate_runtime_available,
+                runtime_ready: false,
             }
         })
         .collect())

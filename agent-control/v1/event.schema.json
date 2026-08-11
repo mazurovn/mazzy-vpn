@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mazurovn/mazzy-vpn/agent-control/v1/event.schema.json",
+  "title": "Mazzy agent egress sanitized event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "protocol", "message_type", "event_id", "session_id", "revision", "event_type", "recorded_at", "data"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "protocol": {"const": "mazzy-agent-egress/1"},
+    "message_type": {"const": "event"},
+    "event_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{16,128}$"},
+    "session_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{16,128}$"},
+    "revision": {"type": "integer", "minimum": 0},
+    "event_type": {"enum": ["vpn.selection.changed", "vpn.connection.changed", "vpn.verification.completed", "region.readiness.changed"]},
+    "recorded_at": {"type": "string", "format": "date-time"},
+    "data": {"type": "object", "maxProperties": 16}
+  }
+}

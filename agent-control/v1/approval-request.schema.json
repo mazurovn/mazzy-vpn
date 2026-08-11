@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mazurovn/mazzy-vpn/agent-control/v1/approval-request.schema.json",
+  "title": "Mazzy trusted local approval request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "protocol", "message_type", "command_id", "session_id",
+    "actor_id", "source_channel", "sequence", "issued_at", "expires_at",
+    "capability", "target_id", "risk", "confirmation", "arguments"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "protocol": {"const": "mazzy-agent-egress/1"},
+    "message_type": {"const": "approval-request"},
+    "command_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{16,128}$"},
+    "session_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{16,128}$"},
+    "actor_id": {"type": "string", "pattern": "^[A-Za-z0-9._:-]{3,128}$"},
+    "source_channel": {
+      "enum": ["web-first-party", "cli-first-party", "telegram-mini-app"]
+    },
+    "sequence": {"type": "integer", "minimum": 0},
+    "issued_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "capability": {"enum": ["vpn.connect", "vpn.disconnect"]},
+    "target_id": {"const": "egress"},
+    "risk": {"const": "high"},
+    "confirmation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "method"],
+      "properties": {
+        "required": {"const": true},
+        "method": {"const": "paired-device"}
+      }
+    },
+    "arguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 0
+    }
+  }
+}
