@@ -1007,7 +1007,12 @@ menu_live_output="$TMP/menu-live.out"
     } | VPNCTL_FORCE_INTERACTIVE=1 "$CLI" >"$menu_live_output" 2>&1
 ) &
 menu_live_pid=$!
-for _ in {1..30}; do
+# A live connect performs the same bounded transition readiness check as the
+# CLI (default 20s).  The old 3s observation window made this integration
+# test spuriously fail on a loaded host even though the operation was still
+# within its documented bound.  Keep the assertion bounded, but allow the
+# complete transition deadline plus a small scheduler margin.
+for _ in {1..250}; do
     grep -q 'Подключение запущено' "$menu_live_output" 2>/dev/null && break
     sleep 0.1
 done
