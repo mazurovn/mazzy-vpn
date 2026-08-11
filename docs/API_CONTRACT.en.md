@@ -244,6 +244,22 @@ schema-version-1 provider registry. Google availability follows the official
 Gemini API region list; Antigravity follows its official geography FAQ. The
 registry is the only provider-selection source used by the CLI probe framework.
 
+`region-check --provider ID [--target-country CC] --json` is a read-only
+region-readiness check. It resolves the default IPv4 egress country only from
+sanitized geo records that report that exact public IP, maps the system IANA
+timezone to an ISO 3166-1 alpha-2 country through the installed timezone table,
+and checks the provider registry. `country_consistent` is true exactly when the
+egress and timezone countries match and that country is supported by the
+provider. An optional target country adds strict target/provider, target/egress
+and target/timezone gates. `ready` requires an empty `mismatches` array.
+
+The result is schema version 1 and contains only the provider ID, country codes,
+system timezone, booleans, verdict, stable `region.*` mismatch reason codes and
+an `account_region_hint`. The hint explicitly describes the manual account
+country association at layer L2; it does not claim that account, cookie,
+subscription or browser region was inspected or changed. This command never
+connects, disconnects or selects a VPN profile.
+
 Installed CLI and TUI clients use the socket without `sudo` for status, profile
 listing, batch endpoint probes, egress verification, connect, quick, reconnect
 and disconnect. The client sends only an

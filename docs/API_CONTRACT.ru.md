@@ -245,6 +245,23 @@ Provider identity, отображаемое имя, HTTPS probe endpoints, по�
 официальном списке регионов Gemini API, Antigravity — на его официальном geo
 FAQ. CLI probe framework выбирает провайдеров только через этот registry.
 
+`region-check --provider ID [--target-country CC] --json` — read-only проверка
+готовности региона. Страна default IPv4 egress определяется только по очищенным
+geo records, которые сообщают именно этот public IP. Системная IANA timezone
+маппится в страну ISO 3166-1 alpha-2 через установленную таблицу timezone, затем
+результат проверяется по provider registry. `country_consistent=true` ровно
+когда страны egress и timezone совпадают и провайдер поддерживает эту страну.
+Необязательная target country добавляет строгие gates target/provider,
+target/egress и target/timezone. Для `ready` массив `mismatches` должен быть
+пустым.
+
+Результат версии схемы 1 содержит только provider ID, коды стран, системную
+timezone, boolean-поля, verdict, стабильные mismatch reason codes `region.*` и
+`account_region_hint`. Hint честно описывает ручную привязку страны аккаунта на
+L2 и не утверждает, что account, cookie, subscription или browser region были
+прочитаны либо изменены. Команда никогда не подключает, не отключает и не
+выбирает VPN-профиль.
+
 Установленные CLI и TUI используют socket без `sudo` для status, списка
 профилей, batch endpoint probe, egress verification, connect, quick, reconnect
 и disconnect. Клиент
