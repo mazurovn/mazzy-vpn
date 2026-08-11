@@ -322,6 +322,12 @@ def main() -> None:
             if status != 2 or response.get("reason") != "invalid-managed-profile":
                 fail(f"managed validator accepted {label}")
 
+        disabled_tls_alpn = profile_for("shadowsocks2022")
+        disabled_tls_alpn["tls"]["alpn"] = ["h2"]  # type: ignore[index]
+        status, response = validate(disabled_tls_alpn)
+        if status != 2 or response.get("reason") != "invalid-managed-profile":
+            fail("managed validator accepted ALPN while TLS is disabled")
+
         duplicate = json.dumps(profile_for("vless"))
         duplicate = duplicate.replace(
             '"schema_version": 1,',
