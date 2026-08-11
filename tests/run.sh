@@ -1780,6 +1780,99 @@ jq -S '.result | del(.evaluated_at)' <<<"$planner_repeat_response" \
 cmp -s "$TMP/planner-first.json" "$TMP/planner-second.json" ||
     fail "local API planner.evaluate is not deterministic for equal evidence"
 
+cp "$TMP/config/openvpn/Test Server.ovpn" \
+    "$TMP/config/openvpn/Russia Exit.ovpn"
+sed -i 's/mazzy-country-code: BE/mazzy-country-code: RU/' \
+    "$TMP/config/openvpn/Russia Exit.ovpn"
+"$CLI" _refresh-dashboard-cache
+russia_profile_id="$(
+    jq -er '.profiles[] | select(.name == "Russia Exit") | .profile_id' \
+        "$VPNCTL_DASHBOARD_DIR/profiles.json"
+)"
+planner_provider_request="$(
+    jq -c --arg russia_profile_id "$russia_profile_id" '
+        .request_id = "request-planner-provider-0001"
+        | .payload.provider = "antigravity"
+        | .payload.candidates = [
+            .payload.candidates[0],
+            (.payload.candidates[0] | .profile_id = $russia_profile_id)
+        ]
+    ' <<<"$planner_request"
+)"
+planner_provider_response="$(
+    printf '%s\n' "$planner_provider_request" | "$CLI" _api-dispatch
+)"
+jq -e \
+    --arg profile_id "$profile_id" \
+    --arg russia_profile_id "$russia_profile_id" '
+    .status == "ok"
+    and .result.provider == "antigravity"
+    and .result.required_country == null
+    and .result.ordered_profile_ids == [$profile_id]
+    and (.result.candidates | length) == 2
+    and .result.candidates[0].profile_id == $profile_id
+    and .result.candidates[0].eligible == true
+    and (.result.candidates[0].hard_gates | length) == 6
+    and any(
+        .result.candidates[0].hard_gates[];
+        .id == "provider-country-supported" and .passed == true
+    )
+    and .result.candidates[1].profile_id == $russia_profile_id
+    and .result.candidates[1].eligible == false
+    and .result.candidates[1].rank == null
+    and .result.candidates[1].score == null
+    and any(
+        .result.candidates[1].hard_gates[];
+        .id == "provider-country-supported"
+        and .passed == false
+        and .reason_code == "planner.gate.provider-country-unsupported"
+    )
+' <<<"$planner_provider_response" >/dev/null ||
+    fail "planner proposed an exit unsupported by the provider registry"
+planner_required_country_request="$(
+    jq -c '
+        .request_id = "request-planner-provider-country-0001"
+        | .payload.required_country = "BE"
+    ' <<<"$planner_provider_request"
+)"
+planner_required_country_response="$(
+    printf '%s\n' "$planner_required_country_request" | "$CLI" _api-dispatch
+)"
+jq -e --arg profile_id "$profile_id" '
+    .status == "ok"
+    and .result.provider == "antigravity"
+    and .result.required_country == "BE"
+    and .result.ordered_profile_ids == [$profile_id]
+    and (.result.candidates[0].hard_gates | length) == 7
+    and any(
+        .result.candidates[0].hard_gates[];
+        .id == "required-country-match" and .passed == true
+    )
+    and any(
+        .result.candidates[1].hard_gates[];
+        .id == "required-country-match"
+        and .passed == false
+        and .reason_code == "planner.gate.required-country-mismatch"
+    )
+' <<<"$planner_required_country_response" >/dev/null ||
+    fail "planner did not enforce its explicit required country"
+for invalid_planner_country_request in \
+    "$(jq -c '.request_id = "request-planner-provider-invalid-0001" | .payload.provider = "unknown"' <<<"$planner_request")" \
+    "$(jq -c '.request_id = "request-planner-country-invalid-0001" | .payload.required_country = "be"' <<<"$planner_request")" \
+    "$(jq -c '.request_id = "request-planner-country-untrusted-0001" | .payload.candidates[0].country_code = "BE"' <<<"$planner_request")"; do
+    invalid_planner_country_response="$(
+        printf '%s\n' "$invalid_planner_country_request" | "$CLI" _api-dispatch
+    )"
+    jq -e '
+        .status == "error"
+        and .error.code == "invalid-request"
+        and .error.message_key == "api.planner.payload-invalid"
+    ' <<<"$invalid_planner_country_response" >/dev/null ||
+        fail "planner accepted an unknown provider or caller-owned country"
+done
+rm -f -- "$TMP/config/openvpn/Russia Exit.ovpn"
+"$CLI" _refresh-dashboard-cache
+
 planner_stale_request="$(
     jq -c '
         .request_id = "request-planner-stale-0001"

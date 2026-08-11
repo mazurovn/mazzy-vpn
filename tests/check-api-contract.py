@@ -245,6 +245,12 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
         fail("PlannerRequest must require workload and candidates only")
     if (
         planner_request.get("additionalProperties") is not False
+        or set(planner_request_properties)
+        != {"workload", "provider", "required_country", "candidates"}
+        or planner_request_properties.get("provider", {}).get("$ref")
+        != "#/$defs/Identifier"
+        or planner_request_properties.get("required_country", {}).get("pattern")
+        != "^[A-Z]{2}$"
         or planner_candidates.get("minItems") != 1
         or planner_candidates.get("maxItems") != 128
         or planner_candidates.get("items", {}).get("$ref")
@@ -337,6 +343,8 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
         "evaluated_at",
         "dry_run",
         "workload",
+        "provider",
+        "required_country",
         "ordered_profile_ids",
         "candidates",
     }
@@ -364,11 +372,11 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
             "reason_codes",
         }.issubset(set(planner_candidate.get("required", [])))
         or planner_candidate_properties.get("hard_gates", {}).get("minItems") != 5
-        or planner_candidate_properties.get("hard_gates", {}).get("maxItems") != 5
+        or planner_candidate_properties.get("hard_gates", {}).get("maxItems") != 7
         or planner_candidate_properties.get("factors", {}).get("minItems") != 5
         or planner_candidate_properties.get("factors", {}).get("maxItems") != 5
     ):
-        fail("PlannerCandidate must expose opaque IDs and exactly five gates/factors")
+        fail("PlannerCandidate must expose opaque IDs, bounded gates and five factors")
 
     verification = defs.get("EgressVerification", {})
     verification_required = set(verification.get("required", []))
