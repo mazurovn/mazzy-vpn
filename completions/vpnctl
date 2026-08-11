@@ -33,7 +33,7 @@ _mazzy_vpn()
         mapfile -t COMPREPLY < <(compgen -W "--timeout --speed --json" -- "$cur")
     elif [[ "${COMP_WORDS[1]:-}" == "verify-service" ]]; then
         mapfile -t COMPREPLY < <(
-            compgen -W "notebooklm openai all --timeout --json" -- "$cur"
+            compgen -W "notebooklm openai google antigravity all --timeout --json" -- "$cur"
         )
     elif [[ "$prev" == "list" || "$prev" == "connect" || "$prev" == "test" ||
             "$prev" == "test-all" || "$prev" == "validate" ||

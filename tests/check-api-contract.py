@@ -419,7 +419,7 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
         or set(service_request.get("properties", {}))
         != {"service", "timeout_seconds"}
         or service_request.get("properties", {}).get("service", {}).get("enum")
-        != ["notebooklm", "openai", "all"]
+        != ["notebooklm", "openai", "google", "antigravity", "all"]
         or service_request.get("properties", {})
         .get("timeout_seconds", {})
         .get("minimum")
@@ -449,6 +449,14 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
         "service.openai.rate-limited",
         "service.openai.service-unavailable",
         "service.openai.unrecognized-response",
+        "service.google.boundary-reached",
+        "service.google.rate-limited",
+        "service.google.service-unavailable",
+        "service.google.unrecognized-response",
+        "service.antigravity.boundary-reached",
+        "service.antigravity.rate-limited",
+        "service.antigravity.service-unavailable",
+        "service.antigravity.unrecognized-response",
         "service.network-unreachable",
         "service.response-invalid",
         "service.response-too-large",
@@ -458,7 +466,7 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
         or set(service_probe.get("required", [])) != service_probe_fields
         or set(service_probe_properties) != service_probe_fields
         or service_probe_properties.get("service_id", {}).get("enum")
-        != ["notebooklm", "openai"]
+        != ["notebooklm", "openai", "google", "antigravity"]
         or service_probe_properties.get("reachability", {}).get("enum")
         != ["reachable", "unreachable"]
         or service_probe_properties.get("egress_eligibility", {}).get("enum")
@@ -474,12 +482,12 @@ def validate_manifest(manifest: dict[str, Any], schema: dict[str, Any]) -> None:
         or set(service_verification.get("required", []))
         != {"schema_version", "checked_at", "scope", "results"}
         or service_results.get("minItems") != 1
-        or service_results.get("maxItems") != 2
+        or service_results.get("maxItems") != 4
         or service_results.get("uniqueItems") is not True
         or service_results.get("items", {}).get("$ref")
         != "#/$defs/ServiceEgressProbe"
     ):
-        fail("ServiceEgressVerification must be strict and bounded to two services")
+        fail("ServiceEgressVerification must be strict and bounded to four services")
 
     security = manifest.get("security")
     if not isinstance(security, dict):

@@ -1364,6 +1364,8 @@
           "enum": [
             "notebooklm",
             "openai",
+            "google",
+            "antigravity",
             "all"
           ]
         },
@@ -1389,7 +1391,9 @@
         "service_id": {
           "enum": [
             "notebooklm",
-            "openai"
+            "openai",
+            "google",
+            "antigravity"
           ]
         },
         "probe_version": {
@@ -1418,6 +1422,14 @@
             "service.openai.rate-limited",
             "service.openai.service-unavailable",
             "service.openai.unrecognized-response",
+            "service.google.boundary-reached",
+            "service.google.rate-limited",
+            "service.google.service-unavailable",
+            "service.google.unrecognized-response",
+            "service.antigravity.boundary-reached",
+            "service.antigravity.rate-limited",
+            "service.antigravity.service-unavailable",
+            "service.antigravity.unrecognized-response",
             "service.network-unreachable",
             "service.response-invalid",
             "service.response-too-large"
@@ -1455,7 +1467,7 @@
         "results": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 2,
+          "maxItems": 4,
           "uniqueItems": true,
           "items": {
             "$ref": "#/$defs/ServiceEgressProbe"

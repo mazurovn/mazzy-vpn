@@ -248,7 +248,7 @@ case "$url" in
             printf '%s' "${FAKE_DEFAULT_IPV4:-203.0.113.7}"
         fi
         ;;
-    *notebooklm.google.com*|*chatgpt.com/backend-api/codex/responses*)
+    *notebooklm.google.com*|*chatgpt.com/backend-api/codex/responses*|*generativelanguage.googleapis.com*|*daily-cloudcode-pa.googleapis.com*)
         [[ -z "${FAKE_SERVICE_CURL_LOG:-}" ]] ||
             printf '%s\n' "$*" >>"$FAKE_SERVICE_CURL_LOG"
         if [[ -n "${ALL_PROXY:-}${all_proxy:-}${HTTP_PROXY:-}${http_proxy:-}${HTTPS_PROXY:-}${https_proxy:-}${NO_PROXY:-}${no_proxy:-}" ]]; then
@@ -1256,12 +1256,91 @@ service_all_result="$(
         "$CLI" verify-service all --timeout 3 --json
 )"
 jq -e '
-    (.results | length) == 2
-    and (.results | map(.service_id)) == ["notebooklm", "openai"]
+    (.results | length) == 4
+    and (.results | map(.service_id))
+        == ["notebooklm", "openai", "google", "antigravity"]
     and .results[0].egress_eligibility == "indeterminate"
     and .results[1].egress_eligibility == "eligible"
+    and .results[2].egress_eligibility == "eligible"
+    and .results[2].reason_code == "service.google.boundary-reached"
+    and .results[3].egress_eligibility == "eligible"
+    and .results[3].reason_code == "service.antigravity.boundary-reached"
 ' <<<"$service_all_result" >/dev/null ||
-    fail "verify-service all did not run both allowlisted probes"
+    fail "verify-service all did not run every allowlisted probe"
+for case in \
+    '401|eligible|service.google.boundary-reached' \
+    '403|eligible|service.google.boundary-reached' \
+    '404|eligible|service.google.boundary-reached' \
+    '429|indeterminate|service.google.rate-limited' \
+    '503|indeterminate|service.google.service-unavailable' \
+    '418|indeterminate|service.google.unrecognized-response'; do
+    IFS='|' read -r status eligibility reason <<<"$case"
+    result="$(
+        FAKE_SERVICE_STATUS="$status" FAKE_SERVICE_LOCATION='' \
+            "$CLI" verify-service google --timeout 3 --json
+    )"
+    jq -e \
+        --arg eligibility "$eligibility" \
+        --arg reason "$reason" \
+        --argjson status "$status" '
+        .results[0].service_id == "google"
+        and .results[0].reachability == "reachable"
+        and .results[0].egress_eligibility == $eligibility
+        and .results[0].reason_code == $reason
+        and .results[0].http_status == $status
+    ' <<<"$result" >/dev/null ||
+        fail "google probe misclassified HTTP $status"
+done
+for case in \
+    '401|eligible|service.antigravity.boundary-reached' \
+    '429|indeterminate|service.antigravity.rate-limited' \
+    '500|indeterminate|service.antigravity.service-unavailable' \
+    '200|indeterminate|service.antigravity.unrecognized-response'; do
+    IFS='|' read -r status eligibility reason <<<"$case"
+    result="$(
+        FAKE_SERVICE_STATUS="$status" FAKE_SERVICE_LOCATION='' \
+            "$CLI" verify-service antigravity --timeout 3 --json
+    )"
+    jq -e \
+        --arg eligibility "$eligibility" \
+        --arg reason "$reason" \
+        --argjson status "$status" '
+        .results[0].service_id == "antigravity"
+        and .results[0].reachability == "reachable"
+        and .results[0].egress_eligibility == $eligibility
+        and .results[0].reason_code == $reason
+        and .results[0].http_status == $status
+    ' <<<"$result" >/dev/null ||
+        fail "antigravity probe misclassified HTTP $status"
+done
+provider_registry="$("$CLI" _provider-registry-json)"
+jq -e '
+    .schema_version == 1
+    and ((keys | sort) == ["providers", "schema_version"])
+    and (.providers | map(.id))
+        == ["notebooklm", "openai", "google", "antigravity"]
+    and ((.providers | map(.id) | unique | length) == 4)
+    and all(
+        .providers[];
+        ((keys | sort) == [
+            "display_name", "id", "probe_endpoints", "probe_strategy",
+            "reason_code_prefix", "supported_countries"
+        ])
+        and (.display_name | type == "string" and length > 0)
+        and (.probe_endpoints | type == "array" and length > 0)
+        and all(.probe_endpoints[]; test("^https://[A-Za-z0-9.-]+/"))
+        and (.supported_countries | type == "array" and length > 0)
+        and all(.supported_countries[]; test("^[A-Z]{2}$"))
+        and (.reason_code_prefix == ("service." + .id))
+    )
+    and ([.providers[] | select(.id == "antigravity")
+        | .supported_countries] | first | index("AT")) != null
+    and ([.providers[] | select(.id == "antigravity")
+        | .supported_countries] | first | index("US")) != null
+    and ([.providers[] | select(.id == "antigravity")
+        | .supported_countries] | first | index("RU")) == null
+' <<<"$provider_registry" >/dev/null ||
+    fail "versioned provider registry is malformed or has unsafe availability data"
 service_network_error="$(
     FAKE_CURL_FAIL=1 "$CLI" verify-service openai --timeout 3 --json
 )"

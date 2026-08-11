@@ -220,7 +220,8 @@ configuration. `include_speed=false` is the default; the five-megabyte transfer
 is never implicit.
 
 `tests.verify-service-egress` is a separate read-only query. Its strict payload
-is exactly `service` (`notebooklm`, `openai` or `all`) plus integer
+is exactly `service` (`notebooklm`, `openai`, `google`, `antigravity` or `all`)
+plus integer
 `timeout_seconds` from 3 through 15. The engine sends credential-free HEAD
 requests only to the built-in HTTPS allowlist, binds them to the selected VPN
 interface, disables redirects and proxy inheritance, and caps response headers.
@@ -229,10 +230,19 @@ reachability, egress eligibility, reason code and an optional HTTP status.
 NotebookLM trusts only the exact unsupported-location and home redirects.
 OpenAI treats 401, or 405 with exact `Allow: POST`, as the authentication
 boundary; 403 is an edge denial, while 429, 5xx and all unrecognized responses
-remain indeterminate. Network errors are unreachable/indeterminate. No URL,
+remain indeterminate. Google (`generativelanguage.googleapis.com`) and
+Antigravity (`daily-cloudcode-pa.googleapis.com`) treat 401, 403 or 404 as the
+reached boundary (eligible), 429 as rate-limited and 5xx as unavailable, with all
+other responses indeterminate. Network errors are unreachable/indeterminate. No URL,
 header, body, address, account or credential is returned or persisted. This
 query does not feed health recovery or planner evidence and does not prove
 authentication, subscription, organization or content access.
+
+Provider identity, display name, HTTPS probe endpoints, supported ISO 3166-1
+alpha-2 countries, reason-code prefix and probe strategy come from the embedded
+schema-version-1 provider registry. Google availability follows the official
+Gemini API region list; Antigravity follows its official geography FAQ. The
+registry is the only provider-selection source used by the CLI probe framework.
 
 Installed CLI and TUI clients use the socket without `sudo` for status, profile
 listing, batch endpoint probes, egress verification, connect, quick, reconnect

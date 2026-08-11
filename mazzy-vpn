@@ -58,9 +58,10 @@ PROBE_V6_URL="${VPNCTL_PROBE_V6_URL:-https://api6.ipify.org}"
 VERIFY_GEO_PRIMARY_URL="${VPNCTL_VERIFY_GEO_PRIMARY_URL:-https://ipapi.co/json/}"
 VERIFY_GEO_SECONDARY_URL="${VPNCTL_VERIFY_GEO_SECONDARY_URL:-https://ipwho.is/}"
 VERIFY_SPEED_URL="${VPNCTL_VERIFY_SPEED_URL:-https://speed.cloudflare.com/__down?bytes=5000000}"
-SERVICE_PROBE_NOTEBOOKLM_URL="https://notebooklm.google.com/"
-SERVICE_PROBE_OPENAI_URL="https://chatgpt.com/backend-api/codex/responses"
 SERVICE_PROBE_MAX_HEADER_BYTES=8192
+PROVIDER_COUNTRIES_GOOGLE="AL DZ AS AD AO AI AQ AG AR AM AW AU AT AZ BS BH BD BB BE BZ BJ BM BT BO BA BW BR IO VG BN BG BF BI CV KH CM CA BQ KY CF TD CL CX CC CO KM CK CR CI HR CW CZ CD DK DJ DM DO EC EG SV GQ ER EE SZ ET FK FO FJ FI FR GF GA GM GE DE GH GI GR GL GD GU GT GG GN GW GY HT HM HN HU IS IN ID IQ IE IM IL IT JM JP JE JO KZ KE KI XK KW KG LA LV LB LS LR LY LI LT LU MG MW MY MV ML MT MH MR MU MX FM MD MC MN ME MS MA MZ NA NR NP NL NC NZ NI NE NG NU NF MK MP NO OM PK PW PS PA PG PY PE PH PN PL PT PR QA CY CG RO RW RE BL SH KN LC PM VC WS SM ST SA SN RS SC SL SG SK SI SB SO ZA GS KR SS ES LK SD SR SE CH TW TJ TZ TH TL TG TK TO TT TN TM TC TV TR UG UA AE GB US UM UY VI UZ VU VA VE VN WF EH YE ZM ZW AX"
+PROVIDER_COUNTRIES_ANTIGRAVITY="AS AI AG AR AW BS BB BZ BM BO BR VG CA BQ KY CL CO CR CW DM DO EC SV FK GL GD GT GY HT HN JM MX MS NI PA PY PE PR BL KN LC PM VC GS SR TT TC US UY VI VE AL AM AT AZ BE BA BG HR CY CZ DK EE FO FI FR GE DE GI GR GG HU IS IE IM IT JE XK LV LI LT LU MT ME NL MK NO PL PT RO RS SK SI ES SE CH UA GB DZ AO BJ BW BF BI CV CM CF TD KM CI CD DJ EG GQ ER SZ ET GA GM GH GN GW KE LS LR LY MG MW ML MR MU MA MZ NA NE NG CG RW SH ST SN SC SL SO ZA SS SD TZ TG TN UG EH ZM ZW BH BD BT IO BN KH CX CC IN ID IQ IL JP JO KZ KW KG LA LB MY MV MN NP OM PK PS PH QA SA SG KR LK TW TJ TH TL TR TM AE UZ VN YE AU CK FJ GU HM KI MH FM NR NC NZ NU NF MP PW PG PN WS SB TK TO TV UM VU WF AQ"
+PROVIDER_COUNTRIES_OPENAI="AL DZ AF AD AO AG AR AM AU AT AZ BS BH BD BB BE BZ BJ BT BO BA BW BR BN BG BF BI CV KH CM CA CF TD CL CO KM CG CD CR CI HR CY CZ DK DJ DM DO EC EG SV GQ ER EE SZ ET FJ FI FR GA GM GE DE GH GR GD GT GN GW GY HT VA HN HU IS IN ID IQ IE IL IT JM JP JO KZ KE KI KW KG LA LV LB LS LR LY LI LT LU MG MW MY MV ML MT MH MR MU MX FM MD MC MN ME MA MZ MM NA NR NP NL NZ NI NE NG MK NO OM PK PW PS PA PG PY PE PH PL PT QA RO RW KN LC VC WS SM ST SA SN RS SC SL SG SK SI SB SO ZA KR SS ES LK SR SE CH SD TW TJ TZ TH TL TG TO TT TN TR TM TV UG UA AE GB US UY UZ VU VN YE ZM ZW"
 OPENVPN_FALLBACK_DNS="${VPNCTL_OPENVPN_FALLBACK_DNS:-}"
 DASHBOARD_DIR="${VPNCTL_DASHBOARD_DIR:-/run/mazzy-vpn}"
 DASHBOARD_FILE="$DASHBOARD_DIR/status.json"
@@ -1672,7 +1673,7 @@ Usage:
   mazzy-vpn disconnect | reconnect
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
   mazzy-vpn verify [--timeout SEC] [--speed] [--json]
-  mazzy-vpn verify-service [notebooklm|openai|all] [--timeout SEC] [--json]
+  mazzy-vpn verify-service [notebooklm|openai|google|antigravity|all] [--timeout SEC] [--json]
   mazzy-vpn list [PROTOCOL] | profiles [--json|--api-json]
   mazzy-vpn validate [PROTOCOL|all]
   mazzy-vpn probe [PROTOCOL|all] [--timeout SEC] [--jobs N] [--json]
@@ -1713,7 +1714,7 @@ Verwendung:
   mazzy-vpn disconnect | reconnect
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
   mazzy-vpn verify [--timeout SEK] [--speed] [--json]
-  mazzy-vpn verify-service [notebooklm|openai|all] [--timeout SEK] [--json]
+  mazzy-vpn verify-service [notebooklm|openai|google|antigravity|all] [--timeout SEK] [--json]
   mazzy-vpn list [PROTOKOLL] | profiles [--json|--api-json]
   mazzy-vpn validate [PROTOKOLL|all]
   mazzy-vpn probe [PROTOKOLL|all] [--timeout SEK] [--jobs N] [--json]
@@ -1754,7 +1755,7 @@ Mazzy VPN — 安全便捷的 Linux VPN 管理工具
   mazzy-vpn disconnect | reconnect
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
   mazzy-vpn verify [--timeout 秒] [--speed] [--json]
-  mazzy-vpn verify-service [notebooklm|openai|all] [--timeout 秒] [--json]
+  mazzy-vpn verify-service [notebooklm|openai|google|antigravity|all] [--timeout 秒] [--json]
   mazzy-vpn list [协议] | profiles [--json|--api-json]
   mazzy-vpn validate [协议|all]
   mazzy-vpn probe [协议|all] [--timeout 秒] [--jobs N] [--json]
@@ -1795,7 +1796,7 @@ Mazzy VPN — Linux 向けの安全で使いやすい VPN 管理ツール
   mazzy-vpn disconnect | reconnect
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
   mazzy-vpn verify [--timeout 秒] [--speed] [--json]
-  mazzy-vpn verify-service [notebooklm|openai|all] [--timeout 秒] [--json]
+  mazzy-vpn verify-service [notebooklm|openai|google|antigravity|all] [--timeout 秒] [--json]
   mazzy-vpn list [プロトコル] | profiles [--json|--api-json]
   mazzy-vpn validate [プロトコル|all]
   mazzy-vpn probe [プロトコル|all] [--timeout 秒] [--jobs N] [--json]
@@ -1836,7 +1837,7 @@ Mazzy VPN — Linux용 안전하고 편리한 VPN 관리 도구
   mazzy-vpn disconnect | reconnect
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
   mazzy-vpn verify [--timeout 초] [--speed] [--json]
-  mazzy-vpn verify-service [notebooklm|openai|all] [--timeout 초] [--json]
+  mazzy-vpn verify-service [notebooklm|openai|google|antigravity|all] [--timeout 초] [--json]
   mazzy-vpn list [프로토콜] | profiles [--json|--api-json]
   mazzy-vpn validate [프로토콜|all]
   mazzy-vpn probe [프로토콜|all] [--timeout 초] [--jobs N] [--json]
@@ -1884,7 +1885,7 @@ Mazzy VPN - быстрое и безопасное управление VPN в L
                                     краткое состояние или JSON
   mazzy-vpn diagnose                диагностика активного соединения
   mazzy-vpn verify [--timeout СЕК] [--speed] [--json]
-  mazzy-vpn verify-service [notebooklm|openai|all] [--timeout СЕК] [--json]
+  mazzy-vpn verify-service [notebooklm|openai|google|antigravity|all] [--timeout СЕК] [--json]
                                     фактический egress, локация, DNS и IPv6
   mazzy-vpn validate [ПРОТОКОЛ|all] проверить формат всех профилей
   mazzy-vpn probe [ПРОТОКОЛ|all] [--timeout СЕК] [--jobs N] [--json]
@@ -4919,6 +4920,82 @@ cmd_verify() {
     [[ "$(jq -r '.verdict' <<<"$result")" != failed ]]
 }
 
+provider_registry_json() {
+    jq -cn \
+        --arg google_countries "$PROVIDER_COUNTRIES_GOOGLE" \
+        --arg antigravity_countries "$PROVIDER_COUNTRIES_ANTIGRAVITY" \
+        --arg openai_countries "$PROVIDER_COUNTRIES_OPENAI" '
+        def country_codes:
+            split(" ")
+            | map(select(test("^[A-Z]{2}$")))
+            | unique;
+        ($google_countries | country_codes) as $google
+        | ($antigravity_countries | country_codes) as $antigravity
+        | ($openai_countries | country_codes) as $openai
+        | {
+            schema_version: 1,
+            providers: [
+                {
+                    id: "notebooklm",
+                    display_name: "Google NotebookLM",
+                    probe_endpoints: ["https://notebooklm.google.com/"],
+                    supported_countries: $google,
+                    reason_code_prefix: "service.notebooklm",
+                    probe_strategy: "notebooklm-redirect"
+                },
+                {
+                    id: "openai",
+                    display_name: "OpenAI API / Codex",
+                    probe_endpoints: [
+                        "https://chatgpt.com/backend-api/codex/responses"
+                    ],
+                    supported_countries: $openai,
+                    reason_code_prefix: "service.openai",
+                    probe_strategy: "openai-auth-boundary"
+                },
+                {
+                    id: "google",
+                    display_name: "Google AI Studio / Gemini API",
+                    probe_endpoints: [
+                        "https://generativelanguage.googleapis.com/"
+                    ],
+                    supported_countries: $google,
+                    reason_code_prefix: "service.google",
+                    probe_strategy: "google-auth-boundary"
+                },
+                {
+                    id: "antigravity",
+                    display_name: "Google Antigravity",
+                    probe_endpoints: [
+                        "https://daily-cloudcode-pa.googleapis.com/"
+                    ],
+                    supported_countries: $antigravity,
+                    reason_code_prefix: "service.antigravity",
+                    probe_strategy: "google-auth-boundary"
+                }
+            ]
+        }
+    '
+}
+
+provider_registry_get() {
+    local provider_id="$1"
+    provider_registry_json |
+        jq -ce --arg provider_id "$provider_id" '
+            [.providers[] | select(.id == $provider_id)]
+            | select(length == 1)
+            | .[0]
+        '
+}
+
+provider_registry_has() {
+    provider_registry_get "$1" >/dev/null 2>&1
+}
+
+provider_registry_ids() {
+    provider_registry_json | jq -er '.providers[].id'
+}
+
 service_probe_result_json() {
     local service_id="$1" reachability="$2" eligibility="$3" reason_code="$4"
     local http_status="${5:-}"
@@ -4956,13 +5033,13 @@ service_probe_result_json() {
 
 service_probe_one_json() {
     local service_id="$1" interface="$2" timeout_seconds="$3" url=""
+    local provider="" strategy="" reason_prefix=""
     local raw="" raw_bytes=0 parsed="" status="" location="" allow="" rc=0
     local LC_ALL=C
-    case "$service_id" in
-        notebooklm) url="$SERVICE_PROBE_NOTEBOOKLM_URL" ;;
-        openai) url="$SERVICE_PROBE_OPENAI_URL" ;;
-        *) return 2 ;;
-    esac
+    provider="$(provider_registry_get "$service_id")" || return 2
+    url="$(jq -er '.probe_endpoints[0]' <<<"$provider")" || return 2
+    strategy="$(jq -er '.probe_strategy' <<<"$provider")" || return 2
+    reason_prefix="$(jq -er '.reason_code_prefix' <<<"$provider")" || return 2
     [[ -n "$interface" ]] || {
         service_probe_result_json "$service_id" unreachable indeterminate \
             service.network-unreachable
@@ -5051,54 +5128,75 @@ service_probe_one_json() {
     }
     IFS=$'\x1f' read -r status location allow <<<"$parsed"
 
-    case "$service_id" in
-        notebooklm)
+    case "$strategy" in
+        notebooklm-redirect)
             if [[ "$status" =~ ^30[12378]$ &&
                   "$location" == "https://notebooklm.google/?location=unsupported" ]]; then
-                service_probe_result_json notebooklm reachable ineligible \
-                    service.notebooklm.unsupported-location "$status"
+                service_probe_result_json "$service_id" reachable ineligible \
+                    "$reason_prefix.unsupported-location" "$status"
             elif [[ "$status" =~ ^30[12378]$ &&
                     "$location" == "https://notebook.google.com/" ]]; then
-                service_probe_result_json notebooklm reachable eligible \
-                    service.notebooklm.home-reached "$status"
+                service_probe_result_json "$service_id" reachable eligible \
+                    "$reason_prefix.home-reached" "$status"
             else
-                service_probe_result_json notebooklm reachable indeterminate \
-                    service.notebooklm.unrecognized-response "$status"
+                service_probe_result_json "$service_id" reachable indeterminate \
+                    "$reason_prefix.unrecognized-response" "$status"
             fi
             ;;
-        openai)
+        openai-auth-boundary)
             case "$status" in
                 401)
-                    service_probe_result_json openai reachable eligible \
-                        service.openai.auth-boundary-reached "$status"
+                    service_probe_result_json "$service_id" reachable eligible \
+                        "$reason_prefix.auth-boundary-reached" "$status"
                     ;;
                 405)
                     if [[ "$allow" == POST ]]; then
-                        service_probe_result_json openai reachable eligible \
-                            service.openai.auth-boundary-reached "$status"
+                        service_probe_result_json "$service_id" reachable eligible \
+                            "$reason_prefix.auth-boundary-reached" "$status"
                     else
-                        service_probe_result_json openai reachable indeterminate \
-                            service.openai.unrecognized-response "$status"
+                        service_probe_result_json "$service_id" reachable indeterminate \
+                            "$reason_prefix.unrecognized-response" "$status"
                     fi
                     ;;
                 403)
-                    service_probe_result_json openai reachable ineligible \
-                        service.openai.edge-denied "$status"
+                    service_probe_result_json "$service_id" reachable ineligible \
+                        "$reason_prefix.edge-denied" "$status"
                     ;;
                 429)
-                    service_probe_result_json openai reachable indeterminate \
-                        service.openai.rate-limited "$status"
+                    service_probe_result_json "$service_id" reachable indeterminate \
+                        "$reason_prefix.rate-limited" "$status"
                     ;;
                 5??)
-                    service_probe_result_json openai reachable indeterminate \
-                        service.openai.service-unavailable "$status"
+                    service_probe_result_json "$service_id" reachable indeterminate \
+                        "$reason_prefix.service-unavailable" "$status"
                     ;;
                 *)
-                    service_probe_result_json openai reachable indeterminate \
-                        service.openai.unrecognized-response "$status"
+                    service_probe_result_json "$service_id" reachable indeterminate \
+                        "$reason_prefix.unrecognized-response" "$status"
                     ;;
             esac
             ;;
+        google-auth-boundary)
+            case "$status" in
+                401|403|404)
+                    service_probe_result_json "$service_id" reachable eligible \
+                        "$reason_prefix.boundary-reached" "$status"
+                    ;;
+                429)
+                    service_probe_result_json "$service_id" reachable indeterminate \
+                        "$reason_prefix.rate-limited" "$status"
+                    ;;
+                5??)
+                    service_probe_result_json "$service_id" reachable indeterminate \
+                        "$reason_prefix.service-unavailable" "$status"
+                    ;;
+                *)
+                    service_probe_result_json "$service_id" reachable indeterminate \
+                        "$reason_prefix.unrecognized-response" "$status"
+                    ;;
+            esac
+            ;;
+        *) return 2 ;;
     esac
 }
 
@@ -5106,11 +5204,14 @@ verify_service_egress_json() {
     local requested="$1" timeout_seconds="$2" protocol="" interface=""
     local service_id result
     local -a services=() results=()
-    case "$requested" in
-        notebooklm|openai) services=("$requested") ;;
-        all) services=(notebooklm openai) ;;
-        *) return 2 ;;
-    esac
+    if [[ "$requested" == all ]]; then
+        mapfile -t services < <(provider_registry_ids) || return 1
+        ((${#services[@]} > 0)) || return 1
+    elif provider_registry_has "$requested"; then
+        services=("$requested")
+    else
+        return 2
+    fi
     if selected_from_state; then
         protocol="$SELECTED_PROTOCOL"
         if service_active && connection_local_ok "$protocol"; then
@@ -5155,7 +5256,7 @@ cmd_verify_service() {
     local -a original_args=("$@")
     while (($#)); do
         case "$1" in
-            notebooklm|openai|all)
+            all)
                 [[ "$scope_seen" == false ]] ||
                     die "Укажите только один service scope"
                 requested="$1"
@@ -5168,10 +5269,18 @@ cmd_verify_service() {
                 ;;
             --json) json_output=true ;;
             --help|-h)
-                say "Использование: $CLI_COMMAND verify-service [notebooklm|openai|all] [--timeout 5] [--json]"
+                say "Использование: $CLI_COMMAND verify-service [notebooklm|openai|google|antigravity|all] [--timeout 5] [--json]"
                 return 0
                 ;;
-            *) die "Неизвестный параметр verify-service: $1" ;;
+            -*) die "Неизвестный параметр verify-service: $1" ;;
+            *)
+                provider_registry_has "$1" ||
+                    die "Неизвестный provider verify-service: $1"
+                [[ "$scope_seen" == false ]] ||
+                    die "Укажите только один service scope"
+                requested="$1"
+                scope_seen=true
+                ;;
         esac
         shift
     done
@@ -7377,29 +7486,38 @@ api_service_verify_result() {
         esac
         result="$(<"$result_file")"
         rm -f -- "$result_file"
-        jq -e --arg service "$service" '
-            .schema_version == 1
+        local registry
+        registry="$(provider_registry_json)" || return 1
+        jq -e \
+            --arg service "$service" \
+            --argjson registry "$registry" '
+            ($registry.providers | map(.id)) as $registered
+            | .schema_version == 1
             and (.checked_at | type == "string")
             and .scope == "unauthenticated-egress"
             and ((keys | sort) == ["checked_at", "results", "schema_version", "scope"])
             and (.results | type == "array")
             and (.results | length) >= 1
-            and (.results | length) <= 2
+            and (.results | length) <= ($registered | length)
             and ((.results | map(.service_id) | unique | length) == (.results | length))
             and (
                 if $service == "all" then
-                    (.results | map(.service_id) | sort) == ["notebooklm", "openai"]
+                    (.results | map(.service_id) | sort) == ($registered | sort)
                 else
                     (.results | length) == 1 and .results[0].service_id == $service
                 end
             )
             and all(
                 .results[];
-                ((keys | sort) == [
+                . as $probe
+                | ($registry.providers
+                    | map(select(.id == $probe.service_id))
+                    | first) as $provider
+                | ($provider != null)
+                and ((keys | sort) == [
                     "egress_eligibility", "http_status", "probe_version",
                     "reachability", "reason_code", "service_id"
                 ])
-                and (.service_id == "notebooklm" or .service_id == "openai")
                 and .probe_version == 1
                 and (.reachability == "reachable" or .reachability == "unreachable")
                 and (
@@ -7417,53 +7535,7 @@ api_service_verify_result() {
                     )
                 )
                 and (
-                    if .reason_code == "service.notebooklm.unsupported-location" then
-                        .service_id == "notebooklm"
-                        and .reachability == "reachable"
-                        and .egress_eligibility == "ineligible"
-                        and (
-                            .http_status == 301 or .http_status == 302
-                            or .http_status == 303 or .http_status == 307
-                            or .http_status == 308
-                        )
-                    elif .reason_code == "service.notebooklm.home-reached" then
-                        .service_id == "notebooklm"
-                        and .reachability == "reachable"
-                        and .egress_eligibility == "eligible"
-                        and (
-                            .http_status == 301 or .http_status == 302
-                            or .http_status == 303 or .http_status == 307
-                            or .http_status == 308
-                        )
-                    elif .reason_code == "service.notebooklm.unrecognized-response" then
-                        .service_id == "notebooklm"
-                        and .reachability == "reachable"
-                        and .egress_eligibility == "indeterminate"
-                    elif .reason_code == "service.openai.auth-boundary-reached" then
-                        .service_id == "openai"
-                        and .reachability == "reachable"
-                        and .egress_eligibility == "eligible"
-                        and (.http_status == 401 or .http_status == 405)
-                    elif .reason_code == "service.openai.edge-denied" then
-                        .service_id == "openai"
-                        and .reachability == "reachable"
-                        and .egress_eligibility == "ineligible"
-                        and .http_status == 403
-                    elif .reason_code == "service.openai.rate-limited" then
-                        .service_id == "openai"
-                        and .reachability == "reachable"
-                        and .egress_eligibility == "indeterminate"
-                        and .http_status == 429
-                    elif .reason_code == "service.openai.service-unavailable" then
-                        .service_id == "openai"
-                        and .reachability == "reachable"
-                        and .egress_eligibility == "indeterminate"
-                        and .http_status >= 500 and .http_status <= 599
-                    elif .reason_code == "service.openai.unrecognized-response" then
-                        .service_id == "openai"
-                        and .reachability == "reachable"
-                        and .egress_eligibility == "indeterminate"
-                    elif .reason_code == "service.network-unreachable" then
+                    if .reason_code == "service.network-unreachable" then
                         .reachability == "unreachable"
                         and .egress_eligibility == "indeterminate"
                         and .http_status == null
@@ -7474,6 +7546,60 @@ api_service_verify_result() {
                         .reachability == "reachable"
                         and .egress_eligibility == "indeterminate"
                         and .http_status == null
+                    elif $provider.probe_strategy == "notebooklm-redirect" then
+                        if .reason_code == ($provider.reason_code_prefix + ".unsupported-location") then
+                            .reachability == "reachable"
+                            and .egress_eligibility == "ineligible"
+                            and ([301, 302, 303, 307, 308] | index($probe.http_status)) != null
+                        elif .reason_code == ($provider.reason_code_prefix + ".home-reached") then
+                            .reachability == "reachable"
+                            and .egress_eligibility == "eligible"
+                            and ([301, 302, 303, 307, 308] | index($probe.http_status)) != null
+                        elif .reason_code == ($provider.reason_code_prefix + ".unrecognized-response") then
+                            .reachability == "reachable"
+                            and .egress_eligibility == "indeterminate"
+                        else false
+                        end
+                    elif $provider.probe_strategy == "openai-auth-boundary" then
+                        if .reason_code == ($provider.reason_code_prefix + ".auth-boundary-reached") then
+                            .reachability == "reachable"
+                            and .egress_eligibility == "eligible"
+                            and (.http_status == 401 or .http_status == 405)
+                        elif .reason_code == ($provider.reason_code_prefix + ".edge-denied") then
+                            .reachability == "reachable"
+                            and .egress_eligibility == "ineligible"
+                            and .http_status == 403
+                        elif .reason_code == ($provider.reason_code_prefix + ".rate-limited") then
+                            .reachability == "reachable"
+                            and .egress_eligibility == "indeterminate"
+                            and .http_status == 429
+                        elif .reason_code == ($provider.reason_code_prefix + ".service-unavailable") then
+                            .reachability == "reachable"
+                            and .egress_eligibility == "indeterminate"
+                            and .http_status >= 500 and .http_status <= 599
+                        elif .reason_code == ($provider.reason_code_prefix + ".unrecognized-response") then
+                            .reachability == "reachable"
+                            and .egress_eligibility == "indeterminate"
+                        else false
+                        end
+                    elif $provider.probe_strategy == "google-auth-boundary" then
+                        if .reason_code == ($provider.reason_code_prefix + ".boundary-reached") then
+                            .reachability == "reachable"
+                            and .egress_eligibility == "eligible"
+                            and ([401, 403, 404] | index($probe.http_status)) != null
+                        elif .reason_code == ($provider.reason_code_prefix + ".rate-limited") then
+                            .reachability == "reachable"
+                            and .egress_eligibility == "indeterminate"
+                            and .http_status == 429
+                        elif .reason_code == ($provider.reason_code_prefix + ".service-unavailable") then
+                            .reachability == "reachable"
+                            and .egress_eligibility == "indeterminate"
+                            and .http_status >= 500 and .http_status <= 599
+                        elif .reason_code == ($provider.reason_code_prefix + ".unrecognized-response") then
+                            .reachability == "reachable"
+                            and .egress_eligibility == "indeterminate"
+                        else false
+                        end
                     else false
                     end
                 )
@@ -8234,7 +8360,7 @@ api_run_lifecycle_action() {
 
 api_dispatch() {
     local request="" request_id operation result action_id authorization deadline_ms
-    local deadline_started_ms allowed_keys rc=0
+    local deadline_started_ms allowed_keys provider_id rc=0
     local LC_ALL=C
     ((EUID == 0)) || [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]] || {
         api_error_response "$(api_server_request_id)" permission-denied \
@@ -8609,11 +8735,7 @@ api_dispatch() {
                 and .deadline_ms >= 100
                 and .deadline_ms <= 32000
                 and ((.payload | keys | sort) == ["service", "timeout_seconds"])
-                and (
-                    .payload.service == "notebooklm"
-                    or .payload.service == "openai"
-                    or .payload.service == "all"
-                )
+                and (.payload.service | type == "string")
                 and (.payload.timeout_seconds | type == "number")
                 and (
                     (.payload.timeout_seconds | floor)
@@ -8622,6 +8744,13 @@ api_dispatch() {
                 and .payload.timeout_seconds >= 3
                 and .payload.timeout_seconds <= 15
             ' <<<"$request" >/dev/null 2>&1; then
+                api_error_response "$request_id" invalid-request \
+                    api.tests.verify-service-egress.payload-invalid false false
+                return
+            fi
+            provider_id="$(jq -r '.payload.service' <<<"$request")"
+            if [[ "$provider_id" != all ]] &&
+               ! provider_registry_has "$provider_id"; then
                 api_error_response "$request_id" invalid-request \
                     api.tests.verify-service-egress.payload-invalid false false
                 return
@@ -10595,13 +10724,17 @@ main() {
         _verify-service-egress-json)
             [[ $# -eq 2 ]] ||
                 die "Internal service verify requires service scope and timeout"
-            [[ "$1" == notebooklm || "$1" == openai || "$1" == all ]] ||
+            [[ "$1" == all ]] || provider_registry_has "$1" ||
                 die "Internal service verify scope is invalid"
             if [[ ! "$2" =~ ^[0-9]+$ ]] ||
                ((10#$2 < 3 || 10#$2 > 15)); then
                 die "Internal service verify timeout is invalid"
             fi
             verify_service_egress_json "$1" "$2"
+            ;;
+        _provider-registry-json)
+            [[ $# -eq 0 ]] || die "Internal provider registry takes no arguments"
+            provider_registry_json
             ;;
         _test-timeout) test_timeout_handler "${1:-}" ;;
         _recover-stale-test) recover_stale_test_state ;;
