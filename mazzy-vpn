@@ -4990,6 +4990,22 @@ cmd_verify() {
 }
 
 provider_registry_json() {
+    local metadata="${SCRIPT_DIR}/providers/v1/registry.json"
+    if [[ -r "$metadata" ]]; then
+        jq -ce --arg google_countries "$PROVIDER_COUNTRIES_GOOGLE" \
+            --arg antigravity_countries "$PROVIDER_COUNTRIES_ANTIGRAVITY" \
+            --arg openai_countries "$PROVIDER_COUNTRIES_OPENAI" '
+            def codes: split(" ") | map(select(test("^[A-Z]{2}$"))) | unique;
+            ($google_countries|codes) as $google
+            | ($antigravity_countries|codes) as $antigravity
+            | ($openai_countries|codes) as $openai
+            | .providers |= map(. + {supported_countries:
+                (if .country_set == "google" then $google
+                 elif .country_set == "antigravity" then $antigravity
+                 elif .country_set == "openai" then $openai else [] end)})
+            ' "$metadata"
+        return
+    fi
     jq -cn \
         --arg google_countries "$PROVIDER_COUNTRIES_GOOGLE" \
         --arg antigravity_countries "$PROVIDER_COUNTRIES_ANTIGRAVITY" \
