@@ -155,6 +155,15 @@ esac
 exit 0
 EOF
 
+cat >"$TMP/fakebin/timedatectl" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "show --property=Timezone --value" ]]; then
+    printf '%s\n' "${FAKE_SYSTEM_TIMEZONE:-Europe/Brussels}"
+    exit 0
+fi
+exit 1
+EOF
+
 cat >"$TMP/fakebin/python3" <<'EOF'
 #!/usr/bin/env bash
 if [[ "${1:-}" == "-I" && "${2:-}" == "-c" &&
@@ -287,8 +296,9 @@ case "$url" in
         ;;
     *ipapi.co*)
         [[ "${FAKE_GEO_FAIL:-0}" == "1" ]] && exit 28
-        printf '{"ip":"%s","country_code":"BE","country_name":"Belgium","region":"Brussels","city":"Brussels"}' \
-            "${FAKE_GEO_IPV4:-203.0.113.7}"
+        country_code="${FAKE_GEO_PRIMARY_COUNTRY:-${FAKE_GEO_COUNTRY:-BE}}"
+        printf '{"ip":"%s","country_code":"%s","country_name":"Test Country","region":"Test Region","city":"Test City"}' \
+            "${FAKE_GEO_IPV4:-203.0.113.7}" "$country_code"
         ;;
     *ipwho.is*)
         [[ "${FAKE_GEO_FAIL:-0}" == "1" ]] && exit 28
@@ -298,10 +308,10 @@ case "$url" in
             region=Berlin
             city=Berlin
         else
-            country_code=BE
-            country=Belgium
-            region=Brussels
-            city=Brussels
+            country_code="${FAKE_GEO_SECONDARY_COUNTRY:-${FAKE_GEO_COUNTRY:-BE}}"
+            country="Test Country"
+            region="Test Region"
+            city="Test City"
         fi
         printf '{"success":true,"ip":"%s","country_code":"%s","country":"%s","region":"%s","city":"%s"}' \
             "${FAKE_GEO_IPV4:-203.0.113.7}" \
@@ -1341,6 +1351,90 @@ jq -e '
         | .supported_countries] | first | index("RU")) == null
 ' <<<"$provider_registry" >/dev/null ||
     fail "versioned provider registry is malformed or has unsafe availability data"
+region_ready="$(
+    FAKE_GEO_COUNTRY=AT FAKE_SYSTEM_TIMEZONE=Europe/Vienna \
+        "$CLI" region-check --provider antigravity --json
+)"
+jq -e '
+    ((keys | sort) == [
+        "account_region_hint", "country_consistent", "egress_country",
+        "mismatches", "provider", "schema_version", "supported_by_provider",
+        "system_timezone", "timezone_country", "verdict"
+    ])
+    and .schema_version == 1
+    and .provider == "antigravity"
+    and .egress_country == "AT"
+    and .system_timezone == "Europe/Vienna"
+    and .timezone_country == "AT"
+    and .supported_by_provider == true
+    and .country_consistent == true
+    and (.account_region_hint | test("AT \\(manual, L2\\)$"))
+    and .verdict == "ready"
+    and .mismatches == []
+' <<<"$region_ready" >/dev/null ||
+    fail "region-check did not accept consistent AT Antigravity egress"
+region_target_mismatch="$(
+    FAKE_GEO_COUNTRY=AT FAKE_SYSTEM_TIMEZONE=Europe/Vienna \
+        "$CLI" region-check --provider antigravity \
+            --target-country us --json || true
+)"
+jq -e '
+    .egress_country == "AT"
+    and .timezone_country == "AT"
+    and .supported_by_provider == true
+    and .country_consistent == true
+    and .verdict == "not-ready"
+    and (.mismatches | index("region.target.egress-mismatch")) != null
+    and (.mismatches | index("region.target.timezone-mismatch")) != null
+    and (.mismatches | index("region.target.country-unsupported")) == null
+    and (.account_region_hint | test("US \\(manual, L2\\)$"))
+' <<<"$region_target_mismatch" >/dev/null ||
+    fail "region-check did not enforce the optional target-country gate"
+region_timezone_mismatch="$(
+    FAKE_GEO_COUNTRY=AT FAKE_SYSTEM_TIMEZONE=Europe/Moscow \
+        "$CLI" region-check --provider antigravity --json || true
+)"
+jq -e '
+    .egress_country == "AT"
+    and .timezone_country == "RU"
+    and .supported_by_provider == true
+    and .country_consistent == false
+    and .verdict == "not-ready"
+    and (.mismatches | index("region.country.egress-timezone-mismatch")) != null
+' <<<"$region_timezone_mismatch" >/dev/null ||
+    fail "region-check trusted mismatched egress and timezone countries"
+region_provider_mismatch="$(
+    FAKE_GEO_COUNTRY=RU FAKE_SYSTEM_TIMEZONE=Europe/Moscow \
+        "$CLI" region-check --provider antigravity --json || true
+)"
+jq -e '
+    .egress_country == "RU"
+    and .timezone_country == "RU"
+    and .supported_by_provider == false
+    and .country_consistent == false
+    and .verdict == "not-ready"
+    and (.mismatches | index("region.provider.country-unsupported")) != null
+' <<<"$region_provider_mismatch" >/dev/null ||
+    fail "region-check trusted a country unsupported by the provider registry"
+region_geo_disagreement="$(
+    FAKE_GEO_PRIMARY_COUNTRY=AT FAKE_GEO_SECONDARY_COUNTRY=DE \
+    FAKE_SYSTEM_TIMEZONE=Europe/Vienna \
+        "$CLI" region-check --provider antigravity --json || true
+)"
+jq -e '
+    .egress_country == null
+    and .country_consistent == false
+    and .verdict == "not-ready"
+    and (.mismatches | index("region.egress.providers-disagree")) != null
+' <<<"$region_geo_disagreement" >/dev/null ||
+    fail "region-check trusted disagreeing egress geolocation providers"
+if "$CLI" region-check --provider unknown --json >/dev/null 2>&1 ||
+   "$CLI" region-check --provider antigravity --target-country USA --json \
+       >/dev/null 2>&1 ||
+   "$CLI" region-check --provider antigravity >/dev/null 2>&1; then
+    fail "region-check accepted an unknown provider or invalid envelope arguments"
+fi
+ok "provider-aware region readiness is strict, read-only and country-consistent"
 service_network_error="$(
     FAKE_CURL_FAIL=1 "$CLI" verify-service openai --timeout 3 --json
 )"

@@ -1674,6 +1674,7 @@ Usage:
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
   mazzy-vpn verify [--timeout SEC] [--speed] [--json]
   mazzy-vpn verify-service [notebooklm|openai|google|antigravity|all] [--timeout SEC] [--json]
+  mazzy-vpn region-check --provider ID [--target-country CC] --json
   mazzy-vpn list [PROTOCOL] | profiles [--json|--api-json]
   mazzy-vpn validate [PROTOCOL|all]
   mazzy-vpn probe [PROTOCOL|all] [--timeout SEC] [--jobs N] [--json]
@@ -1715,6 +1716,7 @@ Verwendung:
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
   mazzy-vpn verify [--timeout SEK] [--speed] [--json]
   mazzy-vpn verify-service [notebooklm|openai|google|antigravity|all] [--timeout SEK] [--json]
+  mazzy-vpn region-check --provider ID [--target-country CC] --json
   mazzy-vpn list [PROTOKOLL] | profiles [--json|--api-json]
   mazzy-vpn validate [PROTOKOLL|all]
   mazzy-vpn probe [PROTOKOLL|all] [--timeout SEK] [--jobs N] [--json]
@@ -1756,6 +1758,7 @@ Mazzy VPN — 安全便捷的 Linux VPN 管理工具
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
   mazzy-vpn verify [--timeout 秒] [--speed] [--json]
   mazzy-vpn verify-service [notebooklm|openai|google|antigravity|all] [--timeout 秒] [--json]
+  mazzy-vpn region-check --provider ID [--target-country CC] --json
   mazzy-vpn list [协议] | profiles [--json|--api-json]
   mazzy-vpn validate [协议|all]
   mazzy-vpn probe [协议|all] [--timeout 秒] [--jobs N] [--json]
@@ -1797,6 +1800,7 @@ Mazzy VPN — Linux 向けの安全で使いやすい VPN 管理ツール
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
   mazzy-vpn verify [--timeout 秒] [--speed] [--json]
   mazzy-vpn verify-service [notebooklm|openai|google|antigravity|all] [--timeout 秒] [--json]
+  mazzy-vpn region-check --provider ID [--target-country CC] --json
   mazzy-vpn list [プロトコル] | profiles [--json|--api-json]
   mazzy-vpn validate [プロトコル|all]
   mazzy-vpn probe [プロトコル|all] [--timeout 秒] [--jobs N] [--json]
@@ -1838,6 +1842,7 @@ Mazzy VPN — Linux용 안전하고 편리한 VPN 관리 도구
   mazzy-vpn dashboard | status [--json|--api-json] | diagnose
   mazzy-vpn verify [--timeout 초] [--speed] [--json]
   mazzy-vpn verify-service [notebooklm|openai|google|antigravity|all] [--timeout 초] [--json]
+  mazzy-vpn region-check --provider ID [--target-country CC] --json
   mazzy-vpn list [프로토콜] | profiles [--json|--api-json]
   mazzy-vpn validate [프로토콜|all]
   mazzy-vpn probe [프로토콜|all] [--timeout 초] [--jobs N] [--json]
@@ -1885,8 +1890,9 @@ Mazzy VPN - быстрое и безопасное управление VPN в L
                                     краткое состояние или JSON
   mazzy-vpn diagnose                диагностика активного соединения
   mazzy-vpn verify [--timeout СЕК] [--speed] [--json]
-  mazzy-vpn verify-service [notebooklm|openai|google|antigravity|all] [--timeout СЕК] [--json]
                                     фактический egress, локация, DNS и IPv6
+  mazzy-vpn verify-service [notebooklm|openai|google|antigravity|all] [--timeout СЕК] [--json]
+  mazzy-vpn region-check --provider ID [--target-country CC] --json
   mazzy-vpn validate [ПРОТОКОЛ|all] проверить формат всех профилей
   mazzy-vpn probe [ПРОТОКОЛ|all] [--timeout СЕК] [--jobs N] [--json]
                                     DNS и ping всех VPN-серверов
@@ -4994,6 +5000,248 @@ provider_registry_has() {
 
 provider_registry_ids() {
     provider_registry_json | jq -er '.providers[].id'
+}
+
+system_timezone_name() {
+    local timezone="" localtime_target=""
+    if command -v timedatectl >/dev/null 2>&1; then
+        timezone="$(
+            timedatectl show --property=Timezone --value 2>/dev/null |
+                LC_ALL=C head -n 1
+        )"
+    fi
+    if [[ -z "$timezone" && -L /etc/localtime ]]; then
+        localtime_target="$(readlink -f /etc/localtime 2>/dev/null || true)"
+        if [[ "$localtime_target" == /usr/share/zoneinfo/* ]]; then
+            timezone="${localtime_target#/usr/share/zoneinfo/}"
+        fi
+    fi
+    if [[ -z "$timezone" && -r /etc/timezone ]]; then
+        IFS= read -r timezone </etc/timezone || true
+    fi
+    ((${#timezone} >= 1 && ${#timezone} <= 96)) || return 1
+    [[ "$timezone" =~ ^[A-Za-z0-9._+-]+(/[A-Za-z0-9._+-]+)+$ ||
+       "$timezone" == UTC || "$timezone" == GMT ]] || return 1
+    printf '%s\n' "$timezone"
+}
+
+timezone_country_from_zone() {
+    local timezone="$1" zone_table country=""
+    [[ "$timezone" =~ ^[A-Za-z0-9._+-]+(/[A-Za-z0-9._+-]+)+$ ]] || return 1
+    for zone_table in \
+        /usr/share/zoneinfo/zone.tab \
+        /usr/share/lib/zoneinfo/tab/zone_sun.tab; do
+        [[ -r "$zone_table" ]] || continue
+        country="$(
+            LC_ALL=C awk -F '\t' -v timezone="$timezone" '
+                $0 !~ /^#/ && $3 == timezone {
+                    print toupper($1)
+                    exit
+                }
+            ' "$zone_table"
+        )"
+        [[ "$country" =~ ^[A-Z]{2}$ ]] || continue
+        printf '%s\n' "$country"
+        return 0
+    done
+    return 1
+}
+
+region_egress_country_json() {
+    local max_time="${1:-5}" egress_ip="" primary="" secondary=""
+    local primary_country="" secondary_country="" country="" reason_code=""
+    egress_ip="$(public_ip "" "$max_time" 2>/dev/null || true)"
+    if [[ -z "$egress_ip" ]]; then
+        jq -cn '{country: null, reason_code: "region.egress.ip-unavailable"}'
+        return 0
+    fi
+    primary="$(
+        verify_geo_record ipapi "$VERIFY_GEO_PRIMARY_URL" "" "$max_time" \
+            2>/dev/null || true
+    )"
+    secondary="$(
+        verify_geo_record ipwho "$VERIFY_GEO_SECONDARY_URL" "" "$max_time" \
+            2>/dev/null || true
+    )"
+    if [[ -n "$primary" && "$(jq -r '.ip' <<<"$primary")" != "$egress_ip" ]]; then
+        primary=""
+    fi
+    if [[ -n "$secondary" && "$(jq -r '.ip' <<<"$secondary")" != "$egress_ip" ]]; then
+        secondary=""
+    fi
+    [[ -z "$primary" ]] || primary_country="$(jq -r '.country_code' <<<"$primary")"
+    [[ -z "$secondary" ]] || secondary_country="$(jq -r '.country_code' <<<"$secondary")"
+    if [[ -n "$primary_country" && -n "$secondary_country" &&
+          "$primary_country" != "$secondary_country" ]]; then
+        reason_code=region.egress.providers-disagree
+    elif [[ -n "$primary_country" ]]; then
+        country="$primary_country"
+    elif [[ -n "$secondary_country" ]]; then
+        country="$secondary_country"
+    else
+        reason_code=region.egress.country-unavailable
+    fi
+    jq -cn \
+        --arg country "$country" \
+        --arg reason_code "$reason_code" '
+        {
+            country: (if $country == "" then null else $country end),
+            reason_code: (if $reason_code == "" then null else $reason_code end)
+        }
+    '
+}
+
+region_check_json() {
+    local provider_id="$1" target_country="${2:-}" provider="" display_name=""
+    local egress_record="" egress_country="" egress_reason=""
+    local system_timezone="" timezone_country="" hint_country="" account_hint=""
+    local supported_by_provider=false country_consistent=false verdict=not-ready
+    local mismatches_json
+    local -a mismatches=()
+
+    provider="$(provider_registry_get "$provider_id")" || return 2
+    display_name="$(jq -er '.display_name' <<<"$provider")" || return 1
+    egress_record="$(region_egress_country_json 5)" || return 1
+    egress_country="$(jq -r '.country // ""' <<<"$egress_record")"
+    egress_reason="$(jq -r '.reason_code // ""' <<<"$egress_record")"
+    [[ -z "$egress_reason" ]] || mismatches+=("$egress_reason")
+
+    system_timezone="$(system_timezone_name 2>/dev/null || true)"
+    if [[ -z "$system_timezone" ]]; then
+        mismatches+=(region.timezone.unavailable)
+    else
+        timezone_country="$(
+            timezone_country_from_zone "$system_timezone" 2>/dev/null || true
+        )"
+        [[ -n "$timezone_country" ]] ||
+            mismatches+=(region.timezone.country-unmapped)
+    fi
+
+    if [[ -n "$egress_country" ]] &&
+       jq -e --arg country "$egress_country" \
+           '.supported_countries | index($country) != null' \
+           <<<"$provider" >/dev/null; then
+        supported_by_provider=true
+    elif [[ -n "$egress_country" ]]; then
+        mismatches+=(region.provider.country-unsupported)
+    fi
+
+    if [[ -n "$egress_country" && -n "$timezone_country" ]]; then
+        if [[ "$egress_country" == "$timezone_country" ]]; then
+            [[ "$supported_by_provider" == true ]] && country_consistent=true
+        else
+            mismatches+=(region.country.egress-timezone-mismatch)
+        fi
+    fi
+
+    if [[ -n "$target_country" ]]; then
+        if ! jq -e --arg country "$target_country" \
+            '.supported_countries | index($country) != null' \
+            <<<"$provider" >/dev/null; then
+            mismatches+=(region.target.country-unsupported)
+        fi
+        [[ -z "$egress_country" || "$egress_country" == "$target_country" ]] ||
+            mismatches+=(region.target.egress-mismatch)
+        [[ -z "$timezone_country" || "$timezone_country" == "$target_country" ]] ||
+            mismatches+=(region.target.timezone-mismatch)
+        hint_country="$target_country"
+    elif [[ -n "$egress_country" ]]; then
+        hint_country="$egress_country"
+    else
+        hint_country="$timezone_country"
+    fi
+
+    if [[ -n "$hint_country" ]]; then
+        account_hint="set $display_name account country association to $hint_country (manual, L2)"
+    else
+        account_hint="set $display_name account country association after resolving egress and timezone country (manual, L2)"
+    fi
+    mismatches_json="$(
+        jq -cn --args '
+            reduce $ARGS.positional[] as $item (
+                [];
+                if index($item) == null then . + [$item] else . end
+            )
+        ' -- "${mismatches[@]}"
+    )" || return 1
+    if [[ "$country_consistent" == true &&
+          "$(jq 'length' <<<"$mismatches_json")" == 0 ]]; then
+        verdict=ready
+    fi
+
+    jq -cn \
+        --arg provider "$provider_id" \
+        --arg egress_country "$egress_country" \
+        --arg system_timezone "$system_timezone" \
+        --arg timezone_country "$timezone_country" \
+        --arg account_region_hint "$account_hint" \
+        --arg verdict "$verdict" \
+        --argjson supported_by_provider "$supported_by_provider" \
+        --argjson country_consistent "$country_consistent" \
+        --argjson mismatches "$mismatches_json" '
+        {
+            schema_version: 1,
+            provider: $provider,
+            egress_country: (
+                if $egress_country == "" then null else $egress_country end
+            ),
+            system_timezone: (
+                if $system_timezone == "" then null else $system_timezone end
+            ),
+            timezone_country: (
+                if $timezone_country == "" then null else $timezone_country end
+            ),
+            supported_by_provider: $supported_by_provider,
+            country_consistent: $country_consistent,
+            account_region_hint: $account_region_hint,
+            verdict: $verdict,
+            mismatches: $mismatches
+        }
+    '
+}
+
+cmd_region_check() {
+    local provider_id="" target_country="" json_output=false result=""
+    local provider_seen=false target_seen=false
+    while (($#)); do
+        case "$1" in
+            --provider)
+                shift
+                [[ $# -gt 0 ]] || die "--provider требует id провайдера"
+                [[ "$provider_seen" == false ]] || die "--provider указан повторно"
+                provider_id="$1"
+                provider_seen=true
+                ;;
+            --target-country)
+                shift
+                [[ $# -gt 0 ]] || die "--target-country требует код страны"
+                [[ "$target_seen" == false ]] ||
+                    die "--target-country указан повторно"
+                target_country="${1^^}"
+                target_seen=true
+                ;;
+            --json)
+                [[ "$json_output" == false ]] || die "--json указан повторно"
+                json_output=true
+                ;;
+            --help|-h)
+                say "Использование: $CLI_COMMAND region-check --provider <id> [--target-country <CC>] --json"
+                return 0
+                ;;
+            *) die "Неизвестный параметр region-check: $1" ;;
+        esac
+        shift
+    done
+    [[ "$provider_seen" == true ]] || die "region-check требует --provider <id>"
+    provider_registry_has "$provider_id" ||
+        die "Неизвестный provider region-check: $provider_id"
+    [[ -z "$target_country" || "$target_country" =~ ^[A-Z]{2}$ ]] ||
+        die "--target-country должен быть кодом ISO 3166-1 alpha-2"
+    [[ "$json_output" == true ]] || die "region-check требует --json"
+    result="$(region_check_json "$provider_id" "$target_country")" ||
+        die "Не удалось проверить согласованность региона"
+    jq . <<<"$result"
+    [[ "$(jq -r '.verdict' <<<"$result")" == ready ]]
 }
 
 service_probe_result_json() {
@@ -10666,6 +10914,7 @@ main() {
         diagnose|diag) cmd_diagnose "$@" ;;
         verify|verify-egress) cmd_verify "$@" ;;
         verify-service) cmd_verify_service "$@" ;;
+        region-check) cmd_region_check "$@" ;;
         validate|lint) cmd_validate "$@" ;;
         probe|ping) cmd_probe "$@" ;;
         test|check) cmd_test "$@" ;;
