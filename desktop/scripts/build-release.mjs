@@ -10,6 +10,8 @@ import {
   rmSync,
   statSync,
   writeFileSync,
+  openSync,
+  closeSync,
 } from "node:fs";
 
 const tauriCli = join(
@@ -21,6 +23,30 @@ const tauriCli = join(
 const remapHome = `--remap-path-prefix=${homedir()}=/build/home`;
 const rustflags = [process.env.RUSTFLAGS, remapHome].filter(Boolean).join(" ");
 const tauriArgs = [tauriCli, "build"];
+// linuxdeploy is distributed as an AppImage.  On hosts with AppImageLauncher
+// its FUSE hand-off can block indefinitely; extraction makes the build
+// deterministic and does not alter the resulting bundle.
+const buildEnv = {
+  ...process.env,
+  RUSTFLAGS: rustflags,
+  APPIMAGE_EXTRACT_AND_RUN: process.env.APPIMAGE_EXTRACT_AND_RUN ?? "1",
+};
+const lockPath = join(tmpdir(), "mazzy-vpn-desktop-release.lock");
+let lockFd;
+try {
+  lockFd = openSync(lockPath, "wx");
+  writeFileSync(lockFd, `${process.pid}\n`, { encoding: "utf8" });
+} catch (error) {
+  console.error(`release build already running (${lockPath}); refusing a concurrent build`);
+  process.exit(2);
+}
+const releaseLock = () => {
+  try { closeSync(lockFd); } catch {}
+  try { rmSync(lockPath, { force: true }); } catch {}
+};
+process.once("exit", releaseLock);
+process.once("SIGINT", () => { releaseLock(); process.exit(130); });
+process.once("SIGTERM", () => { releaseLock(); process.exit(143); });
 let updaterConfigDir;
 if (process.env.TAURI_SIGNING_PRIVATE_KEY) {
   updaterConfigDir = mkdtempSync(join(tmpdir(), "mazzy-tauri-config-"));
@@ -74,9 +100,13 @@ try {
   }
   result = spawnSync(process.execPath, tauriArgs, {
     cwd: process.cwd(),
-    env: { ...process.env, RUSTFLAGS: rustflags },
+    env: buildEnv,
     shell: false,
     stdio: "inherit",
+    // Keep a broken AppImage/linuxdeploy toolchain from leaving CI hanging
+    // forever.  The timeout is configurable for slower release runners.
+    timeout: Number(process.env.MAZZY_RELEASE_TIMEOUT_MS ?? 600_000),
+    killSignal: "SIGTERM",
   });
 } finally {
   for (const [path, mode] of originalModes) {
@@ -88,7 +118,14 @@ try {
 }
 
 if (result.error) {
+  if (result.error.code === "ETIMEDOUT") {
+    console.error("Tauri release build timed out; AppImage toolchain did not finish");
+  }
   console.error(result.error.message);
+  process.exit(1);
+}
+if (result.signal) {
+  console.error(`Tauri release build terminated by ${result.signal}`);
   process.exit(1);
 }
 process.exit(result.status ?? 1);
