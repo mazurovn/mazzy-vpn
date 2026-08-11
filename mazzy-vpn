@@ -8377,7 +8377,8 @@ api_capture_network_snapshot() {
 }
 
 api_compare_network_snapshot() {
-    local expected="$1" actual="${expected}.actual"
+    local expected="$1" actual
+    actual="${expected}.actual"
     api_capture_network_snapshot "$actual" || return 1
     cmp -s -- "$expected" "$actual"
     local rc=$?
