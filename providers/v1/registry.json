@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "catalog_version": "2026-08-11",
+  "providers": [
+    {"id":"notebooklm","display_name":"Google NotebookLM","probe_endpoints":["https://notebooklm.google.com/"],"reason_code_prefix":"service.notebooklm","probe_strategy":"notebooklm-redirect","country_set":"google"},
+    {"id":"openai","display_name":"OpenAI API / Codex","probe_endpoints":["https://chatgpt.com/backend-api/codex/responses"],"reason_code_prefix":"service.openai","probe_strategy":"openai-auth-boundary","country_set":"openai"},
+    {"id":"google","display_name":"Google AI Studio / Gemini API","probe_endpoints":["https://generativelanguage.googleapis.com/"],"reason_code_prefix":"service.google","probe_strategy":"google-auth-boundary","country_set":"google"},
+    {"id":"antigravity","display_name":"Google Antigravity","probe_endpoints":["https://daily-cloudcode-pa.googleapis.com/"],"reason_code_prefix":"service.antigravity","probe_strategy":"google-auth-boundary","country_set":"antigravity"}
+  ]
+}
