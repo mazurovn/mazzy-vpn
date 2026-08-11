@@ -4,8 +4,7 @@
 Description=Periodically check and recover Mazzy VPN connection
 
 [Timer]
-OnBootSec=15s
-OnUnitInactiveSec=60s
+OnActiveSec=15s
 AccuracySec=1s
 RandomizedDelaySec=5s
 Unit=vpnctl-health.service

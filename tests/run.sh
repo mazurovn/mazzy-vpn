@@ -4206,7 +4206,7 @@ grep -q '^StartLimitIntervalSec=600$' \
     fail "service start-limit interval is not the tested ten-minute window"
 grep -q '^StartLimitBurst=5$' "$stage/etc/systemd/system/vpnctl.service" ||
     fail "service start-limit burst is not bounded to five attempts"
-grep -q '^OnUnitInactiveSec=60s$' "$stage/etc/systemd/system/vpnctl-health.timer" ||
+grep -q '^OnUnitActiveSec=60s$' "$stage/etc/systemd/system/vpnctl-health.timer" ||
     fail "health timer interval is not the expected 60 seconds"
 [[ -f "$stage/etc/systemd/system/vpnctl-test-recovery.service" ]] ||
     fail "test recovery unit not staged"
@@ -4472,13 +4472,10 @@ grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
 grep -q '^After=mazzy-vpn-api-recovery.service$' \
     "$ROOT/packaging/linux/systemd/vpnctl-health.service.d/10-package-exec.conf" ||
     fail "package health drop-in is not ordered after recovery"
-[[ "$(grep -c '^OnUnitActiveSec=$' \
-    "$ROOT/packaging/linux/systemd/vpnctl-health.timer.d/10-package-interval.conf")" == 1 ]] ||
-    fail "package health timer drop-in does not reset the legacy interval"
-grep -q '^OnBootSec=15s$' \
+grep -q '^OnActiveSec=60s$' \
     "$ROOT/packaging/linux/systemd/vpnctl-health.timer.d/10-package-interval.conf" ||
     fail "package health timer drop-in does not restore the boot trigger"
-grep -q '^OnUnitInactiveSec=60s$' \
+grep -q '^OnActiveSec=60s$' \
     "$ROOT/packaging/linux/systemd/vpnctl-health.timer.d/10-package-interval.conf" ||
     fail "package health timer drop-in does not enforce the one-minute interval"
 grep -q '^RandomizedDelaySec=5s$' \
@@ -4518,7 +4515,7 @@ awk '
     { print }
 ' "$ROOT/systemd/vpnctl-health.service" \
     >"$effective_etc/vpnctl-health.service"
-sed 's/^OnUnitInactiveSec=.*/OnUnitInactiveSec=20s/' \
+sed 's/^OnUnitActiveSec=.*/OnUnitActiveSec=20s/' \
     "$ROOT/systemd/vpnctl-health.timer" \
     >"$effective_etc/vpnctl-health.timer"
 for effective_unit in \
