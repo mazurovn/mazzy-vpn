@@ -54,7 +54,7 @@ chmod 755 "$APPDIR/AppRun"
 mkdir -p "$APPDIR/usr/share/applications" "$APPDIR/usr/share/icons/hicolor/128x128/apps"
 cp "$DESKTOP/src-tauri/icons/128x128.png" \
   "$APPDIR/usr/share/icons/hicolor/128x128/apps/mazzy-vpn-desktop.png"
-cat > "$APPDIR/usr/share/applications/mazzy-vpn-desktop.desktop" <<EOF
+cat > "$APPDIR/mazzy-vpn-desktop.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Mazzy VPN Desktop
@@ -63,6 +63,8 @@ Icon=mazzy-vpn-desktop
 Categories=Network;Utility;
 Terminal=false
 EOF
+cp "$APPDIR/mazzy-vpn-desktop.desktop" "$APPDIR/usr/share/applications/mazzy-vpn-desktop.desktop"
+cp "$DESKTOP/src-tauri/icons/128x128.png" "$APPDIR/mazzy-vpn-desktop.png"
 
 TOOL="${APPIMAGETOOL:-}"
 if [[ -z "$TOOL" ]]; then
