@@ -7,6 +7,11 @@ set -Eeuo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 ROLLBACK_ROOT="$ROOT/.mazzy/rollback"
+check_only=0
+if [[ "${1:-}" == --check ]]; then
+    check_only=1
+    shift
+fi
 backup="${1:-}"
 EXPECTED_PACKAGE=mazzy-vpn-desktop
 
@@ -48,6 +53,11 @@ expected_sha="$(value rollback_sha256)"
     die "rollback DEB checksum mismatch"
 [[ "$(dpkg-deb -f "$deb" Package)" == "$EXPECTED_PACKAGE" ]] || die "wrong DEB package"
 [[ "$(dpkg-deb -f "$deb" Version)" == "$previous_version" ]] || die "wrong DEB version"
+
+if ((check_only)); then
+    info "rollback bundle is valid: $EXPECTED_PACKAGE $previous_version"
+    exit 0
+fi
 
 before_service="$(systemctl is-active vpnctl.service 2>/dev/null || true)"
 info "downgrading $EXPECTED_PACKAGE to $previous_version"
