@@ -53,6 +53,9 @@ are installed through APT/dpkg; no Tauri self-update feed is published.
   recovery does not leave dpkg half-configured.
 - The release workflow builds and publishes exactly one DEB plus SHA-256
   checksums as a draft GitHub Release.
+- Project-local installation, rollback and pre/post-reboot acceptance scripts
+  preserve the previous DEB and systemd intent without storing passwords,
+  profiles or VPN credentials.
 
 ## Verification evidence
 
