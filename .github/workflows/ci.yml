@@ -27,8 +27,9 @@ jobs:
             packaging/linux/post-install.sh \
             packaging/linux/pre-remove.sh \
             packaging/linux/post-remove.sh \
-            tests/run.sh tests/audit-public.sh tests/check-linux-packages.sh \
-            tests/check-android-build.sh
+          tests/run.sh tests/audit-public.sh tests/check-linux-packages.sh \
+          tests/check-android-build.sh scripts/install-release-deb.sh \
+          scripts/rollback-release-deb.sh scripts/pre-reboot-check.sh
           bash -n setup_amnezia_vpn.sh stop_amnezia_vpn.sh
           bash -n runtime/mazzy-sing-box-adapter
           bash -n completions/mazzy-vpn completions/vpnctl

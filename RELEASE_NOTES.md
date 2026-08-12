@@ -75,7 +75,8 @@ Artifact:
 
 SHA-256:
 
-`50bb0ba798e5f2c8ab24519d890b282d6c5d232dff9d28c8eae60cfbc9e3b6ed`
+The exact package digest is published in the accompanying
+`Mazzy.VPN.Desktop_0.4.8_SHA256SUMS` asset.
 
 ## Honest boundary
 

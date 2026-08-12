@@ -23,8 +23,11 @@ done
 ((failures == 0)) || exit 1
 
 version="$(dpkg-query -W -f='${Version}' mazzy-vpn-desktop 2>/dev/null || true)"
-[[ "$version" == "$EXPECTED_DESKTOP_VERSION" ]] && ok "Desktop package $version" ||
+if [[ "$version" == "$EXPECTED_DESKTOP_VERSION" ]]; then
+    ok "Desktop package $version"
+else
     fail "Desktop package version=${version:-missing}, expected $EXPECTED_DESKTOP_VERSION"
+fi
 if dpkg -V mazzy-vpn-desktop | grep -q .; then
     fail "dpkg payload verification reports modified files"
 else
@@ -32,23 +35,32 @@ else
 fi
 
 for path in /usr/bin/mazzy-vpn-desktop /usr/bin/mazzy-agentd /usr/lib/mazzy-vpn/mazzy-vpn; do
-    [[ -x "$path" && ! -L "$path" ]] && ok "executable $path" || fail "missing executable $path"
+    if [[ -x "$path" && ! -L "$path" ]]; then
+        ok "executable $path"
+    else
+        fail "missing executable $path"
+    fi
 done
 engine_version="$(/usr/lib/mazzy-vpn/mazzy-vpn version 2>/dev/null || true)"
-[[ "$engine_version" == "Mazzy VPN $EXPECTED_ENGINE_VERSION (mazzy-vpn; alias: vpnctl)" ]] &&
-    ok "package engine $EXPECTED_ENGINE_VERSION" || fail "unexpected engine version: $engine_version"
+if [[ "$engine_version" == "Mazzy VPN $EXPECTED_ENGINE_VERSION (mazzy-vpn; alias: vpnctl)" ]]; then
+    ok "package engine $EXPECTED_ENGINE_VERSION"
+else
+    fail "unexpected engine version: $engine_version"
+fi
 
 units=(mazzy-vpn-api-recovery.service mazzy-vpn-api.socket vpnctl.service vpnctl-health.timer)
 for unit in "${units[@]}"; do
-    systemctl is-enabled --quiet "$unit" && ok "$unit enabled" || fail "$unit not enabled"
-    systemctl is-active --quiet "$unit" && ok "$unit active" || fail "$unit not active"
+    if systemctl is-enabled --quiet "$unit"; then ok "$unit enabled"; else fail "$unit not enabled"; fi
+    if systemctl is-active --quiet "$unit"; then ok "$unit active"; else fail "$unit not active"; fi
 done
 
 for unit in mazzy-vpn-api.socket vpnctl.service vpnctl-health.service vpnctl-test-recovery.service; do
     requires="$(systemctl show "$unit" -p Requires --value 2>/dev/null || true)"
-    [[ " $requires " != *' mazzy-vpn-api-recovery.service '* ]] &&
-        ok "$unit has no hard recovery dependency" ||
+    if [[ " $requires " != *' mazzy-vpn-api-recovery.service '* ]]; then
+        ok "$unit has no hard recovery dependency"
+    else
         fail "$unit still hard-requires recovery"
+    fi
 done
 effective_units="$(systemctl cat mazzy-vpn-api@.service vpnctl.service vpnctl-health.service vpnctl-test-recovery.service 2>/dev/null || true)"
 if grep -Eq 'Exec(Start|Condition)=.*(/usr/bin|/usr/local/bin)/mazzy-vpn([[:space:]]|$)' <<<"$effective_units"; then
@@ -58,8 +70,11 @@ else
 fi
 
 timer_line="$(systemctl list-timers --all --no-legend vpnctl-health.timer 2>/dev/null || true)"
-[[ -n "$timer_line" && "${timer_line%% *}" != '-' ]] && ok "health timer has a finite NEXT" ||
+if [[ -n "$timer_line" && "${timer_line%% *}" != '-' ]]; then
+    ok "health timer has a finite NEXT"
+else
     fail "health timer has no finite NEXT"
+fi
 
 api_user=""
 if ((EUID == 0)); then
@@ -116,8 +131,11 @@ else
     done
     ((marker_found == 0)) && ok "no protected recovery marker is active"
     boot_state="$(cat /run/vpnctl/api-recovery.state 2>/dev/null || true)"
-    [[ "$boot_state" == ready ]] && ok "boot recovery state is ready" ||
+    if [[ "$boot_state" == ready ]]; then
+        ok "boot recovery state is ready"
+    else
         fail "boot recovery state=${boot_state:-missing}"
+    fi
     if nft list table inet mazzy_vpn_transition >/dev/null 2>&1; then
         fail "transition guard remains installed"
     else

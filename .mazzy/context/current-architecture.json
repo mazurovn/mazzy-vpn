@@ -22,7 +22,7 @@
     "api_contract": "1.0, 31 operations, 14 errors pass",
     "desktop_ui": "v0.4.8, 110 IDs, 160 localized labels pass",
     "cargo_check_locked": "pass with two existing vendored glib lifetime warnings",
-    "deb": "real DEB-only 0.4.8 candidate; sha256:50bb0ba798e5f2c8ab24519d890b282d6c5d232dff9d28c8eae60cfbc9e3b6ed",
+    "deb": "real DEB-only 0.4.8 candidate; exact digest is recorded in the release checksum asset",
     "rpm": "excluded from supported release pipeline",
     "package_payload": "DEB-only gate passes: internal engine, public compatibility CLI, agentd, registries, systemd units and postinst match source; systemd consumers use /usr/lib/mazzy-vpn/mazzy-vpn",
     "known_release_blocker": "none in the source/package gates; installation and an actual OS reboot remain separate authorized operational acceptance steps"
