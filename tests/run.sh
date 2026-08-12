@@ -4777,9 +4777,12 @@ grep -q 'grant_runtime_reader_session_access' "$ROOT/mazzy-vpn" ||
     fail "package repair cannot grant immediate current-session local API access"
 grep -q 'grant_desktop_runtime_access ||' "$ROOT/install.sh" ||
     fail "installer can fail after a best-effort Desktop session ACL error"
-grep -Fq 'enable "$API_SOCKET_UNIT"' "$ROOT/mazzy-vpn" &&
-    grep -Fq 'start --no-block "$API_SOCKET_UNIT"' "$ROOT/mazzy-vpn" ||
+api_socket_enable_literal="enable \"\$API_SOCKET_UNIT\""
+api_socket_start_literal="start --no-block \"\$API_SOCKET_UNIT\""
+if ! grep -Fq "$api_socket_enable_literal" "$ROOT/mazzy-vpn" ||
+   ! grep -Fq "$api_socket_start_literal" "$ROOT/mazzy-vpn"; then
     fail "Desktop engine repair does not asynchronously start the protected local API"
+fi
 grep -q 'await refreshInstallation(true);' "$ROOT/desktop/ui/app.js" ||
     fail "Desktop does not start its embedded engine before initial data loading"
 ok "Desktop self-start, package state and unavailable notifications are represented honestly"

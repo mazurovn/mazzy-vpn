@@ -536,40 +536,28 @@ def main() -> None:
     ):
         fail("Release builds allow the cargo executable to be replaced through input")
     for workflow_boundary in (
-        "TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}",
         "environment: desktop-release",
-        "publish-update-feed:",
-        "needs: preview-release",
-        "gh release edit \"$RELEASE_TAG\"",
+        "Build DEB-only release",
+        "npm run build:release",
+        "./tests/check-deb-package.sh",
+        "Create draft DEB release",
         "Mazzy.VPN.Desktop_${RELEASE_TAG#desktop-v}_SHA256SUMS",
-        'gh release upload "$RELEASE_TAG"',
-        "gh release upload desktop-updater",
-        'startswith("linux-")',
-        'startswith("windows-")',
-        'startswith("darwin-")',
-        "max-parallel: 1",
-        "canonicalize-updater-feed.py",
-        "prepare-updater-signature-audit.py",
-        "--example verify-updater-signatures",
+        'gh release create "$RELEASE_TAG"',
+        "--notes-file RELEASE_NOTES.md",
+        "--draft",
     ):
         if workflow_boundary not in desktop_workflow:
-            fail(f"Desktop signed release workflow is incomplete: {workflow_boundary}")
-    if desktop_workflow.count("environment: desktop-release") < 2:
-        fail("Desktop update-feed publication bypasses the protected environment")
-    canonicalize_index = desktop_workflow.index("canonicalize-updater-feed.py")
-    signature_audit_index = desktop_workflow.index(
-        "prepare-updater-signature-audit.py"
-    )
-    upload_index = desktop_workflow.index(
-        'gh release upload "$RELEASE_TAG" updater-metadata/latest.json'
-    )
-    publish_index = desktop_workflow.index('gh release edit "$RELEASE_TAG"')
-    if canonicalize_index > signature_audit_index or upload_index > publish_index:
-        fail("Desktop release publishes before canonical feed verification/upload")
-    if "! -name '*_SHA256SUMS'" not in desktop_workflow:
-        fail("Desktop checksum manifest can recursively include an older manifest")
-    if "mapfile -d '' -t updater_signature_args < <(" in desktop_workflow:
-        fail("Desktop signature-audit preparation can hide a failed subprocess")
+            fail(f"Desktop DEB-only release workflow is incomplete: {workflow_boundary}")
+    for forbidden_boundary in (
+        "publish-update-feed:",
+        "tauri-apps/tauri-action",
+        "TAURI_SIGNING_PRIVATE_KEY",
+        "desktop-updater",
+        "macos-14",
+        "windows-2022",
+    ):
+        if forbidden_boundary in desktop_workflow:
+            fail(f"Desktop DEB-only workflow still publishes an unsupported target: {forbidden_boundary}")
     for screenshot_name in ("update-en.png", "update-ru.png"):
         screenshot = ROOT / "docs/images" / screenshot_name
         contents = screenshot.read_bytes()
