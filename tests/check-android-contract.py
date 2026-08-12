@@ -45,7 +45,7 @@ assert "override fun onRevoke()" in service
 assert "PROFILE_SCHEMA" in profile_repository and 'secrets.write(PROFILE_SECRET, envelope)' in profile_repository
 assert "CodingErrorAction.REPORT" in profile_repository
 assert "validateFullTunnelConfig" in profile_repository and "profile-has-no-ipv4-default-route" in profile_repository
-assert "profile-has-no-endpoint" in profile_repository and "profile-requires-bounded-keepalive" in profile_repository
+assert "profile-has-no-endpoint" in profile_repository and "profile-has-invalid-keepalive" in profile_repository
 assert "AtomicLong" in service and "requireCurrentGeneration" in service
 assert "stateTransitionLock" in service and "NET_CAPABILITY_NOT_VPN" in service
 assert "secret-store-decryption-failed" in secret_store

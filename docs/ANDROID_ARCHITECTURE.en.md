@@ -17,7 +17,8 @@ before TUN activation; after activation, imported profiles must provide DNS and
 an IPv4 default route, and Android's unconfigured-family blocking remains in
 force. The current candidate is explicitly IPv4 full-tunnel: IPv6 is blocked,
 not leaked, until dual-stack device gates are implemented. A bounded
-PersistentKeepalive is required so handshake readiness is observable. Always-on
+PersistentKeepalive is optional; when present it must be a valid WireGuard interval.
+The engine observes the initial handshake independently of keepalive. Always-on
 is disabled until durable selected-profile reboot recovery is device-tested.
 The nine modern proxy/transport protocols remain catalog entries, not Android
 connect support.

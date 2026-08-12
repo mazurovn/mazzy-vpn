@@ -22,7 +22,8 @@ registry честно остаётся `android: planned`.
   IP families не разрешаются обходным `allowFamily`. Always-on отключён до
   device-теста durable reboot recovery выбранного профиля. Текущий candidate —
   IPv4 full-tunnel: IPv6 блокируется, а не утекает, до отдельного dual-stack
-  gate. Для наблюдаемого handshake обязателен bounded PersistentKeepalive.
+  gate. `PersistentKeepalive` опционален; если задан, он должен быть допустимым
+  интервалом WireGuard. Начальный handshake проверяется независимо от keepalive.
 - Первым runtime gate может быть только WireGuard/AmneziaWG с реальным Android
   backend. Proxy-протоколы из каталога требуют отдельной проверки embedded
   sing-box/native adapter, лицензии, размера ABI и leak behaviour.
