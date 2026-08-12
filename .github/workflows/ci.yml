@@ -75,20 +75,26 @@ jobs:
 
       - name: Staging installer
         run: |
-          stage="$(mktemp -d)"
+          mkdir -p .mazzy/work/ci-stage
+          stage="$(mktemp -d -p .mazzy/work/ci-stage staging.XXXXXX)"
           ./install.sh --destdir "$stage" --no-deps --yes
           test -x "$stage/usr/local/bin/mazzy-vpn"
           test -r "$stage/usr/local/lib/mazzy-vpn/api/v1/manifest.json"
           test -r "$stage/usr/local/lib/mazzy-vpn/protocols/v1/registry.json"
           "$stage/usr/local/bin/mazzy-vpn" api-info --json |
             cmp -s - "$stage/usr/local/lib/mazzy-vpn/api/v1/manifest.json"
-          sudo install -m 755 \
-            "$stage/usr/local/bin/mazzy-vpn" /usr/local/bin/mazzy-vpn
-          systemd-analyze verify \
-            "$stage/etc/systemd/system/mazzy-vpn-api.socket" \
-            "$stage/etc/systemd/system/mazzy-vpn-api@.service" \
-            "$stage/etc/systemd/system/mazzy-vpn-api-recovery.service" \
-            "$stage/etc/systemd/system/vpnctl.service" \
-            "$stage/etc/systemd/system/vpnctl-health.service" \
-            "$stage/etc/systemd/system/vpnctl-health.timer" \
-            "$stage/etc/systemd/system/vpnctl-test-recovery.service"
+          mkdir -p "$stage/usr/lib/systemd/system"
+          for target in basic.target local-fs.target multi-user.target \
+            network-online.target shutdown.target sockets.target sysinit.target \
+            timers.target; do
+            printf '[Unit]\nDefaultDependencies=no\n' \
+              >"$stage/usr/lib/systemd/system/$target"
+          done
+          systemd-analyze --root="$stage" --man=no verify \
+            mazzy-vpn-api.socket \
+            mazzy-vpn-api@internal.service \
+            mazzy-vpn-api-recovery.service \
+            vpnctl.service \
+            vpnctl-health.service \
+            vpnctl-health.timer \
+            vpnctl-test-recovery.service
