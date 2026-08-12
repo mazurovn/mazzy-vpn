@@ -22,15 +22,21 @@ jobs:
           submodules: true
 
       - name: Install pinned Android native toolchain
-        run: |
-          yes | sdkmanager \
-            "platforms;android-36" \
-            "build-tools;36.0.0" \
-            "ndk;26.1.10909125" \
-            "cmake;3.22.1"
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        with:
+          packages: >-
+            platform-tools
+            platforms;android-36
+            build-tools;36.0.0
+            ndk;26.1.10909125
+            cmake;3.22.1
 
       - name: Validate Android contract
         run: python3 tests/check-android-contract.py
+
+      - name: Prime pinned Gradle and native dependencies
+        working-directory: android
+        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
 
       - name: Validate Android build when the toolchain is present
         run: tests/check-android-build.sh
