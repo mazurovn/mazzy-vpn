@@ -32,7 +32,8 @@ mapfile -t packages < <(find "$BUNDLE_ROOT/deb" -maxdepth 1 -type f -name '*.deb
 deb="${packages[0]}"
 [[ -s "$deb" ]] || fail "DEB is empty: $deb"
 
-tmp="$(mktemp -d)"
+mkdir -p "$ROOT/.mazzy/work/deb-audit"
+tmp="$(mktemp -d -p "$ROOT/.mazzy/work/deb-audit" audit.XXXXXX)"
 trap 'rm -rf -- "$tmp"' EXIT
 root="$tmp/root"
 control="$tmp/control"
@@ -112,17 +113,22 @@ grep -Eq '75\|77' "$control/postinst" ||
     fail "DEB postinst does not recognize recovery gate exit statuses"
 
 if command -v systemd-analyze >/dev/null 2>&1; then
-    # Package units take precedence; distro target/base units are available,
-    # while host /etc overrides are deliberately excluded.
-    SYSTEMD_UNIT_PATH="$root/usr/lib/systemd/system:/usr/lib/systemd/system" \
-        systemd-analyze verify \
-        "$root/usr/lib/systemd/system/mazzy-vpn-api-recovery.service" \
-        "$root/usr/lib/systemd/system/mazzy-vpn-api.socket" \
-        "$root/usr/lib/systemd/system/mazzy-vpn-api@.service" \
-        "$root/usr/lib/systemd/system/vpnctl.service" \
-        "$root/usr/lib/systemd/system/vpnctl-health.service" \
-        "$root/usr/lib/systemd/system/vpnctl-health.timer" \
-        "$root/usr/lib/systemd/system/vpnctl-test-recovery.service" \
+    # Verify only the extracted package root. Minimal target stubs model the
+    # distro graph without reading host /etc overrides or host executables.
+    for target in basic.target local-fs.target multi-user.target \
+        network-online.target shutdown.target sockets.target sysinit.target \
+        timers.target; do
+        printf '[Unit]\nDefaultDependencies=no\n' \
+            >"$root/usr/lib/systemd/system/$target"
+    done
+    systemd-analyze --root="$root" --man=no verify \
+        mazzy-vpn-api-recovery.service \
+        mazzy-vpn-api.socket \
+        mazzy-vpn-api@internal.service \
+        vpnctl.service \
+        vpnctl-health.service \
+        vpnctl-health.timer \
+        vpnctl-test-recovery.service \
         >/dev/null 2>"$tmp/systemd.log" || {
             cat "$tmp/systemd.log" >&2
             fail "DEB systemd units do not verify"
