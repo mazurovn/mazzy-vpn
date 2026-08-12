@@ -168,10 +168,14 @@ jobs:
           mapfile -t debs < <(find desktop/src-tauri/target/release/bundle/deb \
             -maxdepth 1 -type f -name '*.deb' -print)
           ((${#debs[@]} == 1))
+          asset_name="$(basename "${debs[0]}")"
+          asset_name="${asset_name// /.}"
+          asset_deb="$GITHUB_WORKSPACE/$asset_name"
+          cp -- "${debs[0]}" "$asset_deb"
           checksum="$GITHUB_WORKSPACE/Mazzy.VPN.Desktop_${RELEASE_TAG#desktop-v}_SHA256SUMS"
           (
-            cd "$(dirname "${debs[0]}")"
-            sha256sum "$(basename "${debs[0]}")"
+            cd "$GITHUB_WORKSPACE"
+            sha256sum "$asset_name"
           ) >"$checksum"
           gh release create "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
@@ -179,5 +183,5 @@ jobs:
             --title "Mazzy VPN Desktop ${RELEASE_TAG#desktop-v} (DEB)" \
             --notes-file RELEASE_NOTES.md \
             --draft \
-            "${debs[0]}" \
+            "$asset_deb" \
             "$checksum"
