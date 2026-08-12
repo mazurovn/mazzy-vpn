@@ -11,5 +11,6 @@
     <string name="import_profile">Import profile</string>
     <string name="profile_imported">Profile validated and imported</string>
     <string name="profile_import_failed">Profile import failed</string>
+    <string name="profile_import_failed_detail">Profile import failed: %1$s</string>
     <string name="vpn_notification">Mazzy VPN service</string>
 </resources>

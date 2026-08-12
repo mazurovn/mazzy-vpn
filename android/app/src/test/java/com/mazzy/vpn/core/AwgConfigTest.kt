@@ -16,6 +16,12 @@ class AwgConfigTest {
     }
 
     @Test
+    fun parserAcceptsConfigAfterUtf8BomIsRemoved() {
+        val text = decodeProfileText("\uFEFF${validConfig()}".toByteArray())
+        validateFullTunnelConfig(parse(text))
+    }
+
+    @Test
     fun rejectsShellHooks() {
         assertThrows(Exception::class.java) {
             parse(validConfig().replace("DNS = 1.1.1.1", "DNS = 1.1.1.1\nPostUp = id"))

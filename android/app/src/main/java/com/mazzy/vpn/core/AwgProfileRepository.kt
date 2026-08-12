@@ -18,7 +18,7 @@ class AwgProfileRepository(context: Context) {
         require(bytes.size <= MAX_IMPORT_BYTES) { "profile-too-large" }
         require(bytes.none { it == 0.toByte() }) { "profile-binary" }
         val normalizedName = normalizeName(displayName)
-        val text = decodeUtf8Strict(bytes)
+        val text = decodeProfileText(bytes)
         val config = parse(text)
         validateFullTunnelConfig(config)
 
@@ -47,12 +47,6 @@ class AwgProfileRepository(context: Context) {
     private fun parse(text: String): Config =
         ByteArrayInputStream(text.toByteArray(StandardCharsets.UTF_8)).use(Config::parse)
 
-    private fun decodeUtf8Strict(bytes: ByteArray): String = StandardCharsets.UTF_8.newDecoder()
-        .onMalformedInput(CodingErrorAction.REPORT)
-        .onUnmappableCharacter(CodingErrorAction.REPORT)
-        .decode(ByteBuffer.wrap(bytes))
-        .toString()
-
     private fun normalizeName(candidate: String): String {
         val stem = candidate.substringBeforeLast('.').trim()
             .replace(Regex("[^A-Za-z0-9_.=-]+"), "-")
@@ -67,6 +61,13 @@ class AwgProfileRepository(context: Context) {
         private const val PROFILE_SECRET = "awg:active:profile"
     }
 }
+
+internal fun decodeProfileText(bytes: ByteArray): String = StandardCharsets.UTF_8.newDecoder()
+    .onMalformedInput(CodingErrorAction.REPORT)
+    .onUnmappableCharacter(CodingErrorAction.REPORT)
+    .decode(ByteBuffer.wrap(bytes))
+    .toString()
+    .removePrefix("\uFEFF")
 
 data class ImportedAwgProfile(val displayName: String, val config: Config)
 
