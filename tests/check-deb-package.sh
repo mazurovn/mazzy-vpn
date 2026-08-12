@@ -113,15 +113,18 @@ grep -Eq '75\|77' "$control/postinst" ||
     fail "DEB postinst does not recognize recovery gate exit statuses"
 
 if command -v systemd-analyze >/dev/null 2>&1; then
-    # Verify only the extracted package root. Minimal target stubs model the
-    # distro graph without reading host /etc overrides or host executables.
-    for target in basic.target local-fs.target multi-user.target \
-        network-online.target shutdown.target sockets.target sysinit.target \
-        timers.target; do
-        printf '[Unit]\nDefaultDependencies=no\n' \
-            >"$root/usr/lib/systemd/system/$target"
-    done
-    systemd-analyze --root="$root" --man=no verify \
+    # Older Ubuntu systemd-analyze cannot use --root with verify. Build an
+    # isolated copy of the package unit graph, excluding host /etc overrides.
+    # The real extracted engine is mode/byte/execution-checked separately; in
+    # the verification copy only, /bin/true supplies an existing ExecStart.
+    verify_units="$tmp/systemd-units"
+    mkdir -p "$verify_units"
+    cp -a "$root/usr/lib/systemd/system/." "$verify_units/"
+    while IFS= read -r -d '' unit_file; do
+        sed -i 's|/usr/lib/mazzy-vpn/mazzy-vpn|/bin/true|g' "$unit_file"
+    done < <(find "$verify_units" -type f -print0)
+    SYSTEMD_UNIT_PATH="$verify_units:/usr/lib/systemd/system" \
+      systemd-analyze --man=no verify \
         mazzy-vpn-api-recovery.service \
         mazzy-vpn-api.socket \
         mazzy-vpn-api@internal.service \
