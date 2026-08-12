@@ -2,21 +2,21 @@
 set -Eeuo pipefail
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 python3 "$root/tests/check-android-contract.py"
-sdk_configured=0
-if [[ -n "${ANDROID_HOME:-}${ANDROID_SDK_ROOT:-}" || -r "$root/android/local.properties" ]]; then
-  sdk_configured=1
+sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+if [[ -z "$sdk_root" && -r "$root/android/local.properties" ]]; then
+  sdk_root="$(sed -n 's/^sdk\.dir=//p' "$root/android/local.properties" | head -n1)"
 fi
-if [[ ! -x "$root/android/gradlew" || "$sdk_configured" != 1 ]]; then
+if [[ ! -x "$root/android/gradlew" ||
+      ! -d "$sdk_root/platforms/android-36" ||
+      ! -d "$sdk_root/build-tools/36.0.0" ||
+      ! -d "$sdk_root/ndk/26.1.10909125" ||
+      ! -d "$sdk_root/cmake/3.22.1" ]]; then
   printf '%s\n' 'SKIP: Android SDK/Gradle wrapper unavailable; no APK build claimed.'
   exit 0
 fi
 cd "$root/android"
 ./gradlew --no-daemon --offline testDebugUnitTest lintDebug assembleDebug
 
-sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
-if [[ -z "$sdk_root" && -r "$root/android/local.properties" ]]; then
-  sdk_root="$(sed -n 's/^sdk\.dir=//p' "$root/android/local.properties" | head -n1)"
-fi
 build_tools="$sdk_root/build-tools/36.0.0"
 apk="$root/android/app/build/outputs/apk/debug/app-debug.apk"
 test -s "$apk"
