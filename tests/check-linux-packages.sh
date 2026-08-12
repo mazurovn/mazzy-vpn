@@ -183,7 +183,7 @@ if ! systemd-analyze verify --root="$systemd_root" \
         cp -a "$deb_root/usr/lib/systemd/system/." "$systemd_verify_dir/"
         find "$systemd_verify_dir" -type f -name '*.conf' -exec \
             sed -i -E \
-                's#^ExecStart=/usr/bin/mazzy-vpn .*$#ExecStart=/bin/true#' \
+                's#^ExecStart=/usr/lib/mazzy-vpn/mazzy-vpn .*$#ExecStart=/bin/true#' \
                 {} +
         if ! SYSTEMD_UNIT_PATH="$systemd_verify_dir:/usr/lib/systemd/system" \
             systemd-analyze verify "${systemd_units[@]}" \
@@ -199,6 +199,12 @@ fi
 
 cmp -s "$ROOT/packaging/linux/post-install.sh" "$deb_control/postinst" ||
     fail "DEB postinst differs from the audited source"
+grep -Fq 'mazzy-vpn-api@.service' \
+    "$ROOT/packaging/linux/post-install.sh" ||
+    fail "package post-install does not synchronize the legacy API dispatcher"
+grep -Fq 'mazzy-vpn-api@.service.d/10-package-exec.conf' \
+    "$ROOT/packaging/linux/post-install.sh" ||
+    fail "package post-install does not synchronize the legacy API dispatcher override"
 grep -q '^    if systemctl is-enabled --quiet vpnctl.service; then$' \
     "$ROOT/packaging/linux/post-install.sh" ||
     fail "package post-install does not preserve the existing engine opt-in"
@@ -274,8 +280,11 @@ find "$rpm_root" -type f -o -type l |
 
 for listing in "$TMP/deb-files" "$TMP/rpm-files"; do
     for path in \
+        /usr/lib/mazzy-vpn/mazzy-vpn \
         /usr/bin/mazzy-vpn \
         /usr/bin/mazzy-agentd \
+        /usr/lib/Mazzy\ VPN\ Desktop/engine/mazzy-vpn \
+        /usr/lib/Mazzy\ VPN\ Desktop/engine/install.sh \
         /usr/bin/mazzyvpn \
         /usr/bin/vpnctl \
         /usr/lib/mazzy-vpn/api/v1/manifest.json \
@@ -345,6 +354,8 @@ for listing in "$TMP/deb-files" "$TMP/rpm-files"; do
 done
 
 for extracted_root in "$deb_root" "$rpm_root"; do
+    [[ "$(stat -c '%a' "$extracted_root/usr/lib/mazzy-vpn/mazzy-vpn")" == 755 ]] ||
+        fail "package-internal engine mode is not exactly 0755"
     [[ "$(stat -c '%a' "$extracted_root/usr/bin/mazzy-vpn")" == 755 ]] ||
         fail "package engine mode is not exactly 0755"
     [[ "$(stat -c '%a' "$extracted_root/usr/bin/mazzy-agentd")" == 755 ]] ||
@@ -352,7 +363,19 @@ for extracted_root in "$deb_root" "$rpm_root"; do
     [[ "$(stat -c '%a' "$extracted_root/usr/bin/vpnctl")" == 755 ]] ||
         fail "package compatibility command mode is not exactly 0755"
     cmp -s "$ROOT/mazzy-vpn" "$extracted_root/usr/bin/mazzy-vpn" ||
-        fail "package engine differs from source"
+        fail "public CLI differs from source"
+    cmp -s "$ROOT/mazzy-vpn" "$extracted_root/usr/lib/mazzy-vpn/mazzy-vpn" ||
+        fail "package-internal engine differs from source"
+    if grep -R -Eq '^ExecStart=/usr/(local/)?bin/mazzy-vpn([[:space:]]|$)' \
+        "$extracted_root/usr/lib/systemd/system"; then
+        fail "package systemd runtime still depends on a public CLI entry point"
+    fi
+    cmp -s "$ROOT/mazzy-vpn" \
+        "$extracted_root/usr/lib/Mazzy VPN Desktop/engine/mazzy-vpn" ||
+        fail "Desktop embedded engine differs from source"
+    cmp -s "$ROOT/install.sh" \
+        "$extracted_root/usr/lib/Mazzy VPN Desktop/engine/install.sh" ||
+        fail "Desktop embedded installer differs from source"
     cmp -s "$ROOT/mazzy-agentd" "$extracted_root/usr/bin/mazzy-agentd" ||
         fail "package agent daemon differs from source"
     cmp -s "$ROOT/api/v1/manifest.json" \
@@ -421,13 +444,14 @@ for extracted_root in "$deb_root" "$rpm_root"; do
     grep -Fxq 'StartLimitBurst=5' \
         "$extracted_root/usr/lib/systemd/system/vpnctl.service" ||
         fail "package VPN service has an unexpected start-limit burst"
-    grep -Fxq 'Requires=mazzy-vpn-api-recovery.service' \
-        "$extracted_root/usr/lib/systemd/system/vpnctl.service" ||
-        fail "package VPN service can bypass failed API boot recovery"
+    if grep -Eq '^Requires=.*mazzy-vpn-api-recovery\.service' \
+        "$extracted_root/usr/lib/systemd/system/vpnctl.service"; then
+        fail "package VPN service retains a hard recovery dependency"
+    fi
     grep -Fxq \
         'After=network-online.target NetworkManager.service mazzy-vpn-api-recovery.service' \
         "$extracted_root/usr/lib/systemd/system/vpnctl.service" ||
-        fail "package VPN service is not ordered after API boot recovery"
+        fail "package VPN service lost soft recovery ordering"
     cmp -s "$ROOT/systemd/mazzy-vpn-api-recovery.service" \
         "$extracted_root/usr/lib/systemd/system/mazzy-vpn-api-recovery.service" ||
         fail "package API recovery unit differs from source"

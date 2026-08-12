@@ -3,16 +3,15 @@
 [Unit]
 Description=Mazzy VPN managed connection
 Documentation=file:/usr/local/lib/mazzy-vpn/README.md
-Wants=network-online.target
-Requires=mazzy-vpn-api-recovery.service
+Wants=network-online.target mazzy-vpn-api-recovery.service
 After=network-online.target NetworkManager.service mazzy-vpn-api-recovery.service
 StartLimitIntervalSec=600
 StartLimitBurst=5
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/mazzy-vpn _service-run
-Restart=always
+ExecStart=/usr/local/lib/mazzy-vpn/mazzy-vpn _service-run
+Restart=on-failure
 RestartPreventExitStatus=77
 RestartSec=5s
 TimeoutStopSec=20s

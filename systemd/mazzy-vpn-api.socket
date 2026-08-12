@@ -3,8 +3,10 @@
 [Unit]
 Description=Mazzy VPN protected local API socket
 Documentation=file:/usr/local/lib/mazzy-vpn/docs/API_CONTRACT.en.md
-Requires=mazzy-vpn-api-recovery.service
-After=mazzy-vpn-api-recovery.service
+# Recovery is deliberately not a socket dependency. Read-only API operations
+# must remain available while durable recovery markers block mutations inside
+# the engine. A failed oneshot must never make the whole Desktop API disappear.
+Wants=mazzy-vpn-api-recovery.service
 
 [Socket]
 ListenStream=/run/mazzy-vpn/api-v1.sock

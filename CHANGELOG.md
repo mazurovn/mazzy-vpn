@@ -4,6 +4,22 @@ All notable changes to Mazzy VPN are documented here.
 
 ## Unreleased
 
+## 1.4.7 / Desktop 0.4.8 - 2026-08-12
+
+- Make the DEB Desktop autonomous: the package-owned engine, agent daemon,
+  provider registry and systemd units are embedded under `/usr/lib` and work
+  without a separately installed CLI; an optional public CLI remains included
+  for terminal users and interoperates through the same protected local API.
+- Remove the hard systemd recovery dependency that caused repeated
+  `Dependency failed` boot failures. Recovery is now engine-gated and keeps
+  status/profile queries available while mutations fail closed.
+- Harden transition rollback, boot test recovery and health commit ordering so
+  guards and durable markers are not cleared before verified restoration.
+- Replace global route/DNS/firewall byte comparison with a canonical snapshot
+  restricted to Mazzy-owned interfaces and firewall state.
+- Add a DEB-only build and isolated payload gate; AppImage and RPM are not part
+  of this release line.
+
 ## 1.4.6 / Desktop 0.4.7 - 2026-08-09
 
 - Make Linux Desktop start its bundled engine before the first status/profile

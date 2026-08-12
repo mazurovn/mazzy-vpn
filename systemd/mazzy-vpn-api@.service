@@ -7,7 +7,7 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/mazzy-vpn _api-dispatch
+ExecStart=/usr/local/lib/mazzy-vpn/mazzy-vpn _api-dispatch
 StandardInput=socket
 StandardOutput=socket
 StandardError=journal

@@ -13,12 +13,12 @@ This page records the verified resumption point.
 
 ## Verified release baseline
 
-- The current release line is CLI/TUI `v1.4.6` and Tauri-signed Desktop preview
-  `desktop-v0.4.7`. Linux Desktop contains and starts its compatible engine
+- The current release line is CLI/TUI `v1.4.7` and DEB-first Desktop
+  `desktop-v0.4.8`. Linux Desktop contains and starts its compatible engine
   before the first data load, while an existing package-managed or local CLI
   remains compatible. Desktop remains a prerelease because Windows and macOS
   do not yet have native VPN backends or operating-system code signing.
-- Patch source `1.4.6` / Desktop `0.4.7` makes the Linux Desktop startup path
+- Patch source `1.4.7` / Desktop `0.4.8` makes the Linux Desktop startup path
   self-contained: PolicyKit-authorized bootstrap installs or repairs the shared
   backend, starts the protected local API, refreshes read-only caches and grants
   the current GUI session a minimal per-user ACL. Package-managed engines are
@@ -35,7 +35,7 @@ This page records the verified resumption point.
   proc-macro and `unic` transitive graph. They are maintenance debt, not proof
   of an exploitable issue; migration off the legacy GTK3 graph remains a
   Desktop production gate.
-- Windows and macOS 0.4.7 artifacts remain UI previews without native VPN
+- Windows and macOS 0.4.8 artifacts remain UI previews without native VPN
   backends or OS code signing. They must not be described as functional VPN
   clients; a Tauri updater signature does not change that boundary.
 - Android and iOS clients are planned and have no application source or
@@ -94,8 +94,8 @@ This page records the verified resumption point.
 
 Published release links:
 
-- <https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.6>
-- <https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.7>
+- <https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.7>
+- <https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.8>
 
 ## Community and documentation baseline
 

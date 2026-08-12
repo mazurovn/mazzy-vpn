@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 [Unit]
 Description=Mazzy VPN connection health check
-Requires=mazzy-vpn-api-recovery.service
+Wants=mazzy-vpn-api-recovery.service
 After=network-online.target mazzy-vpn-api-recovery.service vpnctl.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/mazzy-vpn _health-check
+ExecStart=/usr/local/lib/mazzy-vpn/mazzy-vpn _health-check
 UMask=0077

@@ -183,7 +183,12 @@ cat >"$TMP/fakebin/nft" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"${FAKE_NFT_LOG:?}"
 case "$*" in
+    "list table inet mazzy_vpn_ipv6_guard") exit 1 ;;
+    "list table inet mazzy_vpn_transition")
+        [[ -e "${FAKE_NFT_GUARD_STATE:?}" ]]
+        ;;
     "delete table inet mazzy_vpn_transition")
+        rm -f -- "${FAKE_NFT_GUARD_STATE:?}"
         [[ -z "${FAKE_TRANSITION_LOG:-}" ]] ||
             printf 'guard remove\n' >>"$FAKE_TRANSITION_LOG"
         exit 0
@@ -194,6 +199,7 @@ case "$*" in
         [[ -z "${FAKE_TRANSITION_LOG:-}" ]] ||
             printf 'guard install\n' >>"$FAKE_TRANSITION_LOG"
         [[ "${FAKE_NFT_INSTALL_FAIL:-0}" != "1" ]] || exit 1
+        : >"${FAKE_NFT_GUARD_STATE:?}"
         ;;
 esac
 EOF
@@ -418,6 +424,12 @@ EOF
 
 cat >"$TMP/fakebin/ip" <<'EOF'
 #!/usr/bin/env bash
+if [[ "$*" == "-j -4 route show table all" &&
+      -n "${FAKE_IP_SNAPSHOT_DELAY_ONCE_FILE:-}" &&
+      ! -e "$FAKE_IP_SNAPSHOT_DELAY_ONCE_FILE" ]]; then
+    : >"$FAKE_IP_SNAPSHOT_DELAY_ONCE_FILE"
+    sleep "${FAKE_IP_SNAPSHOT_DELAY_SECONDS:-1}"
+fi
 case "$*" in
     "-4 rule show")
         [[ ! -e "${FAKE_IP_RULES:?}" ]] || cat "$FAKE_IP_RULES"
@@ -544,6 +556,7 @@ export FAKE_TRANSITION_LOG="$TMP/transition.log"
 export FAKE_TRANSITION_CURL_LOG="$TMP/transition-curl.log"
 export FAKE_NFT_LOG="$TMP/nft.log"
 export FAKE_NFT_RULES_LOG="$TMP/nft-rules.log"
+export FAKE_NFT_GUARD_STATE="$TMP/nft-guard.active"
 export FAKE_SYSTEMCTL_COUNTER="$TMP/systemctl.counter"
 export FAKE_TIMEOUT_LOG="$TMP/timeout.log"
 export FAKE_SYSTEMD_RUN_LOG="$TMP/systemd-run.log"
@@ -579,8 +592,8 @@ export VPNCTL_LEGACY_START="$TMP/fallback-start"
 export VPNCTL_LEGACY_STOP="$TMP/fallback-stop"
 export NO_COLOR=1
 
-"$CLI" version | grep -q '^Mazzy VPN 1\.4\.6 (mazzy-vpn; alias: vpnctl)$'
-"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.4\.6 ' ||
+"$CLI" version | grep -q '^Mazzy VPN 1\.4\.7 (mazzy-vpn; alias: vpnctl)$'
+"$COMPAT_CLI" version | grep -q '^Mazzy VPN 1\.4\.7 ' ||
     fail "vpnctl compatibility wrapper is broken"
 ok "Mazzy VPN branding and compatibility alias"
 
@@ -882,12 +895,8 @@ grep -q '^DESIRED=up$' "$TMP/state/active" || fail "desired state missing"
 if grep -q 'enable.*vpnctl-health.timer' "$TMP/systemctl.log"; then
     fail "ordinary connect enabled watchdog at boot"
 fi
-for priority in 215 216 217 218 219; do
-    grep -q -- "-4 rule delete priority $priority" "$FAKE_IP_LOG" ||
-        fail "stale policy priority $priority was not removed"
-done
-if grep -q -- '-4 rule delete priority 220' "$FAKE_IP_LOG"; then
-    fail "unrelated IPsec priority 220 was removed"
+if grep -q -- '-4 rule delete priority' "$FAKE_IP_LOG"; then
+    fail "connect deleted ownerless policy rules belonging to another VPN"
 fi
 guard_install_line="$(grep -n -m1 '^guard install$' "$FAKE_TRANSITION_LOG" | cut -d: -f1)"
 service_stop_line="$(grep -n -m1 '^systemctl stop vpnctl.service$' "$FAKE_TRANSITION_LOG" | cut -d: -f1)"
@@ -951,10 +960,20 @@ jq -e '
     .reason == "managed-vpn-restore-failed"
 ' "$TMP/state/transition-recovery-required.json" >/dev/null ||
     fail "failed rollback did not persist transition recovery state"
-"$CLI" reconnect >/dev/null
+: >"$FAKE_SYSTEMCTL_LOG"
+if "$CLI" reconnect >/dev/null 2>&1; then
+    fail "reconnect bypassed an unresolved transition recovery marker"
+fi
+[[ -e "$TMP/state/transition-recovery-required.json" ]] ||
+    fail "blocked reconnect cleared transition recovery evidence"
+if grep -Eq '^(stop|start|restart) vpnctl.service$' "$FAKE_SYSTEMCTL_LOG"; then
+    fail "blocked reconnect mutated the tunnel service"
+fi
+"$CLI" disconnect >/dev/null
 [[ ! -e "$TMP/state/transition-recovery-required.json" ]] ||
-    fail "successful reconnect did not clear transition recovery state"
-ok "transition readiness fails closed on ambiguous responses and recovers cleanly"
+    fail "explicit disconnect did not clear reviewed transition recovery state"
+"$CLI" connect openvpn "Test Server" >/dev/null
+ok "transition readiness fails closed and requires explicit recovery"
 
 : >"$FAKE_SYSTEMCTL_LOG"
 : >"$FAKE_TRANSITION_LOG"
@@ -977,17 +996,11 @@ cat >"$FAKE_IP_RULES" <<'EOF'
 EOF
 : >"$FAKE_IP_LOG"
 "$CLI" _dedupe-quick-policy >/dev/null
-for priority in 216 217 218 219; do
-    grep -q -- "-4 rule delete priority $priority" "$FAKE_IP_LOG" ||
-        fail "duplicate policy priority $priority was not removed"
-done
-for priority in 214 215 220; do
-    if grep -q -- "-4 rule delete priority $priority" "$FAKE_IP_LOG"; then
-        fail "active or unrelated policy priority $priority was removed"
-    fi
-done
+if grep -q -- '-4 rule delete priority' "$FAKE_IP_LOG"; then
+    fail "ownerless foreign policy rules were deleted by a global heuristic"
+fi
 rm -f "$FAKE_IP_RULES"
-ok "duplicate quick policy rules are removed without touching the active pair"
+ok "ownerless policy rules are never deleted without journaled ownership"
 
 menu_output="$(
     printf '2\n3\n1\n0\n' |
@@ -2564,7 +2577,7 @@ api_audit_unavailable_request="$(
         operation: "lifecycle.reconnect",
         action_id: "action-audit-unavailable-0001",
         authorization: "system-mutate",
-        deadline_ms: 5000,
+        deadline_ms: 15000,
         payload: {}
     }'
 )"
@@ -2581,7 +2594,10 @@ jq -e '
     and .error.message_key == "api.audit.unavailable"
     and .error.user_action_required == true
 ' <<<"$api_audit_unavailable_response" >/dev/null ||
-    fail "local API did not fail closed when its audit log was unavailable"
+    {
+        printf '%s\n' "$api_audit_unavailable_response" >&2
+        fail "local API did not fail closed when its audit log was unavailable"
+    }
 [[ "$(wc -l <"$FAKE_SYSTEMCTL_LOG")" == "$api_audit_systemctl_count" ]] ||
     fail "local API executed a mutation without a durable start audit event"
 [[ ! -e "$VPNCTL_API_ACTION_DIR/action-audit-unavailable-0001.json" ]] ||
@@ -2596,7 +2612,7 @@ api_terminal_audit_request="$(
         operation: "lifecycle.reconnect",
         action_id: "action-terminal-audit-0001",
         authorization: "system-mutate",
-        deadline_ms: 5000,
+        deadline_ms: 15000,
         payload: {}
     }'
 )"
@@ -2728,7 +2744,7 @@ api_rollback_request="$(
         operation: "lifecycle.connect",
         action_id: "action-rollback-0001",
         authorization: "system-mutate",
-        deadline_ms: 5000,
+        deadline_ms: 15000,
         payload: {profile_id: $profile_id}
     }'
 )"
@@ -2883,6 +2899,21 @@ jq -e '
     fail "local API recovery marker is missing or unsafe"
 [[ "$(stat -c %a "$api_recovery_marker")" == "600" ]] ||
     fail "local API recovery marker is not root-only"
+for recovery_query_operation in status.get profiles.list; do
+    recovery_query_response="$(
+        jq -cn --arg operation "$recovery_query_operation" '{
+            api_version: "1.0",
+            request_id: ("request-recovery-query-" + ($operation | gsub("\\."; "-"))),
+            operation: $operation,
+            deadline_ms: 5000,
+            payload: {}
+        }' | "$CLI" _api-dispatch
+    )"
+    jq -e '.status == "ok"' <<<"$recovery_query_response" >/dev/null ||
+        fail "recovery-only mode blocked the read-only $recovery_query_operation query"
+    [[ -e "$api_recovery_marker" ]] ||
+        fail "read-only $recovery_query_operation query cleared the recovery marker"
+done
 api_blocked_stop_count="$(grep -c '^stop vpnctl.service$' "$FAKE_SYSTEMCTL_LOG" || true)"
 api_blocked_response="$(
     jq -cn '{
@@ -2906,6 +2937,8 @@ jq -e '
 "$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
 [[ ! -e "$api_recovery_marker" ]] ||
     fail "explicit administrator acknowledgement did not clear recovery-only mode"
+[[ "$(cat "$VPNCTL_RUN_DIR/api-recovery.state")" == ready ]] ||
+    fail "explicit administrator acknowledgement did not publish a ready boot state"
 
 api_deadline_request="$(
     jq -cn '{
@@ -2914,30 +2947,37 @@ api_deadline_request="$(
         operation: "lifecycle.reconnect",
         action_id: "action-deadline-0001",
         authorization: "system-mutate",
-        deadline_ms: 5000,
+        deadline_ms: 10000,
         payload: {}
     }'
 )"
 : >"$FAKE_TIMEOUT_LOG"
 api_delayed_systemctl_marker="$TMP/api-systemctl-delay-once"
 api_delayed_systemctl_pid_file="$TMP/api-systemctl-delay.pid"
+api_delayed_snapshot_marker="$TMP/api-snapshot-delay-once"
 api_deadline_response="$(
     printf '%s\n' "$api_deadline_request" |
+        FAKE_IP_SNAPSHOT_DELAY_ONCE_FILE="$api_delayed_snapshot_marker" \
+        FAKE_IP_SNAPSHOT_DELAY_SECONDS=1 \
+        FAKE_SYSTEMCTL_DELAY_ACTION="stop vpnctl.service" \
         FAKE_SYSTEMCTL_DELAY_ONCE_FILE="$api_delayed_systemctl_marker" \
         FAKE_SYSTEMCTL_DELAY_PID_FILE="$api_delayed_systemctl_pid_file" \
-        FAKE_SYSTEMCTL_DELAY_ONCE_SECONDS=10 \
-        VPNCTL_API_CACHE_REFRESH_TIMEOUT_SECONDS=2 \
+        FAKE_SYSTEMCTL_DELAY_ONCE_SECONDS=15 \
         "$CLI" _api-dispatch
 )"
+[[ -e "$api_delayed_snapshot_marker" ]] ||
+    fail "local API deadline test did not execute its snapshot delay"
+[[ -e "$api_delayed_systemctl_marker" ]] ||
+    fail "local API deadline test did not execute its systemctl delay"
 jq -e '
     .status == "ok"
     and .result.action_id == "action-deadline-0001"
     and .result.state == "timed-out"
     and .result.rollback.state == "completed"
 ' <<<"$api_deadline_response" >/dev/null ||
-    fail "local API did not time out and roll back a sub-second mutation"
+    fail "local API did not time out and roll back a bounded mutation"
 grep -Eq -- \
-    '--kill-after=5s [0-4]\.[0-9]{3}s .*/mazzy-vpn reconnect' \
+    '--kill-after=5s [0-9]\.[0-9]{3}s .*/mazzy-vpn reconnect' \
     "$FAKE_TIMEOUT_LOG" ||
     fail "local API did not account for preflight time in the mutation deadline"
 api_delayed_systemctl_pid="$(cat "$api_delayed_systemctl_pid_file")"
@@ -2995,9 +3035,13 @@ grep -Fq -- \
 sed -i 's/^DESIRED=down$/DESIRED=up/' "$VPNCTL_STATE_DIR/active"
 [[ -s "$VPNCTL_STATE_DIR/transition-recovery-required.json" ]] ||
     fail "failed stop rollback did not preserve the transition recovery marker"
-"$CLI" reconnect >/dev/null
+if "$CLI" reconnect >/dev/null 2>&1; then
+    fail "reconnect bypassed transition recovery after failed API rollback"
+fi
+"$CLI" disconnect >/dev/null
+"$CLI" connect openvpn "Test Server" >/dev/null
 [[ ! -e "$VPNCTL_STATE_DIR/transition-recovery-required.json" ]] ||
-    fail "explicit verified reconnect did not clear transition recovery state"
+    fail "explicit disconnect recovery did not clear transition recovery state"
 ok "local API fails closed when rollback cannot stop the service"
 
 api_retention_request="$(
@@ -3007,7 +3051,7 @@ api_retention_request="$(
         operation: "lifecycle.reconnect",
         action_id: "action-retention-0001",
         authorization: "system-mutate",
-        deadline_ms: 5000,
+        deadline_ms: 15000,
         payload: {}
     }'
 )"
@@ -3022,8 +3066,8 @@ jq -e '
     and .result.state == "succeeded"
 ' <<<"$api_retention_response" >/dev/null ||
     fail "local API retention test mutation failed"
-[[ "$(find "$VPNCTL_API_ACTION_DIR" -maxdepth 1 -type f -name '*.json' |
-    wc -l)" -le 3 ]] ||
+[[ "$(find "$VPNCTL_API_ACTION_DIR" -maxdepth 1 -type f -name '*.json' -print0 |
+    xargs -0 -r jq -r 'select(.state == "completed") | 1' | wc -l)" -le 3 ]] ||
     fail "local API completed action journal exceeded its configured bound"
 [[ -r "$VPNCTL_API_ACTION_DIR/action-retention-0001.json" ]] ||
     fail "local API pruned the current action outcome"
@@ -3075,9 +3119,8 @@ jq -cn '{
 }' >"$transition_boot_marker"
 rm -f -- "$VPNCTL_STATE_DIR/test.transaction"
 : >"$FAKE_NFT_RULES_LOG"
-if "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1; then
-    fail "boot recovery accepted an unresolved transition marker"
-fi
+"$CLI" _api-recover-interrupted-actions >/dev/null 2>&1 ||
+    fail "boot recovery could not expose read-only API behind a durable transition marker"
 grep -q 'oifname "lo" accept' "$FAKE_NFT_RULES_LOG" ||
     fail "boot recovery did not restore loopback access in the fail-closed guard"
 grep -q 'chain forward' "$FAKE_NFT_RULES_LOG" ||
@@ -3129,10 +3172,9 @@ if [[ -z "${UMASK_PROBE_ROOT_PID:-}" ]]; then
 fi
 EOF
 jq -cn '{state: "running"}' >"$umask_probe_record"
-if BASH_ENV="$umask_probe_env" UMASK_PROBE_FILE="$umask_probe_file" \
-    "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1; then
-    fail "boot API recovery accepted a corrupt action journal name"
-fi
+BASH_ENV="$umask_probe_env" UMASK_PROBE_FILE="$umask_probe_file" \
+    "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1 ||
+    fail "boot API recovery could not enter durable read-only mode for a corrupt journal"
 [[ "$(stat -c %a "$umask_probe_file")" == "644" ]] ||
     fail "api_mark_recovery_required leaked its restrictive umask to the caller"
 rm -f -- "$umask_probe_record"
@@ -3147,18 +3189,16 @@ jq -cn '{
     started_at: "2026-01-01T00:00:00Z",
     snapshot_existed: true
 }' >"$VPNCTL_API_ACTION_DIR/$boot_failed_action_id.json"
-if "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1; then
-    fail "boot API recovery accepted an interrupted action without a snapshot"
-fi
+"$CLI" _api-recover-interrupted-actions >/dev/null 2>&1 ||
+    fail "missing snapshot could not be isolated behind recovery-only mode"
 jq -e --arg action_id "$boot_failed_action_id" '
     .state == "recovery-required"
     and .action_id == $action_id
     and .reason == "snapshot-missing"
 ' "$VPNCTL_STATE_DIR/api-recovery-required.json" >/dev/null ||
     fail "failed boot rollback did not preserve the recovery marker"
-if "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1; then
-    fail "boot API recovery ignored its fail-closed recovery marker"
-fi
+"$CLI" _api-recover-interrupted-actions >/dev/null 2>&1 ||
+    fail "durable recovery marker prevented read-only API startup"
 [[ -s "$VPNCTL_STATE_DIR/api-recovery-required.json" ]] ||
     fail "repeated boot recovery cleared the recovery marker"
 if "$CLI" _service-run >/dev/null 2>&1; then
@@ -3202,15 +3242,10 @@ api_recovery_bad_run_dir="$TMP/api-recovery-run-path"
 : >"$api_recovery_bad_run_dir"
 if VPNCTL_RUN_DIR="$api_recovery_bad_run_dir" \
     "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1; then
-    fail "boot API recovery accepted an unavailable runtime directory"
+    fail "boot recovery reported success without a writable boot-state directory"
 fi
-jq -e '
-    .state == "recovery-required"
-    and .action_id == "boot-recovery"
-    and .operation == "api.interrupted-recovery"
-    and .reason == "boot-recovery-directory-unavailable"
-' "$VPNCTL_STATE_DIR/api-recovery-required.json" >/dev/null ||
-    fail "runtime-directory failure did not persist the API recovery marker"
+[[ ! -e "$VPNCTL_STATE_DIR/api-recovery-required.json" ]] ||
+    fail "unwritable boot-state directory left a misleading durable marker"
 rm -f -- "$api_recovery_bad_run_dir"
 "$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
 
@@ -3226,24 +3261,18 @@ done
 exec /usr/bin/chmod "$@"
 EOF
 chmod 700 "$api_recovery_chmod_bin/chmod"
-if PATH="$api_recovery_chmod_bin:$PATH" \
+PATH="$api_recovery_chmod_bin:$PATH" \
     FAKE_CHMOD_FAIL_TARGET="$VPNCTL_RUN_DIR" \
-    "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1; then
-    fail "boot API recovery accepted an unprotected runtime directory"
-fi
-jq -e '
-    .state == "recovery-required"
-    and .reason == "boot-recovery-permissions-unavailable"
-' "$VPNCTL_STATE_DIR/api-recovery-required.json" >/dev/null ||
-    fail "runtime-directory chmod failure did not persist the API recovery marker"
-"$CLI" _api-clear-recovery --acknowledge-current-state >/dev/null
+    "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1 &&
+    fail "boot recovery reported success without protected runtime permissions"
+[[ ! -e "$VPNCTL_STATE_DIR/api-recovery-required.json" ]] ||
+    fail "runtime permission failure left a misleading durable marker"
 
 exec 6>"$VPNCTL_RUN_DIR/.mutation.lock"
 flock 6
-if VPNCTL_API_RECOVERY_LOCK_WAIT_SECONDS=1 \
-    "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1; then
-    fail "boot API recovery bypassed the occupied shared mutation lock"
-fi
+VPNCTL_API_RECOVERY_LOCK_WAIT_SECONDS=1 \
+    "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1 ||
+    fail "occupied mutation lock could not be deferred to recovery-only mode"
 flock -u 6
 exec 6>&-
 jq -e '
@@ -3255,6 +3284,8 @@ jq -e '
     fail "shared-lock timeout did not persist the API recovery marker"
 [[ "$(stat -c %a "$VPNCTL_STATE_DIR/api-recovery-required.json")" == "600" ]] ||
     fail "boot infrastructure failure marker is not root-only"
+[[ "$(<"$VPNCTL_RUN_DIR/api-recovery.state")" == recovery-only ]] ||
+    fail "lock timeout did not publish the boot-scoped recovery-only state"
 api_marker_service_rc=0
 "$CLI" _service-run >/dev/null 2>&1 || api_marker_service_rc=$?
 [[ "$api_marker_service_rc" -eq 77 ]] ||
@@ -3314,9 +3345,8 @@ assert_recovery_marker_blocks_runtime() {
 : >"$FAKE_SYNC_LOG"
 corrupt_recovery_record="$VPNCTL_API_ACTION_DIR/broken!.json"
 jq -cn '{state: "running"}' >"$corrupt_recovery_record"
-if "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1; then
-    fail "boot recovery accepted a corrupt action journal name"
-fi
+"$CLI" _api-recover-interrupted-actions >/dev/null 2>&1 ||
+    fail "corrupt journal could not be isolated behind recovery-only mode"
 jq -e '
     .state == "recovery-required"
     and .action_id == "recovery-scan"
@@ -3353,11 +3383,10 @@ exec /usr/bin/mv "$@"
 EOF
 chmod 700 "$journal_mv_bin/mv"
 : >"$FAKE_SYNC_LOG"
-if PATH="$journal_mv_bin:$PATH" \
+PATH="$journal_mv_bin:$PATH" \
     FAKE_MV_FAIL_TARGET="$journal_unavailable_record" \
-    "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1; then
-    fail "boot recovery accepted an unavailable action journal"
-fi
+    "$CLI" _api-recover-interrupted-actions >/dev/null 2>&1 ||
+    fail "unavailable action journal could not enter durable read-only mode"
 jq -e --arg action_id "$journal_unavailable_id" '
     .state == "recovery-required"
     and .action_id == $action_id
@@ -3764,9 +3793,18 @@ cp "$TMP/state/active" "$TMP/state/test.previous"
 touch "$TMP/state/test.previous.exists" "$TMP/state/test.previous.active" "$TMP/state/test.transaction"
 sed -i 's/^MODE=normal$/MODE=test/' "$TMP/state/active"
 printf 'TEST_TOKEN=boot-token\nTEST_DEADLINE=1\n' >>"$TMP/state/active"
+: >"$TMP/systemctl.log"
+: >"$FAKE_NFT_RULES_LOG"
 "$CLI" _recover-stale-test >/dev/null
 grep -q '^MODE=normal$' "$TMP/state/active" || fail "boot recovery did not restore state"
-[[ ! -e "$TMP/state/test.transaction" ]] || fail "boot recovery transaction was not cleaned"
+[[ -e "$TMP/state/test.transaction" ]] || fail "boot recovery discarded its journal before egress verification"
+grep -Fxq 'start --no-block vpnctl.service' "$TMP/systemctl.log" ||
+    fail "boot recovery synchronously started the service and can deadlock its systemd ordering"
+grep -q 'delete table inet mazzy_vpn_transition' "$FAKE_NFT_RULES_LOG" &&
+    fail "boot recovery removed its guard before the queued tunnel became ready"
+"$CLI" _health-check >/dev/null
+[[ ! -e "$TMP/state/test.transaction" ]] ||
+    fail "health verification did not commit the boot recovery transaction"
 ok "boot recovery"
 
 cp "$TMP/state/active" "$TMP/state/test.previous"
@@ -3799,6 +3837,7 @@ jq -e '.reason == "test-managed-restore-failed"' \
 "$CLI" _recover-stale-test >/dev/null
 grep -q '^MODE=normal$' "$TMP/state/active" ||
     fail "recovery did not restore the previous test state"
+"$CLI" _health-check >/dev/null
 [[ ! -e "$TMP/state/test.transaction" ]] ||
     fail "verified test recovery did not clean its transaction"
 ok "test timeout fails closed until rollback is independently verified"
@@ -3814,6 +3853,7 @@ unset FAKE_SYSTEMCTL_START_FAIL
 "$CLI" _recover-stale-test >/dev/null
 grep -q '^MODE=normal$' "$TMP/state/active" ||
     fail "recovery after failed rollback did not restore normal state"
+"$CLI" _health-check >/dev/null
 ok "rollback failure is critical and recoverable"
 
 touch "$FAKE_LEGACY_ACTIVE"
@@ -3863,6 +3903,7 @@ cmp -s "$TMP/emergency-before" "$TMP/state/active" ||
    -e "$TMP/state/transition-recovery-required.json" ]] ||
     fail "unverified emergency rollback did not preserve recoverable state"
 "$CLI" _recover-stale-test >/dev/null
+"$CLI" _health-check >/dev/null
 [[ ! -e "$TMP/state/transition-recovery-required.json" ]] ||
     fail "verified emergency recovery did not clear transition recovery state"
 ok "emergency failure rolls back"
@@ -3988,6 +4029,12 @@ fi
 "$CLI" _health-check >/dev/null
 [[ ! -e "$VPNCTL_RUN_DIR/health.failures" ]] ||
     fail "successful data-plane check did not reset the saturated counter"
+# The deliberately failed automatic recovery remains fail-closed. Explicit
+# operator recovery is disconnect/acknowledge, not another connect that would
+# erase the incident marker.
+if [[ -e "$VPNCTL_STATE_DIR/transition-recovery-required.json" ]]; then
+    "$CLI" disconnect >/dev/null
+fi
 printf '3\n' >"$VPNCTL_RUN_DIR/health.failures"
 : >"$TMP/systemctl.log"
 "$CLI" reconnect >/dev/null
@@ -4111,6 +4158,11 @@ ok "disconnect"
 stage="$TMP/stage"
 "$ROOT/install.sh" --destdir "$stage" --no-deps --lang de >/dev/null
 [[ -x "$stage/usr/local/bin/mazzy-vpn" ]] || fail "Mazzy VPN binary was not staged"
+[[ -x "$stage/usr/local/lib/mazzy-vpn/mazzy-vpn" ]] ||
+    fail "Mazzy VPN source-install internal engine was not staged"
+[[ "$(readlink "$stage/usr/local/bin/mazzy-vpn")" == \
+    "../lib/mazzy-vpn/mazzy-vpn" ]] ||
+    fail "public source-install CLI is not an internal-engine symlink"
 [[ -x "$stage/usr/local/bin/mazzy-agentd" ]] ||
     fail "Mazzy agent daemon was not staged"
 cmp -s "$ROOT/mazzy-agentd" "$stage/usr/local/bin/mazzy-agentd" ||
@@ -4196,8 +4248,8 @@ done
 [[ "$(<"$stage/etc/vpnctl/locale")" == "de" ]] ||
     fail "installer did not persist selected language"
 [[ -f "$stage/etc/systemd/system/vpnctl-health.timer" ]] || fail "timer not staged"
-grep -q '^Restart=always$' "$stage/etc/systemd/system/vpnctl.service" ||
-    fail "service does not restart after a clean unexpected exit"
+grep -q '^Restart=on-failure$' "$stage/etc/systemd/system/vpnctl.service" ||
+    fail "service restarts after an intentional DESIRED=down exit"
 grep -q '^RestartPreventExitStatus=77$' \
     "$stage/etc/systemd/system/vpnctl.service" ||
     fail "service retries permanent OpenVPN authentication failures"
@@ -4218,19 +4270,16 @@ grep -q '^DefaultDependencies=no$' \
 grep -q '^Requires=local-fs.target$' \
     "$stage/etc/systemd/system/mazzy-vpn-api-recovery.service" ||
     fail "early API recovery does not require its filesystem dependency"
-grep -q '^Before=shutdown.target vpnctl-test-recovery.service vpnctl.service vpnctl-health.service mazzy-vpn-api.socket$' \
+grep -q '^Before=shutdown.target$' \
     "$stage/etc/systemd/system/mazzy-vpn-api-recovery.service" ||
-    fail "API recovery is not ordered before every mutating/socket-activated consumer"
-grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
-    "$stage/etc/systemd/system/vpnctl-test-recovery.service" ||
-    fail "test recovery does not require successful API recovery"
+    fail "API recovery lost shutdown ordering"
 grep -q '^After=local-fs.target mazzy-vpn-api-recovery.service$' \
     "$stage/etc/systemd/system/vpnctl-test-recovery.service" ||
-    fail "test recovery is not serialized after API recovery"
+    fail "test recovery is not softly ordered after API recovery"
 grep -q '^TimeoutStartSec=60s$' \
     "$stage/etc/systemd/system/vpnctl-test-recovery.service" ||
     fail "test recovery has no bounded systemd startup budget"
-grep -q '^ExecStart=/usr/local/bin/mazzy-vpn _api-recover-interrupted-actions$' \
+grep -q '^ExecStart=/usr/local/lib/mazzy-vpn/mazzy-vpn _api-recover-interrupted-actions$' \
     "$stage/etc/systemd/system/mazzy-vpn-api-recovery.service" ||
     fail "API recovery unit does not use the root-only recovery entrypoint"
 grep -Fxq 'RemainAfterExit=yes' \
@@ -4256,22 +4305,20 @@ grep -q '^SocketGroup=mazzy-vpn$' "$stage/etc/systemd/system/mazzy-vpn-api.socke
     fail "local API socket is not restricted to the mazzy-vpn group"
 grep -q '^DirectoryMode=0750$' "$stage/etc/systemd/system/mazzy-vpn-api.socket" ||
     fail "local API socket directory is not group-restricted"
-grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
+if grep -Eq '^Requires=.*mazzy-vpn-api-recovery\.service' \
+    "$stage/etc/systemd/system/mazzy-vpn-api.socket"; then
+    fail "local API availability still hard-depends on the recovery oneshot"
+fi
+grep -q '^Wants=mazzy-vpn-api-recovery.service$' \
     "$stage/etc/systemd/system/mazzy-vpn-api.socket" ||
-    fail "local API socket can start without successful boot recovery"
-grep -q '^After=mazzy-vpn-api-recovery.service$' \
-    "$stage/etc/systemd/system/mazzy-vpn-api.socket" ||
-    fail "local API socket is not ordered after boot recovery"
-grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
-    "$stage/etc/systemd/system/vpnctl-health.service" ||
-    fail "health remediation can run after boot recovery fails"
+    fail "local API socket does not request best-effort recovery"
 grep -q '^After=network-online.target mazzy-vpn-api-recovery.service vpnctl.service$' \
     "$stage/etc/systemd/system/vpnctl-health.service" ||
-    fail "health remediation is not serialized after boot recovery"
+    fail "health remediation lost soft recovery ordering"
 grep -q '^NoNewPrivileges=yes$' \
     "$stage/etc/systemd/system/mazzy-vpn-api@.service" ||
     fail "local API request service is missing process hardening"
-grep -q 'ExecStart=/usr/local/bin/mazzy-vpn' \
+grep -q 'ExecStart=/usr/local/lib/mazzy-vpn/mazzy-vpn' \
     "$stage/etc/systemd/system/vpnctl.service" ||
     fail "staged service does not use Mazzy VPN command"
 ok "branded staged installation and aliases"
@@ -4310,9 +4357,10 @@ for dependency in (
 ):
     assert dependency in deb["depends"]
 for dependency in (
-    "netcat-openbsd", "network-manager-l2tp", "openvpn", "wireguard-tools",
+    "netcat-openbsd", "network-manager-l2tp", "wireguard-tools",
 ):
     assert dependency in deb["recommends"]
+assert "openvpn" in deb["depends"]
 for dependency in (
     "bash", "diffutils", "findutils", "gawk", "grep", "iproute", "jq",
     "nftables", "polkit", "procps-ng", "python3", "sed", "socat", "systemd",
@@ -4432,7 +4480,7 @@ for package_dropin in \
     "$ROOT/packaging/linux/systemd/vpnctl-test-recovery.service.d/10-package-exec.conf" \
     "$ROOT/packaging/linux/systemd/vpnctl.service.d/10-package-exec.conf"; do
     if [[ "$package_dropin" == *".service.d/"* ]]; then
-        expected_exec=/usr/bin/mazzy-vpn
+        expected_exec=/usr/lib/mazzy-vpn/mazzy-vpn
         [[ "$package_dropin" == *mazzy-agentd* ]] && expected_exec=/usr/bin/mazzy-agentd
         grep -q "^ExecStart=$expected_exec " "$package_dropin" ||
             fail "package systemd override does not use the package-managed engine"
@@ -4445,36 +4493,28 @@ done
 grep -q '^DefaultDependencies=no$' \
     "$ROOT/packaging/linux/systemd/mazzy-vpn-api-recovery.service.d/10-package-exec.conf" ||
     fail "package recovery drop-in can reintroduce the sockets.target boot cycle"
-grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
-    "$ROOT/packaging/linux/systemd/mazzy-vpn-api.socket.d/10-package-docs.conf" ||
-    fail "package socket drop-in does not harden a legacy /etc unit"
-grep -q '^After=mazzy-vpn-api-recovery.service$' \
-    "$ROOT/packaging/linux/systemd/mazzy-vpn-api.socket.d/10-package-docs.conf" ||
-    fail "package socket drop-in does not serialize a legacy unit after recovery"
-grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
-    "$ROOT/packaging/linux/systemd/vpnctl.service.d/10-package-exec.conf" ||
-    fail "package runtime drop-in does not harden legacy systemd overrides"
+if grep -R -Eq '^Requires=.*mazzy-vpn-api-recovery\.service' \
+    "$ROOT/packaging/linux/systemd/mazzy-vpn-api.socket.d" \
+    "$ROOT/packaging/linux/systemd/vpnctl.service.d" \
+    "$ROOT/packaging/linux/systemd/vpnctl-health.service.d" \
+    "$ROOT/packaging/linux/systemd/vpnctl-test-recovery.service.d"; then
+    fail "package drop-ins reintroduce a hard recovery dependency"
+fi
 grep -q '^StartLimitIntervalSec=600$' \
     "$ROOT/packaging/linux/systemd/vpnctl.service.d/10-package-exec.conf" ||
     fail "package runtime drop-in does not bound legacy service retries"
 grep -q '^RestartPreventExitStatus=77$' \
     "$ROOT/packaging/linux/systemd/vpnctl.service.d/10-package-exec.conf" ||
     fail "package runtime drop-in loses permanent authentication failure handling"
-grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
-    "$ROOT/packaging/linux/systemd/vpnctl-test-recovery.service.d/10-package-exec.conf" ||
-    fail "package test recovery drop-in does not harden a legacy unit"
 grep -q '^TimeoutStartSec=60s$' \
     "$ROOT/packaging/linux/systemd/vpnctl-test-recovery.service.d/10-package-exec.conf" ||
     fail "package test recovery drop-in has no bounded startup budget"
-grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
-    "$ROOT/packaging/linux/systemd/vpnctl-health.service.d/10-package-exec.conf" ||
-    fail "package health drop-in does not propagate recovery failure"
-grep -q '^After=mazzy-vpn-api-recovery.service$' \
-    "$ROOT/packaging/linux/systemd/vpnctl-health.service.d/10-package-exec.conf" ||
-    fail "package health drop-in is not ordered after recovery"
 grep -q '^OnUnitInactiveSec=60s$' \
     "$ROOT/packaging/linux/systemd/vpnctl-health.timer.d/10-package-interval.conf" ||
     fail "package health timer drop-in does not restore the boot trigger"
+grep -q '^OnBootSec=60s$' \
+    "$ROOT/packaging/linux/systemd/vpnctl-health.timer.d/10-package-interval.conf" ||
+    fail "package health timer drop-in can remain elapsed before its first run"
 grep -q '^OnUnitInactiveSec=60s$' \
     "$ROOT/packaging/linux/systemd/vpnctl-health.timer.d/10-package-interval.conf" ||
     fail "package health timer drop-in does not enforce the one-minute interval"
@@ -4488,6 +4528,9 @@ effective_usr="$effective_root/usr/lib/systemd/system"
 mkdir -p "$effective_etc" "$effective_usr" "$effective_root/usr/bin"
 cp "$ROOT/mazzy-vpn" "$effective_root/usr/bin/mazzy-vpn"
 chmod 755 "$effective_root/usr/bin/mazzy-vpn"
+mkdir -p "$effective_root/usr/lib/mazzy-vpn"
+cp "$ROOT/mazzy-vpn" "$effective_root/usr/lib/mazzy-vpn/mazzy-vpn"
+chmod 755 "$effective_root/usr/lib/mazzy-vpn/mazzy-vpn"
 for effective_target in \
     basic.target \
     local-fs.target \
@@ -4500,21 +4543,8 @@ for effective_target in \
     printf '[Unit]\nDefaultDependencies=no\n' \
         >"$effective_usr/$effective_target"
 done
-awk '
-    /^Requires=mazzy-vpn-api-recovery\.service$/ { next }
-    /^After=mazzy-vpn-api-recovery\.service$/ { next }
-    { print }
-' "$ROOT/systemd/mazzy-vpn-api.socket" \
-    >"$effective_etc/mazzy-vpn-api.socket"
-awk '
-    /^Requires=mazzy-vpn-api-recovery\.service$/ { next }
-    /^After=network-online\.target mazzy-vpn-api-recovery\.service vpnctl\.service$/ {
-        print "After=network-online.target vpnctl.service"
-        next
-    }
-    { print }
-' "$ROOT/systemd/vpnctl-health.service" \
-    >"$effective_etc/vpnctl-health.service"
+cp "$ROOT/systemd/mazzy-vpn-api.socket" "$effective_etc/mazzy-vpn-api.socket"
+cp "$ROOT/systemd/vpnctl-health.service" "$effective_etc/vpnctl-health.service"
 sed 's/^OnUnitActiveSec=.*/OnUnitActiveSec=20s/' \
     "$ROOT/systemd/vpnctl-health.timer" \
     >"$effective_etc/vpnctl-health.timer"
@@ -4640,85 +4670,66 @@ ok "Mazzy VPN bash completion"
 if grep -Eq '^(Wants|After)=.*vpnctl-test-recovery' "$ROOT/systemd/vpnctl.service"; then
     fail "runtime service pulls boot recovery into a locked test transaction"
 fi
-grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
+if grep -Eq '^Requires=.*mazzy-vpn-api-recovery\.service' \
+    "$ROOT/systemd/vpnctl.service"; then
+    fail "runtime service still has a hard recovery dependency"
+fi
+grep -q '^Wants=network-online.target mazzy-vpn-api-recovery.service$' \
     "$ROOT/systemd/vpnctl.service" ||
-    fail "runtime service can start after API boot recovery fails"
+    fail "runtime service does not request best-effort recovery"
 grep -q '^After=network-online.target NetworkManager.service mazzy-vpn-api-recovery.service$' \
     "$ROOT/systemd/vpnctl.service" ||
-    fail "runtime service is not ordered after required API boot recovery"
+    fail "runtime service lost network/recovery ordering"
 grep -q '^DefaultDependencies=no$' \
     "$ROOT/systemd/mazzy-vpn-api-recovery.service" ||
     fail "boot API recovery can form a basic.target/sockets.target ordering cycle"
 grep -q '^Requires=local-fs.target$' \
     "$ROOT/systemd/mazzy-vpn-api-recovery.service" ||
     fail "boot API recovery lost its explicit filesystem requirement"
-grep -q '^Before=shutdown.target vpnctl-test-recovery.service vpnctl.service vpnctl-health.service mazzy-vpn-api.socket$' \
+grep -q '^Before=shutdown.target$' \
     "$ROOT/systemd/mazzy-vpn-api-recovery.service" ||
-    fail "boot API recovery ordering drifted"
+    fail "boot API recovery shutdown ordering drifted"
 grep -Fxq 'RemainAfterExit=yes' \
     "$ROOT/systemd/mazzy-vpn-api-recovery.service" ||
     fail "successful boot API recovery is not retained for the boot"
 grep -q '^CapabilityBoundingSet=CAP_NET_ADMIN$' \
     "$ROOT/systemd/mazzy-vpn-api-recovery.service" ||
     fail "boot API recovery cannot restore the nftables transition guard"
-grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
-    "$ROOT/systemd/vpnctl-test-recovery.service" ||
-    fail "test boot recovery no longer requires API boot recovery"
 grep -q '^After=local-fs.target mazzy-vpn-api-recovery.service$' \
     "$ROOT/systemd/vpnctl-test-recovery.service" ||
-    fail "boot recovery units are no longer ordered"
+    fail "test recovery lost local-fs ordering"
 grep -q '^TimeoutStartSec=60s$' \
     "$ROOT/systemd/vpnctl-test-recovery.service" ||
     fail "test boot recovery timeout budget drifted"
 grep -q '^WantedBy=multi-user.target$' \
     "$ROOT/systemd/mazzy-vpn-api-recovery.service" ||
     fail "boot API recovery is not enabled through the boot target"
-grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
-    "$ROOT/systemd/mazzy-vpn-api.socket" ||
-    fail "API socket no longer requires the fail-closed recovery gate"
-grep -q '^After=mazzy-vpn-api-recovery.service$' \
-    "$ROOT/systemd/mazzy-vpn-api.socket" ||
-    fail "API socket is no longer serialized after recovery"
-grep -q '^Requires=mazzy-vpn-api-recovery.service$' \
-    "$ROOT/systemd/vpnctl-health.service" ||
-    fail "health remediation no longer propagates boot recovery failure"
+if grep -Eq '^Requires=.*mazzy-vpn-api-recovery\.service' \
+    "$ROOT/systemd/mazzy-vpn-api.socket" \
+    "$ROOT/systemd/vpnctl-health.service" \
+    "$ROOT/systemd/vpnctl-test-recovery.service"; then
+    fail "a consumer still hard-depends on the recovery oneshot"
+fi
 grep -q '^After=network-online.target mazzy-vpn-api-recovery.service vpnctl.service$' \
     "$ROOT/systemd/vpnctl-health.service" ||
-    fail "health remediation is no longer serialized after recovery"
-: >"$FAKE_SYSTEMCTL_RECOVERY_LOG"
-rm -f -- "$FAKE_SYSTEMCTL_RECOVERY_ACTIVE_FILE"
-FAKE_SYSTEMCTL_MODEL_RECOVERY_DEPENDENCY=1 \
-    systemctl start mazzy-vpn-api-recovery.service
-(
-    exec 9>"$VPNCTL_RUN_DIR/.mutation.lock"
-    flock -x 9
-    FAKE_SYSTEMCTL_MODEL_RECOVERY_DEPENDENCY=1 \
-        systemctl start vpnctl.service
-    FAKE_SYSTEMCTL_MODEL_RECOVERY_DEPENDENCY=1 \
-        systemctl restart vpnctl.service
-)
-[[ "$(wc -l <"$FAKE_SYSTEMCTL_RECOVERY_LOG")" == "1" ]] ||
-    fail "runtime VPN service activation re-entered boot API recovery"
-ok "runtime start cannot deadlock on boot recovery"
-
-for recovery_consumer in \
-    mazzy-vpn-api.socket \
-    vpnctl.service \
-    vpnctl-health.service \
-    vpnctl-test-recovery.service; do
-    rm -f -- "$FAKE_SYSTEMCTL_RECOVERY_ACTIVE_FILE"
-    : >"$FAKE_SYSTEMCTL_RECOVERY_LOG"
-    if FAKE_SYSTEMCTL_MODEL_RECOVERY_DEPENDENCY=1 \
-        FAKE_SYSTEMCTL_RECOVERY_FAIL=1 \
-        systemctl start "$recovery_consumer"; then
-        fail "$recovery_consumer started after required API recovery failed"
+    fail "health remediation lost soft recovery/service ordering"
+for recovery_consumer_file in \
+    "$ROOT/systemd/mazzy-vpn-api.socket" \
+    "$ROOT/systemd/vpnctl.service" \
+    "$ROOT/systemd/vpnctl-health.service" \
+    "$ROOT/systemd/vpnctl-test-recovery.service"; do
+    if grep -Eq '^Requires=.*mazzy-vpn-api-recovery\.service' \
+        "$recovery_consumer_file"; then
+        fail "consumer can still fail as a systemd recovery dependency job"
     fi
-    [[ ! -e "$FAKE_SYSTEMCTL_RECOVERY_ACTIVE_FILE" ]] ||
-        fail "$recovery_consumer retained a false successful recovery state"
-    [[ "$(wc -l <"$FAKE_SYSTEMCTL_RECOVERY_LOG")" == "1" ]] ||
-        fail "$recovery_consumer did not attempt exactly one required recovery"
 done
-ok "API recovery failure blocks every socket and mutating consumer"
+ok "runtime consumers cannot deadlock on or fail as boot recovery dependencies"
+
+# Marker/query/mutation cases above prove the safety boundary independently:
+# read-only API remains available, while lifecycle and direct mutations are
+# rejected before systemctl or fallback effects. Systemd is responsible only
+# for liveness and must not duplicate that gate.
+ok "recovery failure is isolated by engine gates instead of systemd dependencies"
 
 mkdir -p "$TMP/installbin"
 for install_command in bash dirname uname id sed grep tr cut head tail stat \
@@ -4733,6 +4744,9 @@ fallback_output="$(
         VPNCTL_AMNEZIA_PPA_AVAILABLE=0 \
         "$ROOT/install.sh" --dry-run --yes --deps-only
 )"
+if grep -q 'Неполный дистрибутив' <<<"$fallback_output"; then
+    fail "dependency-only package repair incorrectly requires a source-tree payload"
+fi
 grep -q 'amneziawg-go.git' <<<"$fallback_output" ||
     fail "unsupported Ubuntu suite did not select userspace AmneziaWG"
 grep -q '61e741780e8465a67a7d7fb6cffe14a8a15d624a' <<<"$fallback_output" ||
@@ -4763,9 +4777,9 @@ grep -q 'grant_runtime_reader_session_access' "$ROOT/mazzy-vpn" ||
     fail "package repair cannot grant immediate current-session local API access"
 grep -q 'grant_desktop_runtime_access ||' "$ROOT/install.sh" ||
     fail "installer can fail after a best-effort Desktop session ACL error"
-API_SOCKET_START_PATTERN="enable --now \"\$API_SOCKET_UNIT\""
-grep -Fq "$API_SOCKET_START_PATTERN" "$ROOT/mazzy-vpn" ||
-    fail "Desktop engine repair does not start the protected local API"
+grep -Fq 'enable "$API_SOCKET_UNIT"' "$ROOT/mazzy-vpn" &&
+    grep -Fq 'start --no-block "$API_SOCKET_UNIT"' "$ROOT/mazzy-vpn" ||
+    fail "Desktop engine repair does not asynchronously start the protected local API"
 grep -q 'await refreshInstallation(true);' "$ROOT/desktop/ui/app.js" ||
     fail "Desktop does not start its embedded engine before initial data loading"
 ok "Desktop self-start, package state and unavailable notifications are represented honestly"

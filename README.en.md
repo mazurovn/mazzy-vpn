@@ -15,14 +15,14 @@ It is a client and control plane rather than a hosted VPN subscription. Use
 profiles from your VPN provider or organization; Mazzy VPN requires no project
 account and collects no telemetry.
 
-The current release source line is [CLI/TUI 1.4.6](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.6)
-and the [Desktop 0.4.7 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.7).
+The current release source line is [CLI/TUI 1.4.7](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.7)
+and the [Desktop 0.4.8 DEB release](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.8).
 A version is published only when its linked tag and GitHub Release page exist.
 Linux Desktop bundles and starts its compatible engine without requiring a
 separately installed or running CLI. Existing CLI installations remain
-compatible. Windows and macOS artifacts are
-UI previews without native VPN backends or OS code signing. Installable updater
-artifacts are Tauri-signed and always require consent. Issue #31 is closed with the reviewed
+compatible. Windows, macOS, Android, AppImage and RPM artifacts are not
+published in this DEB-only release line; package-managed updates use APT/dpkg.
+Issue #31 is closed with the reviewed
 upstream `glib` backport, exact source-provenance verification and clean
 default-branch RustSec, Dependabot and CodeQL results.
 
@@ -216,14 +216,14 @@ Change the language immediately with menu item 16 or
 The Tauri Desktop 0.4 Linux preview provides Dashboard, Profiles, Diagnostics,
 Settings and About screens plus a system tray. DEB/RPM own the compatible
 engine, systemd units and base runtime dependencies through the package
-manager; AppImage retains the explicitly authorized embedded installer.
+manager with a package-internal engine.
 Desktop checks installed versions and dependencies and can repair supported
 missing protocol packages after authorization. Profile file/folder import,
 search, connect, sortable whole-list latency checks, fastest reachable
 selection, actual egress/location/DNS/IPv6 verification, transactional tests,
 clickable events, Doctor fixes, self-tests, bounded logs, autostart and
 recovery-monitor controls are available
-without first installing the CLI by hand. Packages are available as AppImage,
+without first installing the CLI by hand. The supported Linux package is DEB,
 DEB and RPM.
 
 DEB/RPM upgrade and removal deliberately preserve `/etc/vpnctl` profiles and

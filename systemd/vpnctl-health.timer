@@ -4,6 +4,10 @@
 Description=Periodically check and recover Mazzy VPN connection
 
 [Timer]
+# OnUnitInactiveSec alone can enter active(elapsed) with NEXT=infinity on
+# systemd 259 before the service has ever run. Seed every boot explicitly;
+# subsequent checks remain relative to the completed health service.
+OnBootSec=60s
 OnUnitInactiveSec=60s
 AccuracySec=1s
 RandomizedDelaySec=5s

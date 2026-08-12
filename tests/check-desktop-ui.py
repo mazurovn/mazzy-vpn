@@ -211,6 +211,13 @@ def main() -> None:
         fail(f"Desktop JavaScript references missing IDs: {missing_ids}")
 
     values = translations(javascript)
+    for stale_cli_dependency_text in (
+        "Mazzy VPN CLI data",
+        "Mazzy VPN CLI данные",
+        "Ожидаем данные Mazzy VPN CLI",
+    ):
+        if stale_cli_dependency_text in html or stale_cli_dependency_text in javascript:
+            fail("Desktop UI implies that a separately launched CLI is required")
     for language in ("ru", "en"):
         missing = sorted(parser.i18n - set(values.get(language, {})))
         if missing:
@@ -318,9 +325,9 @@ def main() -> None:
         "engine_startup_repair_needed(" not in rust
         or "|| !api_socket_available" not in rust
         or "|| !api_socket_accessible" not in rust
-        or "status_cache_available: _" not in rust
-        or "profile_cache_available: _" not in rust
         or "wait_for_accessible_local_api()" not in rust
+        or "refresh_status_cache_from_api()" not in rust
+        or '"operation": "profiles.list"' not in rust
         or "embedded_cli_path(app)" not in rust
         or "if !repair.success" not in rust
         or "return repair;" not in rust

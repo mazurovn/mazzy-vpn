@@ -23,6 +23,8 @@ use tauri::{AppHandle, Manager};
 
 const SYSTEM_CLI_PATH: &str = "/usr/bin/mazzy-vpn";
 const LOCAL_CLI_PATH: &str = "/usr/local/bin/mazzy-vpn";
+const PACKAGE_ENGINE_PATH: &str = "/usr/lib/mazzy-vpn/mazzy-vpn";
+const SOURCE_ENGINE_PATH: &str = "/usr/local/lib/mazzy-vpn/mazzy-vpn";
 pub(crate) const TIMEOUT_PATH: &str = "/usr/bin/timeout";
 pub(crate) const PKEXEC_PATH: &str = "/usr/bin/pkexec";
 const PROFILES_FILE: &str = "/run/mazzy-vpn/profiles.json";
@@ -343,10 +345,19 @@ struct DashboardStatus {
     profiles: DashboardProfileCounts,
 }
 
-fn select_cli_path(system_installed: bool, local_installed: bool) -> Option<&'static Path> {
-    if system_installed {
+fn select_cli_path(
+    package_engine: bool,
+    source_engine: bool,
+    system_cli: bool,
+    local_cli: bool,
+) -> Option<&'static Path> {
+    if package_engine {
+        Some(Path::new(PACKAGE_ENGINE_PATH))
+    } else if source_engine {
+        Some(Path::new(SOURCE_ENGINE_PATH))
+    } else if system_cli {
         Some(Path::new(SYSTEM_CLI_PATH))
-    } else if local_installed {
+    } else if local_cli {
         Some(Path::new(LOCAL_CLI_PATH))
     } else {
         None
@@ -355,6 +366,8 @@ fn select_cli_path(system_installed: bool, local_installed: bool) -> Option<&'st
 
 pub(crate) fn installed_cli_path() -> Option<&'static Path> {
     select_cli_path(
+        Path::new(PACKAGE_ENGINE_PATH).is_file(),
+        Path::new(SOURCE_ENGINE_PATH).is_file(),
         Path::new(SYSTEM_CLI_PATH).is_file(),
         Path::new(LOCAL_CLI_PATH).is_file(),
     )
@@ -603,7 +616,7 @@ fn normalize_privileged_error(cleaned: String) -> String {
 }
 
 fn package_managed_cli(cli_path: &Path) -> bool {
-    cli_path == Path::new(SYSTEM_CLI_PATH)
+    cli_path == Path::new(PACKAGE_ENGINE_PATH) || cli_path == Path::new(SYSTEM_CLI_PATH)
 }
 
 fn engine_not_ready_error() -> String {
@@ -622,7 +635,11 @@ fn package_missing_dependencies_error() -> String {
 
 fn engine_source(cli_path: Option<&Path>, bundled_cli: bool) -> &'static str {
     match cli_path {
-        Some(path) if path == Path::new(SYSTEM_CLI_PATH) => "package",
+        Some(path)
+            if path == Path::new(PACKAGE_ENGINE_PATH) || path == Path::new(SYSTEM_CLI_PATH) =>
+        {
+            "package"
+        }
         Some(_) => "local",
         None if bundled_cli => "embedded",
         None => "missing",
@@ -638,8 +655,6 @@ struct EngineStartupReadiness {
     api_installed: bool,
     api_socket_available: bool,
     api_socket_accessible: bool,
-    status_cache_available: bool,
-    profile_cache_available: bool,
 }
 
 fn engine_startup_repair_needed(readiness: EngineStartupReadiness) -> bool {
@@ -651,8 +666,6 @@ fn engine_startup_repair_needed(readiness: EngineStartupReadiness) -> bool {
         api_installed,
         api_socket_available,
         api_socket_accessible,
-        status_cache_available: _,
-        profile_cache_available: _,
     } = readiness;
     !engine_installed
         || !dependencies_ready
@@ -946,6 +959,15 @@ fn local_api_request(
             "payload": payload
         }),
     )))
+}
+
+fn operation_has_local_api_path(request: &OperationRequest) -> bool {
+    matches!(
+        request,
+        OperationRequest::Connect { .. }
+            | OperationRequest::Reconnect
+            | OperationRequest::Disconnect
+    )
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -1538,13 +1560,6 @@ pub(crate) fn verify_connection_sync(
 ) -> Result<Value, String> {
     timeout(timeout_seconds, 3, 30)?;
 
-    let cli_path = installed_cli_path().ok_or_else(|| {
-        "Mazzy VPN engine is not installed. Open Settings and run Install / Repair.".to_owned()
-    })?;
-    if package_managed_cli(cli_path) && !wait_for_local_api() {
-        return Err(engine_not_ready_error());
-    }
-
     let request = verify_api_request(timeout_seconds, include_speed);
     match send_local_api_for_read_only(&request) {
         Ok(response) => return verify_result_from_response(response),
@@ -1556,6 +1571,11 @@ pub(crate) fn verify_connection_sync(
             ));
         }
     }
+
+    let cli_path = installed_cli_path().ok_or_else(|| {
+        "The Desktop engine API is unavailable and no compatible internal engine is installed. Run Install / Repair."
+            .to_owned()
+    })?;
 
     if package_managed_cli(cli_path) {
         return Err(engine_not_ready_error());
@@ -1600,13 +1620,6 @@ pub(crate) fn probe_profiles_sync(
         return Err("Probe concurrency must be between 1 and 8".to_owned());
     }
 
-    let cli_path = installed_cli_path().ok_or_else(|| {
-        "Mazzy VPN engine is not installed. Open Settings and run Install / Repair.".to_owned()
-    })?;
-    if package_managed_cli(cli_path) && !wait_for_local_api() {
-        return Err(engine_not_ready_error());
-    }
-
     let request = probe_api_request(
         &selected_protocol,
         timeout_seconds,
@@ -1623,6 +1636,11 @@ pub(crate) fn probe_profiles_sync(
             ));
         }
     }
+
+    let cli_path = installed_cli_path().ok_or_else(|| {
+        "The Desktop engine API is unavailable and no compatible internal engine is installed. Run Install / Repair."
+            .to_owned()
+    })?;
 
     if package_managed_cli(cli_path) {
         return Err(engine_not_ready_error());
@@ -1808,6 +1826,21 @@ fn send_local_api_for_read_only(request: &Value) -> Result<Value, LocalApiError>
 }
 
 #[cfg(target_os = "linux")]
+pub(crate) fn refresh_status_cache_from_api() -> bool {
+    let request = json!({
+        "api_version": "1.0",
+        "request_id": api_identifier("desktop-status"),
+        "operation": "status.get",
+        "deadline_ms": 10_000,
+        "payload": {}
+    });
+    matches!(
+        send_local_api_for_read_only(&request),
+        Ok(response) if response.get("status").and_then(Value::as_str) == Some("ok")
+    )
+}
+
+#[cfg(target_os = "linux")]
 fn api_capabilities_request() -> Value {
     json!({
         "api_version": "1.0",
@@ -1816,19 +1849,6 @@ fn api_capabilities_request() -> Value {
         "deadline_ms": 1_000,
         "payload": {}
     })
-}
-
-#[cfg(target_os = "linux")]
-fn wait_for_local_api() -> bool {
-    for (attempt, delay_ms) in API_STARTUP_RETRY_DELAYS_MS.iter().enumerate() {
-        if attempt > 0 {
-            thread::sleep(std::time::Duration::from_millis(*delay_ms));
-        }
-        if local_api_accessible() {
-            return true;
-        }
-    }
-    false
 }
 
 #[cfg(target_os = "linux")]
@@ -1868,11 +1888,6 @@ fn wait_for_accessible_local_api() -> bool {
 #[cfg(not(target_os = "linux"))]
 fn wait_for_accessible_local_api() -> bool {
     false
-}
-
-#[cfg(not(target_os = "linux"))]
-fn wait_for_local_api() -> bool {
-    true
 }
 
 #[cfg(target_os = "linux")]
@@ -1930,8 +1945,10 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
                 code: None,
             };
         }
-        let system_installed = Path::new(SYSTEM_CLI_PATH).is_file();
-        let local_installed = Path::new(LOCAL_CLI_PATH).is_file();
+        let system_installed =
+            Path::new(PACKAGE_ENGINE_PATH).is_file() || Path::new(SYSTEM_CLI_PATH).is_file();
+        let local_installed =
+            Path::new(SOURCE_ENGINE_PATH).is_file() || Path::new(LOCAL_CLI_PATH).is_file();
         let initial_dependencies_ready =
             dependencies_ready(selected_protocol_from_status().as_deref());
         let root = engine_root(app);
@@ -1961,7 +1978,7 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
                     bounded_output(
                         Command::new(TIMEOUT_PATH)
                             .args(["--kill-after=30s", "1800s", PKEXEC_PATH])
-                            .arg(SYSTEM_CLI_PATH)
+                            .arg(PACKAGE_ENGINE_PATH)
                             .args(["doctor", "--fix"]),
                     ),
                     true,
@@ -2053,25 +2070,31 @@ pub(crate) fn execute_operation(app: &AppHandle, request: OperationRequest) -> O
             };
         }
     };
+    let api_owned_operation = operation_has_local_api_path(&request);
+    if let Some(result) = try_execute_local_api(&request) {
+        return result;
+    }
     let Some(cli_path) = installed_cli_path() else {
         return OperationResult {
             success: false,
             action,
-            output: "Mazzy VPN engine is not installed. Open Settings and run Install / Repair."
+            output: "The Desktop engine API is unavailable and no compatible internal engine is installed. Run Install / Repair."
                 .into(),
             code: None,
         };
     };
-    if package_managed_cli(cli_path) && !wait_for_local_api() {
+    // Lifecycle operations are owned by the protected API. If delivery was
+    // unavailable, never repeat the mutation through another path. Operations
+    // which are not in API v1 (import, Doctor, tests, settings) execute the
+    // package-internal engine; they must not depend on a separately installed
+    // public CLI entry point.
+    if package_managed_cli(cli_path) && api_owned_operation {
         return OperationResult {
             success: false,
             action,
             output: engine_not_ready_error(),
             code: None,
         };
-    }
-    if let Some(result) = try_execute_local_api(&request) {
-        return result;
     }
     let deadline_seconds = operation_deadline_seconds(&request);
     let changes_system = operation_changes_system(&request);
@@ -2319,43 +2342,40 @@ fn dependencies_ready(selected_protocol: Option<&str>) -> bool {
             dependency.required_for == "core" || dependency.required_for == "Desktop"
         })
         .all(|dependency| dependency.installed);
+    let installed = |id: &str| states.iter().any(|d| d.id == id && d.installed);
+    let openvpn_ready = installed("openvpn");
+    let wireguard_ready = installed("wireguard-tools");
+    let amneziawg_ready = installed("amneziawg-tools") && installed("amneziawg-backend");
+    let l2tp_ready = states
+        .iter()
+        .filter(|d| d.required_for == "L2TP/IPsec")
+        .all(|d| d.installed);
     let tunnel_backend_ready = match selected_protocol {
-        Some("openvpn") => states.iter().any(|d| d.id == "openvpn" && d.installed),
-        Some("wireguard") => {
-            states
-                .iter()
-                .filter(|d| d.id == "wireguard-tools")
-                .all(|d| d.installed)
-                && states
-                    .iter()
-                    .any(|d| d.id == "wireguard-tools" && d.installed)
-        }
-        Some("amneziawg") => {
-            states
-                .iter()
-                .filter(|d| matches!(d.id, "amneziawg-tools" | "amneziawg-backend"))
-                .all(|d| d.installed)
-                && states
-                    .iter()
-                    .any(|d| d.id == "amneziawg-tools" && d.installed)
-        }
-        Some("l2tp") => states
-            .iter()
-            .filter(|d| d.required_for == "L2TP/IPsec")
-            .all(|d| d.installed),
-        _ => states.iter().any(|d| {
-            matches!(
-                d.id,
-                "openvpn" | "wireguard-tools" | "amneziawg-tools" | "amneziawg-backend"
-            ) && d.installed
-        }),
+        Some("openvpn") => openvpn_ready,
+        Some("wireguard") => wireguard_ready,
+        Some("amneziawg") => amneziawg_ready,
+        Some("l2tp") => l2tp_ready,
+        _ => openvpn_ready || wireguard_ready || amneziawg_ready || l2tp_ready,
     };
     core_ready && tunnel_backend_ready
 }
 
 #[tauri::command]
 pub fn get_profiles() -> Value {
-    let response = profile_cache_response(fs::read_to_string(PROFILES_FILE));
+    let mut response = profile_cache_response(fs::read_to_string(PROFILES_FILE));
+    #[cfg(target_os = "linux")]
+    if !profile_cache_is_available(&response) {
+        let request = json!({
+            "api_version": "1.0",
+            "request_id": api_identifier("desktop-profiles"),
+            "operation": "profiles.list",
+            "deadline_ms": 10_000,
+            "payload": {}
+        });
+        if send_local_api_for_read_only(&request).is_ok() {
+            response = profile_cache_response(fs::read_to_string(PROFILES_FILE));
+        }
+    }
     if profile_cache_is_available(&response) {
         let count = response
             .get("profiles")
@@ -2472,7 +2492,8 @@ pub fn get_installation_report(app: AppHandle) -> InstallationReport {
     let root = engine_root(&app);
     let cli_path = installed_cli_path();
     let installed_version = cli_path.and_then(installed_version);
-    let package_managed = cli_path == Some(Path::new(SYSTEM_CLI_PATH));
+    let package_managed = cli_path == Some(Path::new(PACKAGE_ENGINE_PATH))
+        || cli_path == Some(Path::new(SYSTEM_CLI_PATH));
     let bundled_version = bundled_version(&root);
     let bundled_cli = root.join("mazzy-vpn").is_file();
     let engine_installed = installed_version.is_some();
@@ -2506,8 +2527,6 @@ pub fn get_installation_report(app: AppHandle) -> InstallationReport {
         api_installed,
         api_socket_available,
         api_socket_accessible,
-        status_cache_available,
-        profile_cache_available,
     });
     let runtime_ready = !startup_repair_needed;
     let needs_install = startup_repair_needed || installed_version != bundled_version;
@@ -2699,20 +2718,33 @@ mod tests {
     #[test]
     fn package_managed_engine_takes_precedence_over_local_installs() {
         assert_eq!(
-            select_cli_path(true, true),
+            select_cli_path(true, true, true, true),
+            Some(Path::new(PACKAGE_ENGINE_PATH))
+        );
+        assert_eq!(
+            select_cli_path(true, false, false, false),
+            Some(Path::new(PACKAGE_ENGINE_PATH)),
+            "Desktop must remain functional after both public CLI entry points are removed"
+        );
+        assert_eq!(
+            select_cli_path(false, true, true, true),
+            Some(Path::new(SOURCE_ENGINE_PATH))
+        );
+        assert_eq!(
+            select_cli_path(false, false, true, true),
             Some(Path::new(SYSTEM_CLI_PATH))
         );
         assert_eq!(
-            select_cli_path(false, true),
+            select_cli_path(false, false, false, true),
             Some(Path::new(LOCAL_CLI_PATH))
         );
-        assert_eq!(select_cli_path(false, false), None);
+        assert_eq!(select_cli_path(false, false, false, false), None);
         assert_eq!(
-            engine_source(Some(Path::new(SYSTEM_CLI_PATH)), true),
+            engine_source(Some(Path::new(PACKAGE_ENGINE_PATH)), true),
             "package"
         );
         assert_eq!(
-            engine_source(Some(Path::new(LOCAL_CLI_PATH)), true),
+            engine_source(Some(Path::new(SOURCE_ENGINE_PATH)), true),
             "local"
         );
         assert_eq!(engine_source(None, true), "embedded");
@@ -2729,8 +2761,6 @@ mod tests {
             api_installed: true,
             api_socket_available: true,
             api_socket_accessible: true,
-            status_cache_available: true,
-            profile_cache_available: true,
         };
         assert!(!engine_startup_repair_needed(ready));
         assert!(engine_startup_repair_needed(EngineStartupReadiness {
@@ -2741,10 +2771,6 @@ mod tests {
             engine_installed: false,
             ..ready
         }));
-        assert!(!engine_startup_repair_needed(EngineStartupReadiness {
-            status_cache_available: false,
-            ..ready
-        }));
     }
 
     #[cfg(target_os = "linux")]
@@ -2752,8 +2778,24 @@ mod tests {
     fn package_startup_wait_has_a_finite_budget() {
         let budget_ms: u64 = API_STARTUP_RETRY_DELAYS_MS.iter().sum();
         assert_eq!(budget_ms, 15_750);
+        assert!(package_managed_cli(Path::new(PACKAGE_ENGINE_PATH)));
         assert!(package_managed_cli(Path::new(SYSTEM_CLI_PATH)));
         assert!(!package_managed_cli(Path::new(LOCAL_CLI_PATH)));
+        assert!(operation_has_local_api_path(&OperationRequest::Reconnect));
+        assert!(operation_has_local_api_path(&OperationRequest::Disconnect));
+        assert!(operation_has_local_api_path(&OperationRequest::Connect {
+            protocol: "openvpn".into(),
+            profile: "profile.ovpn".into(),
+        }));
+        assert!(!operation_has_local_api_path(&OperationRequest::Doctor {
+            fix: true,
+        }));
+        assert!(!operation_has_local_api_path(
+            &OperationRequest::ImportFiles {
+                paths: vec!["profile.ovpn".into()],
+                force: false,
+            }
+        ));
     }
 
     #[test]
@@ -3104,7 +3146,7 @@ mod tests {
             "schema_version": 1,
             "generated_at": 1,
             "product": "Mazzy VPN",
-            "version": "1.4.6",
+            "version": "1.4.7",
             "language": "en",
             "selected": true,
             "service_state": "active",
