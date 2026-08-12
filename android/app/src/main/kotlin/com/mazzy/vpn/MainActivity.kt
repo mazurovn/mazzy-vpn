@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.VpnService
+import android.provider.OpenableColumns
 import android.os.Build
 import android.os.Bundle
 import android.content.pm.PackageManager
@@ -50,7 +51,6 @@ class MainActivity : Activity() {
             setOnClickListener { startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 type = "*/*"
                 addCategory(Intent.CATEGORY_OPENABLE)
-                putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("text/plain", "application/x-wireguard-profile"))
             }, REQUEST_PROFILE_IMPORT) }
         }
         setContentView(LinearLayout(this).apply {
@@ -110,12 +110,33 @@ class MainActivity : Activity() {
                 contentResolver.openInputStream(uri)?.use { input ->
                     val bytes = readBounded(input, 256 * 1024 + 1)
                     require(bytes.size <= 256 * 1024) { "profile-too-large" }
-                    val name = uri.lastPathSegment?.substringAfterLast('/') ?: "mazzy-awg.conf"
+                    val name = contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                        ?.use { cursor ->
+                            if (cursor.moveToFirst()) cursor.getString(0) else null
+                        }
+                        ?: uri.lastPathSegment?.substringAfterLast('/')
+                        ?: "mazzy-awg.conf"
                     AwgProfileRepository(this).importProfile(name, bytes)
                 } ?: error("profile-not-readable")
             }
-            status.text = result.fold({ getString(R.string.profile_imported) }, { getString(R.string.profile_import_failed) })
+            status.text = result.fold(
+                { getString(R.string.profile_imported) },
+                { getString(R.string.profile_import_failed_detail, safeImportError(it)) }
+            )
         }
+    }
+
+    private fun safeImportError(failure: Throwable): String = when (failure) {
+        is org.amnezia.awg.config.BadConfigException -> listOf(
+            failure.section.name.lowercase(),
+            failure.location.name.lowercase(),
+            failure.reason.name.lowercase()
+        ).joinToString("-")
+        is java.nio.charset.CharacterCodingException -> "invalid-utf8"
+        is IllegalArgumentException -> failure.message
+            ?.takeIf { it.matches(Regex("profile-[a-z0-9-]+")) }
+            ?: "invalid-profile-policy"
+        else -> "unreadable-profile"
     }
 
     private fun startVpnService() {
