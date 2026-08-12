@@ -2,7 +2,7 @@
 
 ## Метод
 
-Цикл проведён в `/home/mazurov/RESEARCH/MAZZY_VPN` на commits
+Цикл проведён в корне репозитория MAZZY_VPN на commits
 `60b9b2d..5398c94`. Координация — Orca orchestration; поиск контекста — реальный
 Mazzy Brain MCP (Nim stdio, `mazzy_search` и `mazzy_context_read`).
 Consilium через connector завершился transport backstop без payload и не

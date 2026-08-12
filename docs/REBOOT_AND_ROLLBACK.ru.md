@@ -13,7 +13,7 @@
 ## Проверка перед перезагрузкой
 
 ```bash
-cd /home/mazurov/RESEARCH/MAZZY_VPN
+cd /path/to/MAZZY_VPN
 pkexec ./scripts/pre-reboot-check.sh 0.4.8 1.4.7 pre-reboot
 ```
 
@@ -37,7 +37,7 @@ timer должны запуститься сами.
 ## Проверка после входа
 
 ```bash
-cd /home/mazurov/RESEARCH/MAZZY_VPN
+cd /path/to/MAZZY_VPN
 pkexec ./scripts/pre-reboot-check.sh 0.4.8 1.4.7 post-reboot
 ```
 
@@ -74,7 +74,7 @@ Rollback bundle создан автоматически в `.mazzy/rollback`; о
 ```
 
 ```bash
-cd /home/mazurov/RESEARCH/MAZZY_VPN
+cd /path/to/MAZZY_VPN
 pkexec ./scripts/rollback-release-deb.sh
 ```
 
