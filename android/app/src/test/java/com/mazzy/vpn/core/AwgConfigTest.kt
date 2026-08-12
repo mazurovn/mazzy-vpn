@@ -47,8 +47,20 @@ class AwgConfigTest {
     }
 
     @Test
-    fun rejectsProfileWithoutKeepalive() {
+    fun acceptsProfileWithoutKeepalive() {
         val config = parse(validConfig().replace("PersistentKeepalive = 25", ""))
+        validateFullTunnelConfig(config)
+    }
+
+    @Test
+    fun acceptsKeepaliveAboveMobileRecommendation() {
+        val config = parse(validConfig().replace("PersistentKeepalive = 25", "PersistentKeepalive = 60"))
+        validateFullTunnelConfig(config)
+    }
+
+    @Test
+    fun rejectsInvalidKeepalive() {
+        val config = parse(validConfig().replace("PersistentKeepalive = 25", "PersistentKeepalive = invalid"))
         assertThrows(IllegalArgumentException::class.java) { validateFullTunnelConfig(config) }
     }
 

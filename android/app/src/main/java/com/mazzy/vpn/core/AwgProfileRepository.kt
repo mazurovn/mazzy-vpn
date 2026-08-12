@@ -85,8 +85,12 @@ internal fun validateFullTunnelConfig(config: Config) {
     require(hasIpv4Default) { "profile-has-no-ipv4-default-route" }
     val peer = config.peers.single()
     require(peer.endpoint.isPresent) { "profile-has-no-endpoint" }
-    val keepalive = peer.persistentKeepalive.orElse("").toIntOrNull() ?: 0
-    require(keepalive in 1..MAX_KEEPALIVE_SECONDS) { "profile-requires-bounded-keepalive" }
+    peer.persistentKeepalive.ifPresent { raw ->
+        val keepalive = raw.toIntOrNull()
+        require(keepalive != null && keepalive in 0..MAX_KEEPALIVE_SECONDS) {
+            "profile-has-invalid-keepalive"
+        }
+    }
 }
 
-private const val MAX_KEEPALIVE_SECONDS = 25
+private const val MAX_KEEPALIVE_SECONDS = 65_535
