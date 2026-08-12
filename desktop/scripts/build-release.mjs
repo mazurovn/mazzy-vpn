@@ -23,13 +23,14 @@ const tauriCli = join(
 const remapHome = `--remap-path-prefix=${homedir()}=/build/home`;
 const rustflags = [process.env.RUSTFLAGS, remapHome].filter(Boolean).join(" ");
 const tauriArgs = [tauriCli, "build"];
-// linuxdeploy is distributed as an AppImage.  On hosts with AppImageLauncher
-// its FUSE hand-off can block indefinitely; extraction makes the build
-// deterministic and does not alter the resulting bundle.
+if (process.platform === "linux") {
+  // Linux releases are DEB-only. Keep this explicit even if a local Tauri
+  // configuration is later widened for development experiments.
+  tauriArgs.push("--bundles", "deb");
+}
 const buildEnv = {
   ...process.env,
   RUSTFLAGS: rustflags,
-  APPIMAGE_EXTRACT_AND_RUN: process.env.APPIMAGE_EXTRACT_AND_RUN ?? "1",
 };
 const lockPath = join(tmpdir(), "mazzy-vpn-desktop-release.lock");
 let lockFd;
@@ -103,8 +104,7 @@ try {
     env: buildEnv,
     shell: false,
     stdio: "inherit",
-    // Keep a broken AppImage/linuxdeploy toolchain from leaving CI hanging
-    // forever.  The timeout is configurable for slower release runners.
+    // Bound all release builds so a broken packager cannot leave CI hanging.
     timeout: Number(process.env.MAZZY_RELEASE_TIMEOUT_MS ?? 600_000),
     killSignal: "SIGTERM",
   });
@@ -119,7 +119,7 @@ try {
 
 if (result.error) {
   if (result.error.code === "ETIMEDOUT") {
-    console.error("Tauri release build timed out; AppImage toolchain did not finish");
+    console.error("Tauri DEB release build timed out");
   }
   console.error(result.error.message);
   process.exit(1);

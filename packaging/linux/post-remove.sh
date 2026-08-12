@@ -25,6 +25,28 @@ restore_legacy_cli() {
     rmdir "$backup_dir" 2>/dev/null || true
 }
 
+restore_legacy_systemd() {
+    root="$1"
+    migration_root="$root/var/lib/vpnctl/package-migration/systemd"
+    [ -d "$migration_root" ] || return 0
+    find "$migration_root" -type f -name '*.pre-package' -print |
+    while IFS= read -r backup; do
+        relative="${backup#"$migration_root/"}"
+        relative="${relative%.pre-package}"
+        current="$root/etc/systemd/system/$relative"
+        checksum="$migration_root/$relative.package-sha256"
+        expected="$(cat "$checksum" 2>/dev/null || true)"
+        actual="$(sha256sum "$current" 2>/dev/null | awk '{print $1}')"
+        if [ -n "$expected" ] && [ "$actual" = "$expected" ]; then
+            install -D -m 0644 "$backup" "$current"
+            rm -f "$backup" "$checksum"
+        else
+            printf '%s\n' "Mazzy VPN: $current changed after installation; legacy backup retained at $backup" >&2
+        fi
+    done
+    find "$migration_root" -depth -type d -empty -delete 2>/dev/null || true
+}
+
 if [ "${1:-}" = --test-restore ]; then
     test_root="${2:-}"
     case "$test_root" in
@@ -33,6 +55,7 @@ if [ "${1:-}" = --test-restore ]; then
         *) exit 2 ;;
     esac
     restore_legacy_cli "$test_root"
+    restore_legacy_systemd "$test_root"
     exit
 fi
 
@@ -42,6 +65,7 @@ case "${1:-}" in
 esac
 
 restore_legacy_cli /
+restore_legacy_systemd /
 
 if [ -d /run/systemd/system ]; then
     systemctl daemon-reload

@@ -7,12 +7,14 @@ DefaultDependencies=no
 Requires=local-fs.target
 After=local-fs.target
 Conflicts=shutdown.target
-Before=shutdown.target vpnctl-test-recovery.service vpnctl.service vpnctl-health.service mazzy-vpn-api.socket
+Before=shutdown.target
+StartLimitIntervalSec=300
+StartLimitBurst=2
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/local/bin/mazzy-vpn _api-recover-interrupted-actions
+ExecStart=/usr/local/lib/mazzy-vpn/mazzy-vpn _api-recover-interrupted-actions
 User=root
 Group=root
 UMask=0077

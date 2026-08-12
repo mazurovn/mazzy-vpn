@@ -15,14 +15,14 @@ L2TP/IPsec, безопасно импортирует профили, измер
 профили своего VPN-провайдера или организации; учётная запись Mazzy VPN и
 телеметрия не требуются.
 
-Текущая release-source линия — [CLI/TUI 1.4.6](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.6)
-и [Desktop 0.4.7 preview](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.7).
+Текущая release-source линия — [CLI/TUI 1.4.7](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.7)
+и [Desktop 0.4.8 DEB](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.8).
 Версия опубликована только тогда, когда существуют её tag и GitHub Release page.
 Linux Desktop содержит и сам запускает совместимый engine: отдельно
 устанавливать или предварительно запускать CLI не требуется. Уже установленный
-CLI остаётся совместимым. Windows и macOS artifacts
-остаются UI preview без native VPN backend и OS code signing. Installable
-updater artifacts имеют Tauri-подпись и всегда требуют consent. Issue #31 закрыт проверенным
+CLI остаётся совместимым. Windows, macOS, Android, AppImage и RPM artifacts
+не публикуются в этой DEB-only release line. Обновление package-managed
+Desktop выполняется через APT/dpkg. Issue #31 закрыт проверенным
 upstream backport `glib`, точной проверкой source provenance и чистыми
 default-branch результатами RustSec, Dependabot и CodeQL.
 
@@ -54,11 +54,50 @@ ShadowTLS ещё не готовы. Подключение всех девяти
 
 ## Установка
 
+Рекомендуемая Linux-установка — DEB. AppImage не требуется:
+
+```bash
+sudo apt install ./Mazzy\ VPN\ Desktop_0.4.8_amd64.deb
+mazzy-vpn-desktop
+```
+
+Desktop запускает установленный движок и local API самостоятельно. Не нужно
+предварительно запускать `mazzy-vpn`, `mazzy-agentd` или systemd-команды.
+`mazzy-agentd` — отдельный opt-in transport для внешних агентов, а не условие
+работы Desktop или VPN.
+
+CLI также полностью самостоятельный:
+
+```bash
+mazzy-vpn                 # интерактивное меню
+mazzy-vpn quick           # сохранённый профиль
+mazzy-vpn status --api-json
+```
+
+После перезагрузки сначала используйте только read-only проверку:
+
+```bash
+systemctl is-active mazzy-vpn-api-recovery.service mazzy-vpn-api.socket vpnctl-health.timer
+systemctl list-timers vpnctl-health.timer --no-pager
+mazzy-vpn status --api-json
+mazzy-vpn profiles --api-json
+sudo mazzy-vpn doctor
+```
+
+Нормальный результат: recovery, socket и timer имеют `active`, timer имеет
+`NEXT`, а profiles возвращает непустой список. Если автоподключение было
+включено заранее, дополнительно `vpnctl.service` активен, а status сообщает
+`connected`, `healthy: true`, `desired: up`. На чистой установке VPN намеренно
+остаётся выключенным до первого выбора пользователя. Не запускайте
+автоматически `doctor --fix` и не очищайте recovery
+markers: сначала сохраните `systemctl status` и `journalctl -b` для анализа.
+
+Установка из исходников нужна только разработчикам:
+
 ```bash
 git clone https://github.com/mazurovn/mazzy-vpn.git
 cd mazzy-vpn
 sudo ./install.sh
-sudo mazzy-vpn doctor --fix
 mazzy-vpn
 ```
 
@@ -190,9 +229,9 @@ ping серверов, emergency recovery, doctor, автозапуск и жу�
 ![Mazzy VPN Desktop Dashboard на русском](docs/images/dashboard-ru.png)
 
 Tauri Desktop 0.4 для Linux содержит экраны Dashboard, Profiles, Diagnostics,
-Settings и «О программе», а также системный tray. DEB/RPM устанавливают
-совместимый engine, systemd units и базовые runtime-зависимости через package
-manager; AppImage сохраняет явно разрешённый embedded installer. Клиент
+Settings и «О программе», а также системный tray. DEB устанавливает
+самодостаточный внутренний engine, systemd units и базовые runtime-зависимости
+через package manager. Клиент
 проверяет версии и зависимости и после разрешения может исправить недостающие
 поддерживаемые protocol packages. Доступны импорт файлов и
 папок, поиск и выбор профиля, сортировка всего списка по ping, выбор самой
@@ -200,9 +239,10 @@ manager; AppImage сохраняет явно разрешённый embedded in
 транзакционные тесты, кликабельные события, Doctor с исправлениями, self-test,
 ограниченный журнал, расширенный tray, autostart и
 управление recovery monitor. Предварительно устанавливать CLI вручную не нужно.
-Linux-пакеты выпускаются как AppImage, DEB и RPM.
+Поддерживаемый Linux-релиз выпускается только как DEB. AppImage и RPM не входят
+в release gate и не публикуются.
 
-Upgrade и remove DEB/RPM намеренно сохраняют профили `/etc/vpnctl` и state
+Upgrade и remove DEB намеренно сохраняют профили `/etc/vpnctl` и state
 `/var/lib/vpnctl`. В release source preview 0.4 сохранено исправление issue #31 с точным
 upstream backport `glib` с проверкой checksum и всей source delta до cargo-deny;
 advisory ignore list остаётся пустым. До production также нужны clean-device

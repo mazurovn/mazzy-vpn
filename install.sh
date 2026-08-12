@@ -94,6 +94,25 @@ run() {
     fi
 }
 
+start_opted_in_engine() {
+    if ((DRY_RUN)); then
+        run systemctl start vpnctl.service
+        return 0
+    fi
+    if systemctl start vpnctl.service; then
+        return 0
+    fi
+    local status
+    status="$(systemctl show vpnctl.service -p ExecMainStatus --value 2>/dev/null || true)"
+    case "$status" in
+        75|77)
+            echo "Mazzy VPN: запуск отложен recovery gate (status $status)" >&2
+            return 0
+            ;;
+    esac
+    return 1
+}
+
 normalize_install_language() {
     local language="${1:-}"
     language="${language,,}"
@@ -163,6 +182,10 @@ write_installed_language() {
 
 validate_source_tree() {
     local required
+    # Package-owned `doctor --fix` invokes this installer only to repair OS
+    # dependencies. Packaged executables live in /usr/bin and are intentionally
+    # not duplicated beside /usr/lib/mazzy-vpn/install.sh.
+    ((DEPS_ONLY == 0)) || return 0
     for required in mazzy-vpn mazzy-agentd install.sh LICENSE AUTHORS.md CHANGELOG.md SECURITY.md \
         PRIVACY.md \
         README.md README.ru.md README.en.md README.de.md README.zh.md \
@@ -290,7 +313,7 @@ import_config_source() {
 }
 
 post_install_checks() {
-    local bin="/usr/local/bin/mazzy-vpn" failed=0
+    local bin="/usr/local/lib/mazzy-vpn/mazzy-vpn" failed=0
     ((SKIP_CHECKS)) && {
         echo "Post-install проверки пропущены (--skip-checks)."
         return 0
@@ -674,7 +697,8 @@ install_files() {
         "$config_dir/amneziawg" "$config_dir/wireguard" \
         "$config_dir/openvpn" "$config_dir/l2tp"
     write_installed_language "$DESTDIR/etc/vpnctl/locale"
-    run install -m 755 "$SCRIPT_DIR/mazzy-vpn" "$bin_dir/mazzy-vpn"
+    run install -m 755 "$SCRIPT_DIR/mazzy-vpn" "$lib_dir/mazzy-vpn"
+    run ln -sfn ../lib/mazzy-vpn/mazzy-vpn "$bin_dir/mazzy-vpn"
     run install -m 755 "$SCRIPT_DIR/mazzy-agentd" "$bin_dir/mazzy-agentd"
     run ln -sfn mazzy-vpn "$bin_dir/vpnctl"
     run ln -sfn mazzy-vpn "$bin_dir/mazzyvpn"
@@ -875,6 +899,8 @@ if [[ -z "$DESTDIR" && $DEPS_ONLY -eq 0 ]]; then
     run systemd-tmpfiles --create /usr/lib/tmpfiles.d/mazzy-vpn.conf
     run systemctl daemon-reload
     run systemctl enable mazzy-vpn-api-recovery.service
+    run systemctl reset-failed mazzy-vpn-api-recovery.service
+    run systemctl restart mazzy-vpn-api-recovery.service
     run systemctl enable --now mazzy-vpn-api.socket
     run systemctl enable vpnctl-test-recovery.service
     run systemctl enable --now vpnctl-health.timer
@@ -882,10 +908,10 @@ if [[ -z "$DESTDIR" && $DEPS_ONLY -eq 0 ]]; then
     # enabling the VPN service on a fresh install.
     if systemctl is-enabled --quiet vpnctl.service; then
         run systemctl enable vpnctl.service
-        run systemctl start vpnctl.service
+        start_opted_in_engine
     fi
     run systemctl restart vpnctl-health.timer
-    run /usr/local/bin/mazzy-vpn _refresh-dashboard-cache
+    run /usr/local/lib/mazzy-vpn/mazzy-vpn _refresh-dashboard-cache
     grant_desktop_runtime_access ||
         echo "Не удалось выдать текущему Desktop-сеансу ACL local API; потребуется повторный вход." >&2
     if ((DRY_RUN)); then

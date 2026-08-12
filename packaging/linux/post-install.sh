@@ -3,6 +3,20 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 set -eu
 
+start_opted_in_engine() {
+    if systemctl start vpnctl.service; then
+        return 0
+    fi
+    status="$(systemctl show vpnctl.service -p ExecMainStatus --value 2>/dev/null || true)"
+    case "$status" in
+        75|77)
+            printf '%s\n' "Mazzy VPN: engine start deferred by recovery gate (status $status)" >&2
+            return 0
+            ;;
+    esac
+    return 1
+}
+
 migrate_legacy_cli() {
     root="$1"
     legacy_dir="$root/usr/local/bin"
@@ -177,11 +191,47 @@ activate_services() {
         return 0
     fi
 
+    migration_root=/var/lib/vpnctl/package-migration/systemd
+    # Older source installs placed Mazzy-owned units in /etc, which has higher
+    # systemd precedence than the DEB payload. Keep only those exact project
+    # paths synchronized so an upgrade cannot boot an obsolete dependency
+    # graph while /usr/lib contains the fixed units.
+    for relative in \
+        vpnctl.service \
+        vpnctl-health.service \
+        vpnctl-test-recovery.service \
+        mazzy-vpn-api.socket \
+        mazzy-vpn-api@.service \
+        mazzy-vpn-api-recovery.service \
+        vpnctl.service.d/10-package-exec.conf \
+        vpnctl-health.service.d/10-package-exec.conf \
+        vpnctl-test-recovery.service.d/10-package-exec.conf \
+        mazzy-vpn-api.socket.d/10-package-docs.conf \
+        mazzy-vpn-api@.service.d/10-package-exec.conf \
+        mazzy-vpn-api-recovery.service.d/10-package-exec.conf; do
+        if [ -e "/etc/systemd/system/$relative" ]; then
+            backup="$migration_root/$relative.pre-package"
+            checksum="$migration_root/$relative.package-sha256"
+            if [ ! -e "$backup" ]; then
+                install -D -m 0600 "/etc/systemd/system/$relative" "$backup"
+            fi
+            install -D -m 0644 "/usr/lib/systemd/system/$relative" \
+                "/etc/systemd/system/$relative"
+            install -d -m 0700 "$(dirname "$checksum")"
+            sha256sum "/usr/lib/systemd/system/$relative" | awk '{print $1}' >"$checksum"
+            chmod 0600 "$checksum"
+        fi
+    done
+
     systemctl daemon-reload
     systemctl enable mazzy-vpn-api-recovery.service
     systemctl enable mazzy-vpn-api.socket
     systemctl enable vpnctl-test-recovery.service
     systemctl enable vpnctl-health.timer
+    # RemainAfterExit may still describe the previous package's recovery pass.
+    # Re-run the newly installed coordinator before any opted-in managed VPN.
+    systemctl reset-failed mazzy-vpn-api-recovery.service 2>/dev/null || true
+    systemctl restart mazzy-vpn-api-recovery.service
     systemctl restart mazzy-vpn-api.socket
     systemctl restart vpnctl-health.timer
 
@@ -189,29 +239,32 @@ activate_services() {
     # enabling the VPN service on a fresh install.
     if systemctl is-enabled --quiet vpnctl.service; then
         systemctl enable vpnctl.service
-        systemctl start vpnctl.service
+        start_opted_in_engine
     fi
 
-    /usr/bin/mazzy-vpn _refresh-dashboard-cache
+    /usr/lib/mazzy-vpn/mazzy-vpn _refresh-dashboard-cache
 }
 
 verify_payload() {
+    test -x /usr/lib/mazzy-vpn/mazzy-vpn
+    test -x /usr/bin/mazzy-vpn
+    cmp -s /usr/lib/mazzy-vpn/mazzy-vpn /usr/bin/mazzy-vpn
     test -x /usr/bin/mazzy-agentd
     test -x /usr/lib/mazzy-vpn/runtime/mazzy-sing-box-adapter
     test -r /usr/lib/mazzy-vpn/protocols/v1/managed-profile.schema.json
     test -r /usr/lib/mazzy-vpn/runtime/v1/adapter-registry.json
-    /usr/bin/mazzy-vpn version
-    /usr/bin/mazzy-vpn api-info --json |
+    /usr/lib/mazzy-vpn/mazzy-vpn version
+    /usr/lib/mazzy-vpn/mazzy-vpn api-info --json |
         cmp -s - /usr/lib/mazzy-vpn/api/v1/manifest.json
-    /usr/bin/mazzy-vpn protocols list --json |
+    /usr/lib/mazzy-vpn/mazzy-vpn protocols list --json |
         cmp -s - /usr/lib/mazzy-vpn/protocols/v1/registry.json
-    /usr/bin/mazzy-vpn protocols adapters --json |
+    /usr/lib/mazzy-vpn/mazzy-vpn protocols adapters --json |
         cmp -s - /usr/lib/mazzy-vpn/runtime/v1/adapter-registry.json
-    /usr/bin/mazzy-vpn agent-transports list --json |
+    /usr/lib/mazzy-vpn/mazzy-vpn agent-transports list --json |
         cmp -s - /usr/lib/mazzy-vpn/agent-control/v1/registry.json
     /usr/bin/mazzy-agentd --version | grep -Eq '^mazzy-agentd [0-9]+\.[0-9]+\.[0-9]+$'
     printf '%s\n' '{"api_version":"1.0","request_id":"request-package-capabilities","operation":"api.capabilities","deadline_ms":1000,"payload":{}}' |
-        /usr/bin/mazzy-vpn _api-dispatch |
+        /usr/lib/mazzy-vpn/mazzy-vpn _api-dispatch |
         jq -e '
             .status == "ok"
             and ([

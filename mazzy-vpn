@@ -6,7 +6,7 @@ set -uo pipefail
 PRODUCT_NAME="Mazzy VPN"
 CLI_COMMAND="mazzy-vpn"
 COMPAT_COMMAND="vpnctl"
-VERSION="1.4.6"
+VERSION="1.4.7"
 
 SELF="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd -- "$(dirname -- "$SELF")" && pwd)"
@@ -31,6 +31,7 @@ API_CACHE_REFRESH_TIMEOUT_SECONDS="${VPNCTL_API_CACHE_REFRESH_TIMEOUT_SECONDS:-1
 API_RECOVERY_LOCK_WAIT_SECONDS="${VPNCTL_API_RECOVERY_LOCK_WAIT_SECONDS:-30}"
 RUN_DIR="${VPNCTL_RUN_DIR:-/run/vpnctl}"
 MUTATION_LOCK_FILE="$RUN_DIR/.mutation.lock"
+BOOT_RECOVERY_STATE="$RUN_DIR/api-recovery.state"
 SERVICE_NAME="${VPNCTL_SERVICE_NAME:-vpnctl.service}"
 HEALTH_TIMER="${VPNCTL_HEALTH_TIMER:-vpnctl-health.timer}"
 TEST_RECOVERY_SERVICE="${VPNCTL_TEST_RECOVERY_SERVICE:-vpnctl-test-recovery.service}"
@@ -3058,10 +3059,106 @@ transition_guard_hold() {
 }
 
 transition_guard_release() {
+    # Kernel enforcement is the source of truth.  Never erase the durable
+    # recovery evidence before the guard is actually gone: an nft failure
+    # must remain diagnosable and must keep all later mutations blocked.
+    command -v nft >/dev/null 2>&1 || return 1
+    transition_guard_remove || return 1
+    transition_guard_installed && return 1
     rm -f -- "$TRANSITION_FALLBACK_RULES" || return 1
     sync -f "$STATE_DIR" || return 1
-    transition_clear_recovery_marker || return 1
-    transition_guard_remove
+    transition_clear_recovery_marker
+}
+
+# Every direct mutation must pass the same durable recovery gate as the local
+# API.  In particular, never install a fresh transition guard (which clears a
+# transition marker) or stop an external fallback while an older transition
+# still requires reconciliation.
+mutation_recovery_gate() {
+    local operation="${1:-mutation}"
+    boot_recovery_mutation_gate "$operation" || return 1
+    if [[ -e "$API_RECOVERY_MARKER" ]]; then
+        error "$operation заблокирован: незавершённый API rollback требует проверки"
+        error "Сначала выполните: sudo $CLI_COMMAND _api-clear-recovery --acknowledge-current-state"
+        return 1
+    fi
+    if [[ -e "$TRANSITION_RECOVERY_MARKER" ]]; then
+        error "$operation заблокирован: предыдущий сетевой переход не восстановлен"
+        error "Резервный VPN и сетевое состояние не будут изменены"
+        return 1
+    fi
+    if [[ -e "$TEST_TRANSACTION" ]]; then
+        error "$operation заблокирован: найден незавершённый тестовый переход"
+        error "Сначала выполните: sudo $CLI_COMMAND _recover-stale-test"
+        return 1
+    fi
+}
+
+# systemd provides only best-effort ordering. Safety remains inside the engine:
+# on a real boot every privileged mutation waits for the recovery pass to
+# publish an atomic, boot-scoped `ready` state. A failed/missing pass cannot
+# race ahead merely because its oneshot is a soft dependency. Test sandboxes
+# use a private RUN_DIR and keep exercising marker semantics independently.
+boot_recovery_state_required() {
+    [[ "$RUN_DIR" == /run/vpnctl &&
+       "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" != 1 ]]
+}
+
+boot_recovery_state_write() {
+    local state="$1" tmp old_umask rc=0
+    case "$state" in
+        running|test-recovery|awaiting-egress|awaiting-cleanup|ready|recovery-only) ;;
+        *) return 1 ;;
+    esac
+    mkdir -p -- "$RUN_DIR" || return 1
+    chmod 700 -- "$RUN_DIR" || return 1
+    old_umask="$(umask)" || return 1
+    umask 077
+    tmp="$(mktemp "$RUN_DIR/.api-recovery-state.XXXXXX")" || rc=1
+    ((rc != 0)) || printf '%s\n' "$state" >"$tmp" || rc=1
+    ((rc != 0)) || chmod 600 -- "$tmp" || rc=1
+    ((rc != 0)) || mv -f -- "$tmp" "$BOOT_RECOVERY_STATE" || rc=1
+    ((rc != 0)) || sync -f "$BOOT_RECOVERY_STATE" || rc=1
+    ((rc != 0)) || sync -f "$RUN_DIR" || rc=1
+    if ((rc != 0)) && [[ -n "${tmp:-}" && -e "$tmp" ]]; then
+        rm -f -- "$tmp" || true
+    fi
+    umask "$old_umask" || return 1
+    return "$rc"
+}
+
+boot_recovery_mutation_gate() {
+    local operation="${1:-mutation}" state=""
+    boot_recovery_state_required || return 0
+    if [[ -f "$BOOT_RECOVERY_STATE" && ! -L "$BOOT_RECOVERY_STATE" ]]; then
+        read -r state <"$BOOT_RECOVERY_STATE" || state=""
+    fi
+    [[ "$state" == ready ]] && return 0
+    error "$operation заблокирован: boot recovery ещё не подтвердил безопасное состояние"
+    error "Статус и профили доступны; сетевые изменения отложены"
+    return 1
+}
+
+boot_recovery_service_exit_code() {
+    local state=""
+    if [[ -f "$BOOT_RECOVERY_STATE" && ! -L "$BOOT_RECOVERY_STATE" ]]; then
+        read -r state <"$BOOT_RECOVERY_STATE" || state=""
+    fi
+    case "$state" in
+        running|test-recovery) printf '75\n' ;;
+        awaiting-egress|awaiting-cleanup) printf '0\n' ;;
+        recovery-only) printf '77\n' ;;
+        *) printf '77\n' ;;
+    esac
+}
+
+boot_recovery_service_gate() {
+    local state=""
+    boot_recovery_state_required || return 0
+    if [[ -f "$BOOT_RECOVERY_STATE" && ! -L "$BOOT_RECOVERY_STATE" ]]; then
+        read -r state <"$BOOT_RECOVERY_STATE" || state=""
+    fi
+    [[ "$state" == ready || "$state" == awaiting-egress || "$state" == awaiting-cleanup ]]
 }
 
 transition_resolve_host() {
@@ -3298,7 +3395,9 @@ transition_guard_install() {
     else
         printf '%s' "$definition" | nft -f - >/dev/null || return 1
     fi
-    transition_clear_recovery_marker
+    # Marker ownership belongs to the transaction coordinator.  Installing a
+    # guard must never silently acknowledge an older recovery incident.
+    return 0
 }
 
 transition_readiness_probe_family() {
@@ -4234,11 +4333,14 @@ transition_wait_external_ready() {
     deadline=$((SECONDS + TRANSITION_READY_TIMEOUT))
     while ((SECONDS < deadline)); do
         interface="$preferred_interface"
-        [[ -n "$interface" ]] || interface="$(transition_external_interface "$fallback")"
+        if [[ -z "$interface" ]] || ! ip link show "$interface" >/dev/null 2>&1; then
+            interface="$(transition_external_interface "$fallback" 2>/dev/null || true)"
+        fi
         if [[ -n "$interface" ]] && ip link show "$interface" >/dev/null 2>&1 &&
            transition_readiness_probe "$interface" 3; then
             return 0
         fi
+        preferred_interface=""
         sleep 1
     done
     return 1
@@ -4247,7 +4349,10 @@ transition_wait_external_ready() {
 transition_restore_previous() {
     local previous_active="$1" previous_protocol="$2" previous_profile="$3"
     local previous_state_backup="$4" fallback="$5" fallback_interface="$6"
-    stop_service_bounded 15 || true
+    if ! stop_service_bounded 15; then
+        transition_guard_hold managed-service-stop-failed
+        return 1
+    fi
     cleanup_stale_quick_policy
     if [[ -n "$previous_state_backup" && -r "$previous_state_backup" ]]; then
         install -m 600 -- "$previous_state_backup" "$STATE_FILE" || {
@@ -4336,6 +4441,7 @@ cmd_connect() (
     require_root connect "$protocol" "$(basename -- "$SELECTED_PROFILE")"
     systemd_available || die "systemd недоступен; выполните установку на системе с systemd"
     acquire_action_lock
+    mutation_recovery_gate connect || return 1
 
     info "Выбран $(protocol_title "$protocol"): $(profile_name "$SELECTED_PROFILE")"
     cancel_test_guard
@@ -4349,7 +4455,8 @@ cmd_connect() (
             die "Не удалось сохранить предыдущее состояние"
     fi
     service_active && previous_active=1
-    fallback="$(detect_external_fallback || true)"
+    fallback="$(detect_external_fallback)" ||
+        die "Переключение отменено до изменения внешних VPN"
     fallback_interface="$(transition_external_interface "$fallback")"
     transition_guard_install "$protocol" "$SELECTED_PROFILE" "$fallback" \
         "$previous_protocol" "$previous_profile" ||
@@ -4358,7 +4465,7 @@ cmd_connect() (
     systemctl_quiet stop "$SERVICE_NAME" || true
     if [[ -n "$fallback" ]]; then
         info "Временно останавливаем внешний VPN: $(external_fallback_title "$fallback")"
-        if ! stop_external_fallbacks; then
+        if ! stop_external_fallbacks "$fallback"; then
             error "Не удалось безопасно остановить внешний VPN"
             if transition_restore_previous "$previous_active" "$previous_protocol" \
                 "$previous_profile" "$previous_state_backup" "$fallback" \
@@ -4401,7 +4508,11 @@ cmd_connect() (
 )
 
 cmd_disconnect() (
-    if api_client_ready; then
+    # Recovery-only API correctly rejects mutations.  Disconnect is also the
+    # explicit administrator recovery action for a transition marker, so it
+    # must use the local root path in that one state instead of recursing into
+    # the blocked API mutation endpoint.
+    if [[ ! -e "$TRANSITION_RECOVERY_MARKER" ]] && api_client_ready; then
         api_client_cmd_disconnect "$@"
         return
     fi
@@ -4426,82 +4537,20 @@ cmd_disconnect() (
 )
 
 cmd_reconnect() (
-    local fallback="" transition_guard_active=0 previous_active=0
-    local previous_protocol="" previous_profile="" previous_state_backup=""
-    local fallback_interface=""
-    # shellcheck disable=SC2317,SC2329  # invoked by the EXIT trap below
-    cleanup_reconnect_transition_guard() {
-        if ((transition_guard_active)); then
-            transition_guard_hold interrupted-reconnect >/dev/null 2>&1 || true
-        fi
-        [[ -z "$previous_state_backup" ]] || rm -f -- "$previous_state_backup"
-    }
-    trap cleanup_reconnect_transition_guard EXIT
+    local protocol profile
     if api_client_ready; then
         api_client_cmd_reconnect "$@"
         return
     fi
-    require_root reconnect
-    acquire_action_lock
-    cancel_test_guard
-    discard_test_backup
+    require_profile_access reconnect "$@"
+    require_root reconnect "$@"
     selected_from_state || die "Сначала выберите профиль: $CLI_COMMAND connect"
-    previous_protocol="$SELECTED_PROTOCOL"
-    previous_profile="$SELECTED_PROFILE"
-    validate_profile "$SELECTED_PROTOCOL" "$SELECTED_PROFILE" 1 ||
-        die "Выбранный профиль не прошёл проверку"
-    mkdir -p -- "$RUN_DIR" || die "Не удалось открыть runtime directory"
-    chmod 700 -- "$RUN_DIR" || die "Не удалось защитить runtime directory"
-    if [[ -r "$STATE_FILE" ]]; then
-        previous_state_backup="$(mktemp "$RUN_DIR/.transition-state.XXXXXX")" ||
-            die "Не удалось сохранить предыдущее состояние"
-        install -m 600 -- "$STATE_FILE" "$previous_state_backup" ||
-            die "Не удалось сохранить предыдущее состояние"
-    fi
-    service_active && previous_active=1
-    fallback="$(detect_external_fallback || true)"
-    fallback_interface="$(transition_external_interface "$fallback")"
-    transition_guard_install "$SELECTED_PROTOCOL" "$SELECTED_PROFILE" "$fallback" \
-        "$previous_protocol" "$previous_profile" ||
-        die "Переподключение отменено: не удалось закрыть прямой выход в интернет"
-    transition_guard_active=1
-    if [[ -n "$fallback" ]]; then
-        info "Временно останавливаем внешний VPN: $(external_fallback_title "$fallback")"
-        if ! stop_external_fallbacks; then
-            if transition_restore_previous "$previous_active" "$previous_protocol" \
-                "$previous_profile" "$previous_state_backup" "$fallback" \
-                "$fallback_interface"; then
-                transition_guard_active=0
-            fi
-            die "Не удалось безопасно остановить внешний VPN"
-        fi
-    fi
-    stop_service_bounded 15 || true
-    cleanup_stale_quick_policy
-    write_state "$SELECTED_PROTOCOL" "$SELECTED_PROFILE" up ||
-        die "Не удалось обновить состояние"
-    health_reset
-    reset_service_start_limit
-    if ! systemctl start "$SERVICE_NAME"; then
-        if transition_restore_previous "$previous_active" "$previous_protocol" \
-            "$previous_profile" "$previous_state_backup" "$fallback" \
-            "$fallback_interface"; then
-            transition_guard_active=0
-        fi
-        die "Не удалось перезапустить $SERVICE_NAME"
-    fi
-    if ! wait_for_connection_ready "$SELECTED_PROTOCOL"; then
-        systemctl_quiet stop "$SERVICE_NAME" || true
-        if transition_restore_previous "$previous_active" "$previous_protocol" \
-            "$previous_profile" "$previous_state_backup" "$fallback" \
-            "$fallback_interface"; then
-            transition_guard_active=0
-        fi
-        die "VPN не подтвердил защищённый выход за ${TRANSITION_READY_TIMEOUT}s"
-    fi
-    transition_guard_release || die "Не удалось снять transition guard"
-    transition_guard_active=0
-    say "Переподключение запущено. Защищённый выход подтверждён."
+    protocol="$SELECTED_PROTOCOL"
+    profile="$(basename -- "$SELECTED_PROFILE")"
+    # Reconnect is the same state transition as connect-to-current. Keeping a
+    # second implementation previously made its preflight, rollback and
+    # fallback handling drift from connect.
+    cmd_connect "$protocol" "$profile"
 )
 
 cmd_quick_connect() {
@@ -5790,96 +5839,21 @@ quick_interfaces_active() {
 }
 
 cleanup_duplicate_quick_policy() {
-    local -a mark_entries=() mark_priorities=() duplicate_priorities=()
-    local -a suppress_priorities=()
-    local entry priority key index keep_count
-    local -A seen=()
-    mapfile -t mark_entries < <(
-        ip -4 rule show 2>/dev/null |
-            awk '
-                /not from all fwmark/ && /lookup 518[2-9][0-9]([[:space:]]|$)/ {
-                    priority=$1
-                    sub(/:$/, "", priority)
-                    mark=""
-                    table=""
-                    for (i=1; i<=NF; i++) {
-                        if ($i == "fwmark") mark=$(i + 1)
-                        if ($i == "lookup") table=$(i + 1)
-                    }
-                    if (priority ~ /^[0-9]+$/ && mark != "" && table != "")
-                        print priority, mark "/" table
-                }
-            '
-    )
-    ((${#mark_entries[@]} > 1)) || return 0
-    for entry in "${mark_entries[@]}"; do
-        read -r priority key <<<"$entry"
-        mark_priorities+=("$priority")
-        if [[ -n "${seen[$key]:-}" ]]; then
-            duplicate_priorities+=("$priority")
-        else
-            seen["$key"]="$priority"
-        fi
-    done
-    ((${#duplicate_priorities[@]} > 0)) || return 0
-    mapfile -t suppress_priorities < <(
-        ip -4 rule show 2>/dev/null |
-            awk '
-                /from all lookup main suppress_prefixlength 0/ {
-                    sub(/:$/, "", $1)
-                    if ($1 ~ /^[0-9]+$/) print $1
-                }
-            '
-    )
-    for priority in "${duplicate_priorities[@]}"; do
-        ip -4 rule delete priority "$priority" 2>/dev/null ||
-            warn "Не удалось удалить duplicate policy rule priority $priority"
-    done
-    if ((${#suppress_priorities[@]} == ${#mark_priorities[@]})); then
-        keep_count=$((${#suppress_priorities[@]} - ${#duplicate_priorities[@]}))
-        for ((index = keep_count; index < ${#suppress_priorities[@]}; index++)); do
-            priority="${suppress_priorities[$index]}"
-            ip -4 rule delete priority "$priority" 2>/dev/null ||
-                warn "Не удалось удалить duplicate suppress rule priority $priority"
-        done
-    fi
-    ip -4 route flush cache 2>/dev/null || true
-    info "Удалены дубли policy rules WireGuard/AmneziaWG"
+    # Global fwmark/table values are shared conventions, not Mazzy ownership
+    # evidence. Leave them untouched until exact created priorities are kept
+    # in the transition journal.
+    return 0
 }
 
 cleanup_stale_quick_policy() {
-    local -a mark_priorities=() suppress_priorities=()
-    local priority
     if quick_interfaces_active; then
         cleanup_duplicate_quick_policy
-        return 0
     fi
-    mapfile -t mark_priorities < <(
-        ip -4 rule show 2>/dev/null |
-            awk '
-                /not from all fwmark/ && /lookup 518[2-9][0-9]([[:space:]]|$)/ {
-                    sub(/:$/, "", $1)
-                    print $1
-                }
-            '
-    )
-    ((${#mark_priorities[@]} > 0)) || return 0
-    mapfile -t suppress_priorities < <(
-        ip -4 rule show 2>/dev/null |
-            awk '
-                /from all lookup main suppress_prefixlength 0/ {
-                    sub(/:$/, "", $1)
-                    print $1
-                }
-            '
-    )
-    for priority in "${mark_priorities[@]}" "${suppress_priorities[@]}"; do
-        [[ "$priority" =~ ^[0-9]+$ ]] || continue
-        ip -4 rule delete priority "$priority" 2>/dev/null ||
-            warn "Не удалось удалить orphan policy rule priority $priority"
-    done
-    ip -4 route flush cache 2>/dev/null || true
-    info "Удалены orphan policy rules от остановленных wg-quick туннелей"
+    # Numeric marks/tables are shared conventions, not proof of ownership.
+    # Never delete ownerless global policy rules: they may belong to AdGuard
+    # or another WireGuard client. Diagnostics can report them, but mutation
+    # requires an exact journaled Mazzy owner.
+    return 0
 }
 
 fallback_account() {
@@ -5915,16 +5889,21 @@ fallback_account() {
 }
 
 run_adguard_fallback() {
-    local limit="$1" entry uid home
+    local limit="$1" entry user uid gid home
+    local -a command=()
     shift
     [[ -x "$ADGUARD_FALLBACK_CLI" ]] || return 127
     entry="$(fallback_account)" || return 1
-    IFS=: read -r _ _ uid _ _ home _ <<<"$entry"
-    [[ "$uid" =~ ^[0-9]+$ && -d "$home" ]] || return 1
-    timeout "$limit" env HOME="$home" \
+    IFS=: read -r user _ uid gid _ home _ <<<"$entry"
+    [[ "$uid" =~ ^[0-9]+$ && "$gid" =~ ^[0-9]+$ && -d "$home" ]] || return 1
+    command=(env HOME="$home"
         XDG_RUNTIME_DIR="/run/user/$uid" \
         DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" \
-        "$ADGUARD_FALLBACK_CLI" "$@" 7>&- 8>&- 9>&-
+        "$ADGUARD_FALLBACK_CLI" "$@")
+    if ((EUID == 0 && uid != 0)); then
+        command=(setpriv --reuid="$uid" --regid="$gid" --init-groups "${command[@]}")
+    fi
+    timeout "$limit" "${command[@]}" 7>&- 8>&- 9>&-
 }
 
 adguard_fallback_pid_file() {
@@ -5940,17 +5919,53 @@ adguard_fallback_pid_file() {
 }
 
 adguard_fallback_process_pid() {
-    local pid_file pid command_line
+    local pid_file root_pid pid command_line depth=0 child
+    local entry expected_uid actual_uid pid_file_uid
+    local -a current=() next=()
+    entry="$(fallback_account)" || return 1
+    IFS=: read -r _ _ expected_uid _ _ _ _ <<<"$entry"
+    [[ "$expected_uid" =~ ^[0-9]+$ ]] || return 1
     pid_file="$(adguard_fallback_pid_file)" || return 1
     [[ -r "$pid_file" ]] || return 1
-    read -r pid <"$pid_file" || return 1
-    [[ "$pid" =~ ^[0-9]+$ && "$pid" -gt 1 && -r "/proc/$pid/cmdline" ]] ||
+    pid_file_uid="$(stat -c %u -- "$pid_file" 2>/dev/null || true)"
+    [[ "$pid_file_uid" == 0 || "$pid_file_uid" == "$expected_uid" ]] || return 1
+    read -r root_pid <"$pid_file" || return 1
+    [[ "$root_pid" =~ ^[0-9]+$ && "$root_pid" -gt 1 &&
+       -r "/proc/$root_pid/cmdline" ]] ||
         return 1
-    command_line="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null)" ||
-        return 1
-    [[ "$command_line" == *adguardvpn-cli* &&
-        "$command_line" == *" connect "* ]] || return 1
-    printf '%s\n' "$pid"
+    current=("$root_pid")
+    # Some AdGuard releases persist the trusted sudo wrapper PID while the
+    # actual sockets belong to its direct child. Walk only that verified
+    # process subtree, with a small depth/width bound; never use a global
+    # name-based process search that could select an unrelated command.
+    while ((depth < 4 && ${#current[@]} > 0)); do
+        next=()
+        for pid in "${current[@]}"; do
+            [[ "$pid" =~ ^[0-9]+$ && -r "/proc/$pid/cmdline" ]] || continue
+            actual_uid="$(stat -c %u -- "/proc/$pid" 2>/dev/null || true)"
+            command_line="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null)" ||
+                continue
+            if [[ "$command_line" == *adguardvpn-cli* &&
+                  "$command_line" == *" connect "* &&
+                  "$command_line" != *sudo.ws* ]]; then
+                if [[ "$actual_uid" == "$expected_uid" ||
+                      ( "$actual_uid" == 0 && "$pid_file_uid" == 0 ) ]]; then
+                    printf '%s\n' "$pid"
+                    return 0
+                fi
+            fi
+            if [[ -r "/proc/$pid/task/$pid/children" ]]; then
+                for child in $(<"/proc/$pid/task/$pid/children"); do
+                    [[ "$child" =~ ^[0-9]+$ ]] || continue
+                    ((${#next[@]} < 16)) || return 1
+                    next+=("$child")
+                done
+            fi
+        done
+        current=("${next[@]}")
+        depth=$((depth + 1))
+    done
+    return 1
 }
 
 terminate_adguard_fallback_process() {
@@ -5980,7 +5995,9 @@ detect_external_fallback() {
     legacy_fallback_active && legacy=1
     adguard_fallback_active && adguard=1
     if ((legacy && adguard)); then
-        warn "Одновременно активны $LEGACY_FALLBACK_INTERFACE и AdGuard VPN; rollback сохранит AdGuard"
+        error "Одновременно активны $LEGACY_FALLBACK_INTERFACE и AdGuard VPN"
+        error "Автоматический переход отменён: невозможно однозначно восстановить двух владельцев egress"
+        return 1
     fi
     if ((adguard)); then
         printf 'adguard\n'
@@ -6030,18 +6047,13 @@ stop_one_external_fallback() {
 }
 
 stop_external_fallbacks() {
-    local failed=0
-    if legacy_fallback_active; then
-        stop_one_external_fallback legacy || failed=1
-    fi
-    if adguard_fallback_active; then
-        stop_one_external_fallback adguard || failed=1
-    fi
-    ((failed == 0))
+    local captured_kind="${1:-}"
+    [[ "$captured_kind" == legacy || "$captured_kind" == adguard ]] || return 1
+    stop_one_external_fallback "$captured_kind"
 }
 
 start_external_fallback() {
-    local kind="$1" deadline
+    local kind="$1" deadline launch_rc=0
     deadline=$(($(date +%s) + FALLBACK_TIMEOUT))
     info "Восстанавливаем внешний VPN: $(external_fallback_title "$kind")"
     case "$kind" in
@@ -6059,9 +6071,13 @@ start_external_fallback() {
             ;;
         adguard)
             run_adguard_fallback "$FALLBACK_TIMEOUT" connect --no-progress -y ||
-                return 1
+                launch_rc=$?
             while ! adguard_fallback_active; do
-                (($(date +%s) < deadline)) || return 1
+                (($(date +%s) < deadline)) || {
+                    ((launch_rc == 0)) ||
+                        error "AdGuard launch exited with status $launch_rc and no tunnel became active"
+                    return 1
+                }
                 sleep 1
             done
             ;;
@@ -6088,7 +6104,8 @@ save_test_backup() {
             die "Не удалось сохранить предыдущее состояние"
         : >"$TEST_BACKUP_EXISTS"
     fi
-    fallback="$(detect_external_fallback || true)"
+    fallback="$(detect_external_fallback)" ||
+        die "Тест отменён до изменения внешних VPN"
     if [[ -n "$fallback" ]]; then
         printf '%s\n' "$fallback" >"$TEST_BACKUP_FALLBACK"
         if service_active; then
@@ -6129,10 +6146,16 @@ arm_test_guard() {
 }
 
 restore_test_backup() {
-    local reason="${1:-rollback}" had_previous=0 was_active=0 token fallback=""
+    local reason="${1:-rollback}" context="${2:-interactive}"
+    local had_previous=0 was_active=0 token fallback=""
     local fallback_interface="" previous_protocol="" previous_profile=""
     local current_protocol="" current_profile=""
     [[ -e "$TEST_TRANSACTION" ]] || return 0
+    if [[ -e "$TRANSITION_RECOVERY_MARKER" && "$context" != boot ]]; then
+        transition_guard_restore_fail_closed || true
+        error "TEST rollback остановлен: предыдущий transition требует ручной проверки"
+        return 1
+    fi
     [[ -e "$TEST_BACKUP_EXISTS" && -r "$TEST_BACKUP" ]] && had_previous=1
     [[ -e "$TEST_BACKUP_ACTIVE" ]] && was_active=1
     if [[ -r "$TEST_BACKUP_FALLBACK" ]]; then
@@ -6157,7 +6180,10 @@ restore_test_backup() {
     token="$(state_get TEST_TOKEN 2>/dev/null || true)"
 
     warn "TEST rollback: $reason"
-    if ! transition_guard_installed; then
+    # At boot API recovery may have restored a loopback-only emergency guard.
+    # Re-render the transaction-specific endpoint allowlist before starting
+    # the previous owner; table existence alone is not sufficient readiness.
+    if [[ "$context" == boot ]] || ! transition_guard_installed; then
         transition_guard_install "$current_protocol" "$current_profile" "$fallback" \
             "$previous_protocol" "$previous_profile" || {
             transition_guard_hold test-rollback-guard-unavailable
@@ -6189,8 +6215,23 @@ restore_test_backup() {
 
     if ((was_active)); then
         reset_service_start_limit
-        if timeout 20 systemctl start "$SERVICE_NAME" &&
-           wait_for_connection_ready "$previous_protocol"; then
+        if [[ "$context" == boot ]]; then
+            # vpnctl-test-recovery.service is ordered before vpnctl.service.
+            # Queue the restored service, retain the fail-closed guard, and
+            # let the health pass release it only after protected egress is
+            # independently observed. Waiting here would deadlock the jobs.
+            transition_clear_recovery_marker || {
+                transition_guard_hold test-marker-clear-failed || true
+                return 1
+            }
+            systemctl start --no-block "$SERVICE_NAME" || {
+                transition_guard_hold test-managed-restore-enqueue-failed
+                return 1
+            }
+            info "Предыдущее VPN-соединение подготовлено к запуску после boot recovery"
+            return 0
+        elif timeout 20 systemctl start "$SERVICE_NAME" &&
+             wait_for_connection_ready "$previous_protocol"; then
             transition_guard_release || return 1
             info "Предыдущее VPN-соединение восстановлено и проверено"
         else
@@ -6217,14 +6258,26 @@ recover_stale_test_state() {
     ((EUID == 0)) || [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]] ||
         die "_recover-stale-test требует root"
     [[ -e "$TEST_TRANSACTION" ]] || return 0
-    acquire_recovery_lock 30 ||
+    boot_recovery_state_write test-recovery ||
+        die "BOOT RECOVERY: не удалось опубликовать состояние test-recovery"
+    if ! acquire_recovery_lock 30; then
+        transition_guard_restore_fail_closed || true
+        transition_guard_hold test-recovery-lock-unavailable || true
         die "BOOT RECOVERY: не удалось получить блокировку восстановления"
+    fi
     [[ ! -e "$API_RECOVERY_MARKER" ]] ||
         die "BOOT RECOVERY: заблокировано до ручной проверки API rollback"
 
     warn "BOOT RECOVERY: найден незавершённый тестовый туннель"
-    restore_test_backup "boot recovery после незавершённого теста" ||
+    restore_test_backup "boot recovery после незавершённого теста" boot ||
         die "BOOT RECOVERY: предыдущее VPN-состояние не восстановлено"
+    if [[ -e "$TEST_TRANSACTION" ]]; then
+        boot_recovery_state_write awaiting-egress ||
+            die "BOOT RECOVERY: не удалось опубликовать ожидание проверки egress"
+    else
+        boot_recovery_state_write ready ||
+            die "BOOT RECOVERY: не удалось опубликовать готовое состояние"
+    fi
     info "BOOT RECOVERY: предыдущее состояние восстановлено"
 }
 
@@ -6271,7 +6324,7 @@ start_test_attempt() {
     stop_service_bounded 15 || true
     if [[ -n "$fallback" ]]; then
         info "TEST: останавливаем внешний VPN без потери rollback: $(external_fallback_title "$fallback")"
-        stop_external_fallbacks || return 1
+        stop_external_fallbacks "$fallback" || return 1
     fi
     cleanup_stale_quick_policy
     rm -f "$TEST_FAILURE_MARKER"
@@ -6439,10 +6492,14 @@ cmd_test() (
     validate_permissions "$SELECTED_PROFILE" ||
         die "Небезопасный владелец/права профиля или каталога; запустите $CLI_COMMAND doctor --fix"
     acquire_action_lock
+    if [[ -e "$API_RECOVERY_MARKER" || -e "$TRANSITION_RECOVERY_MARKER" ]]; then
+        mutation_recovery_gate test || return 1
+    fi
     if [[ "$(state_get MODE 2>/dev/null || true)" == "test" ]]; then
         restore_test_backup "очистка незавершённого предыдущего теста" ||
             die "Не удалось восстановить предыдущий VPN; новый тест отменён"
     fi
+    mutation_recovery_gate test || return 1
     save_test_backup || die "Не удалось подготовить безопасный VPN rollback"
 
     local tested_profile="$SELECTED_PROFILE"
@@ -6653,9 +6710,13 @@ cmd_emergency() (
     ((total > 0)) || die "Нет безопасных профилей для emergency recovery"
 
     acquire_action_lock
+    if [[ -e "$API_RECOVERY_MARKER" || -e "$TRANSITION_RECOVERY_MARKER" ]]; then
+        mutation_recovery_gate emergency || return 1
+    fi
     if [[ "$(state_get MODE 2>/dev/null || true)" == "test" ]]; then
         restore_test_backup "очистка незавершённого теста" || true
     fi
+    mutation_recovery_gate emergency || return 1
     save_test_backup || die "Не удалось подготовить безопасный VPN rollback"
 
     local transaction_active=1
@@ -6723,7 +6784,10 @@ cmd_status() {
         return
     fi
     require_profile_access status "$@"
-    fallback="$(detect_external_fallback || true)"
+    fallback="$(detect_external_fallback)" || {
+        error "Статус внешних VPN неоднозначен"
+        return 1
+    }
     if ! selected_from_state; then
         say "VPN: профиль не выбран"
         [[ -z "$fallback" ]] ||
@@ -6807,7 +6871,10 @@ dashboard_json_live() {
     systemctl_quiet is-active "$HEALTH_TIMER" && health_monitor=true
     desired="$(state_get DESIRED 2>/dev/null || printf 'unknown')"
     mode="$(state_get MODE 2>/dev/null || printf 'normal')"
-    fallback="$(detect_external_fallback || true)"
+    fallback="$(detect_external_fallback)" || {
+        error "Автовосстановление отменено: неоднозначное состояние внешних VPN"
+        return 1
+    }
     [[ -z "$fallback" ]] || fallback_name="$(external_fallback_title "$fallback")"
     if [[ -r "$RUN_DIR/health.failures" ]]; then
         read -r failure_count <"$RUN_DIR/health.failures" || failure_count=0
@@ -8134,6 +8201,18 @@ api_mark_boot_recovery_unavailable() {
         boot-recovery api.interrupted-recovery "$reason"
 }
 
+boot_recovery_defer_to_read_only() {
+    local reason="$1" message="$2"
+    if [[ ! -e "$API_RECOVERY_MARKER" ]]; then
+        api_mark_boot_recovery_unavailable "$reason" ||
+            die "BOOT API RECOVERY: unable to persist the fail-closed recovery marker"
+    fi
+    boot_recovery_state_write recovery-only ||
+        die "BOOT API RECOVERY: unable to persist boot-scoped recovery state"
+    warn "BOOT API RECOVERY: $message; local API remains read-only"
+    return 0
+}
+
 api_prune_completed_actions() {
     local preserve_action_id="${1:-}" record base action_id state completed_at
     local max_records remove_count entry
@@ -8300,7 +8379,11 @@ api_find_profile() {
 }
 
 api_restore_state() {
-    local snapshot="$1" existed="$2" recovery_mode="${3:-runtime}" network_snapshot="${4:-${snapshot}.network}"
+    local snapshot existed recovery_mode network_snapshot
+    snapshot="$1"
+    existed="$2"
+    recovery_mode="${3:-runtime}"
+    network_snapshot="${4:-${snapshot}.network}"
     local previous_desired="" tmp rollback_timeout
     if [[ "$existed" == true ]]; then
         mkdir -p -- "$STATE_DIR" || return 1
@@ -8355,31 +8438,70 @@ api_restore_state() {
     if [[ -r "$network_snapshot" ]]; then
         api_compare_network_snapshot "$network_snapshot" || return 1
     fi
+    # A nested CLI mutation may have installed the fail-closed transition
+    # guard before it was interrupted.  Restoring the persisted state and
+    # observing the owned network planes is not a completed rollback while
+    # that guard (and its durable recovery marker) remains active.  Remove and
+    # verify the kernel guard last; transition_guard_release intentionally
+    # clears the marker only after nft confirms that the table is gone.
+    transition_guard_release || return 1
 }
 
 api_capture_network_snapshot() {
-    local output="$1" route='' dns='' firewall=''
-    if command -v ip >/dev/null 2>&1; then
-        route="$(timeout 2 ip -j route show table main 2>/dev/null || true)"
-        [[ -n "$route" ]] || route='[]'
-        jq -e 'type == "array"' <<<"$route" >/dev/null || return 1
-    else route='__unavailable__'; fi
+    local output="$1" routes4 routes6 dns='[]' firewall='null'
+    local device value present=false
+    command -v ip >/dev/null 2>&1 || return 1
+    command -v jq >/dev/null 2>&1 || return 1
+    routes4="$(LC_ALL=C timeout 2 ip -j -4 route show table all 2>/dev/null)" || return 1
+    routes6="$(LC_ALL=C timeout 2 ip -j -6 route show table all 2>/dev/null)" || return 1
+    jq -e 'type == "array"' <<<"$routes4" >/dev/null || return 1
+    jq -e 'type == "array"' <<<"$routes6" >/dev/null || return 1
+    routes4="$(jq -cS '
+        map(select((.dev // "") | IN("vpnaw0", "vpnwg0", "vpnovpn0")))
+        | map({family:"ipv4",dev,dst:(.dst//"default"),gateway:(.gateway//null),
+               prefsrc:(.prefsrc//null),metric:(.metric//null),table:(.table//"main"),
+               protocol:(.protocol//null),scope:(.scope//null),type:(.type//null)})
+        | sort_by(.dev,.table,.dst,.gateway,.metric)
+    ' <<<"$routes4")" || return 1
+    routes6="$(jq -cS '
+        map(select((.dev // "") | IN("vpnaw0", "vpnwg0", "vpnovpn0")))
+        | map({family:"ipv6",dev,dst:(.dst//"default"),gateway:(.gateway//null),
+               prefsrc:(.prefsrc//null),metric:(.metric//null),table:(.table//"main"),
+               protocol:(.protocol//null),scope:(.scope//null),type:(.type//null)})
+        | sort_by(.dev,.table,.dst,.gateway,.metric)
+    ' <<<"$routes6")" || return 1
+
     if command -v resolvectl >/dev/null 2>&1; then
-        dns="$(timeout 2 resolvectl status 2>/dev/null || true)"
-    else dns='__unavailable__'; fi
-    if command -v nft >/dev/null 2>&1; then
-        firewall="$(timeout 2 nft -j list ruleset 2>/dev/null || true)"
-        [[ -n "$firewall" ]] || firewall='{}'
-        jq -e 'type == "object"' <<<"$firewall" >/dev/null || return 1
-    else firewall='__unavailable__'; fi
-    jq -cn --arg route "$route" --arg dns "$dns" --arg firewall "$firewall" \
-        '{route:$route,dns:$dns,firewall:$firewall}' >"$output"
+        for device in vpnaw0 vpnwg0 vpnovpn0; do
+            ip link show "$device" >/dev/null 2>&1 || continue
+            present=true
+            value="$(LC_ALL=C timeout 2 resolvectl dns "$device" 2>/dev/null)" || return 1
+            value="${value#*: }"
+            dns="$(jq -cnS --argjson current "$dns" --arg dev "$device" --arg servers "$value" \
+                '$current + [{dev:$dev,servers:($servers|split(" ")|map(select(length>0))|sort)}]')" || return 1
+        done
+        [[ "$present" == false || "$dns" != '[]' ]] || return 1
+    fi
+
+    if command -v nft >/dev/null 2>&1 &&
+       timeout 2 nft list table inet "$IPV6_GUARD_TABLE" >/dev/null 2>&1; then
+        firewall="$(LC_ALL=C timeout 2 nft -j list table inet "$IPV6_GUARD_TABLE" 2>/dev/null)" || return 1
+        firewall="$(jq -cS 'walk(if type == "object" then del(.handle,.counter) else . end)' \
+            <<<"$firewall")" || return 1
+    fi
+    jq -cnS --argjson routes4 "$routes4" --argjson routes6 "$routes6" \
+        --argjson dns "$dns" --argjson firewall "$firewall" '
+        {schema:"mazzy-vpn.owned-network.v1",owner:"mazzy-vpn",
+         observed:{routes:($routes4+$routes6),dns:$dns,ipv6_guard:$firewall}}
+    ' >"$output"
 }
 
 api_compare_network_snapshot() {
     local expected="$1" actual
     actual="${expected}.actual"
     api_capture_network_snapshot "$actual" || return 1
+    jq -e '(.schema == "mazzy-vpn.owned-network.v1") and (.owner == "mazzy-vpn")' \
+        "$expected" >/dev/null || { rm -f -- "$actual"; return 1; }
     cmp -s -- "$expected" "$actual"
     local rc=$?
     rm -f -- "$actual"
@@ -8387,19 +8509,12 @@ api_compare_network_snapshot() {
 }
 
 api_observe_network_planes() {
-    local route dns firewall
-    if command -v ip >/dev/null 2>&1; then
-        route="$(timeout 1 ip -j route show table main 2>/dev/null || true)"
-        [[ -z "$route" ]] || jq -e 'type == "array"' <<<"$route" >/dev/null || return 1
-    fi
-    if command -v resolvectl >/dev/null 2>&1; then
-        dns="$(timeout 1 resolvectl status 2>/dev/null || true)"
-    fi
-    if command -v nft >/dev/null 2>&1; then
-        firewall="$(timeout 1 nft -j list ruleset 2>/dev/null || true)"
-        [[ -z "$firewall" ]] || jq -e 'type == "object"' <<<"$firewall" >/dev/null || return 1
-    fi
-    return 0
+    local snapshot
+    snapshot="$(mktemp "$RUN_DIR/.network-observation.XXXXXX")" || return 1
+    api_capture_network_snapshot "$snapshot"
+    local rc=$?
+    rm -f -- "$snapshot"
+    return "$rc"
 }
 
 api_store_completed_action() {
@@ -8552,35 +8667,49 @@ cmd_api_recover_interrupted_actions() {
     require_root _api-recover-interrupted-actions "$@"
     (($# == 0)) ||
         die "Usage: $CLI_COMMAND _api-recover-interrupted-actions"
+    boot_recovery_state_write running ||
+        die "BOOT API RECOVERY: unable to enter the running state"
     if ! mkdir -p -- "$API_ACTION_DIR" "$RUN_DIR"; then
-        api_mark_boot_recovery_unavailable \
-            boot-recovery-directory-unavailable ||
-            die "BOOT API RECOVERY: unable to persist the fail-closed recovery marker"
-        die "BOOT API RECOVERY: unable to open protected state directories"
+        boot_recovery_defer_to_read_only boot-recovery-directory-unavailable \
+            "unable to open protected state directories"
+        return
     fi
     if ! chmod 700 -- "$STATE_DIR" "$API_ACTION_DIR" "$RUN_DIR"; then
-        api_mark_boot_recovery_unavailable \
-            boot-recovery-permissions-unavailable ||
-            die "BOOT API RECOVERY: unable to persist the fail-closed recovery marker"
-        die "BOOT API RECOVERY: unable to protect state directories"
+        boot_recovery_defer_to_read_only boot-recovery-permissions-unavailable \
+            "unable to protect state directories"
+        return
     fi
     lock_wait_seconds="$(api_recovery_lock_wait_seconds)"
     if ! acquire_recovery_lock "$lock_wait_seconds"; then
-        api_mark_boot_recovery_unavailable \
-            boot-recovery-lock-unavailable ||
-            die "BOOT API RECOVERY: unable to persist the fail-closed recovery marker"
-        die "BOOT API RECOVERY: unable to acquire the shared mutation lock"
+        boot_recovery_defer_to_read_only boot-recovery-lock-unavailable \
+            "shared mutation lock is busy"
+        return
     fi
     if [[ -e "$TRANSITION_RECOVERY_MARKER" ]]; then
-        transition_guard_restore_fail_closed ||
-            die "BOOT API RECOVERY: unable to restore the fail-closed transition guard"
-        [[ -e "$TEST_TRANSACTION" ]] ||
-            die "BOOT API RECOVERY: transition rollback requires administrator review"
+        if ! transition_guard_restore_fail_closed; then
+            boot_recovery_defer_to_read_only transition-guard-restore-failed \
+                "unable to restore the fail-closed transition guard"
+            return
+        fi
+        if [[ ! -e "$TEST_TRANSACTION" ]]; then
+            boot_recovery_defer_to_read_only transition-review-required \
+                "transition rollback requires administrator review"
+            return
+        fi
     fi
     if ! api_recover_interrupted_actions boot; then
-        die "BOOT API RECOVERY: interrupted action rollback requires administrator review"
+        boot_recovery_defer_to_read_only interrupted-action-review-required \
+            "interrupted action rollback requires administrator review"
+        return
     fi
     api_cleanup_action_temps
+    if [[ -e "$TEST_TRANSACTION" ]]; then
+        boot_recovery_state_write test-recovery ||
+            die "BOOT API RECOVERY: unable to publish test-recovery state"
+    else
+        boot_recovery_state_write ready ||
+            die "BOOT API RECOVERY: unable to publish the ready state"
+    fi
     info "BOOT API RECOVERY: interrupted actions reconciled"
 }
 
@@ -8614,6 +8743,11 @@ api_run_lifecycle_action() {
         return
     fi
     export VPNCTL_MUTATION_LOCK_FD=7
+    if ! boot_recovery_mutation_gate "$operation" || [[ -e "$TEST_TRANSACTION" ]]; then
+        api_error_response "$request_id" internal-error \
+            api.action.recovery-required false true
+        return
+    fi
     if [[ -e "$TRANSITION_RECOVERY_MARKER" ]]; then
         api_error_response "$request_id" internal-error \
             api.action.recovery-required false true
@@ -8811,16 +8945,19 @@ api_run_lifecycle_action() {
     case "$operation" in
         lifecycle.connect)
             timeout --kill-after=5s "${duration}s" \
+                env VPNCTL_API_CLIENT_DISABLE=1 \
                 "$SELF" connect "$protocol" "$profile" >"$output_file" 2>&1
             rc=$?
             ;;
         lifecycle.reconnect)
             timeout --kill-after=5s "${duration}s" \
+                env VPNCTL_API_CLIENT_DISABLE=1 \
                 "$SELF" reconnect >"$output_file" 2>&1
             rc=$?
             ;;
         lifecycle.disconnect)
             timeout --kill-after=5s "${duration}s" \
+                env VPNCTL_API_CLIENT_DISABLE=1 \
                 "$SELF" disconnect >"$output_file" 2>&1
             rc=$?
             ;;
@@ -8851,6 +8988,13 @@ api_run_lifecycle_action() {
                 "$action_id" rollback-failed true true failed \
                 api.action.rollback-failed)"
             audit_outcome=rollback-failed
+            # Rollback failure is both a control-plane and a network
+            # transition incident.  Re-establish the kernel fail-closed guard
+            # and persist its independent marker before publishing the API
+            # recovery marker.  This remains safe even when the nested CLI
+            # process died before it could write its own transition marker.
+            transition_guard_restore_fail_closed || true
+            transition_mark_recovery_required api-rollback-failed || true
             if ! api_mark_recovery_required \
                 "$action_id" "$operation" rollback-failed; then
                 api_error_response "$request_id" internal-error \
@@ -9689,7 +9833,10 @@ doctor_fallback_checks() {
     else
         check_warn "AdGuard fallback недоступен или не определён пользователь"
     fi
-    fallback="$(detect_external_fallback || true)"
+    fallback="$(detect_external_fallback)" || {
+        error "Автовосстановление отменено: неоднозначное состояние внешних VPN"
+        return 1
+    }
     [[ -z "$fallback" ]] ||
         check_ok "Сейчас активен внешний fallback: $(external_fallback_title "$fallback")"
 }
@@ -9869,14 +10016,16 @@ doctor_fix() {
     if systemd_available; then
         systemctl daemon-reload || true
         systemctl_quiet enable "$API_RECOVERY_SERVICE" || true
-        systemctl_quiet enable --now "$API_SOCKET_UNIT" || true
+        systemctl_quiet enable "$API_SOCKET_UNIT" || true
+        systemctl_quiet start --no-block "$API_SOCKET_UNIT" || true
         systemctl_quiet enable "$TEST_RECOVERY_SERVICE" || true
-        systemctl_quiet enable --now "$HEALTH_TIMER" || true
+        systemctl_quiet enable "$HEALTH_TIMER" || true
+        systemctl_quiet start --no-block "$HEALTH_TIMER" || true
         if [[ "$(state_get DESIRED 2>/dev/null || true)" == "up" ]] &&
            selected_from_state; then
             systemctl_quiet enable "$SERVICE_NAME" || true
             reset_service_start_limit
-            systemctl_quiet start "$SERVICE_NAME" || true
+            systemctl_quiet start --no-block "$SERVICE_NAME" || true
         fi
     fi
     write_dashboard_cache || warn "Не удалось обновить Desktop cache"
@@ -9902,10 +10051,17 @@ cmd_api_clear_recovery() {
     if [[ -e "$API_RECOVERY_MARKER" ]]; then
         rm -f -- "$API_RECOVERY_MARKER" ||
             die "Unable to clear the local API recovery marker"
-        say "Local API recovery-only mode cleared after explicit administrator acknowledgement."
-    else
-        say "Local API recovery-only mode is not active."
+        sync -f "$STATE_DIR" ||
+            die "Unable to persist the local API recovery acknowledgement"
     fi
+    # The durable marker and the boot-scoped state are one gate. Clearing only
+    # the former leaves service/API mutations permanently blocked and produces
+    # the misleading "mode is not active" loop after reboot. The administrator
+    # explicitly acknowledged the observed current state, so publish the same
+    # ready state a successful recovery pass would publish.
+    boot_recovery_state_write ready ||
+        die "Unable to publish the acknowledged boot recovery state"
+    say "Local API recovery-only mode cleared after explicit administrator acknowledgement."
 }
 
 cmd_doctor() {
@@ -10481,9 +10637,13 @@ run_l2tp_service() {
 }
 
 service_run() {
-    local desired mode deadline
+    local desired mode deadline recovery_exit
     ((EUID == 0)) || [[ "${VPNCTL_ALLOW_UNPRIVILEGED:-0}" == "1" ]] ||
         die "_service-run требует root"
+    if ! boot_recovery_service_gate; then
+        recovery_exit="$(boot_recovery_service_exit_code)"
+        return "$recovery_exit"
+    fi
     if [[ -e "$API_RECOVERY_MARKER" ]]; then
         error "_service-run заблокирован: требуется ручная проверка API rollback"
         return 77
@@ -10496,9 +10656,21 @@ service_run() {
     desired="$(state_get DESIRED 2>/dev/null || true)"
     mode="$(state_get MODE 2>/dev/null || printf 'normal')"
     deadline="$(state_get TEST_DEADLINE 2>/dev/null || true)"
+    if [[ -e "$TEST_TRANSACTION" ]]; then
+        # Boot recovery may have restored the previous normal intent and
+        # installed an endpoint-scoped fail-closed guard before queueing this
+        # executor. That is the only transaction state allowed to resume; a
+        # stale MODE=test or missing guard remains terminally blocked.
+        if [[ "$mode" != normal ]] || ! transition_guard_installed; then
+            error "_service-run заблокирован: незавершённый тест не подготовлен к безопасному восстановлению"
+            return 77
+        fi
+    fi
     if [[ "$desired" != "up" ]]; then
-        write_state "$SELECTED_PROTOCOL" "$SELECTED_PROFILE" up ||
-            die "Не удалось обновить состояние подключения"
+        # The service reconciles persisted intent; it must never invent a new
+        # connection request merely because systemd started the unit.
+        info "_service-run: сохранено DESIRED=down; запуск туннеля не требуется"
+        return 0
     fi
     validate_profile "$SELECTED_PROTOCOL" "$SELECTED_PROFILE" 1 ||
         die "Профиль не прошёл проверку безопасности"
@@ -10665,6 +10837,7 @@ health_recover() {
         warn "Автовосстановление отложено: уже выполняется другая операция $PRODUCT_NAME"
         return 0
     fi
+    boot_recovery_mutation_gate health-recovery || return 1
     if [[ -e "$API_RECOVERY_MARKER" ]]; then
         error "Автовосстановление заблокировано: требуется ручная проверка API rollback"
         return 1
@@ -10677,7 +10850,10 @@ health_recover() {
         error "Автовосстановление не нашло безопасный выбранный профиль"
         return 1
     }
-    fallback="$(detect_external_fallback || true)"
+    fallback="$(detect_external_fallback)" || {
+        error "Автовосстановление отменено: неоднозначное состояние внешних VPN"
+        return 1
+    }
     fallback_interface="$(transition_external_interface "$fallback")"
     transition_guard_install "$SELECTED_PROTOCOL" "$SELECTED_PROFILE" "$fallback" \
         "$SELECTED_PROTOCOL" "$SELECTED_PROFILE" || {
@@ -10686,7 +10862,7 @@ health_recover() {
     }
     if [[ -n "$fallback" ]]; then
         warn "Автовосстановление останавливает конфликтующий $(external_fallback_title "$fallback")"
-        stop_external_fallbacks || {
+        stop_external_fallbacks "$fallback" || {
             error "Автовосстановление не смогло остановить внешний VPN"
             if transition_wait_external_ready "$fallback" "$fallback_interface"; then
                 transition_guard_release || true
@@ -10796,6 +10972,29 @@ health_check() {
         return 0
     fi
     health_reset
+    if transition_guard_installed &&
+       [[ ! -e "$API_RECOVERY_MARKER" && ! -e "$TRANSITION_RECOVERY_MARKER" ]]; then
+        transition_guard_release || {
+            transition_guard_hold health-ready-guard-release-failed || true
+            return 1
+        }
+        boot_recovery_state_write awaiting-cleanup || {
+            transition_guard_restore_fail_closed || true
+            transition_guard_hold health-ready-state-publish-failed || true
+            return 1
+        }
+        # A boot-restored test transaction is committed only after health has
+        # independently observed the restored protected egress and the ready
+        # state is durable. Until cleanup completes, every mutation still sees
+        # TEST_TRANSACTION and remains blocked.
+        [[ ! -e "$TEST_TRANSACTION" ]] || discard_test_backup
+        boot_recovery_state_write ready || {
+            transition_guard_restore_fail_closed || true
+            transition_guard_hold health-ready-state-publish-failed || true
+            return 1
+        }
+        info "Защищённый выход подтверждён; boot transition guard снят"
+    fi
 }
 
 cmd_logs() {

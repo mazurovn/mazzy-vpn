@@ -59,7 +59,7 @@ banner. They contain no operational profile, endpoint or user IP.
 
 | Platform | Status | Bundles |
 |---|---|---|
-| Linux x86_64 | Control Center with embedded shared-engine bootstrap | AppImage, DEB, RPM |
+| Linux x86_64 | Control Center with an autonomous package-internal engine | DEB |
 | macOS | UI preview; VPN backend is not implemented yet | app, DMG |
 | Windows | UI preview; VPN backend is not implemented yet | MSI, NSIS EXE |
 
@@ -227,10 +227,10 @@ events depend on the desktop environment.
 
 ## Linux installation
 
-After a release exists and its RustSec gate is green, install one Desktop bundle
-from the Releases page. DEB and RPM are now package-managed installations: the
-archive owns the engine under `/usr/bin`,
-its public runtime under `/usr/lib/mazzy-vpn`, systemd units/drop-ins under
+After a release exists and its RustSec gate is green, install the DEB from the
+Releases page. The archive owns its internal engine at
+`/usr/lib/mazzy-vpn/mazzy-vpn`, a compatible public command under `/usr/bin`,
+and systemd units/drop-ins under
 `/usr/lib/systemd/system`, the tmpfiles policy and Bash completion. The package
 manager installs the base runtime dependencies, while supported VPN protocol
 packages are recommendations. The idempotent package script creates the
@@ -240,7 +240,7 @@ systemd host and verifies the engine/API manifest.
 Existing `/etc/vpnctl` profiles and `/var/lib/vpnctl` state are not package
 payload and are deliberately preserved during upgrade and removal. A legacy
 manual `/etc/systemd/system` unit keeps its settings, while package drop-ins
-select the package-owned `/usr/bin/mazzy-vpn`, preserve recovery/restart
+select the package-owned `/usr/lib/mazzy-vpn/mazzy-vpn`, preserve recovery/restart
 invariants and reset a legacy health timer to the current one-minute interval.
 When installation is run through
 `sudo` or `pkexec`, the invoking user is added to the `mazzy-vpn` group. Desktop
@@ -265,13 +265,7 @@ retain spaces from the Tauri product name instead.
 sudo apt install ./Mazzy.VPN.Desktop_0.4.1_amd64.deb
 ```
 
-RPM:
-
-```bash
-sudo dnf install ./Mazzy.VPN.Desktop-0.4.1-1.x86_64.rpm
-```
-
-For DEB/RPM, **Settings → Install / update / repair** runs package-safe
+**Settings → Install / update / repair** runs package-safe
 `mazzy-vpn doctor --fix`: it repairs supported missing protocol dependencies
 and service state without copying package files into `/usr/local`. This slice is
 still preview. The 0.4 release artifacts carry the verified issue #31 `glib`
@@ -280,19 +274,8 @@ Clean-device install/upgrade/remove tests across every supported distribution,
 package rollback/fault injection, AmneziaWG distribution and signing also remain
 open release gates.
 
-AppImage:
-
-```bash
-sha256sum -c --ignore-missing Mazzy.VPN.Desktop_0.4.1_SHA256SUMS
-chmod +x ./Mazzy.VPN.Desktop_0.4.1_amd64.AppImage
-./Mazzy.VPN.Desktop_0.4.1_amd64.AppImage
-```
-
-AppImage includes the CLI engine and starts its bootstrap automatically; no
-standalone CLI download or launch is required. The native PolicyKit dialog
-still authorizes system installation. Check `command -v pkexec` first and
-install your distribution's polkit/pkexec package manually if it is missing;
-an AppImage cannot supply the operating system's privilege broker itself.
+AppImage and RPM are outside the supported release pipeline. Keeping a single
+package-managed DEB path avoids the unverified AppImage FUSE/PolicyKit bootstrap.
 
 Replace the sample version with the downloaded file name. Installable updater
 artifacts carry a Tauri signature verified by the public key embedded in
@@ -348,8 +331,9 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 npm run build:release
 ```
 
-Linux builds place AppImage, DEB and RPM bundles under
-`desktop/src-tauri/target/release/bundle/`. npm and Cargo dependencies are
+Linux release builds place the DEB under
+`desktop/src-tauri/target/release/bundle/deb/` and audit it with
+`tests/check-deb-package.sh`. npm and Cargo dependencies are
 locked. The release command remaps the builder's local home directory out of
 Rust diagnostic strings. CI builds each OS on its matching GitHub runner. The
 tagged workflow first creates a draft preview with Tauri-signed updater

@@ -1,0 +1,11 @@
+{
+  "schema": "mazzy.external_project.v1",
+  "schema_version": 1,
+  "project_id": "9f13d5f9-ae87-4681-b47b-3b18da091214",
+  "created_at": "2026-08-12T13:45:00Z",
+  "brain_version": "0.2.0",
+  "retention": {
+    "traffic_days": 14,
+    "max_bytes": 2147483648
+  }
+}

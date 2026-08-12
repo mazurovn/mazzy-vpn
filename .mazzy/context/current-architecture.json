@@ -1,0 +1,31 @@
+{
+  "schema": "mazzy.project_context.v1",
+  "project_id": "9f13d5f9-ae87-4681-b47b-3b18da091214",
+  "updated_at": "2026-08-12T19:20:00Z",
+  "source_head": "cc986bc405338b142052c224dc1be01f65320f82",
+  "dirty_digest": "sha256:e129881f02155f4f4195672065cb3f2ecf76d9dacd09a9e32279c121ce276952",
+  "objective": "Make Mazzy VPN Desktop and CLI independently autonomous while sharing one package-internal privileged engine.",
+  "decisions": [
+    "Never use /tmp or tmpfs for Mazzy VPN builds, tests, logs or scratch data; use the project-local disk directory .mazzy/work via TMPDIR.",
+    "The package-internal canonical engine is /usr/lib/mazzy-vpn/mazzy-vpn.",
+    "The source-install canonical engine is /usr/local/lib/mazzy-vpn/mazzy-vpn.",
+    "/usr/bin/mazzy-vpn and /usr/local/bin/mazzy-vpn are optional public CLI entry points, never systemd runtime dependencies.",
+    "Desktop readiness depends on the internal engine and typed local API, not on a public CLI executable.",
+    "Migration must not restart or disconnect an active VPN.",
+    "Strict acceptance removes public CLI entry points and proves Desktop status, profiles and lifecycle still work; CLI is separately tested without Desktop.",
+    "Mazzy Brain external-project memory stays under .mazzy and never stores VPN profile contents, credentials or private keys."
+    ,"Boot recovery uses explicit test-recovery, awaiting-egress and awaiting-cleanup phases; ordinary mutations require ready while the managed executor has a narrow resume gate."
+    ,"API rollback snapshots observe only Mazzy-managed interfaces/routes/DNS/IPv6 guard in canonical JSON; global host route/DNS/nft byte comparison is forbidden."
+  ],
+  "verification": {
+    "tests_run_sh": "PASS: frozen-tree low-priority disk-backed run completed 1..105",
+    "api_contract": "1.0, 31 operations, 14 errors pass",
+    "desktop_ui": "v0.4.8, 110 IDs, 160 localized labels pass",
+    "cargo_check_locked": "pass with two existing vendored glib lifetime warnings",
+    "deb": "real DEB-only 0.4.8 candidate; sha256:50bb0ba798e5f2c8ab24519d890b282d6c5d232dff9d28c8eae60cfbc9e3b6ed",
+    "rpm": "excluded from supported release pipeline",
+    "package_payload": "DEB-only gate passes: internal engine, public compatibility CLI, agentd, registries, systemd units and postinst match source; systemd consumers use /usr/lib/mazzy-vpn/mazzy-vpn",
+    "known_release_blocker": "none in the source/package gates; installation and an actual OS reboot remain separate authorized operational acceptance steps"
+  },
+  "next_gate": "Install the audited DEB only when explicitly requested, then perform real post-install and cold-reboot acceptance without touching an active fallback VPN."
+}

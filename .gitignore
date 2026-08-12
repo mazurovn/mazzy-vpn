@@ -9,3 +9,8 @@ dist/
 # Tauri / Node build outputs.
 desktop/node_modules/
 desktop/src-tauri/target/
+desktop/.mazzy/
+
+# Machine-local Mazzy Brain connector; project memory is governed by
+# .mazzy/.gitignore and carries no VPN secrets.
+.mcp.json

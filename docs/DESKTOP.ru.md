@@ -23,7 +23,7 @@ Linux-пакет 0.4 включает совместимый engine installer: �
 > signing/notarization и перенос оставшихся typed
 > `pkexec`-операций в частично реализованный versioned local API.
 
-> **Разделение версий:** release source `desktop-v0.4.1` содержит Dashboard,
+> **Разделение версий:** release source `desktop-v0.4.8` содержит Dashboard,
 > Profiles, Diagnostics, Settings, About и diagnostics-only Agent Control.
 > В нём добавлены Tauri-подписанные обновления с обязательным диалогом. Agent
 > Control не запускает и не связывает provider processes.
@@ -53,7 +53,7 @@ Linux-пакет 0.4 включает совместимый engine installer: �
 
 | Платформа | Статус | Пакеты |
 |---|---|---|
-| Linux x86_64 | Control Center с встроенным bootstrap общего движка | AppImage, DEB, RPM |
+| Linux x86_64 | Control Center с автономным package-internal движком | DEB |
 | macOS | Preview интерфейса, VPN backend ещё не реализован | app, DMG |
 | Windows | Preview интерфейса, VPN backend ещё не реализован | MSI, NSIS EXE |
 
@@ -61,7 +61,7 @@ macOS и Windows preview не нужно использовать как сре�
 Для полноценной поддержки нужны нативные Network Extension/launchd и Windows
 service/Wintun backends, подпись кода и platform-specific тесты.
 
-## Экраны Desktop 0.4.1
+## Экраны Desktop 0.4.8
 
 1. **Обзор** — туннель, интернет, IP, handshake, health, recovery, проверка
    фактического egress и tray.
@@ -221,10 +221,10 @@ output. Те же lifecycle-команды CLI/TUI используют этот
 
 ## Установка Linux
 
-После появления релиза и зелёного RustSec gate установите один Desktop-пакет со
-страницы Releases. DEB и RPM теперь являются package-managed установками: архив
-владеет engine в `/usr/bin`, публичным
-runtime в `/usr/lib/mazzy-vpn`, systemd units/drop-ins в
+После появления релиза и зелёного RustSec gate установите DEB со страницы
+Releases. Архив владеет внутренним engine в
+`/usr/lib/mazzy-vpn/mazzy-vpn`, совместимой публичной командой в `/usr/bin`,
+systemd units/drop-ins в
 `/usr/lib/systemd/system`, tmpfiles policy и Bash completion. Package manager
 устанавливает базовые runtime-зависимости, а поддерживаемые VPN-протоколы
 объявлены рекомендациями. Идемпотентный package script создаёт защищённую
@@ -260,13 +260,7 @@ DEB:
 sudo apt install ./Mazzy.VPN.Desktop_0.4.1_amd64.deb
 ```
 
-RPM:
-
-```bash
-sudo dnf install ./Mazzy.VPN.Desktop-0.4.1-1.x86_64.rpm
-```
-
-Для DEB/RPM действие **Установить / обновить / исправить** запускает
+Действие **Установить / обновить / исправить** запускает
 package-safe `mazzy-vpn doctor --fix`: оно исправляет поддерживаемые
 недостающие protocol dependencies и service state, но не копирует package
 files в `/usr/local`. Этот slice всё ещё preview. Release artifacts 0.4
@@ -275,20 +269,9 @@ files в `/usr/local`. Этот slice всё ещё preview. Release artifacts 0
 tests для всех поддерживаемых дистрибутивов, package rollback/fault injection,
 доставка AmneziaWG и подпись.
 
-AppImage:
-
-```bash
-sha256sum -c --ignore-missing Mazzy.VPN.Desktop_0.4.1_SHA256SUMS
-chmod +x ./Mazzy.VPN.Desktop_0.4.1_amd64.AppImage
-./Mazzy.VPN.Desktop_0.4.1_amd64.AppImage
-```
-
-AppImage содержит CLI-движок и автоматически запускает его bootstrap до первой
-загрузки данных; отдельно загружать или запускать CLI не нужно. Системная
-установка всё равно подтверждается штатным диалогом PolicyKit. Сначала
-проверьте `command -v pkexec` и вручную установите package polkit/pkexec вашего
-дистрибутива, если команды нет: AppImage не может поставить системный broker
-привилегий внутрь самого себя.
+AppImage и RPM исключены из поддерживаемого release-контура. Это устраняет
+непроверяемый AppImage bootstrap через FUSE/PolicyKit и оставляет один
+воспроизводимый package-managed путь установки.
 
 Имена версий в примерах замените на фактические имена загруженных файлов.
 Installable updater artifacts имеют Tauri-подпись, которую Desktop проверяет
@@ -344,8 +327,8 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 npm run build:release
 ```
 
-Linux build создаёт AppImage, DEB и RPM в
-`desktop/src-tauri/target/release/bundle/`. Зависимости npm и Cargo
+Linux build создаёт DEB в `desktop/src-tauri/target/release/bundle/deb/`.
+Проверка выполняется `tests/check-deb-package.sh`. Зависимости npm и Cargo
 зафиксированы lock-файлами. Release-команда удаляет локальный домашний путь
 сборщика из диагностических строк Rust. CI собирает каждую ОС на
 соответствующем GitHub runner. Tagged workflow сначала создаёт draft preview с

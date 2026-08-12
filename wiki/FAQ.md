@@ -15,7 +15,7 @@ Copyright © 2026 Nik m. Код распространяется по GNU AGPL-3
 
 ## Какие версии сейчас рабочие?
 
-- Текущая release line: CLI/TUI 1.4.6 и Tauri-signed Desktop 0.4.7
+- Текущая release line: CLI/TUI 1.4.7 и DEB Desktop 0.4.8
   preview. Issue #31 закрыт проверенным `glib` backport и чистыми release checks.
 - Windows и macOS: только UI preview, нативные VPN backend ещё не готовы.
 - Android и iOS: planned native clients; готовых мобильных пакетов пока нет.
@@ -148,7 +148,7 @@ and preserving authorship.
 
 ## Which versions work today?
 
-- Current release line: CLI/TUI 1.4.6 and the Tauri-signed Desktop 0.4.7
+- Current release line: CLI/TUI 1.4.7 and the DEB Desktop 0.4.8
   preview. Issue #31 is closed with a verified `glib` backport and clean release
   checks.
 - Windows and macOS: UI preview only; native VPN backends are not complete.

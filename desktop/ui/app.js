@@ -7,7 +7,7 @@ const invoke = tauri?.core?.invoke;
 const translations = {
   ru: {
     language: "Язык", brandNetwork: "СЕТЬ ДЛЯ ЛЮДЕЙ И ИИ", brandEngine: "АВТОЛЕЧЕНИЕ",
-    liveStatus: "РАБОТАЕТ", checking: "Проверяем соединение", waiting: "Ожидаем данные Mazzy VPN CLI",
+    liveStatus: "РАБОТАЕТ", checking: "Проверяем соединение", waiting: "Ожидаем данные встроенного Mazzy VPN engine",
     protocol: "Протокол", interface: "Интерфейс", handshake: "Рукопожатие", publicIp: "Публичный IP",
     quickConnect: "Быстро подключить", useDefault: "Профиль по умолчанию", reconnect: "Переподключить",
     safeRestart: "Безопасный перезапуск", disconnect: "Отключить", stopTunnel: "Остановить туннель",
@@ -29,7 +29,7 @@ const translations = {
   },
   en: {
     language: "Language", brandNetwork: "AI-READY NETWORK", brandEngine: "SELF-HEALING CORE",
-    liveStatus: "LIVE", checking: "Checking connection", waiting: "Waiting for Mazzy VPN CLI data",
+    liveStatus: "LIVE", checking: "Checking connection", waiting: "Waiting for the embedded Mazzy VPN engine",
     protocol: "Protocol", interface: "Interface", handshake: "Handshake", publicIp: "Public IP",
     quickConnect: "Quick connect", useDefault: "Default config", reconnect: "Reconnect",
     safeRestart: "Safe restart", disconnect: "Disconnect", stopTunnel: "Stop tunnel",
@@ -50,7 +50,7 @@ const translations = {
   },
   de: {
     language: "Sprache", brandNetwork: "KI-BEREITES NETZ", brandEngine: "SELBSTHEILUNG",
-    liveStatus: "AKTIV", checking: "Verbindung wird geprüft", waiting: "Warte auf Mazzy VPN CLI",
+    liveStatus: "AKTIV", checking: "Verbindung wird geprüft", waiting: "Warte auf die integrierte Mazzy VPN Engine",
     protocol: "Protokoll", interface: "Schnittstelle", handshake: "Handshake", publicIp: "Öffentliche IP",
     quickConnect: "Schnell verbinden", useDefault: "Standardkonfiguration", reconnect: "Neu verbinden",
     safeRestart: "Sicherer Neustart", disconnect: "Trennen", stopTunnel: "Tunnel stoppen",
@@ -71,7 +71,7 @@ const translations = {
   },
   zh: {
     language: "语言", brandNetwork: "面向 AI 的网络", brandEngine: "自恢复核心",
-    liveStatus: "运行中", checking: "正在检查连接", waiting: "正在等待 Mazzy VPN CLI 数据",
+    liveStatus: "运行中", checking: "正在检查连接", waiting: "正在等待内置 Mazzy VPN 引擎",
     protocol: "协议", interface: "接口", handshake: "握手", publicIp: "公网 IP",
     quickConnect: "快速连接", useDefault: "默认配置", reconnect: "重新连接", safeRestart: "安全重启",
     disconnect: "断开连接", stopTunnel: "停止隧道", doctor: "自我诊断", checkSystem: "检查系统",
@@ -90,7 +90,7 @@ const translations = {
   },
   ja: {
     language: "言語", brandNetwork: "AI 対応ネットワーク", brandEngine: "自己修復コア",
-    liveStatus: "稼働中", checking: "接続を確認中", waiting: "Mazzy VPN CLI のデータを待っています",
+    liveStatus: "稼働中", checking: "接続を確認中", waiting: "組み込み Mazzy VPN エンジンを待っています",
     protocol: "プロトコル", interface: "インターフェース", handshake: "ハンドシェイク", publicIp: "公開 IP",
     quickConnect: "クイック接続", useDefault: "既定の設定", reconnect: "再接続", safeRestart: "安全な再起動",
     disconnect: "切断", stopTunnel: "トンネルを停止", doctor: "自己診断", checkSystem: "システムを確認",
@@ -109,7 +109,7 @@ const translations = {
   },
   ko: {
     language: "언어", brandNetwork: "AI 지원 네트워크", brandEngine: "자가 복구 코어",
-    liveStatus: "작동 중", checking: "연결 확인 중", waiting: "Mazzy VPN CLI 데이터를 기다리는 중",
+    liveStatus: "작동 중", checking: "연결 확인 중", waiting: "내장 Mazzy VPN 엔진을 기다리는 중",
     protocol: "프로토콜", interface: "인터페이스", handshake: "핸드셰이크", publicIp: "공인 IP",
     quickConnect: "빠른 연결", useDefault: "기본 구성", reconnect: "다시 연결", safeRestart: "안전한 재시작",
     disconnect: "연결 해제", stopTunnel: "터널 중지", doctor: "자가 진단", checkSystem: "시스템 확인",
@@ -779,7 +779,7 @@ function documentationPreviewData() {
       available: true,
       generated_at: Math.floor(Date.now() / 1000),
       product: "Mazzy VPN",
-      version: "1.4.6",
+      version: "1.4.7",
       service_state: "active",
       desired: "up",
       internet: "up",
@@ -864,8 +864,8 @@ function documentationPreviewData() {
     installation: {
       engine_installed: true,
       package_managed: true,
-      installed_version: "1.4.6",
-      bundled_version: "1.4.6",
+      installed_version: "1.4.7",
+      bundled_version: "1.4.7",
       bundled_installer: true,
       needs_install: false,
       service_installed: true,
@@ -923,7 +923,7 @@ function documentationPreviewData() {
     platform: {
       functional: true,
       os: "linux",
-      desktop_version: "0.4.7",
+      desktop_version: "0.4.8",
       author: "Nik m (@mazurovn)",
       license: "AGPL-3.0-or-later"
     }
@@ -974,7 +974,7 @@ function renderDocumentationPreview() {
   showPage(previewParameters.get("page") || "dashboard");
   if (previewParameters.get("update") === "available") {
     showUpdateDialog({
-      current_version: "0.4.7",
+      current_version: "0.4.8",
       version: "0.4.8",
       install_supported: true,
       installation_method: "signed-in-app"
@@ -1219,7 +1219,7 @@ function renderStatus(data) {
     $(`#bar-${key}`).style.width = `${(counts[index] / max) * 100}%`;
   });
 
-  $("#engine-version").textContent = `${data?.product || "Mazzy VPN"} CLI ${data?.version || ""}`.trim();
+  $("#engine-version").textContent = `${data?.product || "Mazzy VPN"} engine ${data?.version || ""}`.trim();
   const generated = Number(data?.generated_at || 0);
   const age = generated ? Math.max(0, Math.round(Date.now() / 1000 - generated)) : null;
   $("#freshness-label").textContent = age === null ? t("neverUpdated")
