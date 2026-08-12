@@ -36,14 +36,17 @@ class AndroidKeystoreSecretStore(context: Context) : SecureSecretStore {
 
     override fun read(key: String): String? {
         val encoded = preferences.getString(key, null) ?: return null
-        return runCatching {
+        return try {
             val bytes = Base64.decode(encoded, Base64.NO_WRAP)
+            require(bytes.size > IV_LENGTH) { "secret-store-payload-invalid" }
             val iv = bytes.copyOfRange(0, IV_LENGTH)
             Cipher.getInstance(TRANSFORMATION).run {
                 init(Cipher.DECRYPT_MODE, this@AndroidKeystoreSecretStore.key, GCMParameterSpec(TAG_BITS, iv))
                 String(doFinal(bytes.copyOfRange(IV_LENGTH, bytes.size)), StandardCharsets.UTF_8)
             }
-        }.getOrNull()
+        } catch (failure: Throwable) {
+            throw IllegalStateException("secret-store-decryption-failed", failure)
+        }
     }
 
     override fun write(key: String, value: String) {
@@ -54,7 +57,9 @@ class AndroidKeystoreSecretStore(context: Context) : SecureSecretStore {
         }
     }
 
-    override fun delete(key: String) { preferences.edit().remove(key).commit() }
+    override fun delete(key: String) {
+        check(preferences.edit().remove(key).commit()) { "secret-store-delete-failed" }
+    }
 
     private companion object {
         const val ANDROID_KEYSTORE = "AndroidKeyStore"

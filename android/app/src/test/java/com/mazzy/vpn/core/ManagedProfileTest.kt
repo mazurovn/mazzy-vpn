@@ -14,11 +14,13 @@ class ManagedProfileTest {
         assertTrue(!profile.toString().contains("123e4567"))
     }
 
-    @Test(expected = IllegalArgumentException::class)
-    fun rejectsUnknownRootKey() = ManagedProfileContractValidator.validate(valid.dropLast(1) + ",\"unexpected\":true}")
+    @Test fun rejectsUnknownRootKey() = assertTrue(
+        ManagedProfileContractValidator.validate(valid.dropLast(1) + ",\"unexpected\":true}").isFailure
+    )
 
-    @Test(expected = IllegalArgumentException::class)
-    fun rejectsOversizedImport() = ManagedProfileContractValidator.validate(valid + " ".repeat(ManagedProfileContractValidator.MAX_IMPORT_BYTES))
+    @Test fun rejectsOversizedImport() = assertTrue(
+        ManagedProfileContractValidator.validate(valid + " ".repeat(ManagedProfileContractValidator.MAX_IMPORT_BYTES)).isFailure
+    )
 
     @Test
     fun rejectsMixedCaseProtocol() {
@@ -26,13 +28,11 @@ class ManagedProfileTest {
         assertTrue(ManagedProfileContractValidator.validate(mixedCase).isFailure)
     }
 
-    @Test(expected = IllegalArgumentException::class)
-    fun rejectsStringTlsInsecureFlag() {
-        ManagedProfileContractValidator.validate(valid.replace("\"insecure\":false", "\"insecure\":\"false\""))
-    }
+    @Test fun rejectsStringTlsInsecureFlag() = assertTrue(
+        ManagedProfileContractValidator.validate(valid.replace("\"insecure\":false", "\"insecure\":\"false\"")).isFailure
+    )
 
-    @Test(expected = IllegalArgumentException::class)
-    fun rejectsNumericTlsInsecureFlag() {
-        ManagedProfileContractValidator.validate(valid.replace("\"insecure\":false", "\"insecure\":1"))
-    }
+    @Test fun rejectsNumericTlsInsecureFlag() = assertTrue(
+        ManagedProfileContractValidator.validate(valid.replace("\"insecure\":false", "\"insecure\":1")).isFailure
+    )
 }

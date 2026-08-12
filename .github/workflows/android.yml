@@ -19,6 +19,15 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          submodules: true
+
+      - name: Install pinned Android native toolchain
+        run: |
+          yes | sdkmanager \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;26.1.10909125" \
+            "cmake;3.22.1"
 
       - name: Validate Android contract
         run: python3 tests/check-android-contract.py

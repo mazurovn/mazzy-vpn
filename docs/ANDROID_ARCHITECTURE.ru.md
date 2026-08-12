@@ -1,21 +1,28 @@
 # Android Mazzy VPN: архитектура и 15 итераций аудита
 
-Статус: `foundation`, не production. В репозитории появился нативный Kotlin
-foundation с `VpnService`, импортом и зашифрованным хранилищем профилей. Реальный
-protocol engine, TUN packet loop, DNS forwarder, routing и device leak tests ещё
-не закрыты. Поэтому ни один протокол не переводится из `android: planned`.
+Статус: embedded AmneziaWG/WireGuard `device-test candidate`, не production.
+APK уже собирает pinned userspace `libwg-go.so`, использует один собственный
+`VpnService`, импортирует `.conf` в единый зашифрованный Keystore-envelope,
+создаёт TUN, маршруты/DNS и объявляет CONNECTED только после handshake. Emulator,
+physical-device leak/routing и signed-release gates ещё не закрыты, поэтому
+registry честно остаётся `android: planned`.
 
 ## Решения
 
-- Native Android app, `minSdk 26`, `targetSdk 35`, foreground `VpnService`.
+- Native Android app, `minSdk 26`, `targetSdk 36`, foreground `VpnService`.
 - UI не запускает shell, root или LLM-generated commands. Управление идёт через
   typed actions и системный `VpnService.prepare()` permission boundary.
-- Профили проверяются до сохранения по v1 contract, ограничены 256 KiB, секреты
-  хранятся в Android Keystore AES-GCM; активный и предыдущий слоты обеспечивают
-  атомарный rollback.
-- Engine adapter должен быть pinned/reproducible и владеть TUN/DNS/routing.
-  До его появления сервис намеренно заканчивает запуск в `ERROR`, не создавая
-  ложный connected state и не направляя трафик в несуществующий туннель.
+- Native AWG/WG профили проходят строгий parser до сохранения, ограничены
+  256 KiB и целиком хранятся одним Android Keystore AES-GCM envelope.
+- Pinned engine сам владеет TUN/DNS/routing. Ошибка permission, parse, storage,
+  establish, protect или handshake переводит сервис в `ERROR` и выполняет
+  teardown, не создавая ложный connected state.
+- Bootstrap DNS endpoint выполняется через underlying network до создания TUN.
+  После создания TUN профиль обязан иметь DNS и IPv4 default route; неописанные
+  IP families не разрешаются обходным `allowFamily`. Always-on отключён до
+  device-теста durable reboot recovery выбранного профиля. Текущий candidate —
+  IPv4 full-tunnel: IPv6 блокируется, а не утекает, до отдельного dual-stack
+  gate. Для наблюдаемого handshake обязателен bounded PersistentKeepalive.
 - Первым runtime gate может быть только WireGuard/AmneziaWG с реальным Android
   backend. Proxy-протоколы из каталога требуют отдельной проверки embedded
   sing-box/native adapter, лицензии, размера ABI и leak behaviour.
@@ -30,8 +37,8 @@ protocol engine, TUN packet loop, DNS forwarder, routing и device leak tests е
 4. Profile catalog не равен поддержанному connect backend. Для VLESS, Hysteria2,
    Mieru, NaiveProxy, TUIC, Shadowsocks 2022, Trojan, AnyTLS и ShadowTLS Android
    support остаётся planned.
-5. Gradle/SDK/device отсутствуют в текущем workspace, поэтому APK не объявляется
-   собранным: CI обязан печатать `SKIP`, а не ложный `PASS`.
+5. Реальный debug APK и четыре ABI собраны локально; это ещё не заменяет
+   emulator и physical-device доказательства data plane.
 
 ## 15 итераций
 

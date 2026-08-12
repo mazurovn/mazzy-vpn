@@ -1,0 +1,2 @@
+# Copy to local.properties or export ANDROID_HOME. Keep SDK data outside Git.
+sdk.dir=/absolute/path/to/project/.mazzy/android-sdk
