@@ -16,3 +16,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "mazzy-vpn-android"
 include(":app")
+include(":amneziawg-tunnel")
+project(":amneziawg-tunnel").projectDir = file("amneziawg-tunnel")

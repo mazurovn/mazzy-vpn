@@ -11,6 +11,14 @@ desktop/node_modules/
 desktop/src-tauri/target/
 desktop/.mazzy/
 
+# Android machine-local SDK/build state and secrets.
+android/local.properties
+android/.gradle/
+android/**/build/
+android/**/.cxx/
+*.jks
+*.keystore
+
 # Machine-local Mazzy Brain connector; project memory is governed by
 # .mazzy/.gitignore and carries no VPN secrets.
 .mcp.json

@@ -1,14 +1,24 @@
 # Android Mazzy VPN: architecture and 15 audit iterations
 
-Status: `foundation`, not production. The repository now has a native Kotlin
-foundation with `VpnService`, profile import and encrypted storage. A real
-protocol engine, TUN packet loop, DNS forwarder, routing and device leak tests
-remain open. No protocol is promoted from `android: planned`.
+Status: embedded AmneziaWG/WireGuard `device-test candidate`, not production.
+The native Kotlin app builds a pinned userspace engine, owns one `VpnService`,
+imports native profiles into a Keystore-encrypted envelope, establishes TUN,
+installs profile routes/DNS and waits for a real handshake. Emulator,
+physical-device routing/leak and signed-release gates remain open, so the
+published registry honestly remains `android: planned`.
 
 The app is native, uses Android's permission and foreground-service boundaries,
-validates the shared v1 profile contract before storage, encrypts active/previous
-slots with Android Keystore AES-GCM, and deliberately fails closed until a pinned
-engine adapter exists. Linux shell/systemd adapters are not reusable inside APK.
+uses a separate strict native-profile parser, encrypts the complete profile
+envelope with Android Keystore AES-GCM, and fails closed on parse, storage,
+permission, TUN, socket-protection or handshake errors. Linux shell/systemd
+adapters are not packaged or invoked inside the APK.
+Endpoint bootstrap DNS is deliberately resolved on the underlying network
+before TUN activation; after activation, imported profiles must provide DNS and
+an IPv4 default route, and Android's unconfigured-family blocking remains in
+force. The current candidate is explicitly IPv4 full-tunnel: IPv6 is blocked,
+not leaked, until dual-stack device gates are implemented. A bounded
+PersistentKeepalive is required so handshake readiness is observable. Always-on
+is disabled until durable selected-profile reboot recovery is device-tested.
 The nine modern proxy/transport protocols remain catalog entries, not Android
 connect support.
 
@@ -34,5 +44,5 @@ five consecutive clean audits and all runtime/device gates are closed.
 14. Emulator plus real-device permission and leak tests.
 15. Signed APK/AAB, Data safety, release verification and five clean audits.
 
-Presence of Kotlin source is not a completed client. Until real engine, device,
-leak and signed-release gates pass, Android remains `foundation`/`preview`.
+An APK build is not device proof. Until emulator, physical-device, leak and
+signed-release gates pass, Android remains a preview candidate.
