@@ -128,7 +128,7 @@ net request_id-spoofing, нет утечки внутренних ошибок. 
 | U4 | Интерактивное меню (mazzy-vpn без аргументов) | P0 | DONE |
 | U5 | `netadapter`: выбор адаптера (кабель/Wi‑Fi), рекомендация | P0 | DONE |
 | U6 | `netdiag`: анализ сети + фиксы (детект AdGuard tun0) | P0 | DONE |
-| U7 | bind egress к выбранному uplink в connect | P1 | TODO |
+| U7 | bind egress к выбранному uplink в connect | P1 | DONE |
 
 U1-U6 (Раунд 19, `../audit/round-19-cli-ux-features.ru.md`): 65+ функций,
 15 CLI-команд. Исправлены UX-1 (TCP→UDP probe для WG) и UX-2 (link-local
@@ -150,7 +150,7 @@ P3-1 (Раунд 18, `../audit/round-18-cli-connect.ru.md`): добавлены 
 (foreground, single-flight lock + persist state) и `status --json`. root-check
 первым (non-root не читает секретный файл). go.work git-ignored. Исправлены
 CLI-4 (redundant filepath.Join) и S1023.
-| P3-CI | CI-gate: staticcheck + vet + gofmt + -race | P1 | TODO |
+| P3-CI | CI-gate: staticcheck + vet + gofmt + -race | P1 | DONE (.github/workflows/go-ci.yml) |
 | P3-2 | install без git clone/apt VPN-бэкендов | P0 | TODO |
 | P3-3 | Desktop на **gio**, линкует core, работает без CLI, без webkit/GTK | P0 | TODO |
 | P3-3a | Desktop: трей-иконка + автозапуск (gio трей не даёт) | P1 | TODO |

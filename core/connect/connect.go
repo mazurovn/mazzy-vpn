@@ -59,6 +59,9 @@ type Options struct {
 	// disallows mutations, Up fails with ErrBootRecoveryPending and performs no
 	// kernel action. Nil disables the check (e.g. unit tests, dev mode).
 	BootGate *bootrecovery.Gate
+	// Uplink, when set, pins the encrypted-traffic egress to this physical
+	// interface (U7). Empty uses the default route.
+	Uplink string
 }
 
 // Up brings a wireguard/amneziawg connection fully online from a parsed config.
@@ -121,6 +124,7 @@ func Up(ctx context.Context, proto core.Protocol, cfg *profile.Config, opts Opti
 
 	// 3. Addresses + policy routing on the real interface name.
 	c.routes = routes.New(runner, eng.Interface, cfg)
+	c.routes.Uplink = opts.Uplink
 	if err := c.routes.Up(ctx, cfg); err != nil {
 		c.unwind(ctx)
 		return nil, fmt.Errorf("routes up: %w", err)

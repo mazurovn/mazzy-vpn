@@ -21,6 +21,7 @@ import (
 	"github.com/mazurovn/mazzy-vpn/core/lock"
 	"github.com/mazurovn/mazzy-vpn/core/notify"
 	"github.com/mazurovn/mazzy-vpn/core/profile"
+	"github.com/mazurovn/mazzy-vpn/core/settings"
 	"github.com/mazurovn/mazzy-vpn/core/state"
 )
 
@@ -59,6 +60,20 @@ func loadProfile(path string) (core.Protocol, *profile.Config, error) {
 	return proto, cfg, nil
 }
 
+// resolveUplink returns the physical uplink to pin egress to (U7): an explicit
+// --uplink flag wins, else the PreferredUplink setting, else "" (default route).
+func resolveUplink(args []string) string {
+	if v := flagValue(args, "--uplink"); v != "" {
+		return v
+	}
+	return settingsUplink()
+}
+
+// connectOpts builds connect.Options with the resolved uplink.
+func connectOpts(uplink string) connect.Options {
+	return connect.Options{LogLevel: wireguard.LogError, Uplink: uplink}
+}
+
 // cmdConnect brings up a tunnel in the FOREGROUND, holding it until SIGINT/TERM,
 // then tears it down cleanly. Daemonized/service mode lands in a later step.
 func cmdConnect(ctx context.Context, args []string) int {
@@ -85,7 +100,11 @@ func cmdConnect(ctx context.Context, args []string) int {
 	defer mu.Unlock()
 
 	fmt.Printf("Connecting %s (%s)...\n", filepath.Base(path), proto.Title())
-	conn, err := connect.Up(ctx, proto, cfg, connect.Options{LogLevel: wireguard.LogError})
+	uplink := resolveUplink(args)
+	if uplink != "" {
+		fmt.Printf("Pinning egress to uplink: %s\n", uplink)
+	}
+	conn, err := connect.Up(ctx, proto, cfg, connectOpts(uplink))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "connect failed:", err)
 		return 1
@@ -176,7 +195,7 @@ dashLoop:
 			fmt.Printf("⟳ Egress lost (%d checks). Reconnecting %s...\n", consecutiveFail, zoneName)
 			nfy.Reconnecting(zoneName, snap.Reason)
 			_ = conn.Down(ctx)
-			newConn, rerr := connect.Up(ctx, proto, cfg, connect.Options{LogLevel: wireguard.LogError})
+			newConn, rerr := connect.Up(ctx, proto, cfg, connectOpts(uplink))
 			if rerr != nil {
 				fmt.Fprintf(os.Stderr, "  reconnect failed: %v\n", rerr)
 				nfy.Failed(zoneName, rerr.Error())
@@ -267,4 +286,9 @@ func detectLiveInterface() string {
 		}
 	}
 	return ""
+}
+
+// settingsUplink returns the user's preferred uplink from settings ("" if none).
+func settingsUplink() string {
+	return settings.NewStore().Load().PreferredUplink
 }
