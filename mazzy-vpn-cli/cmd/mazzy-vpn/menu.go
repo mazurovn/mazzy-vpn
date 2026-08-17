@@ -71,6 +71,10 @@ func cmdMenu(ctx context.Context, _ []string) int {
 			cmdDiagnose(ctx, nil)
 		case "17": // trace
 			menuTrace(ctx, in)
+		case "18": // stealth
+			cmdStealth(ctx, nil)
+		case "19": // dns privacy
+			cmdDNSCheck(ctx, nil)
 		case "0", "q", "quit", "exit":
 			fmt.Println("Bye.")
 			return 0
@@ -134,6 +138,8 @@ func drawMenu(profileCount int, set settings.Settings) {
 	fmt.Println("  10. 🤖 Check AI providers")
 	fmt.Println("  16. 🔍 Diagnose problems (what's wrong)")
 	fmt.Println("  17. 🧭 Trace packet path")
+	fmt.Println("  18. 🕵️  Stealth check (anti-detection)")
+	fmt.Println("  19. 🔒 DNS privacy check")
 	fmt.Println("  Profiles & settings")
 	fmt.Println("  11. 📥 Import config / folder")
 	fmt.Println("  12. 📋 List profiles")
