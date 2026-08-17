@@ -93,3 +93,6 @@ jobs:
 
       - name: Public secret/PII audit
         run: bash tests/audit-public.sh
+
+      - name: Installer autonomy (P3-2)
+        run: bash tests/check-go-installer-autonomy.sh

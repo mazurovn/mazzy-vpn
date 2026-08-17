@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright © 2026 Nik m (@mazurovn). All rights reserved.
+#
+# Mazzy VPN persistent daemon. Connects to a chosen zone at boot and keeps the
+# tunnel up with auto-reconnect. Enable with a zone name, e.g.:
+#   sudo systemctl enable --now mazzy-vpn@NetherlandsAmsterdamH4
+#
+# The zone after @ must be an imported profile name (see: mazzy-vpn profiles).
+[Unit]
+Description=Mazzy VPN persistent tunnel (%i)
+Documentation=https://github.com/mazurovn/mazzy-vpn
+Wants=network-online.target
+After=network-online.target nss-lookup.target
+
+[Service]
+Type=simple
+# The catalog is read from this user's config; adjust if you import as root.
+Environment=MAZZY_CONFIG_DIR=/root/.config/mazzy-vpn/profiles
+ExecStart=/usr/local/bin/mazzy-vpn daemon %i
+# Give the daemon time to tear down cleanly on stop.
+TimeoutStopSec=20
+Restart=on-failure
+RestartSec=5
+# Hardening: the daemon needs network admin to manage the TUN and nftables.
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
+NoNewPrivileges=false
+ProtectSystem=strict
+ReadWritePaths=/run /var/lib/mazzy-vpn /etc/resolv.conf
+ProtectHome=read-only
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
