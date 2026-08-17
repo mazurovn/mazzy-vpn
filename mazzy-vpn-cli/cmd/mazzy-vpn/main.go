@@ -25,14 +25,20 @@ func main() {
 
 func run(args []string) int {
 	ctx := context.Background()
-	// No args: launch the interactive menu (ergonomic default).
+	// No args: launch the full-screen TUI when attached to a terminal, else the
+	// line-based menu (scripts/pipes). ADR-0006.
 	if len(args) == 0 {
+		if isTTY() {
+			return runTUI()
+		}
 		return cmdMenu(ctx, nil)
 	}
 	cmd, rest := args[0], args[1:]
 
 	switch cmd {
-	case "menu":
+	case "tui":
+		return runTUI()
+	case "menu", "--plain":
 		return cmdMenu(ctx, rest)
 	case "doctor":
 		return cmdDoctor(ctx, rest)
@@ -85,11 +91,26 @@ func run(args []string) int {
 	}
 }
 
+// isTTY reports whether stdin and stdout are both terminals (so the full-screen
+// TUI is appropriate). Piped/redirected use falls back to the line menu.
+func isTTY() bool {
+	fi, err := os.Stdout.Stat()
+	if err != nil || (fi.Mode()&os.ModeCharDevice) == 0 {
+		return false
+	}
+	fi2, err := os.Stdin.Stat()
+	if err != nil || (fi2.Mode()&os.ModeCharDevice) == 0 {
+		return false
+	}
+	return true
+}
+
 func printUsage() {
 	fmt.Fprint(os.Stderr, `mazzy-vpn — autonomous AI-ready VPN client (Go)
 
 Usage:
-  mazzy-vpn                           interactive menu (no args)
+  mazzy-vpn                           full-screen TUI dashboard (or menu if piped)
+  mazzy-vpn tui | menu | --plain      force TUI / line menu
 
  Profiles (managed catalog):
   mazzy-vpn import <FILE|DIR>...      import profiles into the catalog
