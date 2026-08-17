@@ -133,7 +133,7 @@ Usage:
  Connect:
   sudo mazzy-vpn up [NAME|--best]     connect by name, or auto-pick best zone
   sudo mazzy-vpn auto                 rank zones + connect to the best (failover)
-  sudo mazzy-vpn connect FILE         connect using a raw file path
+  sudo mazzy-vpn connect FILE [--uplink IF]  connect via a raw file path / pinned uplink
   mazzy-vpn status [--json]           show the connection intent
 
   While connected, a live dashboard shows PROTECTED/LINK-UP status, sends

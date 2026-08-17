@@ -121,3 +121,50 @@ func mustContain(t *testing.T, hay, needle string) {
 		t.Errorf("missing %q in:\n%s", needle, hay)
 	}
 }
+
+// TestUplinkPinsEndpointRoute verifies U7: with an uplink set, a host route for
+// the endpoint IP is installed via that interface, and removed on Down.
+func TestUplinkPinsEndpointRoute(t *testing.T) {
+	fake := &netexectest.Fake{}
+	cfg := fullTunnelConf()
+	// fullTunnelConf uses Endpoint h:51820 (hostname) — override to an IP.
+	cfg.Peers[0].Endpoint = "203.0.113.50:51820"
+	a := New(fake, "vpnaw0", cfg)
+	a.Uplink = "enp5s0"
+	if err := a.Up(context.Background(), cfg); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	joined := strings.Join(fake.Calls, "\n")
+	mustContain(t, joined, "ip -4 route add 203.0.113.50/32 dev enp5s0")
+
+	fake.Calls = nil
+	if err := a.Down(context.Background()); err != nil {
+		t.Fatalf("Down: %v", err)
+	}
+	mustContain(t, strings.Join(fake.Calls, "\n"), "route del 203.0.113.50/32 dev enp5s0")
+}
+
+// TestNoUplinkSkipsEndpointRoute: without an uplink, no host route is added.
+func TestNoUplinkSkipsEndpointRoute(t *testing.T) {
+	fake := &netexectest.Fake{}
+	cfg := fullTunnelConf()
+	cfg.Peers[0].Endpoint = "203.0.113.50:51820"
+	a := New(fake, "vpnaw0", cfg) // no Uplink
+	_ = a.Up(context.Background(), cfg)
+	if strings.Contains(strings.Join(fake.Calls, "\n"), "203.0.113.50/32") {
+		t.Error("no uplink should not pin an endpoint route")
+	}
+}
+
+// TestUplinkHostnameEndpointSkipped: a hostname endpoint is not pinned (needs
+// resolution and may change), so no route is added even with an uplink.
+func TestUplinkHostnameEndpointSkipped(t *testing.T) {
+	fake := &netexectest.Fake{}
+	cfg := fullTunnelConf() // Endpoint h:51820 (hostname)
+	a := New(fake, "vpnaw0", cfg)
+	a.Uplink = "enp5s0"
+	_ = a.Up(context.Background(), cfg)
+	if strings.Contains(strings.Join(fake.Calls, "\n"), "route add h") {
+		t.Error("hostname endpoint must not be pinned")
+	}
+}

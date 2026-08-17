@@ -29,9 +29,15 @@ type Applier struct {
 	// defaults to 51820 when no explicit fwmark; we pin an explicit value for
 	// determinism unless the config sets FwMark.
 	Table uint32
+	// Uplink, when set, pins the encrypted-traffic egress to a specific physical
+	// interface (e.g. a wired uplink vs Wi‑Fi). A host route for the server
+	// endpoint is installed via this uplink so WireGuard's own marked packets
+	// leave through it (U7). Empty = use the default route.
+	Uplink string
 
-	appliedAddrs   []netip.Prefix
-	appliedDefault map[bool]bool // family(isV6)->added
+	appliedAddrs    []netip.Prefix
+	appliedDefault  map[bool]bool // family(isV6)->added
+	appliedEndpoint string        // endpoint host route we installed (for teardown)
 }
 
 // DefaultMark is wg-quick's default fwmark/table value used when the config
@@ -76,6 +82,18 @@ func (a *Applier) Up(ctx context.Context, cfg *profile.Config) error {
 		a.appliedAddrs = append(a.appliedAddrs, p)
 	}
 
+	// U7: pin the encrypted-traffic egress to a chosen uplink by routing the
+	// server endpoint host through it. Must be done BEFORE the default route so
+	// the WireGuard socket can reach the server via that uplink.
+	if a.Uplink != "" {
+		if host := cfg.EndpointHost(); host != "" {
+			if err := a.addEndpointRoute(ctx, host); err != nil {
+				return fmt.Errorf("pin endpoint via uplink %s: %w", a.Uplink, err)
+			}
+			a.appliedEndpoint = host
+		}
+	}
+
 	// Determine which families need a default route.
 	needV4, needV6 := allowedDefaults(cfg)
 	if needV4 {
@@ -89,6 +107,40 @@ func (a *Applier) Up(ctx context.Context, cfg *profile.Config) error {
 		}
 	}
 	return nil
+}
+
+// addEndpointRoute installs a host route for the server endpoint via the pinned
+// uplink, so the WireGuard socket's encrypted packets egress that interface.
+func (a *Applier) addEndpointRoute(ctx context.Context, host string) error {
+	ip, err := netip.ParseAddr(host)
+	if err != nil {
+		// Endpoint is a hostname; skip pinning (needs resolution + may change).
+		return nil
+	}
+	fam, hostRoute := "-4", ip.String()+"/32"
+	if ip.Is6() {
+		fam, hostRoute = "-6", ip.String()+"/128"
+	}
+	_, err = a.Runner.Run(ctx, "ip", fam, "route", "add", hostRoute, "dev", a.Uplink)
+	return err
+}
+
+// delEndpointRoute removes the pinned endpoint host route on teardown.
+func (a *Applier) delEndpointRoute(ctx context.Context) error {
+	if a.appliedEndpoint == "" {
+		return nil
+	}
+	ip, err := netip.ParseAddr(a.appliedEndpoint)
+	if err != nil {
+		return nil
+	}
+	fam, hostRoute := "-4", ip.String()+"/32"
+	if ip.Is6() {
+		fam, hostRoute = "-6", ip.String()+"/128"
+	}
+	_, err = a.Runner.Run(ctx, "ip", fam, "route", "del", hostRoute, "dev", a.Uplink)
+	a.appliedEndpoint = ""
+	return err
 }
 
 // Down reverts everything Up applied. It is best-effort and tolerant.
@@ -105,6 +157,7 @@ func (a *Applier) Down(ctx context.Context) error {
 		}
 		note(a.delDefault(ctx, isV6))
 	}
+	note(a.delEndpointRoute(ctx))
 	// Addresses are removed automatically when the interface is destroyed by
 	// the engine; explicit flush is a safety net.
 	return firstErr

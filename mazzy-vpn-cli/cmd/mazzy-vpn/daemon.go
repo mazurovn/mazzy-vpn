@@ -201,7 +201,7 @@ func (d *daemonState) connectZone(ctx context.Context, name string) (*connect.Co
 		return nil, false
 	}
 	d.logf("connecting %s (%s)...", name, proto.Title())
-	c, err := connect.Up(ctx, proto, cfg, connect.Options{LogLevel: wireguard.LogError})
+	c, err := connect.Up(ctx, proto, cfg, connect.Options{LogLevel: wireguard.LogError, Uplink: settingsUplink()})
 	if err != nil {
 		d.logf("connect failed: %v", err)
 		d.nfy.Failed(name, err.Error())
