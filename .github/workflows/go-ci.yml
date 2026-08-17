@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright © 2026 Nik m (@mazurovn). All rights reserved.
+#
+# Go CI gate for the autonomous Mazzy VPN rewrite (core/ + mazzy-vpn-cli/).
+# Runs build, tests, race detector, vet, staticcheck, gofmt and the public
+# secret/PII audit. Uses vendored dependencies (offline, no go get).
+name: Go CI
+
+on:
+  push:
+    branches:
+      - feat/go-rewrite
+      - "feat/go-**"
+  pull_request:
+    branches:
+      - feat/go-rewrite
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: "1.25.x"
+          cache: false
+
+      - name: gofmt (owned code, excluding vendor)
+        run: |
+          fmt_out="$(gofmt -l $(git ls-files '*.go' | grep -v '/vendor/'))"
+          if [ -n "$fmt_out" ]; then
+            echo "Unformatted files:"; echo "$fmt_out"; exit 1
+          fi
+
+      - name: Build core (static, vendored)
+        working-directory: core
+        run: CGO_ENABLED=0 go build -mod=vendor ./...
+
+      - name: Test core
+        working-directory: core
+        run: CGO_ENABLED=0 go test -mod=vendor ./...
+
+      - name: Race core
+        working-directory: core
+        run: go test -mod=vendor -race ./...
+
+      - name: Vet core
+        working-directory: core
+        run: go vet -mod=vendor ./...
+
+      - name: Build CLI (static, vendored)
+        working-directory: mazzy-vpn-cli
+        run: CGO_ENABLED=0 go build -mod=vendor ./...
+
+      - name: Vet CLI
+        working-directory: mazzy-vpn-cli
+        run: go vet -mod=vendor ./...
+
+      - name: Verify static binary
+        working-directory: mazzy-vpn-cli
+        run: |
+          CGO_ENABLED=0 go build -mod=vendor -o /tmp/mazzy-vpn ./cmd/mazzy-vpn
+          file /tmp/mazzy-vpn | grep -q "statically linked" \
+            && echo "OK: statically linked" \
+            || { echo "FAIL: not static"; exit 1; }
+
+      - name: staticcheck
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@2025.1.1
+          echo "== core =="
+          ( cd core && "$(go env GOPATH)/bin/staticcheck" ./... )
+          echo "== cli =="
+          ( cd mazzy-vpn-cli && "$(go env GOPATH)/bin/staticcheck" ./... )
+
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Public secret/PII audit
+        run: bash tests/audit-public.sh
