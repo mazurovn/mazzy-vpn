@@ -151,7 +151,7 @@ P3-1 (Раунд 18, `../audit/round-18-cli-connect.ru.md`): добавлены 
 первым (non-root не читает секретный файл). go.work git-ignored. Исправлены
 CLI-4 (redundant filepath.Join) и S1023.
 | P3-CI | CI-gate: staticcheck + vet + gofmt + -race | P1 | DONE (.github/workflows/go-ci.yml) |
-| P3-2 | install без git clone/apt VPN-бэкендов | P0 | TODO |
+| P3-2 | install без git clone/apt VPN-бэкендов | P0 | DONE (tests/check-go-installer-autonomy.sh) |
 | P3-3 | Desktop на **gio**, линкует core, работает без CLI, без webkit/GTK | P0 | TODO |
 | P3-3a | Desktop: трей-иконка + автозапуск (gio трей не даёт) | P1 | TODO |
 | P3-3b | Desktop: проверка рендера Wayland+X11 на целевых DE | P1 | TODO |
