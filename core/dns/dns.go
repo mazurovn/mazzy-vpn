@@ -47,10 +47,18 @@ func (m *Manager) Up(ctx context.Context, servers []string) error {
 		}
 	case netexec.Available("resolvconf"):
 		m.backend = "resolvconf"
-		// resolvconf reads nameserver lines from stdin; we emulate via -a and
-		// a here-doc is not available through Runner, so use a temp approach:
-		// fall through to per-server not supported -> return explicit error.
-		return fmt.Errorf("resolvconf backend requires stdin; not yet supported (backlog C1-4b2)")
+		// resolvconf reads "nameserver <ip>" lines from stdin (C1-4b2).
+		ir, ok := m.Runner.(netexec.InputRunner)
+		if !ok {
+			return fmt.Errorf("resolvconf backend requires an input-capable runner")
+		}
+		var b strings.Builder
+		for _, s := range servers {
+			fmt.Fprintf(&b, "nameserver %s\n", strings.TrimSpace(s))
+		}
+		if _, err := ir.RunInput(ctx, b.String(), "resolvconf", "-a", m.Interface, "-m", "0", "-x"); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("no DNS backend (resolvectl/resolvconf) available")
 	}
