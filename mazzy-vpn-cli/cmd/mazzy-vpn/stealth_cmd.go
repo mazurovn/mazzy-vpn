@@ -228,6 +228,9 @@ func cmdMimic(ctx context.Context, args []string) int {
 		env := mgr.ProcessEnv(sig.EgressCountry)
 		fmt.Printf("# launch an app as if local to %s:\n", sig.EgressCountry)
 		fmt.Printf("env %s <your-app>\n", strings.Join(env, " "))
+		fmt.Println("\n# for a browser, also disable WebRTC IP leak, e.g. Chromium:")
+		fmt.Printf("env %s chromium --force-webrtc-ip-handling-policy=disable_non_proxied_udp\n",
+			strings.Join(env, " "))
 		return 0
 	}
 

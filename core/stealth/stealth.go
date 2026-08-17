@@ -115,6 +115,12 @@ func Analyze(s Signal) *Report {
 			"No action needed unless a service geo-blocks; try a zone closer to a matching PoP.", 5)
 	}
 
+	// WebRTC advisory: the CLI cannot see the browser, but WebRTC can leak the
+	// real IP over UDP even behind a VPN. Always remind (info only, no penalty).
+	add(Info, "webrtc.advisory", "WebRTC may leak your real IP in browsers",
+		"WebRTC can expose your real IP via UDP even with the VPN up; the CLI cannot detect this (browser-only).",
+		"Disable WebRTC or force proxied UDP: mazzy-vpn mimic --process prints browser flags.", 0)
+
 	if r.Score < 0 {
 		r.Score = 0
 	}
