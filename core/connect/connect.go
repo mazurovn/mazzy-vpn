@@ -49,6 +49,7 @@ type Conn struct {
 	ipv6GuardOn bool
 	routesOn    bool
 	dnsOn       bool
+	connmarkOn  bool
 }
 
 // Options tune a connection.
@@ -131,6 +132,14 @@ func Up(ctx context.Context, proto core.Protocol, cfg *profile.Config, opts Opti
 	}
 	c.routesOn = true
 
+	// 3b. CONNMARK save/restore so marked reply packets keep the mark (wg-quick
+	//     parity, C1-4a2). Best-effort: connectivity works without it in most
+	//     setups, so a failure here only drops the connmark helper, not the
+	//     whole connection.
+	if err := c.guard.InstallConnmark(ctx, mark); err == nil {
+		c.connmarkOn = true
+	}
+
 	// 4. DNS (optional; empty DNS is a no-op).
 	c.dns = dns.New(runner, eng.Interface)
 	if err := c.dns.Up(ctx, cfg.DNS); err != nil {
@@ -155,6 +164,10 @@ func (c *Conn) Down(ctx context.Context) error {
 		note(c.dns.Down(ctx))
 		c.dnsOn = false
 	}
+	if c.connmarkOn {
+		note(c.guard.RemoveConnmark(ctx))
+		c.connmarkOn = false
+	}
 	if c.routesOn {
 		note(c.routes.Down(ctx))
 		c.routesOn = false
@@ -176,6 +189,10 @@ func (c *Conn) unwind(ctx context.Context) {
 	if c.dnsOn {
 		_ = c.dns.Down(ctx)
 		c.dnsOn = false
+	}
+	if c.connmarkOn {
+		_ = c.guard.RemoveConnmark(ctx)
+		c.connmarkOn = false
 	}
 	if c.routesOn {
 		_ = c.routes.Down(ctx)

@@ -77,3 +77,23 @@ func TestInvalidInterfaceRejected(t *testing.T) {
 		t.Fatal("expected rejection of invalid interface name")
 	}
 }
+
+func TestConnmarkRuleset(t *testing.T) {
+	cf := &captureFake{}
+	g := New(cf)
+	if err := g.InstallConnmark(context.Background(), 51820); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	rs := cf.lastRuleset
+	for _, want := range []string{
+		"table inet " + ConnmarkTable,
+		"type filter hook prerouting priority -150",
+		"meta l4proto udp meta mark set ct mark",
+		"type filter hook postrouting priority -150",
+		"meta l4proto udp mark 51820 ct mark set mark",
+	} {
+		if !strings.Contains(rs, want) {
+			t.Errorf("connmark ruleset missing %q:\n%s", want, rs)
+		}
+	}
+}

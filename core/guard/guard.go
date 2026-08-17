@@ -21,6 +21,11 @@ const (
 	// TransitionGuardTable is the fail-closed kill-switch used while switching
 	// or recovering: everything except lo is administratively prohibited.
 	TransitionGuardTable = "mazzy_vpn_transition_guard"
+	// ConnmarkTable carries the CONNMARK save/restore rules (wg-quick parity,
+	// C1-4a2): it saves the socket fwmark onto the connection in postrouting and
+	// restores it in prerouting, so reply packets keep the mark and route out
+	// the correct table instead of looping into the tunnel.
+	ConnmarkTable = "mazzy_vpn_connmark"
 )
 
 var ifaceRe = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
@@ -89,6 +94,31 @@ func (g *Guard) InstallFailClosed(ctx context.Context) error {
 `, TransitionGuardTable)
 	g.deleteTable(ctx, TransitionGuardTable)
 	return g.applyRuleset(ctx, ruleset)
+}
+
+// InstallConnmark installs the CONNMARK save/restore rules for the given fwmark
+// so marked UDP reply packets keep their mark (wg-quick parity). It covers both
+// IPv4 and IPv6 via an inet table.
+func (g *Guard) InstallConnmark(ctx context.Context, mark uint32) error {
+	ruleset := fmt.Sprintf(`table inet %[1]s {
+    chain premangle {
+        type filter hook prerouting priority -150; policy accept;
+        meta l4proto udp meta mark set ct mark
+    }
+    chain postmangle {
+        type filter hook postrouting priority -150; policy accept;
+        meta l4proto udp mark %[2]d ct mark set mark
+    }
+}
+`, ConnmarkTable, mark)
+	g.deleteTable(ctx, ConnmarkTable)
+	return g.applyRuleset(ctx, ruleset)
+}
+
+// RemoveConnmark deletes the CONNMARK table.
+func (g *Guard) RemoveConnmark(ctx context.Context) error {
+	_, err := g.Runner.Run(ctx, "nft", "delete", "table", "inet", ConnmarkTable)
+	return err
 }
 
 // RemoveIPv6Guard deletes the IPv6 guard table.
