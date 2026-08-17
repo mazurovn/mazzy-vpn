@@ -13,6 +13,7 @@ package probe
 
 import (
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -107,9 +108,9 @@ func (p *NetProbe) publicIP(ctx context.Context, iface string) (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
-	buf := make([]byte, 64)
-	n, _ := resp.Body.Read(buf)
-	ip := strings.TrimSpace(string(buf[:n]))
+	// Full bounded read: a single Read() can truncate an IP across segments.
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 128))
+	ip := strings.TrimSpace(string(body))
 	if net.ParseIP(ip) == nil {
 		return "", errBadIP
 	}

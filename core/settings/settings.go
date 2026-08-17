@@ -28,6 +28,9 @@ type Settings struct {
 	PreferredUplink string `json:"preferred_uplink"`
 	// KillSwitch keeps the fail-closed guard on if the tunnel drops.
 	KillSwitch bool `json:"kill_switch"`
+	// AutoMimic aligns the system timezone to the egress country on connect, so
+	// services (Google/Gemini/Antigravity) see a consistent local timezone.
+	AutoMimic bool `json:"auto_mimic"`
 }
 
 // Default returns settings with recommended defaults enabled.

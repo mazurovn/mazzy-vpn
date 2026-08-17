@@ -127,6 +127,7 @@ func cmdConnect(ctx context.Context, args []string) int {
 		fmt.Printf("  egress IP : %s\n", snap.EgressIP)
 		fmt.Printf("  protocol  : %s\n", proto.Title())
 		nfy.Connected(zoneName, snap.EgressIP)
+		maybeAutoMimic(ctx)
 	} else {
 		fmt.Printf("⚠ Interface %s is up, but egress is NOT confirmed: %s\n", conn.Interface, snap.Reason)
 		fmt.Println("  The tunnel may still be establishing, or this server is not routing traffic.")

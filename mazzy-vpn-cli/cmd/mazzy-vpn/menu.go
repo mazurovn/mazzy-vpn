@@ -261,7 +261,8 @@ func menuSettings(ctx context.Context, in *bufio.Reader, store *settings.Store) 
 		fmt.Printf("  3. Notifications           : %s\n", onoff(set.Notifications))
 		fmt.Printf("  4. Auto-reconnect          : %s\n", onoff(set.AutoReconnect))
 		fmt.Printf("  5. Kill-switch (fail-closed): %s\n", onoff(set.KillSwitch))
-		fmt.Printf("  6. Preferred zone          : %s\n", orDash(set.PreferredZone))
+		fmt.Printf("  6. Auto-mimic timezone     : %s\n", onoff(set.AutoMimic))
+		fmt.Printf("  7. Preferred zone          : %s\n", orDash(set.PreferredZone))
 		fmt.Println("  0. Back")
 		fmt.Print("Toggle #: ")
 		line, _ := in.ReadString('\n')
@@ -277,6 +278,8 @@ func menuSettings(ctx context.Context, in *bufio.Reader, store *settings.Store) 
 		case "5":
 			set.KillSwitch = !set.KillSwitch
 		case "6":
+			set.AutoMimic = !set.AutoMimic
+		case "7":
 			fmt.Print("Preferred zone name (blank = best): ")
 			z, _ := in.ReadString('\n')
 			set.PreferredZone = strings.TrimSpace(z)
