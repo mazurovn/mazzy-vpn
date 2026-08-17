@@ -1,0 +1,146 @@
+ok 1 - Mazzy VPN branding and compatibility alias
+ok 2 - six interface languages are selectable and persisted
+ok 3 - list handles spaces
+ok 4 - profile names and locations come from config metadata with filename fallback
+ok 5 - profile catalog rejects terminal control characters
+ok 6 - profile catalog rejects Unicode direction and zero-width spoofing markers
+ok 7 - validate checks every selected profile
+ok 8 - bounded endpoint probe reports per-location reachability and latency
+ok 9 - OpenVPN nested config is rejected
+ok 10 - safe multi-file profile import
+ok 11 - folder structure and safe protocol auto-import
+ok 12 - connect persists profile and prevents direct traffic during the transition
+ok 13 - transition readiness supports IPv6-only protected egress
+ok 14 - transition readiness fails closed and requires explicit recovery
+ok 15 - tunnel mutation fails before stop when the leak guard is unavailable
+ok 16 - ownerless policy rules are never deleted without journaled ownership
+ok 17 - interactive TUI protocol/profile selection
+ok 18 - idle TUI releases the watchdog mutation lock
+ok 19 - interactive TUI config-folder action
+ok 20 - interactive TUI language selection
+ok 21 - OpenVPN service arguments
+[INFO] TEST: расширенное логирование включено; deadline=9999999999
+[INFO] TEST: OpenVPN / Test Server
+[INFO] TEST: OpenVPN запущен с verb=6; профиль Test Server
+ok 22 - test mode logging and permanent/retryable OpenVPN exit classification
+Link 7 (vpnovpn0): 9.9.9.9
+Link 7 (vpnovpn0): ~.
+Link 7 (vpnovpn2): 9.9.9.9
+Link 7 (vpnovpn2): ~.
+ok 23 - OpenVPN DNS lifecycle avoids a hard-coded resolver
+ok 24 - status
+ok 25 - safe structured dashboard status
+ok 26 - network egress verification preserves schema v1 and locale-independent JSON
+ok 27 - provider-aware region readiness is strict, read-only and country-consistent
+ok 28 - allowlisted service egress classifiers are credential-free, bounded and sanitized
+ok 29 - VPN egress verification rejects route, IPv6, geo, DNS and tunnel failures
+ok 30 - sanitized Desktop profile library cache
+ok 31 - deterministic agent-safe protocol planner
+ok 32 - local API query envelopes expose sanitized status, profiles, probes and egress
+ok 33 - local API bounds request memory before JSON parsing
+ok 34 - local API rejects ambiguous JSON envelopes before dispatch
+ok 35 - local API bounds query refreshes and cleans interrupted cache writes
+ok 36 - local API serializes concurrent mutations
+ok 37 - local API requires a durable audit event before mutation
+ok 38 - local API repairs terminal audit persistence without repeating a mutation
+ok 39 - local API mutation IDs are persistent and idempotent
+ok 40 - local API accounts preflight time and terminates timed-out descendants
+ok 41 - local API fails closed when rollback cannot stop the service
+ok 42 - local API recovery fails closed and bounds persistent journals
+ok 43 - boot API recovery reconciles interrupted actions without an ordering deadlock
+ok 44 - boot transition recovery restores a process-wide fail-closed guard
+ok 45 - API recovery marker creation restores the caller umask
+ok 46 - boot API recovery failure remains fail closed until administrator acknowledgement
+ok 47 - boot recovery reports marker-persistence failure without leaking temporary state
+ok 48 - boot API infrastructure failures persist a fail-closed marker
+ok 49 - all boot journal failure markers are mode 600, synced and fail closed
+2026/08/16 22:12:00 socat[331360] W exiting on signal 15
+ok 50 - local API client preserves the response half after request EOF
+ok 51 - CLI/TUI use opaque local API queries and idempotent lifecycle mutations
+ok 52 - dashboard and quick default connection
+[WARN] AmneziaWG: профилей нет
+[WARN] WireGuard: профилей нет
+[WARN] L2TP/IPsec: профилей нет
+ok 53 - offline self-diagnostics
+[WARN] TEST rollback: проверка завершена; возвращаем исходное соединение
+ok 54 - successful test rolls back
+[WARN] Обнаружен конфликт managed VPN и внешнего VPN; rollback оставит внешний VPN
+[WARN] TEST rollback: проверка завершена; возвращаем исходное соединение
+ok 55 - AdGuard fallback cannot retain direct or API mutation locks
+[WARN] Обнаружен конфликт managed VPN и внешнего VPN; rollback оставит внешний VPN
+[WARN] TEST rollback: проверка завершена; возвращаем исходное соединение
+ok 56 - AdGuard is detected by its validated PID file when status is unavailable
+[WARN] TEST rollback: проверка завершена; возвращаем исходное соединение
+ok 57 - explicit profile cycling and test-all reset systemd start limit and roll back
+ok 58 - test-all stops safely on an OpenVPN server connection limit
+[WARN] TEST rollback: истёк защитный таймаут
+ok 59 - independent timeout guard
+ok 60 - timeout recovery is serialized with active operations
+[WARN] BOOT RECOVERY: найден незавершённый тестовый туннель
+[WARN] TEST rollback: boot recovery после незавершённого теста
+ok 61 - boot recovery
+[WARN] BOOT RECOVERY: найден незавершённый тестовый туннель
+[WARN] TEST rollback: boot recovery после незавершённого теста
+ok 62 - boot recovery restores external fallback
+[WARN] BOOT RECOVERY: найден незавершённый тестовый туннель
+[WARN] TEST rollback: boot recovery после незавершённого теста
+ok 63 - test timeout fails closed until rollback is independently verified
+[WARN] BOOT RECOVERY: найден незавершённый тестовый туннель
+[WARN] TEST rollback: boot recovery после незавершённого теста
+ok 64 - rollback failure is critical and recoverable
+ok 65 - failed connect restores legacy fallback
+[WARN] Обнаружен конфликт managed VPN и внешнего VPN; rollback оставит внешний VPN
+ok 66 - test keep leaves external fallback stopped
+ok 67 - emergency keeps first available tunnel
+[WARN] BOOT RECOVERY: найден незавершённый тестовый туннель
+[WARN] TEST rollback: boot recovery после незавершённого теста
+ok 68 - emergency failure rolls back
+ok 69 - unsafe hooks are rejected
+[WARN] Проверка соединения 1/2: системный default egress идёт не через VPN
+[WARN] Проверка соединения 2/2: системный default egress идёт не через VPN
+[WARN] Автовосстановление: системный default egress идёт не через VPN после 2 последовательных проверок; действие=restart vpnctl.service
+ok 70 - watchdog can enforce full-tunnel default egress without breaking split-tunnel auto mode
+[WARN] Проверка соединения 1/2: системный default egress идёт не через VPN
+[WARN] Проверка соединения 2/2: системный default egress идёт не через VPN
+[WARN] Автовосстановление: системный default egress идёт не через VPN после 2 последовательных проверок; действие=restart vpnctl.service
+ok 71 - watchdog parses compact WireGuard full-tunnel routes
+ok 72 - watchdog uses suspend-safe bounded monotonic grace and fails closed without its clock
+ok 73 - watchdog caps automatic recovery and explicit recovery resets its counter
+[WARN] Автовосстановление: сохранено DESIRED=up, но сервис не активен; действие=start vpnctl.service
+ok 74 - watchdog immediately restores an inactive desired service
+ok 75 - health remediation fails closed behind the recovery marker
+ok 76 - health remediation retains the shared lock through terminal systemd result
+ok 77 - autostart semantics
+ok 78 - independent health monitor control
+ok 79 - service policy mutations fail closed behind the shared lock
+ok 80 - bounded service log retrieval
+ok 81 - disconnect
+ok 82 - branded staged installation and aliases
+ok 83 - package lifecycle migrates and restores trusted legacy executables
+ok 84 - package drop-ins form a valid recovery graph over legacy /etc units
+ok 85 - dependency bootstrap and package-owned lifecycle are declared safely
+ok 86 - installer language selection
+ok 87 - installer config-folder auto-detection
+ok 88 - Mazzy VPN bash completion
+ok 89 - runtime consumers cannot deadlock on or fail as boot recovery dependencies
+ok 90 - recovery failure is isolated by engine gates instead of systemd dependencies
+ok 91 - Ubuntu without PPA uses commit-verified userspace fallback
+ok 92 - Desktop self-start, package state and unavailable notifications are represented honestly
+ok 93 - Desktop verifies egress and exposes sortable sanitized per-location health
+ok 94 - CLI/TUI/Desktop capability parity and release gates
+ok 95 - versioned local API contract
+ok 96 - protocol registry and AI orchestration policy
+ok 97 - reverse agent-control transports and ingress policy
+ok 98 - mazzy-agentd LAN-WSS select/connect/verify/region-check flow
+ok 99 - Desktop Agent Control is diagnostics-only and exposes no renderer mutation
+ok 100 - managed proxy profiles generate a closed sing-box TUN graph
+ok 101 - modern protocol runtime adapters have explicit execution and release gates
+ok 102 - planner SDK examples enforce strict bounded JSON
+ok 103 - protocol URI/JSON classification is bounded and credential-redacted
+ok 104 - runtime hard-code boundaries
+ok 105 - CodeQL scans owned code and the excluded vendor tree remains byte-verified
+1..105
+
+ELAPSED_SEC=279.15
+MAX_RSS_KB=45388
+EXIT=0

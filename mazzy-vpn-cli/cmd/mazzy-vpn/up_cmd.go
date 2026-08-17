@@ -8,7 +8,10 @@ import (
 	"fmt"
 	"os"
 
+	"time"
+
 	"github.com/mazurovn/mazzy-vpn/core/measure"
+	"github.com/mazurovn/mazzy-vpn/core/zonescore"
 )
 
 // cmdUp connects by managed profile NAME, or picks the best zone with --best/
@@ -17,7 +20,8 @@ func cmdUp(ctx context.Context, args []string) int {
 	cat := newCatalog()
 
 	var name string
-	auto := hasFlag(args, "--best") || hasFlag(args, "--auto")
+	clean := hasFlag(args, "--clean")
+	auto := hasFlag(args, "--best") || hasFlag(args, "--auto") || clean
 	for _, a := range args {
 		if a != "" && a[0] != '-' {
 			name = a
@@ -50,7 +54,21 @@ func cmdUp(ctx context.Context, args []string) int {
 				return 1
 			}
 			name = best.Name
-			if best.ICMPAlive {
+			// --clean: among the live zones, prefer the ones the stealth cache
+			// knows are cleanest (non-datacenter, high stealth score).
+			if clean {
+				live := []string{}
+				for _, r := range ranked {
+					if r.ICMPAlive {
+						live = append(live, r.Name)
+					}
+				}
+				if len(live) > 0 {
+					ranked2 := zonescore.New().Rank(live, 24*time.Hour)
+					name = ranked2[0]
+					fmt.Printf("Cleanest live zone: %s\n", name)
+				}
+			} else if best.ICMPAlive {
 				fmt.Printf("Best zone: %s (%d ms, ✔ alive)\n", name, best.LatencyMS)
 			} else {
 				fmt.Printf("Best zone: %s (no ICMP reply; may still work)\n", name)

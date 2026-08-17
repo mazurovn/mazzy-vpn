@@ -1,0 +1,8 @@
+
+> pi-vpn-recovery@0.2.0 typecheck
+> tsc --noEmit
+
+
+ELAPSED_SEC=3.41
+MAX_RSS_KB=342432
+EXIT=0

@@ -1,0 +1,137 @@
+## npm test
+
+> pi-vpn-recovery@0.2.0 test
+> node --experimental-strip-types --test test/*.test.ts
+
+TAP version 13
+# Subtest: network classifier excludes policy and quota errors
+ok 1 - network classifier excludes policy and quota errors
+  ---
+  duration_ms: 4.151921
+  type: 'test'
+  ...
+# Subtest: cross-process lock admits only one owner
+ok 2 - cross-process lock admits only one owner
+  ---
+  duration_ms: 2.05138
+  type: 'test'
+  ...
+# Subtest: expired lock is reclaimed even while its Pi owner is alive
+ok 3 - expired lock is reclaimed even while its Pi owner is alive
+  ---
+  duration_ms: 1.890013
+  type: 'test'
+  ...
+# Subtest: healthy tunnel skips destructive recovery and consumes no attempt
+ok 4 - healthy tunnel skips destructive recovery and consumes no attempt
+  ---
+  duration_ms: 6.947651
+  type: 'test'
+  ...
+# Subtest: missing physical network suppresses recovery without consuming budget
+ok 5 - missing physical network suppresses recovery without consuming budget
+  ---
+  duration_ms: 2.814791
+  type: 'test'
+  ...
+# Subtest: failed turn signal cannot abort a committed recovery
+ok 6 - failed turn signal cannot abort a committed recovery
+  ---
+  duration_ms: 109.29405
+  type: 'test'
+  ...
+# Subtest: ordinary kill switch does not strand a committed reconnect
+ok 7 - ordinary kill switch does not strand a committed reconnect
+  ---
+  duration_ms: 6.145955
+  type: 'test'
+  ...
+# Subtest: failed final allowed attempt opens the circuit
+ok 8 - failed final allowed attempt opens the circuit
+  ---
+  duration_ms: 8.231428
+  type: 'test'
+  ...
+# Subtest: legacy incomplete attempt is reconciled without another reconnect
+ok 9 - legacy incomplete attempt is reconciled without another reconnect
+  ---
+  duration_ms: 2.170955
+  type: 'test'
+  ...
+# Subtest: failed reconciliation opens the circuit without another reconnect
+ok 10 - failed reconciliation opens the circuit without another reconnect
+  ---
+  duration_ms: 504.126212
+  type: 'test'
+  ...
+# Subtest: doctor runs bounded structured probes without invoking recovery
+ok 11 - doctor runs bounded structured probes without invoking recovery
+  ---
+  duration_ms: 3.040439
+  type: 'test'
+  ...
+# Subtest: fast transport quorum excludes non-general probes for doctor and recovery
+ok 12 - fast transport quorum excludes non-general probes for doctor and recovery
+  ---
+  duration_ms: 3.837209
+  type: 'test'
+  ...
+# Subtest: balanced and deep quorum rounds exclude first-round non-general passes
+ok 13 - balanced and deep quorum rounds exclude first-round non-general passes
+  ---
+  duration_ms: 4.379406
+  type: 'test'
+  ...
+# Subtest: relevant IPv6 probe failures degrade doctor aggregate to WARN
+ok 14 - relevant IPv6 probe failures degrade doctor aggregate to WARN
+  ---
+  duration_ms: 1.488407
+  type: 'test'
+  ...
+# Subtest: long custom verification extends lock and attempt deadlines
+ok 15 - long custom verification extends lock and attempt deadlines
+  ---
+  duration_ms: 2.702666
+  type: 'test'
+  ...
+# Subtest: long custom reconciliation verification extends the lock deadline
+ok 16 - long custom reconciliation verification extends the lock deadline
+  ---
+  duration_ms: 2.001651
+  type: 'test'
+  ...
+# Subtest: invalid mode falls back to balanced in status rather than weakening checks
+ok 17 - invalid mode falls back to balanced in status rather than weakening checks
+  ---
+  duration_ms: 2.047673
+  type: 'test'
+  ...
+# Subtest: malformed config fails back to guarded balanced defaults
+ok 18 - malformed config fails back to guarded balanced defaults
+  ---
+  duration_ms: 0.624819
+  type: 'test'
+  ...
+# Subtest: headless session does not call UI status methods
+ok 19 - headless session does not call UI status methods
+  ---
+  duration_ms: 1.276518
+  type: 'test'
+  ...
+1..19
+# tests 19
+# suites 0
+# pass 19
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 999.361547
+
+## npm run typecheck
+
+> pi-vpn-recovery@0.2.0 typecheck
+> tsc --noEmit
+
+
+RESULT test=0 typecheck=0

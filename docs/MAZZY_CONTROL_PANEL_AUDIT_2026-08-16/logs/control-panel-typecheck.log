@@ -1,0 +1,12 @@
+
+> @mazzy/control@0.2.0 typecheck
+> tsc -p tsconfig.json
+
+src/storage-policy.ts(34,107): error TS18046: 'rule.maxAgeSeconds' is of type 'unknown'.
+src/storage-policy.ts(34,134): error TS18046: 'rule.maxAgeSeconds' is of type 'unknown'.
+src/storage-policy.ts(35,30): error TS2322: Type 'unknown' is not assignable to type 'number'.
+Command exited with non-zero status 2
+
+ELAPSED_SEC=7.65
+MAX_RSS_KB=700672
+EXIT=2
