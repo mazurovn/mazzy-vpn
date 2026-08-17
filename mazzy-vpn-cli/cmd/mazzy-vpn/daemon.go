@@ -92,6 +92,25 @@ func cmdDaemon(ctx context.Context, args []string) int {
 			_ = st.SetDesired(core.DesiredDown)
 			return 0
 		case <-ticker.C:
+			// Honor an intent written by the (unprivileged) TUI (ADR-0006 D2).
+			if di, ok := readDesired(); ok {
+				if di.Desired == "down" && conn != nil {
+					d.logf("TUI requested disconnect")
+					_ = conn.Down(ctx)
+					conn = nil
+					nfy.Disconnected(zone)
+					continue
+				}
+				if di.Desired == "up" && di.Zone != "" && di.Zone != "--best" && di.Zone != zone {
+					d.logf("TUI requested zone switch: %s → %s", zone, di.Zone)
+					if conn != nil {
+						_ = conn.Down(ctx)
+						conn = nil
+					}
+					zone = di.Zone
+					fails = 0
+				}
+			}
 			if conn == nil {
 				time.Sleep(backoff(fails))
 				conn, _ = d.connectZone(ctx, zone)
