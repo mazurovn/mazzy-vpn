@@ -34,7 +34,7 @@ Control Panel (`.mazzy-vpn-control/`, git-ignored).
 | C1-4a | `routes`: таблицы/ip rule/fwmark (policy routing wg-quick) | P0 | DONE |
 | C1-4a2 | CONNMARK save/restore (паритет wg-quick, G3) | P2 | DONE |
 | C1-4b | `dns`: resolvectl | P0 | DONE (resolvectl) |
-| C1-4b2 | `dns`: resolvconf stdin backend (G4) | P2 | TODO |
+| C1-4b2 | `dns`: resolvconf stdin backend (G4) | P2 | DONE |
 | C1-4d | native-netlink вместо exec `ip` (ADR-0005 этап 2) | P2 | TODO |
 | C1-5 | `guard`: fail-closed nftables + IPv6 leak guard | P0 | DONE |
 | C1-7 | `state`+`lock`: намерение + single-flight lease | P0 | DONE |

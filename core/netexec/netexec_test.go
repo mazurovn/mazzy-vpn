@@ -61,3 +61,17 @@ func TestAvailable(t *testing.T) {
 		t.Error("nonexistent binary must not be reported available")
 	}
 }
+
+func TestRunInputPipesStdin(t *testing.T) {
+	if !Available("cat") {
+		t.Skip("cat unavailable")
+	}
+	r := ExecRunner{}
+	out, err := r.RunInput(context.Background(), "hello-stdin", "cat")
+	if err != nil {
+		t.Fatalf("cat: %v", err)
+	}
+	if out != "hello-stdin" {
+		t.Errorf("stdin not piped: got %q", out)
+	}
+}

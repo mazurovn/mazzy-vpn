@@ -25,6 +25,13 @@ type Runner interface {
 	Run(ctx context.Context, bin string, args ...string) (stdout string, err error)
 }
 
+// InputRunner additionally feeds stdin to a command (e.g. resolvconf reads
+// nameserver lines from stdin). ExecRunner implements it; fakes may too.
+type InputRunner interface {
+	Runner
+	RunInput(ctx context.Context, stdin string, bin string, args ...string) (stdout string, err error)
+}
+
 // ExecRunner is the production Runner using os/exec with no shell.
 type ExecRunner struct {
 	// Timeout bounds each command. Zero means 15s.
@@ -44,6 +51,37 @@ func (r ExecRunner) Run(ctx context.Context, bin string, args ...string) (string
 	defer cancel()
 
 	cmd := exec.CommandContext(cctx, bin, args...)
+	var out, errb bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &errb
+	err := cmd.Run()
+	if cctx.Err() == context.DeadlineExceeded {
+		return out.String(), fmt.Errorf("%s timed out after %s", bin, to)
+	}
+	if err != nil {
+		msg := strings.TrimSpace(errb.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		return out.String(), fmt.Errorf("%s %s: %s", bin, strings.Join(args, " "), msg)
+	}
+	return out.String(), nil
+}
+
+// RunInput executes bin with args and pipes stdin, no shell.
+func (r ExecRunner) RunInput(ctx context.Context, stdin, bin string, args ...string) (string, error) {
+	if err := validateArgv(bin, args); err != nil {
+		return "", err
+	}
+	to := r.Timeout
+	if to == 0 {
+		to = 15 * time.Second
+	}
+	cctx, cancel := context.WithTimeout(ctx, to)
+	defer cancel()
+
+	cmd := exec.CommandContext(cctx, bin, args...)
+	cmd.Stdin = strings.NewReader(stdin)
 	var out, errb bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errb
