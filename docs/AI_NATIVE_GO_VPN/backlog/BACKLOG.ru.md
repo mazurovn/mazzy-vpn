@@ -164,6 +164,7 @@ CLI-4 (redundant filepath.Join) и S1023.
 |---|---|---|---|
 | L4-0 | **SDD контракт Control Plane** (идентификация/доверие/авторизация) (R6) | P1 | DONE (arch/04) |
 | L4-0a | self-auth Ed25519 identity | P1 | DONE |
+| L4-0b | trust store (untrusted/paired/owned) + pairing | P1 | DONE |
 | L4-1 | `control`: реестр агентов/харнессов/устройств | P1 | DONE |
 | L4-2 | Маршрутизация связей «кто с кем» (deny-by-default) | P1 | DONE |
 | L4-2p | Плоскость 2: `provider` region-check (LLM без блокировок) | P1 | DONE |
