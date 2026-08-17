@@ -66,6 +66,10 @@ func run(args []string) int {
 		return cmdDiagnose(ctx, rest)
 	case "trace":
 		return cmdTrace(ctx, rest)
+	case "stealth", "leaks":
+		return cmdStealth(ctx, rest)
+	case "mimic", "timezone":
+		return cmdMimic(ctx, rest)
 	case "up":
 		return cmdUp(ctx, rest)
 	case "auto":
@@ -145,6 +149,8 @@ Usage:
   mazzy-vpn netdiag [--json]          analyze the network + suggest fixes
   mazzy-vpn diagnose [--json]         root-cause analysis: what's wrong + fixes
   mazzy-vpn trace [ZONE] [--json]     packet path: DNS→server→tunnel→egress
+  mazzy-vpn stealth [--json]          detection risks (IPv6/DNS/timezone/ASN)
+  sudo mazzy-vpn mimic [--apply]      align timezone to egress (look local)
 
  Recovery:
   sudo mazzy-vpn disconnect           bring the tunnel down gracefully
