@@ -1,0 +1,365 @@
+## npm test
+
+> @mazzy/control@0.2.0 test
+> node --experimental-strip-types --test test/*.test.ts
+
+TAP version 13
+# Subtest: published orchestrator instructions retain the safe parent-attested comment import rule
+ok 1 - published orchestrator instructions retain the safe parent-attested comment import rule
+  ---
+  duration_ms: 2.631809
+  type: 'test'
+  ...
+# Subtest: standalone package metadata exposes only package-local runtime resources
+ok 2 - standalone package metadata exposes only package-local runtime resources
+  ---
+  duration_ms: 2.706443
+  type: 'test'
+  ...
+# Subtest: the exact browser chat artifact deduplicates optimism and preserves focused drafts
+ok 3 - the exact browser chat artifact deduplicates optimism and preserves focused drafts
+  ---
+  duration_ms: 5.629098
+  type: 'test'
+  ...
+# Subtest: browser chat state writes only the canonical Mazzy key and clear removes legacy aliases
+ok 4 - browser chat state writes only the canonical Mazzy key and clear removes legacy aliases
+  ---
+  duration_ms: 1.66385
+  type: 'test'
+  ...
+# (node:376730) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: Mazzy commands, legacy aliases, compatibility tools, and Ctrl+Alt+M shortcut register
+ok 5 - Mazzy commands, legacy aliases, compatibility tools, and Ctrl+Alt+M shortcut register
+  ---
+  duration_ms: 1.872961
+  type: 'test'
+  ...
+# (node:376732) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: fixed doorbell contains identifiers only, does not interpolate data, and selects delivery safely
+ok 6 - fixed doorbell contains identifiers only, does not interpolate data, and selects delivery safely
+  ---
+  duration_ms: 2.076872
+  type: 'test'
+  ...
+# Subtest: discussion doorbell is fixed identifier-only followUp with no template expansion
+ok 7 - discussion doorbell is fixed identifier-only followUp with no template expansion
+  ---
+  duration_ms: 0.271354
+  type: 'test'
+  ...
+# Subtest: child runtime guard rejects control-plane bridge ownership
+ok 8 - child runtime guard rejects control-plane bridge ownership
+  ---
+  duration_ms: 0.210479
+  type: 'test'
+  ...
+# Subtest: git-root DB resolution prevents root/nested Pi Ops split-brain
+ok 9 - git-root DB resolution prevents root/nested Pi Ops split-brain
+  ---
+  duration_ms: 54.870951
+  type: 'test'
+  ...
+# (node:376749) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: durable web create replays a lost response and rejects changed payload
+ok 10 - durable web create replays a lost response and rejects changed payload
+  ---
+  duration_ms: 294.224552
+  type: 'test'
+  ...
+# Subtest: authenticated stream replays ordered durable events, observes parent mutations, and cleans up
+ok 11 - authenticated stream replays ordered durable events, observes parent mutations, and cleans up
+  ---
+  duration_ms: 378.687978
+  type: 'test'
+  ...
+# Subtest: two authenticated SSE clients independently receive real HTTP POST and PATCH mutations
+ok 12 - two authenticated SSE clients independently receive real HTTP POST and PATCH mutations
+  ---
+  duration_ms: 4204.084578
+  type: 'test'
+  ...
+# Subtest: stale SSE cursor receives an explicit reset rather than a silently truncated replay
+ok 13 - stale SSE cursor receives an explicit reset rather than a silently truncated replay
+  ---
+  duration_ms: 399.342767
+  type: 'test'
+  ...
+# Subtest: web PATCH only accepts current server uiTransitions and requires expectedRevision
+ok 14 - web PATCH only accepts current server uiTransitions and requires expectedRevision
+  ---
+  duration_ms: 103.605281
+  type: 'test'
+  ...
+# Subtest: browser client contract exercises authenticated API construction without token URLs
+ok 15 - browser client contract exercises authenticated API construction without token URLs
+  ---
+  duration_ms: 2.922238
+  type: 'test'
+  ...
+# Subtest: real create helper mints fresh submits and only retry-original reuses its saved payload
+ok 16 - real create helper mints fresh submits and only retry-original reuses its saved payload
+  ---
+  duration_ms: 2.130809
+  type: 'test'
+  ...
+# Subtest: browser unread state persists only cursors and counts, and stream reconciliation does not count refreshes
+ok 17 - browser unread state persists only cursors and counts, and stream reconciliation does not count refreshes
+  ---
+  duration_ms: 0.741343
+  type: 'test'
+  ...
+# Subtest: valid token supports the same create payload shape used by the task form
+ok 18 - valid token supports the same create payload shape used by the task form
+  ---
+  duration_ms: 85.465335
+  type: 'test'
+  ...
+# Subtest: routes bounded reconnaissance to the cheap default and produces stable L4 candidate keys
+ok 19 - routes bounded reconnaissance to the cheap default and produces stable L4 candidate keys
+  ---
+  duration_ms: 9.82133
+  type: 'test'
+  ...
+# Subtest: escalates risk and permits direct top-gate architecture only with a gate reason
+ok 20 - escalates risk and permits direct top-gate architecture only with a gate reason
+  ---
+  duration_ms: 5.461032
+  type: 'test'
+  ...
+# Subtest: requires a gate reason before risk escalation reaches a top-gate agent
+ok 21 - requires a gate reason before risk escalation reaches a top-gate agent
+  ---
+  duration_ms: 7.752007
+  type: 'test'
+  ...
+# Subtest: accepts agents without skills and rejects malformed and unknown-agent policies
+ok 22 - accepts agents without skills and rejects malformed and unknown-agent policies
+  ---
+  duration_ms: 12.619944
+  type: 'test'
+  ...
+# Subtest: routing policy precedence is env, trusted project, then packaged fallback
+ok 23 - routing policy precedence is env, trusted project, then packaged fallback
+  ---
+  duration_ms: 43.178004
+  type: 'test'
+  ...
+# Subtest: malformed routing overrides fail only when loaded and leave fallback/dashboard callers usable
+ok 24 - malformed routing overrides fail only when loaded and leave fallback/dashboard callers usable
+  ---
+  duration_ms: 25.116764
+  type: 'test'
+  ...
+# Subtest: explicitly excludes writer, verifier, evidence, uncertain and incomplete work from caching
+ok 25 - explicitly excludes writer, verifier, evidence, uncertain and incomplete work from caching
+  ---
+  duration_ms: 5.857049
+  type: 'test'
+  ...
+# Subtest: settings deep merge preserves existing arrays on apply and force, and rollback is exact
+ok 26 - settings deep merge preserves existing arrays on apply and force, and rollback is exact
+  ---
+  duration_ms: 85.633725
+  type: 'test'
+  ...
+# Subtest: legacy self path is preserved when it resolves from the target .pi directory
+ok 27 - legacy self path is preserved when it resolves from the target .pi directory
+  ---
+  duration_ms: 69.987534
+  type: 'test'
+  ...
+# Subtest: doctor validates remote specs syntactically and local specs from target .pi without network claims
+ok 28 - doctor validates remote specs syntactically and local specs from target .pi without network claims
+  ---
+  duration_ms: 41.286844
+  type: 'test'
+  ...
+# Subtest: clean unrelated Git project prunes stale self path, diagnoses it, and rolls back byte-for-byte
+ok 29 - clean unrelated Git project prunes stale self path, diagnoses it, and rolls back byte-for-byte
+  ---
+  duration_ms: 79.180019
+  type: 'test'
+  ...
+# Subtest: portable Mazzy scaffold plans, applies idempotently, force-backs up, rolls back, diagnoses, and keeps runtime payloads out of tarballs
+ok 30 - portable Mazzy scaffold plans, applies idempotently, force-backs up, rolls back, diagnoses, and keeps runtime payloads out of tarballs
+  ---
+  duration_ms: 879.563459
+  type: 'test'
+  ...
+# (node:376786) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: server rejects foreign Host, authenticates every API method, and never embeds the capability token
+ok 31 - server rejects foreign Host, authenticates every API method, and never embeds the capability token
+  ---
+  duration_ms: 372.181941
+  type: 'test'
+  ...
+# Subtest: task API supports basic create, list, update, and clear revision/transition failures
+ok 32 - task API supports basic create, list, update, and clear revision/transition failures
+  ---
+  duration_ms: 242.991153
+  type: 'test'
+  ...
+# Subtest: server policy options are injected and standalone defaults expose no agents
+ok 33 - server policy options are injected and standalone defaults expose no agents
+  ---
+  duration_ms: 291.677883
+  type: 'test'
+  ...
+# Subtest: web comments are authenticated, idempotent, persisted before identifier-only callback, and do not mutate revisions
+ok 34 - web comments are authenticated, idempotent, persisted before identifier-only callback, and do not mutate revisions
+  ---
+  duration_ms: 176.52496
+  type: 'test'
+  ...
+# Subtest: rapid GO clicks coalesce to one request and one in-flight callback
+ok 35 - rapid GO clicks coalesce to one request and one in-flight callback
+  ---
+  duration_ms: 137.979884
+  type: 'test'
+  ...
+# Subtest: detail is authenticated read-only and includes report missing honestly
+ok 36 - detail is authenticated read-only and includes report missing honestly
+  ---
+  duration_ms: 143.323932
+  type: 'test'
+  ...
+# Subtest: dashboard wires task FSM, orchestration controls, all detail tabs, and the canonical chat artifact
+ok 37 - dashboard wires task FSM, orchestration controls, all detail tabs, and the canonical chat artifact
+  ---
+  duration_ms: 0.686416
+  type: 'test'
+  ...
+# Subtest: extension writes and clears only the canonical mazzy widget key
+ok 38 - extension writes and clears only the canonical mazzy widget key
+  ---
+  duration_ms: 0.309275
+  type: 'test'
+  ...
+# Subtest: server self-serves the exact browser chat artifact with defensive headers
+ok 39 - server self-serves the exact browser chat artifact with defensive headers
+  ---
+  duration_ms: 142.882172
+  type: 'test'
+  ...
+# Subtest: dashboard API supports a real allowed FSM click path
+ok 40 - dashboard API supports a real allowed FSM click path
+  ---
+  duration_ms: 127.451969
+  type: 'test'
+  ...
+# Subtest: shared UI read model excludes DONE and generic RUNNING
+ok 41 - shared UI read model excludes DONE and generic RUNNING
+  ---
+  duration_ms: 0.88042
+  type: 'test'
+  ...
+# Subtest: storage policy is strict, canonical, and init creates all protected/reserved directories
+ok 42 - storage policy is strict, canonical, and init creates all protected/reserved directories
+  ---
+  duration_ms: 102.783868
+  type: 'test'
+  ...
+# Subtest: cleanup is dry-run by default, explicit on apply, and excludes protected directories and symlinks
+ok 43 - cleanup is dry-run by default, explicit on apply, and excludes protected directories and symlinks
+  ---
+  duration_ms: 34.802321
+  type: 'test'
+  ...
+# Subtest: cleanup fails closed on a bounded scan and policy quota reporting is non-destructive
+ok 44 - cleanup fails closed on a bounded scan and policy quota reporting is non-destructive
+  ---
+  duration_ms: 45.279552
+  type: 'test'
+  ...
+# (node:376820) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: migrates populated legacy rows with acceptance and web-comment backfill
+ok 45 - migrates populated legacy rows with acceptance and web-comment backfill
+  ---
+  duration_ms: 310.324997
+  type: 'test'
+  ...
+# Subtest: acceptance PASS remains current after DONE and later same-acceptance FAIL blocks DONE
+ok 46 - acceptance PASS remains current after DONE and later same-acceptance FAIL blocks DONE
+  ---
+  duration_ms: 266.816861
+  type: 'test'
+  ...
+# Subtest: RUNNING acceptance edit atomically supersedes binding, REVIEW requires its report attestation, and transfer recovers no-worker RUNNING
+ok 47 - RUNNING acceptance edit atomically supersedes binding, REVIEW requires its report attestation, and transfer recovers no-worker RUNNING
+  ---
+  duration_ms: 176.29746
+  type: 'test'
+  ...
+# Subtest: idempotency fingerprints conflict and outstanding GO coalesces across random keys
+ok 48 - idempotency fingerprints conflict and outstanding GO coalesces across random keys
+  ---
+  duration_ms: 168.009821
+  type: 'test'
+  ...
+# Subtest: bounded stale CLAIMED recovery requires unavailable owner and no matching run
+ok 49 - bounded stale CLAIMED recovery requires unavailable owner and no matching run
+  ---
+  duration_ms: 138.054911
+  type: 'test'
+  ...
+# Subtest: discussion is durable, derives parent/bound roles, idempotently replies and acknowledges users
+ok 50 - discussion is durable, derives parent/bound roles, idempotently replies and acknowledges users
+  ---
+  duration_ms: 157.733727
+  type: 'test'
+  ...
+# Subtest: completion reconciles lifecycle-only RUNNING revision drift but rejects changed acceptance
+ok 51 - completion reconciles lifecycle-only RUNNING revision drift but rejects changed acceptance
+  ---
+  duration_ms: 145.875345
+  type: 'test'
+  ...
+# Subtest: discussion imports reject every stale or unbound binding without durable side effects
+ok 52 - discussion imports reject every stale or unbound binding without durable side effects
+  ---
+  duration_ms: 182.546098
+  type: 'test'
+  ...
+# Subtest: current worker and reviewer comments import, but comments cannot transition a task to DONE
+ok 53 - current worker and reviewer comments import, but comments cannot transition a task to DONE
+  ---
+  duration_ms: 138.809227
+  type: 'test'
+  ...
+# (node:376878) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: parent-only tool boundary rejects inherited child execution and derives actor locally
+ok 54 - parent-only tool boundary rejects inherited child execution and derives actor locally
+  ---
+  duration_ms: 2.574515
+  type: 'test'
+  ...
+# Subtest: a child cannot invoke import-comment and the parent import path requires a bound run
+ok 55 - a child cannot invoke import-comment and the parent import path requires a bound run
+  ---
+  duration_ms: 174.77836
+  type: 'test'
+  ...
+1..55
+# tests 55
+# suites 0
+# pass 55
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 6058.840763
+
+## npm run typecheck
+
+> @mazzy/control@0.2.0 typecheck
+> tsc -p tsconfig.json
+
+
+RESULT test=0 typecheck=0

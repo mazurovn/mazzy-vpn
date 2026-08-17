@@ -18,7 +18,27 @@ import (
 	"github.com/mazurovn/mazzy-vpn/core/mimicry"
 	"github.com/mazurovn/mazzy-vpn/core/settings"
 	"github.com/mazurovn/mazzy-vpn/core/stealth"
+	"github.com/mazurovn/mazzy-vpn/core/zonescore"
 )
+
+// recordZoneScore stores the current egress stealth quality for a zone so the
+// cleanest-server selector (up --clean) can learn over time.
+func recordZoneScore(ctx context.Context, zone string) {
+	if zone == "" {
+		return
+	}
+	sig := gatherStealthSignal(ctx)
+	if sig.EgressCountry == "" {
+		return
+	}
+	rep := stealth.Analyze(sig)
+	_ = zonescore.New().Record(zonescore.Score{
+		Zone:         zone,
+		StealthScore: rep.Score,
+		IsDatacenter: sig.IsHostingFlagged || sig.IsProxyFlagged,
+		EgressCC:     sig.EgressCountry,
+	})
+}
 
 // maybeAutoMimic aligns the system timezone to the egress country when the
 // AutoMimic setting is on and we are root. It is a no-op otherwise, and only

@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "syntheticTasks": 500,
+  "benchmarks": {
+    "create": {
+      "n": 500,
+      "minMs": 1.024,
+      "p50Ms": 1.362,
+      "p95Ms": 2.523,
+      "maxMs": 20.723,
+      "meanMs": 1.565
+    },
+    "list": {
+      "n": 200,
+      "minMs": 1.856,
+      "p50Ms": 2.348,
+      "p95Ms": 3.545,
+      "maxMs": 6.194,
+      "meanMs": 2.49
+    },
+    "detail": {
+      "n": 200,
+      "minMs": 0.219,
+      "p50Ms": 0.295,
+      "p95Ms": 0.522,
+      "maxMs": 1.067,
+      "meanMs": 0.325
+    },
+    "httpSnapshot": {
+      "n": 100,
+      "minMs": 3.598,
+      "p50Ms": 4.846,
+      "p95Ms": 8.405,
+      "maxMs": 28.728,
+      "meanMs": 5.42
+    },
+    "httpUnauthorized": {
+      "n": 50,
+      "minMs": 0.446,
+      "p50Ms": 0.583,
+      "p95Ms": 0.925,
+      "maxMs": 1.309,
+      "meanMs": 0.626
+    }
+  },
+  "functional": {
+    "authenticatedPatch": "PASS",
+    "unauthorizedSnapshot": "PASS",
+    "commentIdempotency": "PASS"
+  },
+  "notes": [
+    "Sequential localhost benchmark",
+    "Synthetic project-local database",
+    "Not a cross-host throughput benchmark"
+  ]
+}
