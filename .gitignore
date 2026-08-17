@@ -22,3 +22,27 @@ android/**/.cxx/
 # Machine-local Mazzy Brain connector; project memory is governed by
 # .mazzy/.gitignore and carries no VPN secrets.
 .mcp.json
+
+# ---------------------------------------------------------------------------
+# Project-local Mazzy Control Panel fork (AI-NATIVE-GO-VPN orchestration).
+# EXCLUSION RULE: this fork, its server state, backlog DB and node_modules
+# MUST NEVER be published to GitHub. Only finished Go sources and design docs
+# are committed. The Control Panel tooling stays strictly local.
+# ---------------------------------------------------------------------------
+# Exclude the entire Control Panel fork tree from publication. Only finished
+# Go sources (mazzy-vpn-cli/, desktop, android) and design docs under docs/
+# are committed.
+tools/mazzy-control-panel/
+
+# Local orchestration/backlog server state (pi-ops).
+.pi-ops/
+
+# Local AI-NATIVE-GO-VPN control-plane workspace (backlog, runs, evidence).
+.mazzy-vpn-control/
+
+# Pi settings reference the local-only Control Panel fork; keep local.
+.pi/
+
+# Go workspace (local module linking; not published).
+go.work
+go.work.sum
