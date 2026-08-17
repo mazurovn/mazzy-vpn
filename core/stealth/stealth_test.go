@@ -10,7 +10,7 @@ import (
 
 func cleanSignal() Signal {
 	return Signal{
-		EgressIPv4: "95.211.225.232", EgressCountry: "NL", EgressCity: "Amsterdam",
+		EgressIPv4: "203.0.113.9", EgressCountry: "NL", EgressCity: "Amsterdam",
 		IPv6Leaked: false, DNSCountry: "NL",
 		SystemTimezone: "Europe/Amsterdam", ExpectedTZCC: "NL",
 		IsProxyFlagged: false, IsHostingFlagged: false,
