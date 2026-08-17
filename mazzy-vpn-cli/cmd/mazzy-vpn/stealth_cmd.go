@@ -21,6 +21,11 @@ import (
 	"github.com/mazurovn/mazzy-vpn/core/zonescore"
 )
 
+// stealthScoreOf computes the stealth score for an already-gathered signal.
+func stealthScoreOf(sig stealth.Signal) int {
+	return stealth.Analyze(sig).Score
+}
+
 // recordZoneScore stores the current egress stealth quality for a zone so the
 // cleanest-server selector (up --clean) can learn over time.
 func recordZoneScore(ctx context.Context, zone string) {

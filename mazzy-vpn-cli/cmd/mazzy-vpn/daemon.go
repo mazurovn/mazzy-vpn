@@ -76,6 +76,11 @@ func cmdDaemon(ctx context.Context, args []string) int {
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
+	// Periodic stealth monitor (Task 2): re-checks detection score every few
+	// minutes and notifies if it drops, so a silently-degraded exit is caught.
+	stealthTicker := time.NewTicker(5 * time.Minute)
+	defer stealthTicker.Stop()
+	lastStealth := -1
 
 	fails := 0
 	const reconnectLimit = 2 // reconnect same zone this many times
@@ -91,6 +96,20 @@ func cmdDaemon(ctx context.Context, args []string) int {
 			nfy.Disconnected(zone)
 			_ = st.SetDesired(core.DesiredDown)
 			return 0
+		case <-stealthTicker.C:
+			if conn == nil {
+				continue
+			}
+			sig := gatherStealthSignal(ctx)
+			if sig.EgressCountry == "" {
+				continue
+			}
+			score := stealthScoreOf(sig)
+			d.logf("stealth score: %d (egress %s)", score, sig.EgressCountry)
+			if lastStealth >= 0 && score < lastStealth-15 {
+				d.nfy.Failed(zone, fmt.Sprintf("stealth dropped %d→%d (more detectable)", lastStealth, score))
+			}
+			lastStealth = score
 		case <-ticker.C:
 			// Honor an intent written by the (unprivileged) TUI (ADR-0006 D2).
 			if di, ok := readDesired(); ok {
