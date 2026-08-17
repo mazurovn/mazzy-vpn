@@ -7,15 +7,40 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mazurovn/mazzy-vpn/core/mimicry"
+	"github.com/mazurovn/mazzy-vpn/core/settings"
 	"github.com/mazurovn/mazzy-vpn/core/stealth"
 )
+
+// maybeAutoMimic aligns the system timezone to the egress country when the
+// AutoMimic setting is on and we are root. It is a no-op otherwise, and only
+// reports when it actually changes something.
+func maybeAutoMimic(ctx context.Context) {
+	set := settings.NewStore().Load()
+	if !set.AutoMimic || os.Geteuid() != 0 {
+		return
+	}
+	sig := gatherStealthSignal(ctx)
+	if sig.EgressCountry == "" {
+		return
+	}
+	mgr := &mimicry.Manager{Runner: execRunner{}, CurrentTZ: systemTimezone}
+	plan, ok := mgr.PlanFor(sig.EgressCountry)
+	if !ok || !plan.NeedsChange {
+		return
+	}
+	if _, err := mgr.ApplySystemTZ(sig.EgressCountry); err == nil {
+		fmt.Printf("  timezone  : %s (auto-aligned to %s)\n", plan.ToTZ, sig.EgressCountry)
+	}
+}
 
 // systemTimezone reads the active system timezone.
 func systemTimezone() string {
@@ -42,17 +67,28 @@ func httpGetText(ctx context.Context, url string, timeout time.Duration) (string
 		return "", 0
 	}
 	defer resp.Body.Close()
-	buf := make([]byte, 4096)
-	n, _ := resp.Body.Read(buf)
-	return strings.TrimSpace(string(buf[:n])), resp.StatusCode
+	// Read the full (bounded) body: a single Read() can return partial data for
+	// chunked/TLS responses, which previously dropped Cloudflare trace fields.
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	return strings.TrimSpace(string(body)), resp.StatusCode
 }
 
-// gatherStealthSignal probes detection vectors from the current egress.
+// gatherStealthSignal probes detection vectors from the current egress. The
+// three network probes run concurrently so the whole check is bounded by the
+// slowest one (~6s) instead of their sum (~16s).
 func gatherStealthSignal(ctx context.Context) stealth.Signal {
 	s := stealth.Signal{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	wg.Add(3)
 
 	// IPv4 egress + geo (ip-api gives proxy/hosting flags).
-	if body, code := httpGetText(ctx, "http://ip-api.com/json/?fields=query,countryCode,city,proxy,hosting", 6*time.Second); code == 200 {
+	go func() {
+		defer wg.Done()
+		body, code := httpGetText(ctx, "http://ip-api.com/json/?fields=query,countryCode,city,proxy,hosting", 6*time.Second)
+		if code != 200 {
+			return
+		}
 		var g struct {
 			Query       string `json:"query"`
 			CountryCode string `json:"countryCode"`
@@ -61,33 +97,47 @@ func gatherStealthSignal(ctx context.Context) stealth.Signal {
 			Hosting     bool   `json:"hosting"`
 		}
 		if json.Unmarshal([]byte(body), &g) == nil {
+			mu.Lock()
 			s.EgressIPv4 = g.Query
 			s.EgressCountry = g.CountryCode
 			s.EgressCity = g.City
 			s.IsProxyFlagged = g.Proxy
 			s.IsHostingFlagged = g.Hosting
+			mu.Unlock()
 		}
-	}
+	}()
 
 	// IPv6 leak check.
-	if ip, code := httpGetText(ctx, "https://api6.ipify.org", 5*time.Second); code == 200 && strings.Contains(ip, ":") {
-		s.IPv6Leaked = true
-		s.IPv6EgressIP = ip
-	}
+	go func() {
+		defer wg.Done()
+		if ip, code := httpGetText(ctx, "https://api6.ipify.org", 5*time.Second); code == 200 && strings.Contains(ip, ":") {
+			mu.Lock()
+			s.IPv6Leaked = true
+			s.IPv6EgressIP = ip
+			mu.Unlock()
+		}
+	}()
 
 	// Cloudflare trace: colo + loc.
-	if body, code := httpGetText(ctx, "https://www.cloudflare.com/cdn-cgi/trace", 5*time.Second); code == 200 {
-		for _, line := range strings.Split(body, "\n") {
-			if strings.HasPrefix(line, "colo=") {
-				s.CloudflareColo = strings.TrimPrefix(line, "colo=")
+	go func() {
+		defer wg.Done()
+		if body, code := httpGetText(ctx, "https://www.cloudflare.com/cdn-cgi/trace", 5*time.Second); code == 200 {
+			mu.Lock()
+			for _, line := range strings.Split(body, "\n") {
+				if strings.HasPrefix(line, "colo=") {
+					s.CloudflareColo = strings.TrimPrefix(line, "colo=")
+				}
+				if strings.HasPrefix(line, "loc=") {
+					s.CloudflareLoc = strings.TrimPrefix(line, "loc=")
+				}
 			}
-			if strings.HasPrefix(line, "loc=") {
-				s.CloudflareLoc = strings.TrimPrefix(line, "loc=")
-			}
+			mu.Unlock()
 		}
-	}
+	}()
 
-	// System timezone → country.
+	wg.Wait()
+
+	// System timezone → country (local, no network).
 	s.SystemTimezone = systemTimezone()
 	s.ExpectedTZCC = mimicry.CountryForTimezone(s.SystemTimezone)
 

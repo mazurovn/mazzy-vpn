@@ -253,6 +253,8 @@ func (m tuiModel) keySettings(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.set.AutoReconnect = !m.set.AutoReconnect
 	case "5":
 		m.set.KillSwitch = !m.set.KillSwitch
+	case "6":
+		m.set.AutoMimic = !m.set.AutoMimic
 	}
 	_ = m.setStore.Save(m.set)
 	return m, nil
@@ -383,6 +385,7 @@ func (m tuiModel) viewSettings() string {
 	b.WriteString(fmt.Sprintf("  %s Notifications           %s\n", stKey.Render("[3]"), onoff(m.set.Notifications)))
 	b.WriteString(fmt.Sprintf("  %s Auto-reconnect          %s\n", stKey.Render("[4]"), onoff(m.set.AutoReconnect)))
 	b.WriteString(fmt.Sprintf("  %s Kill-switch             %s\n", stKey.Render("[5]"), onoff(m.set.KillSwitch)))
+	b.WriteString(fmt.Sprintf("  %s Auto-mimic timezone     %s\n", stKey.Render("[6]"), onoff(m.set.AutoMimic)))
 	return b.String()
 }
 
