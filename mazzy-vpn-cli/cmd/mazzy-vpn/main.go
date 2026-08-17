@@ -70,6 +70,8 @@ func run(args []string) int {
 		return cmdStealth(ctx, rest)
 	case "mimic", "timezone":
 		return cmdMimic(ctx, rest)
+	case "dns-check", "dns":
+		return cmdDNSCheck(ctx, rest)
 	case "up":
 		return cmdUp(ctx, rest)
 	case "auto":
@@ -151,6 +153,7 @@ Usage:
   mazzy-vpn trace [ZONE] [--json]     packet path: DNS→server→tunnel→egress
   mazzy-vpn stealth [--json]          detection risks (IPv6/DNS/timezone/ASN)
   sudo mazzy-vpn mimic [--apply]      align timezone to egress (look local)
+  mazzy-vpn dns-check [--json]        DNS privacy: in-country + encrypted?
 
  Recovery:
   sudo mazzy-vpn disconnect           bring the tunnel down gracefully
