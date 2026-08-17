@@ -17,7 +17,7 @@ import (
 )
 
 // version is the CLI source line; the published tag governs releases.
-const version = "2.0.0-dev"
+const version = "2.0.0"
 
 func main() {
 	os.Exit(run(os.Args[1:]))
@@ -62,6 +62,10 @@ func run(args []string) int {
 		return cmdAdapters(ctx, rest)
 	case "netdiag", "analyze":
 		return cmdNetdiag(ctx, rest)
+	case "diagnose", "why":
+		return cmdDiagnose(ctx, rest)
+	case "trace":
+		return cmdTrace(ctx, rest)
 	case "up":
 		return cmdUp(ctx, rest)
 	case "auto":
@@ -76,6 +80,8 @@ func run(args []string) int {
 		return cmdRecover(ctx, rest)
 	case "providers", "ai":
 		return cmdProviders(ctx, rest)
+	case "update", "self-update":
+		return cmdUpdate(ctx, rest)
 	case "status":
 		return cmdStatus(ctx, rest)
 	case "version", "--version", "-v":
@@ -137,6 +143,8 @@ Usage:
   mazzy-vpn best [--json]             print the best zone to connect to
   mazzy-vpn adapters [--json]         list network interfaces + recommendation
   mazzy-vpn netdiag [--json]          analyze the network + suggest fixes
+  mazzy-vpn diagnose [--json]         root-cause analysis: what's wrong + fixes
+  mazzy-vpn trace [ZONE] [--json]     packet path: DNS→server→tunnel→egress
 
  Recovery:
   sudo mazzy-vpn disconnect           bring the tunnel down gracefully
@@ -148,6 +156,7 @@ Usage:
   mazzy-vpn providers [--type llm|agent|search] [--json]   check AI providers
   mazzy-vpn list DIR [--json]         validate profiles in a directory
   mazzy-vpn validate FILE             validate a single profile
+  mazzy-vpn update [--apply]          check/install a newer release from GitHub
   mazzy-vpn version | help
 
 Profiles: AmneziaWG (.conf), WireGuard (.conf), OpenVPN (.ovpn).

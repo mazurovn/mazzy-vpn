@@ -65,6 +65,12 @@ func cmdMenu(ctx context.Context, _ []string) int {
 			menuSettings(ctx, in, setStore)
 		case "14": // doctor
 			cmdDoctor(ctx, nil)
+		case "15": // update from GitHub
+			cmdUpdate(ctx, nil)
+		case "16": // diagnose
+			cmdDiagnose(ctx, nil)
+		case "17": // trace
+			menuTrace(ctx, in)
 		case "0", "q", "quit", "exit":
 			fmt.Println("Bye.")
 			return 0
@@ -126,11 +132,14 @@ func drawMenu(profileCount int, set settings.Settings) {
 	fmt.Println("   8. 🔌 Network adapters")
 	fmt.Println("   9. 🩺 Analyze network (fixes)")
 	fmt.Println("  10. 🤖 Check AI providers")
+	fmt.Println("  16. 🔍 Diagnose problems (what's wrong)")
+	fmt.Println("  17. 🧭 Trace packet path")
 	fmt.Println("  Profiles & settings")
 	fmt.Println("  11. 📥 Import config / folder")
 	fmt.Println("  12. 📋 List profiles")
 	fmt.Println("  13. ⚙️  Settings")
 	fmt.Println("  14. 🔧 Doctor")
+	fmt.Println("  15. ⬆️  Update from GitHub")
 	fmt.Println("   0. Quit")
 }
 
@@ -211,6 +220,18 @@ func menuChooseZone(ctx context.Context, in *bufio.Reader, cat interface {
 		return
 	}
 	runPrivileged(ctx, "up", entries[n-1].Name)
+}
+
+// menuTrace prompts for a zone and traces its packet path.
+func menuTrace(ctx context.Context, in *bufio.Reader) {
+	fmt.Print("Zone name (blank = current connection): ")
+	line, _ := in.ReadString('\n')
+	z := strings.TrimSpace(line)
+	if z == "" {
+		cmdTrace(ctx, nil)
+	} else {
+		cmdTrace(ctx, []string{z})
+	}
 }
 
 // menuImport prompts for a path and imports it.
