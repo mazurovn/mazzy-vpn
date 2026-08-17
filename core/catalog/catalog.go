@@ -1,0 +1,270 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright © 2026 Nik m (@mazurovn). All rights reserved.
+
+// Package catalog manages a user's imported VPN profiles ("zones"): importing
+// them into a managed store, listing, selecting, favoriting and removing them.
+// It gives the CLI a real client workflow instead of passing raw file paths.
+package catalog
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/mazurovn/mazzy-vpn/core"
+	"github.com/mazurovn/mazzy-vpn/core/profile"
+)
+
+// Entry is one managed profile.
+type Entry struct {
+	Name     string        `json:"name"`     // stable display name (file stem)
+	File     string        `json:"file"`     // absolute path in the managed store
+	Protocol core.Protocol `json:"protocol"` // amneziawg/wireguard/openvpn
+	Favorite bool          `json:"favorite"`
+	Country  string        `json:"country,omitempty"` // inferred 2-letter code
+}
+
+// Catalog is a file-backed registry of managed profiles.
+type Catalog struct {
+	Dir string // e.g. ~/.config/mazzy-vpn/profiles
+}
+
+var (
+	// ErrNotFound is returned when a named entry does not exist.
+	ErrNotFound = errors.New("catalog: profile not found")
+	// ErrExists is returned when importing a duplicate name.
+	ErrExists = errors.New("catalog: profile already exists")
+)
+
+// New returns a Catalog rooted at dir.
+func New(dir string) *Catalog { return &Catalog{Dir: dir} }
+
+// DefaultDir returns the per-user catalog directory, honoring MAZZY_CONFIG_DIR.
+func DefaultDir() string {
+	if d := os.Getenv("MAZZY_CONFIG_DIR"); d != "" {
+		return d
+	}
+	if h, err := os.UserConfigDir(); err == nil {
+		return filepath.Join(h, "mazzy-vpn", "profiles")
+	}
+	return filepath.Join(os.TempDir(), "mazzy-vpn", "profiles")
+}
+
+func (c *Catalog) metaFile() string { return filepath.Join(c.Dir, ".catalog.json") }
+
+// ensureDir makes the managed directory with private permissions.
+func (c *Catalog) ensureDir() error {
+	if err := os.MkdirAll(c.Dir, 0o700); err != nil {
+		return err
+	}
+	return os.Chmod(c.Dir, 0o700)
+}
+
+// safeName sanitizes a filename stem into a stable catalog name.
+func safeName(path string) string {
+	base := filepath.Base(path)
+	stem := strings.TrimSuffix(base, filepath.Ext(base))
+	// Keep alnum, dash, underscore; collapse the rest to '-'.
+	var b strings.Builder
+	for _, r := range stem {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('-')
+		}
+	}
+	name := strings.Trim(b.String(), "-")
+	if name == "" {
+		name = "profile"
+	}
+	return name
+}
+
+// detectProtocol infers a protocol from extension + content.
+func detectProtocol(path string, data []byte) core.Protocol {
+	if strings.EqualFold(filepath.Ext(path), ".ovpn") {
+		return core.OpenVPN
+	}
+	if cfg, err := profile.Parse(string(data)); err == nil && cfg.HasAmneziaFields {
+		return core.AmneziaWG
+	}
+	return core.WireGuard
+}
+
+// Import copies a profile file into the managed store and records metadata. It
+// validates WireGuard/AmneziaWG profiles before accepting them.
+func (c *Catalog) Import(path string) (*Entry, error) {
+	if err := c.ensureDir(); err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read profile: %w", err)
+	}
+	proto := detectProtocol(path, data)
+	if proto == core.AmneziaWG || proto == core.WireGuard {
+		cfg, err := profile.Parse(string(data))
+		if err != nil {
+			return nil, fmt.Errorf("parse profile: %w", err)
+		}
+		if problems := profile.Validate(proto, cfg); len(problems) != 0 {
+			return nil, fmt.Errorf("invalid profile: %s", strings.Join(problems, "; "))
+		}
+	}
+
+	// Reject an exact-content duplicate already in the store (different name,
+	// same profile) so the catalog stays clean.
+	fp := fingerprint(data)
+	existing, _ := c.load()
+	for i := range existing {
+		if d, err := os.ReadFile(existing[i].File); err == nil && fingerprint(d) == fp {
+			return nil, fmt.Errorf("%w: identical to %q", ErrExists, existing[i].Name)
+		}
+	}
+
+	name := safeName(path)
+	ext := ".conf"
+	if proto == core.OpenVPN {
+		ext = ".ovpn"
+	}
+	dest := filepath.Join(c.Dir, name+ext)
+	if _, err := os.Stat(dest); err == nil {
+		return nil, ErrExists
+	}
+	if err := os.WriteFile(dest, data, 0o600); err != nil {
+		return nil, err
+	}
+
+	entry := Entry{Name: name, File: dest, Protocol: proto, Country: inferCountry(name)}
+	entries := existing
+	entries = append(entries, entry)
+	if err := c.save(entries); err != nil {
+		return nil, err
+	}
+	return &entry, nil
+}
+
+// List returns all managed entries, favorites first then alphabetical. It
+// always returns a non-nil slice so JSON callers see [] rather than null.
+func (c *Catalog) List() ([]Entry, error) {
+	entries, err := c.load()
+	if err != nil {
+		return nil, err
+	}
+	if entries == nil {
+		entries = []Entry{}
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].Favorite != entries[j].Favorite {
+			return entries[i].Favorite
+		}
+		return entries[i].Name < entries[j].Name
+	})
+	return entries, nil
+}
+
+// Get returns one entry by name.
+func (c *Catalog) Get(name string) (*Entry, error) {
+	entries, err := c.load()
+	if err != nil {
+		return nil, err
+	}
+	for i := range entries {
+		if entries[i].Name == name {
+			return &entries[i], nil
+		}
+	}
+	return nil, ErrNotFound
+}
+
+// Remove deletes a managed profile and its file.
+func (c *Catalog) Remove(name string) error {
+	entries, err := c.load()
+	if err != nil {
+		return err
+	}
+	out := entries[:0]
+	found := false
+	for _, e := range entries {
+		if e.Name == name {
+			_ = os.Remove(e.File)
+			found = true
+			continue
+		}
+		out = append(out, e)
+	}
+	if !found {
+		return ErrNotFound
+	}
+	return c.save(out)
+}
+
+// SetFavorite toggles the favorite flag on an entry.
+func (c *Catalog) SetFavorite(name string, fav bool) error {
+	entries, err := c.load()
+	if err != nil {
+		return err
+	}
+	found := false
+	for i := range entries {
+		if entries[i].Name == name {
+			entries[i].Favorite = fav
+			found = true
+		}
+	}
+	if !found {
+		return ErrNotFound
+	}
+	return c.save(entries)
+}
+
+// Count returns the number of managed profiles.
+func (c *Catalog) Count() int {
+	entries, _ := c.load()
+	return len(entries)
+}
+
+// load reads the metadata file (empty slice when absent).
+func (c *Catalog) load() ([]Entry, error) {
+	data, err := os.ReadFile(c.metaFile())
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var entries []Entry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return nil, fmt.Errorf("corrupt catalog metadata: %w", err)
+	}
+	return entries, nil
+}
+
+// save atomically writes the metadata file.
+func (c *Catalog) save(entries []Entry) error {
+	if err := c.ensureDir(); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(entries, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := c.metaFile() + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, c.metaFile())
+}
+
+// fingerprint returns a short content hash (for dedupe/debugging).
+func fingerprint(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])[:12]
+}
