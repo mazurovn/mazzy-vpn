@@ -53,6 +53,7 @@ github.com/mazurovn/mazzy-vpn/core
 github.com/mazurovn/mazzy-vpn/core/bootrecovery
 github.com/mazurovn/mazzy-vpn/core/catalog
 github.com/mazurovn/mazzy-vpn/core/connect
+github.com/mazurovn/mazzy-vpn/core/control
 github.com/mazurovn/mazzy-vpn/core/diagnose
 github.com/mazurovn/mazzy-vpn/core/dns
 github.com/mazurovn/mazzy-vpn/core/dnscheck
