@@ -53,21 +53,27 @@ github.com/mazurovn/mazzy-vpn/core
 github.com/mazurovn/mazzy-vpn/core/bootrecovery
 github.com/mazurovn/mazzy-vpn/core/catalog
 github.com/mazurovn/mazzy-vpn/core/connect
+github.com/mazurovn/mazzy-vpn/core/diagnose
 github.com/mazurovn/mazzy-vpn/core/dns
+github.com/mazurovn/mazzy-vpn/core/dnscheck
 github.com/mazurovn/mazzy-vpn/core/doctor
 github.com/mazurovn/mazzy-vpn/core/engine/wireguard
 github.com/mazurovn/mazzy-vpn/core/guard
 github.com/mazurovn/mazzy-vpn/core/livecheck
 github.com/mazurovn/mazzy-vpn/core/lock
 github.com/mazurovn/mazzy-vpn/core/measure
+github.com/mazurovn/mazzy-vpn/core/mimicry
 github.com/mazurovn/mazzy-vpn/core/netadapter
 github.com/mazurovn/mazzy-vpn/core/netdiag
 github.com/mazurovn/mazzy-vpn/core/netexec
 github.com/mazurovn/mazzy-vpn/core/notify
+github.com/mazurovn/mazzy-vpn/core/pathtrace
 github.com/mazurovn/mazzy-vpn/core/profile
 github.com/mazurovn/mazzy-vpn/core/routes
 github.com/mazurovn/mazzy-vpn/core/settings
 github.com/mazurovn/mazzy-vpn/core/state
+github.com/mazurovn/mazzy-vpn/core/stealth
+github.com/mazurovn/mazzy-vpn/core/zonescore
 # github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
 ## explicit; go 1.17
 github.com/muesli/ansi
