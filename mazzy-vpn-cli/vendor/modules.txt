@@ -60,6 +60,7 @@ github.com/mazurovn/mazzy-vpn/core/dnscheck
 github.com/mazurovn/mazzy-vpn/core/doctor
 github.com/mazurovn/mazzy-vpn/core/engine/wireguard
 github.com/mazurovn/mazzy-vpn/core/guard
+github.com/mazurovn/mazzy-vpn/core/i18n
 github.com/mazurovn/mazzy-vpn/core/livecheck
 github.com/mazurovn/mazzy-vpn/core/lock
 github.com/mazurovn/mazzy-vpn/core/measure

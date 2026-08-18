@@ -74,6 +74,8 @@ func run(args []string) int {
 		return cmdDNSCheck(ctx, rest)
 	case "control", "identity":
 		return cmdControl(ctx, rest)
+	case "language", "lang":
+		return cmdLanguage(ctx, rest)
 	case "up":
 		return cmdUp(ctx, rest)
 	case "auto":
@@ -157,6 +159,7 @@ Usage:
   sudo mazzy-vpn mimic [--apply]      align timezone to egress (look local)
   mazzy-vpn dns-check [--json]        DNS privacy: in-country + encrypted?
   mazzy-vpn control id|pair|list      control-plane identity & pairing
+  mazzy-vpn language [code|--list]    choose UI language (en/ru/de/zh/ja/ko)
 
  Recovery:
   sudo mazzy-vpn disconnect           bring the tunnel down gracefully
