@@ -235,6 +235,72 @@ var cliCatalog = map[string]map[Lang]string{
 		EN: "Last:", RU: "Последний:", DE: "Zuletzt:",
 		ZH: "最近：", JA: "最後:", KO: "마지막:",
 	},
+
+	// --- up / best / auto ---
+	"cli.up.no_profiles": {
+		EN: "no managed profiles; import first: mazzy-vpn import <DIR>",
+		RU: "нет управляемых профилей; сначала импорт: mazzy-vpn import <DIR>",
+		DE: "keine verwalteten Profile; zuerst importieren: mazzy-vpn import <DIR>",
+		ZH: "没有受管配置；请先导入：mazzy-vpn import <DIR>",
+		JA: "管理プロファイルなし。先にインポート: mazzy-vpn import <DIR>",
+		KO: "관리되는 프로필 없음; 먼저 가져오기: mazzy-vpn import <DIR>",
+	},
+	"cli.up.selecting_best": {
+		EN: "No profile named; selecting the best reachable zone...",
+		RU: "Имя профиля не указано; выбираю лучшую доступную зону...",
+		DE: "Kein Profilname; wähle die beste erreichbare Zone...",
+		ZH: "未指定配置；正在选择最佳可达区域...",
+		JA: "プロファイル名なし。最適な到達可能ゾーンを選択中...",
+		KO: "프로필 이름 없음; 가장 좋은 도달 가능 존 선택 중...",
+	},
+	"cli.up.no_reachable": {
+		EN: "no reachable server found; check your connection (mazzy-vpn netdiag)",
+		RU: "доступных серверов нет; проверьте соединение (mazzy-vpn netdiag)",
+		DE: "kein erreichbarer Server; prüfen Sie die Verbindung (mazzy-vpn netdiag)",
+		ZH: "未找到可达服务器；请检查连接（mazzy-vpn netdiag）",
+		JA: "到達可能なサーバーなし。接続を確認 (mazzy-vpn netdiag)",
+		KO: "도달 가능한 서버 없음; 연결을 확인하세요 (mazzy-vpn netdiag)",
+	},
+	"cli.up.cleanest": {
+		EN: "Cleanest live zone: %s",
+		RU: "Самая чистая живая зона: %s",
+		DE: "Sauberste Live-Zone: %s",
+		ZH: "最干净的活动区域：%s",
+		JA: "最もクリーンなライブゾーン: %s",
+		KO: "가장 깨끗한 라이브 존: %s",
+	},
+	"cli.up.best_alive": {
+		EN: "Best zone: %s (%d ms, ✔ alive)",
+		RU: "Лучшая зона: %s (%d мс, ✔ жива)",
+		DE: "Beste Zone: %s (%d ms, ✔ aktiv)",
+		ZH: "最佳区域：%s（%d 毫秒，✔ 在线）",
+		JA: "最適ゾーン: %s (%d ms、✔ 稼働中)",
+		KO: "최적 존: %s (%d ms, ✔ 활성)",
+	},
+	"cli.up.best_noicmp": {
+		EN: "Best zone: %s (no ICMP reply; may still work)",
+		RU: "Лучшая зона: %s (нет ICMP-ответа; может работать)",
+		DE: "Beste Zone: %s (keine ICMP-Antwort; kann trotzdem funktionieren)",
+		ZH: "最佳区域：%s（无 ICMP 回应；仍可能可用）",
+		JA: "最適ゾーン: %s (ICMP 応答なし。動作する場合あり)",
+		KO: "최적 존: %s (ICMP 응답 없음; 작동할 수 있음)",
+	},
+	"cli.up.ranking": {
+		EN: "Ranking zones by reachability and latency...",
+		RU: "Ранжирование зон по доступности и задержке...",
+		DE: "Zonen nach Erreichbarkeit und Latenz sortieren...",
+		ZH: "按可达性和延迟对区域排序...",
+		JA: "到達性とレイテンシでゾーンをランキング中...",
+		KO: "도달성과 지연 시간으로 존 순위 지정 중...",
+	},
+	"cli.up.auto_connecting": {
+		EN: "Auto-connecting to best zone: %s",
+		RU: "Автоподключение к лучшей зоне: %s",
+		DE: "Automatische Verbindung zur besten Zone: %s",
+		ZH: "正在自动连接到最佳区域：%s",
+		JA: "最適ゾーンに自動接続中: %s",
+		KO: "최적 존에 자동 연결 중: %s",
+	},
 }
 
 func init() {
