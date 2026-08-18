@@ -19,7 +19,26 @@ renderer를 제공합니다. 하지만 연결 lifecycle 통합은 아직 완료�
 [영문 아키텍처 및 동작 다이어그램](docs/ARCHITECTURE.en.md) ·
 [러시아어 아키텍처 다이어그램](docs/ARCHITECTURE.ru.md)
 
-## 설치 및 언어
+## 네이티브 Go CLI (v2.1.0)
+
+v2 라인은 VPN 엔진(AmneziaWG/WireGuard, `amneziawg-go` v3.1)을 **내장**한
+단일 정적 링크 바이너리(`mazzy-vpn`)를 제공합니다. `awg`/`wg`/`jq`가
+필요 없으며 `CGO_ENABLED=0`으로 Linux 호스트 간 이식이 가능합니다.
+
+```bash
+tar xzf mazzy-vpn-go-2.1.0-linux-amd64.tar.gz
+cd release-v2.1.0 && sudo ./install.sh
+
+mazzy-vpn language --list        # en/ru/de/zh/ja/ko (기본값 English)
+mazzy-vpn language               # 대화형 언어 메뉴
+mazzy-vpn best                   # 가장 깨끗한 라이브 서버에 연결
+```
+
+**6개 UI 언어**, 기본값은 영어. 언어는 저장된 설정, 그다음
+`MAZZY_LANG`/`LC_*`/`LANG` 순으로 해석되며 하드코딩이 없습니다.
+참조: [Go CLI wiki](https://github.com/mazurovn/mazzy-vpn/wiki/Go-CLI).
+
+## 설치 및 언어 (레거시 bash CLI)
 
 ```bash
 git clone https://github.com/mazurovn/mazzy-vpn.git

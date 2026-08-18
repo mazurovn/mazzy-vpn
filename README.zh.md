@@ -17,7 +17,25 @@ Trojan、AnyTLS 和 ShadowTLS v3 已加入目录，但连接状态明确为 `pla
 [英文架构与工作流程图](docs/ARCHITECTURE.en.md) ·
 [俄文架构图](docs/ARCHITECTURE.ru.md)
 
-## 安装与语言
+## 原生 Go 命令行 (v2.1.0)
+
+v2 系列提供单一静态链接的 Go 二进制文件（`mazzy-vpn`），**内置**
+AmneziaWG/WireGuard 引擎（`amneziawg-go` v3.1）。无需 `awg`/`wg`/`jq`；
+`CGO_ENABLED=0`，可在 Linux 主机间移植。
+
+```bash
+tar xzf mazzy-vpn-go-2.1.0-linux-amd64.tar.gz
+cd release-v2.1.0 && sudo ./install.sh
+
+mazzy-vpn language --list        # en/ru/de/zh/ja/ko（默认 English）
+mazzy-vpn language               # 交互式语言菜单
+mazzy-vpn best                   # 连接最干净的可用服务器
+```
+
+**六种界面语言**，默认英语；语言按已保存设置、`MAZZY_LANG`/`LC_*`/`LANG`
+顺序解析，无硬编码。参考：[Go CLI wiki](https://github.com/mazurovn/mazzy-vpn/wiki/Go-CLI)。
+
+## 安装与语言（旧版 bash CLI）
 
 ```bash
 git clone https://github.com/mazurovn/mazzy-vpn.git

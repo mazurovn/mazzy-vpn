@@ -19,7 +19,26 @@ managed profile schema とアトミックな Linux import が追加され、6 �
 [英語のアーキテクチャ図](docs/ARCHITECTURE.en.md) ·
 [ロシア語のアーキテクチャ図](docs/ARCHITECTURE.ru.md)
 
-## インストールと言語
+## ネイティブ Go CLI (v2.1.0)
+
+v2 系列は、VPN エンジン（AmneziaWG/WireGuard、`amneziawg-go` v3.1）を
+**内蔵**した単一の静的リンクバイナリ（`mazzy-vpn`）を提供します。
+`awg`/`wg`/`jq` は不要。`CGO_ENABLED=0` で Linux ホスト間を完全に移植可能。
+
+```bash
+tar xzf mazzy-vpn-go-2.1.0-linux-amd64.tar.gz
+cd release-v2.1.0 && sudo ./install.sh
+
+mazzy-vpn language --list        # en/ru/de/zh/ja/ko（既定は English）
+mazzy-vpn language               # 対話式言語メニュー
+mazzy-vpn best                   # 最もクリーンなライブサーバーに接続
+```
+
+**6 言語の UI**、既定は英語。言語は保存された設定、次いで
+`MAZZY_LANG`/`LC_*`/`LANG` の順で解決され、ハードコードはありません。
+参照: [Go CLI wiki](https://github.com/mazurovn/mazzy-vpn/wiki/Go-CLI)。
+
+## インストールと言語（旧 bash CLI）
 
 ```bash
 git clone https://github.com/mazurovn/mazzy-vpn.git

@@ -1,6 +1,22 @@
 # Релизы и roadmap
 
-## 1.4.7 / Desktop 0.4.8 — самостоятельный запуск Linux Desktop
+## 2.1.0 — Go native CLI (AI-native control plane + 6 языков)
+
+- Единый статически слинкованный Go-бинарник (`mazzy-vpn`) со **встроенным**
+  движком AmneziaWG/WireGuard (`amneziawg-go` v3.1); не нужны `awg`/`wg`/`jq`,
+  `CGO_ENABLED=0` — переносим между Linux-хостами.
+- **AI-native control plane**: self-auth Ed25519 identity, доверие через
+  pairing (anti-impersonation), подписанные срочные гранты, deny-by-default
+  каналы для агентов.
+- **6 языков UI** (en/ru/de/zh/ja/ko), английский по умолчанию, меню выбора,
+  без хардкода. См. [Go CLI](Go-CLI).
+- Безопасность: toolchain go1.25.13, **0 уязвимостей** (govulncheck), fuzzing
+  парсера и control plane; полноценные CI-гейты.
+- Исходники: [`core/`](https://github.com/mazurovn/mazzy-vpn/tree/main/core) и
+  [`mazzy-vpn-cli/`](https://github.com/mazurovn/mazzy-vpn/tree/main/mazzy-vpn-cli).
+- Релиз: https://github.com/mazurovn/mazzy-vpn/releases/tag/v2.1.0
+
+## 1.4.7 / Desktop 0.4.8 — самостоятельный запуск Linux Desktop (legacy)
 
 - Linux Desktop запускает встроенный engine до первого чтения статуса и
   профилей; отдельная установка или предварительный запуск CLI больше не нужны;

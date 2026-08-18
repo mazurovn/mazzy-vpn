@@ -52,7 +52,32 @@ ShadowTLS ещё не готовы. Подключение всех девяти
 ещё не является целевым `mazzy-vpnd`: общий action journal для всех root paths
 и доказательство восстановления routes/DNS/firewall/leak state остаются P0.
 
-## Установка
+## Нативный Go CLI (v2.1.0)
+
+В линейке v2 поставляется единый статический Go-бинарник (`mazzy-vpn`) со
+**встроенным** движком AmneziaWG/WireGuard (vendored `amneziawg-go` v3.1). Не
+нужны `awg`, `awg-quick`, `wg`, `jq`; `CGO_ENABLED=0` — бинарник переносим между
+Linux-хостами. Исходники: [`core/`](core/) (движок) и
+[`mazzy-vpn-cli/`](mazzy-vpn-cli/) (CLI + TUI).
+
+```bash
+# Из tarball релиза v2.1.0:
+tar xzf mazzy-vpn-go-2.1.0-linux-amd64.tar.gz
+cd release-v2.1.0 && sudo ./install.sh    # статический бинарник, без apt/сборки
+
+mazzy-vpn language --list        # en/ru/de/zh/ja/ko (по умолчанию English)
+mazzy-vpn language               # интерактивное меню выбора языка
+mazzy-vpn best                   # подключить самый чистый живой сервер
+mazzy-vpn providers              # доступность AI-провайдеров
+mazzy-vpn stealth                # оценка детектируемости
+mazzy-vpn control id             # identity control plane (AI-native)
+```
+
+**Шесть языков интерфейса**, по умолчанию английский; язык берётся из сохранённой
+настройки, затем `MAZZY_LANG`/`LC_ALL`/`LC_MESSAGES`/`LANG`, без хардкода. Полный
+справочник: [Go CLI wiki](https://github.com/mazurovn/mazzy-vpn/wiki/Go-CLI).
+
+## Установка (legacy bash CLI / Desktop)
 
 Рекомендуемая Linux-установка — DEB. AppImage не требуется:
 

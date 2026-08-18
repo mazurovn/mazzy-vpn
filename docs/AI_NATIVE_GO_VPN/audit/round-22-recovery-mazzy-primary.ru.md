@@ -36,10 +36,10 @@
 
 ```
 --present : exit 0 (vpnaw0 up)
---healthy : exit 0 (egress 95.211.225.232 protected)
+--healthy : exit 0 (egress 203.0.113.10 protected)
 --check   : exit 0 (через NOPASSWD sudoers)
 config    : selectedClient=mazzy, enabled=true
-status    : ✔ PROTECTED egress=95.211.225.232
+status    : ✔ PROTECTED egress=203.0.113.10
 ```
 
 ## Безопасность

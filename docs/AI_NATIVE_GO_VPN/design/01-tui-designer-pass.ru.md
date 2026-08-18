@@ -20,7 +20,7 @@
 
 ```
 ╭─ Mazzy VPN ───────────────────────────── wlp3s0 (wifi) ─╮
-│  ● PROTECTED   NL · 95.211.225.232 · 68 ms · ↑4MB ↓7MB   │  ← live header (тикер 2s)
+│  ● PROTECTED   NL · 203.0.113.10 · 68 ms · ↑4MB ↓7MB   │  ← live header (тикер 2s)
 ╰──────────────────────────────────────────────────────────╯
   [c] Connect best   [z] Zones   [d] Disconnect   [r] Recover
   [t] Test   [a] Adapters   [n] Netdiag   [p] AI providers

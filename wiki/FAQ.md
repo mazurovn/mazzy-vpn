@@ -15,8 +15,10 @@ Copyright © 2026 Nik m. Код распространяется по GNU AGPL-3
 
 ## Какие версии сейчас рабочие?
 
-- Текущая release line: CLI/TUI 1.4.7 и DEB Desktop 0.4.8
-  preview. Issue #31 закрыт проверенным `glib` backport и чистыми release checks.
+- Текущая release line: **Go native CLI 2.1.0** — единый статический бинарник
+  со встроенным движком (AmneziaWG/WireGuard), 6 языков интерфейса, AI-native
+  control plane. См. [Go CLI](Go-CLI).
+- Legacy: bash CLI/TUI 1.4.7 и DEB Desktop 0.4.8 preview остаются доступными.
 - Windows и macOS: только UI preview, нативные VPN backend ещё не готовы.
 - Android и iOS: planned native clients; готовых мобильных пакетов пока нет.
 
@@ -148,9 +150,10 @@ and preserving authorship.
 
 ## Which versions work today?
 
-- Current release line: CLI/TUI 1.4.7 and the DEB Desktop 0.4.8
-  preview. Issue #31 is closed with a verified `glib` backport and clean release
-  checks.
+- Current release line: **Go native CLI 2.1.0** — a single static binary with
+  an embedded engine (AmneziaWG/WireGuard), six UI languages and an AI-native
+  control plane. See [Go CLI](Go-CLI).
+- Legacy: the bash CLI/TUI 1.4.7 and DEB Desktop 0.4.8 preview remain available.
 - Windows and macOS: UI preview only; native VPN backends are not complete.
 - Android and iOS: planned native clients; no working mobile packages yet.
 
