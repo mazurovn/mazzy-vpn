@@ -215,7 +215,7 @@ func menuChooseZone(ctx context.Context, in *bufio.Reader, cat interface {
 		if ping == "" {
 			ping = "—"
 		}
-		fmt.Printf("  %2d.%s %-24s %-10s %-4s %s\n", i+1, star, safeDisplay(e.Name), e.Protocol, safeDisplay(e.Country), ping)
+		fmt.Printf("  %2d.%s %-24s %-10s %-4s %s\n", i+1, star, safeDisplay(e.Name), safeDisplay(string(e.Protocol)), safeDisplay(e.Country), safeDisplay(ping))
 	}
 	fmt.Print(translator().T("cli.menu.prompt.zone_num"))
 	line, _ := in.ReadString('\n')

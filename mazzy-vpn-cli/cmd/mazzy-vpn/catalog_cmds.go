@@ -113,9 +113,9 @@ func cmdProfiles(ctx context.Context, args []string) int {
 			if ping == "" {
 				ping = "n/a"
 			}
-			fmt.Printf("%-3d %-24s %-10s %-4s %-8s %s\n", i+1, safeDisplay(e.Name), e.Protocol, safeDisplay(e.Country), ping, star)
+			fmt.Printf("%-3d %-24s %-10s %-4s %-8s %s\n", i+1, safeDisplay(e.Name), safeDisplay(string(e.Protocol)), safeDisplay(e.Country), safeDisplay(ping), star)
 		} else {
-			fmt.Printf("%-3d %-24s %-10s %-4s %s\n", i+1, safeDisplay(e.Name), e.Protocol, safeDisplay(e.Country), star)
+			fmt.Printf("%-3d %-24s %-10s %-4s %s\n", i+1, safeDisplay(e.Name), safeDisplay(string(e.Protocol)), safeDisplay(e.Country), star)
 		}
 	}
 	return 0
