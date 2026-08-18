@@ -301,6 +301,50 @@ var cliCatalog = map[string]map[Lang]string{
 		JA: "最適ゾーンに自動接続中: %s",
 		KO: "최적 존에 자동 연결 중: %s",
 	},
+
+	// --- usage / help (section headers; command syntax stays literal) ---
+	"cli.usage.tagline": {
+		EN: "autonomous AI-ready VPN client (Go)",
+		RU: "автономный AI-ready VPN-клиент (Go)",
+		DE: "autonomer, KI-tauglicher VPN-Client (Go)",
+		ZH: "自主的 AI-ready VPN 客户端（Go）",
+		JA: "自律的な AI-ready VPN クライアント (Go)",
+		KO: "자율적인 AI-ready VPN 클라이언트 (Go)",
+	},
+	"cli.usage.sec.profiles": {
+		EN: "Profiles (managed catalog):", RU: "Профили (управляемый каталог):",
+		DE: "Profile (verwalteter Katalog):", ZH: "配置（管理目录）：",
+		JA: "プロファイル（管理カタログ）:", KO: "프로필(관리 카탈로그):",
+	},
+	"cli.usage.sec.connect": {
+		EN: "Connect:", RU: "Подключение:", DE: "Verbinden:",
+		ZH: "连接：", JA: "接続:", KO: "연결:",
+	},
+	"cli.usage.sec.background": {
+		EN: "Permanent (background) operation:", RU: "Постоянная (фоновая) работа:",
+		DE: "Dauerhafter (Hintergrund-)Betrieb:", ZH: "持久（后台）运行：",
+		JA: "常駐（バックグラウンド）動作:", KO: "상시(백그라운드) 작동:",
+	},
+	"cli.usage.sec.network": {
+		EN: "Network:", RU: "Сеть:", DE: "Netzwerk:",
+		ZH: "网络：", JA: "ネットワーク:", KO: "네트워크:",
+	},
+	"cli.usage.sec.recovery": {
+		EN: "Recovery:", RU: "Восстановление:", DE: "Wiederherstellung:",
+		ZH: "恢复：", JA: "復旧:", KO: "복구:",
+	},
+	"cli.usage.sec.diagnostics": {
+		EN: "Diagnostics:", RU: "Диагностика:", DE: "Diagnose:",
+		ZH: "诊断：", JA: "診断:", KO: "진단:",
+	},
+	"cli.usage.footer": {
+		EN: "connect/up run in the foreground and hold the tunnel until Ctrl+C.",
+		RU: "connect/up работают на переднем плане и держат туннель до Ctrl+C.",
+		DE: "connect/up laufen im Vordergrund und halten den Tunnel bis Strg+C.",
+		ZH: "connect/up 在前台运行，保持隧道直到 Ctrl+C。",
+		JA: "connect/up はフォアグラウンドで実行され、Ctrl+C までトンネルを保持します。",
+		KO: "connect/up는 포그라운드에서 실행되며 Ctrl+C까지 터널을 유지합니다.",
+	},
 }
 
 func init() {
