@@ -118,6 +118,42 @@ VPN profiles. Choose the interface language at the beginning or pass
 Real keys and personal VPN profiles are intentionally excluded from Git.
 Publish templates only; keep operational profiles in `/etc/vpnctl/profiles`.
 
+## Go native CLI (v2)
+
+The v2 line introduces a **single statically-linked Go binary** (`mazzy-vpn`)
+that **embeds the VPN engine** (AmneziaWG/WireGuard via a vendored
+`amneziawg-go`). It needs **no** `awg`, `awg-quick`, `wg`, `jq` or any external
+VPN backend, builds with `CGO_ENABLED=0`, and is fully portable across Linux
+hosts. Sources live under [`core/`](core/) (the reusable engine, 35 packages)
+and [`mazzy-vpn-cli/`](mazzy-vpn-cli/) (the CLI + full-screen TUI).
+
+Highlights:
+
+- **AI-native control plane** — self-authenticating Ed25519 identities, trust
+  pairing (anti-impersonation), signed time-bounded grants, deny-by-default
+  egress channels for agents/harnesses.
+- **Six UI languages** — English (default), Russian, German, Chinese, Japanese,
+  Korean. `mazzy-vpn language` opens a selection menu; the language is resolved
+  from settings/`MAZZY_LANG`/`LC_*`/`LANG` with **no hardcoding**.
+- **Stealth & mimicry** — detection score, timezone/locale alignment to the
+  egress country, DNS-over-TLS in-country checks, AI-provider reachability.
+- **Safety** — fail-closed IPv6 leak guard armed before the interface exists,
+  `fwmark = routing table` parity, real egress verification, atomic durable
+  state, single-writer lock.
+- **Quality gates** — tests + `-race` + `vet` + `staticcheck` + `gofmt` +
+  `govulncheck` (0 vulnerabilities) + parser/control fuzzing, all in CI.
+
+```bash
+sudo ./install.sh                    # static binary, no compilation/apt
+mazzy-vpn language --list            # en/ru/de/zh/ja/ko (current marked *)
+mazzy-vpn best                       # connect the cleanest live server
+mazzy-vpn providers                  # AI provider reachability
+mazzy-vpn control id                 # this node's control-plane identity
+```
+
+See the [Go CLI wiki page](https://github.com/mazurovn/mazzy-vpn/wiki/Go-CLI)
+for the full command reference in all six languages.
+
 ## Author and license
 
 Mazzy VPN was created by [Nik m (@mazurovn)](https://github.com/mazurovn).

@@ -256,3 +256,27 @@ vote in
 [Polls](https://github.com/mazurovn/mazzy-vpn/discussions/categories/polls).
 Results help order user-facing work. Mandatory security, platform and release
 gates remain mandatory regardless of vote count.
+
+## What is the Go native CLI and how is it different?
+
+Starting with the v2 line, Mazzy VPN ships a **single statically-linked Go
+binary** (`mazzy-vpn`) that **embeds the VPN engine** (AmneziaWG/WireGuard via a
+vendored `amneziawg-go`). It requires **no** `awg`, `awg-quick`, `wg`, `jq` or
+any external VPN backend, and `CGO_ENABLED=0` makes it portable across Linux
+hosts. See the [Go CLI](Go-CLI) page for the full command reference.
+
+## How do I change the interface language?
+
+The UI supports **six languages** — English (default), Russian, German, Chinese,
+Japanese, Korean. Run `mazzy-vpn language` for an interactive menu, or
+`mazzy-vpn language <code>` (`en`/`ru`/`de`/`zh`/`ja`/`ko`). With no saved
+setting, the language is resolved from your OS locale (`MAZZY_LANG`, `LC_ALL`,
+`LC_MESSAGES`, `LANG`) and falls back to English. Nothing is hardcoded.
+
+## Do AI agents get unrestricted access through the tunnel?
+
+No. The control plane is **deny-by-default**. Each agent/harness has a
+self-authenticating Ed25519 identity, and an egress channel opens only when all
+three gates pass: the peer is registered, trusted (paired), and covered by a
+non-expired, signed grant for the requested scope. Access is auditable and
+revocable. See [Architecture](Architecture) and the `mazzy-vpn control` command.
