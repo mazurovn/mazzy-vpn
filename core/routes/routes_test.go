@@ -167,4 +167,16 @@ func TestUplinkHostnameEndpointSkipped(t *testing.T) {
 	if strings.Contains(strings.Join(fake.Calls, "\n"), "route add h") {
 		t.Error("hostname endpoint must not be pinned")
 	}
+	// BUG-N3: a skipped (hostname) pin must NOT be recorded, so teardown does
+	// not try to delete a route that was never added.
+	if a.appliedEndpoint != "" {
+		t.Errorf("appliedEndpoint should be empty for a skipped hostname pin, got %q", a.appliedEndpoint)
+	}
+	before := len(fake.Calls)
+	_ = a.Down(context.Background())
+	for _, c := range fake.Calls[before:] {
+		if strings.Contains(c, "route del") {
+			t.Errorf("teardown must not delete a non-existent endpoint route: %q", c)
+		}
+	}
 }
