@@ -60,15 +60,25 @@ INSTALLED_BIN="$BIN_DIR/$BINARY_NAME"
 # ---------------------------------------------------------------------------
 # Privilege helper: re-run individual steps with sudo when needed.
 # ---------------------------------------------------------------------------
-# writable_target decides whether we need elevation: if both the bin dir's
-# parent and the state dir's parent are writable by us, a rootless install into
-# a custom --prefix works without sudo.
+# writable_ancestor walks up from a (possibly not-yet-existing) target path to
+# the first directory that exists, and reports whether we can write there. This
+# is what actually determines if `install -d` will succeed without elevation.
+writable_ancestor() {
+    local p
+    p="$1"
+    while [[ -n "$p" && ! -e "$p" ]]; do
+        p="$(dirname "$p")"
+    done
+    [[ -n "$p" && -w "$p" ]]
+}
+
+# needs_root decides whether we need elevation: if the bin dir, the state dir
+# AND the runtime dir are all creatable without root, a rootless install into a
+# custom --prefix works without sudo.
 needs_root() {
-    local bin_parent state_parent
-    bin_parent="$(dirname "$PREFIX/bin")"
-    state_parent="$(dirname "$STATE_DIR")"
-    [[ -w "$bin_parent" || -w "$PREFIX/bin" ]] &&
-        [[ -w "$state_parent" || -w "$STATE_DIR" ]] && return 1
+    writable_ancestor "$PREFIX/bin" &&
+        writable_ancestor "$STATE_DIR" &&
+        writable_ancestor "$RUN_DIR" && return 1
     return 0
 }
 
@@ -93,7 +103,9 @@ if [[ "$DO_UNINSTALL" == 1 ]]; then
         warn "Binary not found at $INSTALLED_BIN"
     fi
     printf 'Remove state directory %s (keeps no profiles)? [y/N] ' "$STATE_DIR"
-    read -r ans
+    # `read` returns non-zero on EOF (non-interactive/piped stdin); under set -e
+    # that would abort. Default to "no" and keep going.
+    read -r ans || ans=""
     if [[ "${ans,,}" == y* ]]; then
         priv rm -rf "$STATE_DIR" && ok "Removed $STATE_DIR"
     else
@@ -166,10 +178,15 @@ priv install -d -m 0700 "$STATE_DIR"
 ok "State directory ready: $STATE_DIR"
 
 # Install the systemd template unit for permanent operation (optional to use).
-if [[ -f "$SCRIPT_DIR/mazzy-vpn@.service" ]] && command -v systemctl >/dev/null 2>&1; then
+# Skipped for a rootless/custom --prefix install: /etc/systemd/system is a
+# system path, so writing it would force elevation the user did not ask for.
+if [[ "$PREFIX" == "/usr/local" || "$PREFIX" == "/usr" ]] &&
+    [[ -f "$SCRIPT_DIR/mazzy-vpn@.service" ]] && command -v systemctl >/dev/null 2>&1; then
     priv install -m 0644 "$SCRIPT_DIR/mazzy-vpn@.service" /etc/systemd/system/mazzy-vpn@.service
     priv systemctl daemon-reload 2>/dev/null || true
     ok "systemd unit installed: mazzy-vpn@.service"
+else
+    info "Skipped systemd unit (custom prefix or no systemd); use 'mazzy-vpn daemon' directly."
 fi
 # /run is tmpfs; created at connect time, but prepare it now if possible.
 if priv install -d -m 0700 "$RUN_DIR" 2>/dev/null; then
@@ -198,9 +215,16 @@ info "5) Network analysis"
 
 echo
 info "6) Profile setup (optional)"
-echo "Import your profiles now (AmneziaWG .conf / OpenVPN .ovpn) into the catalog."
-printf 'Path to a profile file or directory (blank to skip): '
-read -r pdir
+# Only prompt when attached to a terminal; a non-interactive install
+# (piped/automation) skips import cleanly instead of aborting on EOF.
+pdir=""
+if [[ -t 0 ]]; then
+    echo "Import your profiles now (AmneziaWG .conf / OpenVPN .ovpn) into the catalog."
+    printf 'Path to a profile file or directory (blank to skip): '
+    read -r pdir || pdir=""
+else
+    info "Non-interactive install: skipping profile import (use 'mazzy-vpn import <DIR>')."
+fi
 if [[ -n "$pdir" ]]; then
     if [[ -e "$pdir" ]]; then
         "$INSTALLED_BIN" import "$pdir" || true

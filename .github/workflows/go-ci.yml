@@ -76,6 +76,16 @@ jobs:
             && echo "OK: statically linked" \
             || { echo "FAIL: not static"; exit 1; }
 
+      - name: Installer lint + scenario matrix
+        run: |
+          sudo apt-get update && sudo apt-get install -y shellcheck
+          bash -n mazzy-vpn-cli/packaging/install.sh
+          bash -n mazzy-vpn-cli/packaging/install_test.sh
+          shellcheck mazzy-vpn-cli/packaging/install.sh mazzy-vpn-cli/packaging/install_test.sh
+          # Reuse the just-built static binary so the matrix does not rebuild.
+          cp /tmp/mazzy-vpn mazzy-vpn-cli/packaging/mazzy-vpn
+          bash mazzy-vpn-cli/packaging/install_test.sh
+
       - name: staticcheck
         run: |
           go install honnef.co/go/tools/cmd/staticcheck@2025.1.1
