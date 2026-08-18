@@ -31,6 +31,9 @@ type Settings struct {
 	// AutoMimic aligns the system timezone to the egress country on connect, so
 	// services (Google/Gemini/Antigravity) see a consistent local timezone.
 	AutoMimic bool `json:"auto_mimic"`
+	// Language is the UI language code (en/ru/de/zh/ja/ko). Empty means resolve
+	// from the OS locale, defaulting to English. Never hardcoded at call sites.
+	Language string `json:"language,omitempty"`
 }
 
 // Default returns settings with recommended defaults enabled.
