@@ -171,7 +171,7 @@ func gatherStealthSignal(ctx context.Context) stealth.Signal {
 
 // cmdStealth analyzes how detectable the VPN is and how to look local.
 func cmdStealth(ctx context.Context, args []string) int {
-	fmt.Println("Analyzing detection vectors (IPv6/DNS/timezone/ASN/Cloudflare)...")
+	fmt.Println(translator().T("cli.stealth.analyzing"))
 	sig := gatherStealthSignal(ctx)
 	rep := stealth.Analyze(sig)
 
@@ -262,7 +262,7 @@ func cmdMimic(ctx context.Context, args []string) int {
 	fmt.Printf("Egress country: %s\n", sig.EgressCountry)
 	fmt.Printf("Timezone: %s → %s\n", plan.FromTZ, plan.ToTZ)
 	if !plan.NeedsChange {
-		fmt.Println("Already aligned. Nothing to do.")
+		fmt.Println(translator().T("cli.stealth.aligned"))
 		return 0
 	}
 	if !hasFlag(args, "--apply") {

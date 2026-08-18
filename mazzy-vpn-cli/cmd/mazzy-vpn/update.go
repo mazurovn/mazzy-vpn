@@ -37,22 +37,23 @@ type ghRelease struct {
 // installs it. Without --apply it only reports what is available (dry run).
 func cmdUpdate(ctx context.Context, args []string) int {
 	apply := hasFlag(args, "--apply")
+	t := translator()
 
-	fmt.Printf("Current version: %s\n", version)
-	fmt.Printf("Checking %s for updates...\n", updateRepo)
+	fmt.Println(t.Tf("cli.update.current", version))
+	fmt.Println(t.Tf("cli.update.checking", updateRepo))
 
 	rel, err := latestRelease(ctx)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "update check failed:", err)
 		return 1
 	}
-	fmt.Printf("Latest release : %s\n", rel.TagName)
+	fmt.Println(t.Tf("cli.update.latest", rel.TagName))
 
 	if !isNewer(rel.TagName, version) {
-		fmt.Println("You are up to date.")
+		fmt.Println(t.T("cli.update.uptodate"))
 		return 0
 	}
-	fmt.Printf("A newer version is available: %s\n", rel.TagName)
+	fmt.Println(t.Tf("cli.update.available", rel.TagName))
 
 	// Find the linux-amd64 tarball asset.
 	asset := ""
@@ -76,16 +77,16 @@ func cmdUpdate(ctx context.Context, args []string) int {
 	}
 
 	if !apply {
-		fmt.Println("\nRun 'sudo mazzy-vpn update --apply' to download and install it.")
+		fmt.Println(t.T("cli.update.hint_apply"))
 		return 0
 	}
 
 	if os.Geteuid() != 0 {
-		fmt.Fprintln(os.Stderr, "installing an update needs root: sudo mazzy-vpn update --apply")
+		fmt.Fprintln(os.Stderr, t.T("cli.update.needs_root"))
 		return 1
 	}
 
-	fmt.Printf("Downloading %s...\n", assetName)
+	fmt.Println(t.Tf("cli.update.downloading", assetName))
 	bin, err := downloadBinaryFromTarball(ctx, asset)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "download failed:", err)
@@ -102,7 +103,7 @@ func cmdUpdate(ctx context.Context, args []string) int {
 		fmt.Fprintln(os.Stderr, "install failed:", err)
 		return 1
 	}
-	fmt.Printf("✔ Updated to %s. Restart mazzy-vpn to use it.\n", rel.TagName)
+	fmt.Println(t.Tf("cli.update.updated", rel.TagName))
 	return 0
 }
 

@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodically check AdGuard VPN state
+
+[Timer]
+OnBootSec=60s
+OnUnitInactiveSec=15s
+AccuracySec=1s
+Unit=adguard-vpn-watchdog.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if (( EUID != 0 )); then
+    echo "Run this uninstaller with sudo." >&2
+    exit 1
+fi
+
+systemctl disable --now adguard-vpn-watchdog.timer 2>/dev/null || true
+systemctl stop adguard-vpn-watchdog.service adguard-vpn-managed.service 2>/dev/null || true
+systemctl disable adguard-vpn-managed.service 2>/dev/null || true
+rm -f /etc/systemd/system/adguard-vpn-managed.service \
+      /etc/systemd/system/adguard-vpn-watchdog.service \
+      /etc/systemd/system/adguard-vpn-watchdog.timer \
+      /usr/local/libexec/adguard-vpn-watchdog
+systemctl daemon-reload
+systemctl reset-failed
+
+echo "Removed. AdGuard VPN was left disconnected."

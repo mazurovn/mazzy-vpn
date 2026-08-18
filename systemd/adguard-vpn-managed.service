@@ -1,0 +1,19 @@
+[Unit]
+Description=Managed AdGuard VPN CLI connection
+Wants=network-online.target
+After=network-online.target NetworkManager.service
+
+[Service]
+Type=simple
+Environment=HOME=/home/mazurov
+Environment=DISPLAY=:0
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+ExecStart=/opt/adguardvpn_cli/adguardvpn-cli connect --no-fork --boot -l GB --log-to-file
+Restart=on-failure
+RestartSec=10s
+TimeoutStopSec=30s
+KillMode=control-group
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

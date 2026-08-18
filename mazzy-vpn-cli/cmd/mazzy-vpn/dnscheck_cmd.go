@@ -90,7 +90,7 @@ func cmdDNSCheck(ctx context.Context, args []string) int {
 
 	if hasFlag(args, "--dot") {
 		if os.Geteuid() != 0 {
-			fmt.Fprintln(os.Stderr, "enabling DoT needs root: sudo mazzy-vpn dns-check --dot")
+			fmt.Fprintln(os.Stderr, translator().T("cli.dnscheck.dot_needs_root"))
 			return 1
 		}
 		if err := enableDoT(iface); err != nil {

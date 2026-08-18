@@ -93,7 +93,7 @@ func dnsOK(ctx context.Context) bool {
 // cmdDiagnose runs the smart root-cause analyzer and prints ranked problems +
 // fixes. This is the "what's wrong and how to fix it" command.
 func cmdDiagnose(ctx context.Context, args []string) int {
-	fmt.Println("Analyzing connection (uplink, tunnel, servers, DNS, egress)...")
+	fmt.Println(translator().T("cli.diagnose.analyzing"))
 	sig := gatherSignal(ctx)
 	rep := diagnose.Analyze(sig)
 

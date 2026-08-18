@@ -17,7 +17,7 @@ import (
 )
 
 // version is the CLI source line; the published tag governs releases.
-const version = "2.1.0"
+const version = "2.1.1"
 
 func main() {
 	os.Exit(run(os.Args[1:]))
@@ -122,19 +122,20 @@ func isTTY() bool {
 }
 
 func printUsage() {
-	fmt.Fprint(os.Stderr, `mazzy-vpn — autonomous AI-ready VPN client (Go)
+	t := translator()
+	fmt.Fprintf(os.Stderr, `mazzy-vpn — %s
 
 Usage:
   mazzy-vpn                           full-screen TUI dashboard (or menu if piped)
   mazzy-vpn tui | menu | --plain      force TUI / line menu
 
- Profiles (managed catalog):
+ %s
   mazzy-vpn import <FILE|DIR>...      import profiles into the catalog
   mazzy-vpn profiles [--json]         list managed profiles
   mazzy-vpn favorite NAME [--off]     mark/unmark a favorite zone
   mazzy-vpn remove NAME               remove a managed profile
 
- Connect:
+ %s
   sudo mazzy-vpn up [NAME|--best]     connect by name, or auto-pick best zone
   sudo mazzy-vpn auto                 rank zones + connect to the best (failover)
   sudo mazzy-vpn connect FILE [--uplink IF]  connect via a raw file path / pinned uplink
@@ -144,11 +145,11 @@ Usage:
   desktop notifications (connected/reconnecting/disconnected), and
   auto-reconnects if the egress drops. Add --no-reconnect to disable.
 
- Permanent (background) operation:
+ %s
   sudo mazzy-vpn daemon NAME          run persistently with auto-reconnect
   sudo systemctl enable --now mazzy-vpn@NAME   start at boot (systemd)
 
- Network:
+ %s
   mazzy-vpn test [--json]             probe all servers (latency/reachability)
   mazzy-vpn best [--json]             print the best zone to connect to
   mazzy-vpn adapters [--json]         list network interfaces + recommendation
@@ -161,12 +162,12 @@ Usage:
   mazzy-vpn control id|pair|list      control-plane identity & pairing
   mazzy-vpn language [code|--list]    choose UI language (en/ru/de/zh/ja/ko)
 
- Recovery:
+ %s
   sudo mazzy-vpn disconnect           bring the tunnel down gracefully
   sudo mazzy-vpn recover              force-clean ALL tunnels/guards (panic button)
   sudo mazzy-vpn recover --reset-catalog   also wipe imported profiles
 
- Diagnostics:
+ %s
   mazzy-vpn doctor [--json]           host diagnostics (no awg/jq required)
   mazzy-vpn providers [--type llm|agent|search] [--json]   check AI providers
   mazzy-vpn list DIR [--json]         validate profiles in a directory
@@ -175,6 +176,14 @@ Usage:
   mazzy-vpn version | help
 
 Profiles: AmneziaWG (.conf), WireGuard (.conf), OpenVPN (.ovpn).
-connect/up run in the foreground and hold the tunnel until Ctrl+C.
-`)
+%s
+`,
+		t.T("cli.usage.tagline"),
+		t.T("cli.usage.sec.profiles"),
+		t.T("cli.usage.sec.connect"),
+		t.T("cli.usage.sec.background"),
+		t.T("cli.usage.sec.network"),
+		t.T("cli.usage.sec.recovery"),
+		t.T("cli.usage.sec.diagnostics"),
+		t.T("cli.usage.footer"))
 }

@@ -33,7 +33,8 @@ func cmdRecover(ctx context.Context, args []string) int {
 		}
 	}
 
-	fmt.Println("Restoring a clean network state...")
+	t := translator()
+	fmt.Println(t.T("cli.recover.restoring"))
 
 	// 1. Remove our tunnel interfaces.
 	for _, iface := range core.ManagedInterfaces() {
@@ -69,7 +70,7 @@ func cmdRecover(ctx context.Context, args []string) int {
 		fmt.Println("  ✔ catalog reset")
 	}
 
-	fmt.Printf("\n✔ Clean state restored (%d actions). You are on plain Wi‑Fi/uplink now.\n", steps)
+	fmt.Println(t.Tf("cli.recover.done", steps))
 	fmt.Println("  Verify with: mazzy-vpn status")
 	return 0
 }
@@ -79,9 +80,10 @@ func cmdDisconnect(ctx context.Context, _ []string) int {
 	if !requireRoot("disconnect") {
 		return 1
 	}
+	t := translator()
 	iface := detectLiveInterface()
 	if iface == "" {
-		fmt.Println("No active Mazzy VPN interface. Nothing to disconnect.")
+		fmt.Println(t.T("cli.disconnect.none"))
 		return 0
 	}
 	r := netexec.ExecRunner{}
@@ -93,6 +95,6 @@ func cmdDisconnect(ctx context.Context, _ []string) int {
 		_, _ = r.Run(ctx, "nft", "delete", "table", "inet", tbl)
 	}
 	_ = newStore().SetDesired("down")
-	fmt.Printf("✔ Disconnected (%s removed).\n", iface)
+	fmt.Println(t.Tf("cli.disconnect.ok", iface))
 	return 0
 }

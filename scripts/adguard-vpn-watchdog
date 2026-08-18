@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+# Recover AdGuard VPN only when its state machine is stuck while the physical WAN works.
+set -u
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+HOME_DIR=/home/mazurov
+VPN_BIN=/opt/adguardvpn_cli/adguardvpn-cli
+VPN_LOG="$HOME_DIR/.local/share/adguardvpn-cli/tunnel.log"
+INCIDENT_ROOT="$HOME_DIR/.local/state/adguardvpn-watchdog/incidents"
+STATE_DIR=/var/lib/adguard-vpn-watchdog
+BAD_FILE="$STATE_DIR/bad-since"
+RESTARTS_FILE="$STATE_DIR/restarts"
+LOCK_FILE=/run/adguard-vpn-watchdog.lock
+INTERFACE=wlp3s0
+SERVICE=adguard-vpn-managed.service
+HOLD_SECONDS=45
+COOLDOWN_SECONDS=600
+MAX_RESTARTS_PER_HOUR=3
+
+if [[ "${ADGUARD_WATCHDOG_DRY_RUN:-0}" == 1 ]]; then
+    STATE_DIR="/tmp/adguard-vpn-watchdog-$UID"
+    BAD_FILE="$STATE_DIR/bad-since"
+    RESTARTS_FILE="$STATE_DIR/restarts"
+    LOCK_FILE="/tmp/adguard-vpn-watchdog-$UID.lock"
+fi
+
+mkdir -p "$STATE_DIR"
+exec 9>"$LOCK_FILE"
+flock -n 9 || exit 0
+
+log() {
+    logger -t adguard-vpn-watchdog -- "$*"
+    printf '%s %s\n' "$(date --iso-8601=seconds)" "$*"
+}
+
+reset_bad() {
+    rm -f "$BAD_FILE"
+}
+
+# The timer must not take ownership of manually launched sessions.
+if [[ "${ADGUARD_WATCHDOG_DRY_RUN:-0}" != 1 ]] && ! systemctl is-active --quiet "$SERVICE"; then
+    reset_bad
+    exit 0
+fi
+
+# tunnel.log.1 precedes tunnel.log after rotation. A large tail keeps the state
+# visible long enough even when debug logging produces a high volume of lines.
+last_state="$({
+    [[ -f "$VPN_LOG.1" ]] && tail -n 60000 "$VPN_LOG.1"
+    [[ -f "$VPN_LOG" ]] && tail -n 60000 "$VPN_LOG"
+} 2>/dev/null | awk '/VPNCORE raise_state:/ { state=$NF } END { print state }')"
+
+if [[ "$last_state" != "VPN_SS_WAITING_FOR_NETWORK" ]]; then
+    reset_bad
+    exit 0
+fi
+
+# Never restart for a real Wi-Fi/WAN outage. Require an operational interface,
+# a physical default route and at least two successful independent probes,
+# including at least one public address.
+if [[ ! -e "/sys/class/net/$INTERFACE/operstate" ]] || [[ "$(cat "/sys/class/net/$INTERFACE/operstate")" != up ]]; then
+    reset_bad
+    log "Waiting for network is genuine: $INTERFACE is not up"
+    exit 0
+fi
+
+default_route="$(ip -4 route show default dev "$INTERFACE" | head -n 1)"
+if [[ -z "$default_route" ]]; then
+    reset_bad
+    log "Waiting for network is genuine: no IPv4 default route on $INTERFACE"
+    exit 0
+fi
+
+gateway="$(awk '{for (i=1; i<=NF; i++) if ($i == "via") {print $(i+1); exit}}' <<<"$default_route")"
+gw_ok=0
+p1_ok=0
+p8_ok=0
+[[ -n "$gateway" ]] && ping -n -I "$INTERFACE" -c 1 -W 1 "$gateway" >/dev/null 2>&1 && gw_ok=1
+ping -n -I "$INTERFACE" -c 1 -W 1 1.1.1.1 >/dev/null 2>&1 && p1_ok=1
+ping -n -I "$INTERFACE" -c 1 -W 1 8.8.8.8 >/dev/null 2>&1 && p8_ok=1
+probe_total=$((gw_ok + p1_ok + p8_ok))
+
+if (( probe_total < 2 || (p1_ok == 0 && p8_ok == 0) )); then
+    reset_bad
+    log "Waiting for network not overridden: physical probes gw=$gw_ok p1=$p1_ok p8=$p8_ok"
+    exit 0
+fi
+
+now="$(date +%s)"
+if [[ ! -s "$BAD_FILE" ]]; then
+    printf '%s\n' "$now" >"$BAD_FILE"
+    log "Suspected false WAITING_FOR_NETWORK; confirmation timer started (gw=$gw_ok p1=$p1_ok p8=$p8_ok)"
+    exit 0
+fi
+
+bad_since="$(cat "$BAD_FILE" 2>/dev/null || printf '%s' "$now")"
+[[ "$bad_since" =~ ^[0-9]+$ ]] || bad_since="$now"
+if (( now - bad_since < HOLD_SECONDS )); then
+    exit 0
+fi
+
+# Keep only restart timestamps from the last hour.
+touch "$RESTARTS_FILE"
+awk -v cutoff="$((now - 3600))" '$1 >= cutoff' "$RESTARTS_FILE" >"$RESTARTS_FILE.tmp"
+mv "$RESTARTS_FILE.tmp" "$RESTARTS_FILE"
+restart_count="$(wc -l <"$RESTARTS_FILE")"
+last_restart="$(tail -n 1 "$RESTARTS_FILE" 2>/dev/null || true)"
+[[ "$last_restart" =~ ^[0-9]+$ ]] || last_restart=0
+
+if (( now - last_restart < COOLDOWN_SECONDS )); then
+    log "Recovery suppressed by ${COOLDOWN_SECONDS}s cooldown"
+    exit 0
+fi
+
+stamp="$(date +%Y%m%d-%H%M%S)"
+incident="$INCIDENT_ROOT/$stamp"
+mkdir -p "$incident"
+{
+    echo "timestamp=$(date --iso-8601=seconds)"
+    echo "reason=false WAITING_FOR_NETWORK for $((now - bad_since)) seconds"
+    echo "last_state=$last_state"
+    echo "interface=$INTERFACE"
+    echo "default_route=$default_route"
+    echo "probes=gw:$gw_ok,p1:$p1_ok,p8:$p8_ok"
+    systemctl status "$SERVICE" --no-pager || true
+} >"$incident/summary.txt" 2>&1
+ip -details address show >"$incident/ip-address.txt" 2>&1 || true
+ip -details route show table all >"$incident/ip-routes.txt" 2>&1 || true
+ip rule show >"$incident/ip-rules.txt" 2>&1 || true
+ss -tinap >"$incident/tcp-sockets.txt" 2>&1 || true
+journalctl -u "$SERVICE" --since '-15 minutes' --no-pager >"$incident/service-journal.txt" 2>&1 || true
+{
+    [[ -f "$VPN_LOG.1" ]] && tail -n 20000 "$VPN_LOG.1"
+    [[ -f "$VPN_LOG" ]] && tail -n 40000 "$VPN_LOG"
+} >"$incident/tunnel-tail.log" 2>/dev/null || true
+timeout 20 "$VPN_BIN" export-logs -o "$incident" -f >"$incident/export-logs.txt" 2>&1 || true
+
+owner_uid="$(stat -c %u "$HOME_DIR")"
+owner_gid="$(stat -c %g "$HOME_DIR")"
+chown -R "$owner_uid:$owner_gid" "$INCIDENT_ROOT" 2>/dev/null || true
+
+if (( restart_count >= MAX_RESTARTS_PER_HOUR )); then
+    log "Recovery blocked after $restart_count restarts/hour; diagnostics: $incident"
+    reset_bad
+    exit 1
+fi
+
+printf '%s\n' "$now" >>"$RESTARTS_FILE"
+reset_bad
+log "Confirmed false WAITING_FOR_NETWORK; restarting $SERVICE; diagnostics: $incident"
+
+if [[ "${ADGUARD_WATCHDOG_DRY_RUN:-0}" == 1 ]]; then
+    log "Dry run: restart skipped"
+    exit 0
+fi
+
+systemctl restart "$SERVICE"

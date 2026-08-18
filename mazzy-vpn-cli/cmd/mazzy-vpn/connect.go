@@ -91,22 +91,24 @@ func cmdConnect(ctx context.Context, args []string) int {
 		return 1
 	}
 
+	t := translator()
+
 	// Single-flight: only one mutation at a time (parity acquire_action_lock).
 	mu, err := lock.Acquire(lockDir())
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "another mazzy-vpn operation is in progress")
+		fmt.Fprintln(os.Stderr, t.T("cli.err.lock"))
 		return 1
 	}
 	defer mu.Unlock()
 
-	fmt.Printf("Connecting %s (%s)...\n", filepath.Base(path), proto.Title())
+	fmt.Println(t.Tf("cli.connect.connecting", filepath.Base(path), proto.Title()))
 	uplink := resolveUplink(args)
 	if uplink != "" {
-		fmt.Printf("Pinning egress to uplink: %s\n", uplink)
+		fmt.Println(t.Tf("cli.connect.pin_uplink", uplink))
 	}
 	conn, err := connect.Up(ctx, proto, cfg, connectOpts(uplink))
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "connect failed:", err)
+		fmt.Fprintln(os.Stderr, t.T("cli.connect.failed"), err)
 		return 1
 	}
 
@@ -121,7 +123,7 @@ func cmdConnect(ctx context.Context, args []string) int {
 
 	// Verify REAL egress before telling the user they are protected. This is
 	// the difference between "an interface exists" and "the VPN actually works".
-	fmt.Print("Verifying protected egress")
+	fmt.Print(t.T("cli.connect.verifying"))
 	lc := livecheck.New()
 	spinDone := make(chan struct{})
 	go func() {
@@ -141,15 +143,15 @@ func cmdConnect(ctx context.Context, args []string) int {
 	zoneName := filepath.Base(path)
 	nfy := notify.New()
 	if snap.Protected() {
-		fmt.Printf("✔ CONNECTED and protected.\n")
-		fmt.Printf("  interface : %s\n", conn.Interface)
-		fmt.Printf("  egress IP : %s\n", snap.EgressIP)
-		fmt.Printf("  protocol  : %s\n", proto.Title())
+		fmt.Println(t.T("cli.connect.ok"))
+		fmt.Println(t.Tf("cli.connect.interface", conn.Interface))
+		fmt.Println(t.Tf("cli.connect.egress", snap.EgressIP))
+		fmt.Println(t.Tf("cli.connect.protocol", proto.Title()))
 		nfy.Connected(zoneName, snap.EgressIP)
 		maybeAutoMimic(ctx)
 		go recordZoneScore(ctx, strings.TrimSuffix(zoneName, filepath.Ext(zoneName)))
 	} else {
-		fmt.Printf("⚠ Interface %s is up, but egress is NOT confirmed: %s\n", conn.Interface, snap.Reason)
+		fmt.Println(t.Tf("cli.connect.not_confirmed", conn.Interface, snap.Reason))
 		fmt.Println("  The tunnel may still be establishing, or this server is not routing traffic.")
 		fmt.Println("  Try another zone (mazzy-vpn test) if this persists.")
 		nfy.Failed(zoneName, snap.Reason)
@@ -157,9 +159,9 @@ func cmdConnect(ctx context.Context, args []string) int {
 
 	autoReconnect := !hasFlag(args, "--no-reconnect")
 	if autoReconnect {
-		fmt.Println("\nLive dashboard + auto-reconnect (Ctrl+C to disconnect):")
+		fmt.Println(t.T("cli.connect.dashboard_reconnect"))
 	} else {
-		fmt.Println("\nLive dashboard (Ctrl+C to disconnect):")
+		fmt.Println(t.T("cli.connect.dashboard"))
 	}
 
 	// Live dashboard: refresh status every few seconds until interrupted, and
@@ -192,7 +194,7 @@ dashLoop:
 				continue
 			}
 			// Egress lost: attempt an in-place reconnect.
-			fmt.Printf("⟳ Egress lost (%d checks). Reconnecting %s...\n", consecutiveFail, zoneName)
+			fmt.Println(t.Tf("cli.connect.egress_lost", consecutiveFail, zoneName))
 			nfy.Reconnecting(zoneName, s.Reason)
 			_ = conn.Down(ctx)
 			newConn, rerr := connect.Up(ctx, proto, cfg, connectOpts(uplink))
@@ -205,24 +207,24 @@ dashLoop:
 			conn = newConn
 			rs := lc.WaitProtected(ctx, conn.Interface, 15*time.Second)
 			if rs.Protected() {
-				fmt.Printf("✔ Reconnected. egress=%s\n", rs.EgressIP)
+				fmt.Println(t.Tf("cli.connect.reconnected", rs.EgressIP))
 				nfy.Reconnected(zoneName, rs.EgressIP)
 			} else {
-				fmt.Printf("⚠ Reconnect did not confirm egress: %s\n", rs.Reason)
+				fmt.Println(t.Tf("cli.connect.not_confirmed", conn.Interface, rs.Reason))
 				nfy.Failed(zoneName, rs.Reason)
 			}
 			consecutiveFail = 0
 		}
 	}
 
-	fmt.Println("\nDisconnecting...")
+	fmt.Println(t.T("cli.connect.disconnecting"))
 	if err := conn.Down(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "teardown error:", err)
 		return 1
 	}
 	nfy.Disconnected(zoneName)
 	_ = st.SetDesired(core.DesiredDown)
-	fmt.Println("Disconnected.")
+	fmt.Println(t.T("cli.connect.disconnected"))
 	return 0
 }
 
@@ -258,21 +260,22 @@ func cmdStatus(ctx context.Context, args []string) int {
 		return 0
 	}
 
+	t := translator()
 	switch {
 	case snap.Protected():
-		fmt.Printf("State:     ✔ PROTECTED\n")
-		fmt.Printf("Interface: %s\n", liveIface)
-		fmt.Printf("Egress IP: %s\n", snap.EgressIP)
+		fmt.Printf("%-10s %s\n", t.T("cli.status.state"), t.T("cli.status.protected"))
+		fmt.Printf("%-10s %s\n", t.T("cli.status.interface"), liveIface)
+		fmt.Printf("%-10s %s\n", t.T("cli.status.egress"), snap.EgressIP)
 		if profileName != "" {
-			fmt.Printf("Profile:   %s\n", profileName)
+			fmt.Printf("%-10s %s\n", t.T("cli.status.profile"), profileName)
 		}
 	case snap.LinkUp:
-		fmt.Printf("State:     ⚠ LINK UP (egress not confirmed: %s)\n", snap.Reason)
-		fmt.Printf("Interface: %s\n", liveIface)
+		fmt.Printf("%-10s %s\n", t.T("cli.status.state"), t.Tf("cli.status.linkup", snap.Reason))
+		fmt.Printf("%-10s %s\n", t.T("cli.status.interface"), liveIface)
 	default:
-		fmt.Println("State:     ✖ down (no active VPN interface)")
+		fmt.Printf("%-10s %s\n", t.T("cli.status.state"), t.T("cli.status.down"))
 		if profileName != "" {
-			fmt.Printf("Last:      %s (%s)\n", profileName, protoName)
+			fmt.Printf("%-10s %s (%s)\n", t.T("cli.status.last"), profileName, protoName)
 		}
 	}
 	return 0

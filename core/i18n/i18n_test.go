@@ -104,3 +104,45 @@ func TestVerifyKeysLocalized(t *testing.T) {
 		}
 	}
 }
+
+// TestCLICatalogCompleteAllLanguages ensures every cli.* key has a translation
+// in all six supported languages (no silent English fallback for CLI output).
+func TestCLICatalogCompleteAllLanguages(t *testing.T) {
+	for _, k := range Keys() {
+		if len(k) < 4 || k[:4] != "cli." {
+			continue
+		}
+		for _, l := range Supported {
+			tr := NewTranslator(l)
+			if got := tr.T(k); got == k {
+				t.Errorf("CLI key %q missing translation for %s", k, l)
+			}
+		}
+	}
+}
+
+// TestCLICatalogPrintfConsistency checks that a key's printf verbs match across
+// languages, so Tf never mismatches arguments.
+func TestCLICatalogPrintfConsistency(t *testing.T) {
+	verbs := func(s string) int {
+		n := 0
+		for i := 0; i < len(s)-1; i++ {
+			if s[i] == '%' && s[i+1] != '%' {
+				n++
+			}
+		}
+		return n
+	}
+	en := NewTranslator(EN)
+	for _, k := range Keys() {
+		if len(k) < 4 || k[:4] != "cli." {
+			continue
+		}
+		want := verbs(en.T(k))
+		for _, l := range Supported {
+			if got := verbs(NewTranslator(l).T(k)); got != want {
+				t.Errorf("key %q: %s has %d printf verbs, EN has %d", k, l, got, want)
+			}
+		}
+	}
+}

@@ -64,7 +64,7 @@ func cmdImport(_ context.Context, args []string) int {
 			imported++
 		}
 	}
-	fmt.Printf("\nImported %d profile(s), %d skipped.\n", imported, failed)
+	fmt.Println(translator().Tf("cli.catalog.imported", imported, failed))
 	if imported == 0 {
 		return 1
 	}
@@ -87,14 +87,14 @@ func cmdProfiles(ctx context.Context, args []string) int {
 		return 0
 	}
 	if len(entries) == 0 {
-		fmt.Println("No managed profiles. Import some with: mazzy-vpn import <FILE|DIR>")
+		fmt.Println(translator().T("cli.catalog.none"))
 		return 0
 	}
 
 	withPing := hasFlag(args, "--ping")
 	var pings map[string]string
 	if withPing {
-		fmt.Println("Measuring servers...")
+		fmt.Println(translator().T("cli.catalog.measuring"))
 		pings = measureCatalogPings(ctx, cat)
 	}
 
@@ -152,6 +152,6 @@ func cmdRemove(_ context.Context, args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	fmt.Printf("removed %s\n", args[0])
+	fmt.Println(translator().Tf("cli.catalog.removed", args[0]))
 	return 0
 }

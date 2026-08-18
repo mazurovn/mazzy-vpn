@@ -1,0 +1,9 @@
+[Unit]
+Description=Recover a falsely stuck AdGuard VPN connection
+After=network-online.target NetworkManager.service adguard-vpn-managed.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/adguard-vpn-watchdog
+UMask=0077
