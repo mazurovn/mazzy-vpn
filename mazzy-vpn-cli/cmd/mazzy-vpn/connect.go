@@ -264,14 +264,14 @@ func cmdStatus(ctx context.Context, args []string) int {
 	switch {
 	case snap.Protected():
 		fmt.Printf("%-10s %s\n", t.T("cli.status.state"), t.T("cli.status.protected"))
-		fmt.Printf("%-10s %s\n", t.T("cli.status.interface"), liveIface)
+		fmt.Printf("%-10s %s\n", t.T("cli.status.interface"), safeDisplay(liveIface))
 		fmt.Printf("%-10s %s\n", t.T("cli.status.egress"), snap.EgressIP)
 		if profileName != "" {
 			fmt.Printf("%-10s %s\n", t.T("cli.status.profile"), safeDisplay(profileName))
 		}
 	case snap.LinkUp:
 		fmt.Printf("%-10s %s\n", t.T("cli.status.state"), t.Tf("cli.status.linkup", snap.Reason))
-		fmt.Printf("%-10s %s\n", t.T("cli.status.interface"), liveIface)
+		fmt.Printf("%-10s %s\n", t.T("cli.status.interface"), safeDisplay(liveIface))
 	default:
 		fmt.Printf("%-10s %s\n", t.T("cli.status.state"), t.T("cli.status.down"))
 		if profileName != "" {
