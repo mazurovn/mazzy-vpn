@@ -19,9 +19,14 @@ import (
 
 // safeDisplay sanitizes a user-controlled string (profile name, path, zone,
 // uplink) before printing it to the terminal, stripping ASCII control and
-// C1 characters so a crafted name cannot inject ANSI escape sequences or move
-// the cursor. Printable Unicode is preserved.
+// C1 characters so a crafted name cannot inject ANSI escape sequences, move the
+// cursor, or forge new log lines. Printable Unicode is preserved.
 func safeDisplay(s string) string {
+	// Explicitly drop the line-break characters first (recognized by static
+	// analysis as a log-injection barrier), then strip the remaining control
+	// and C1 range.
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
 	return strings.Map(func(r rune) rune {
 		if r == '\t' {
 			return ' '

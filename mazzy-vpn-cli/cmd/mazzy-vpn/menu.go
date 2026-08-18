@@ -320,7 +320,7 @@ func runPrivileged(_ context.Context, subcmd string, sargs ...string) {
 	needsRoot := subcmd == "up" || subcmd == "connect" || subcmd == "disconnect" ||
 		subcmd == "recover" || subcmd == "auto" || subcmd == "daemon"
 	if needsRoot && os.Geteuid() != 0 {
-		fmt.Printf("(needs root) run: sudo %s %s\n", self, strings.Join(args, " "))
+		fmt.Printf("(needs root) run: sudo %s %s\n", safeDisplay(self), safeDisplay(strings.Join(args, " ")))
 		return
 	}
 	// In-process dispatch keeps it simple and avoids re-exec.
