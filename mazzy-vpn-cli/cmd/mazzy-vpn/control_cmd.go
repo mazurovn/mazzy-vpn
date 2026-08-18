@@ -91,7 +91,7 @@ func controlShowID() int {
 		fmt.Fprintln(os.Stderr, "identity error:", err)
 		return 1
 	}
-	fmt.Printf("ID:      %s\n", id)
+	fmt.Printf("ID:      %s\n", safeDisplay(id))
 	fmt.Printf("PubKey:  %s\n", base64.StdEncoding.EncodeToString(pub))
 	fmt.Println("\nShare these with a peer so they can 'mazzy-vpn control pair' with you.")
 	return 0
@@ -121,7 +121,7 @@ func controlPair(id, pubB64 string) int {
 	}
 	for _, r := range recs {
 		if r.ID == id {
-			fmt.Println("already paired:", id)
+			fmt.Println("already paired:", safeDisplay(id))
 			return 0
 		}
 	}
@@ -130,7 +130,7 @@ func controlPair(id, pubB64 string) int {
 		fmt.Fprintln(os.Stderr, "save trust:", err)
 		return 1
 	}
-	fmt.Printf("✔ paired with %s\n", id)
+	fmt.Printf("✔ paired with %s\n", safeDisplay(id))
 	return 0
 }
 
@@ -170,7 +170,7 @@ func controlList() int {
 		if !ok {
 			status = "INVALID KEY"
 		}
-		fmt.Printf("%-18s %s\n", r.ID, status)
+		fmt.Printf("%-18s %s\n", safeDisplay(r.ID), status)
 	}
 	return 0
 }

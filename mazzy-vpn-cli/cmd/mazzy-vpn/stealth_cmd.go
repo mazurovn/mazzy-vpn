@@ -186,7 +186,7 @@ func cmdStealth(ctx context.Context, args []string) int {
 	}
 
 	fmt.Printf("\nEgress: %s (%s, %s)\n", sig.EgressIPv4, sig.EgressCountry, sig.EgressCity)
-	fmt.Printf("System timezone: %s\n\n", sig.SystemTimezone)
+	fmt.Printf("System timezone: %s\n\n", safeDisplay(sig.SystemTimezone))
 	for _, f := range rep.Findings {
 		glyph := "●"
 		switch f.Severity {
