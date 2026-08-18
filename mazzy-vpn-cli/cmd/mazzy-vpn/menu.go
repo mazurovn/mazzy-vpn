@@ -82,7 +82,7 @@ func cmdMenu(ctx context.Context, _ []string) int {
 		case "":
 			// redraw
 		default:
-			fmt.Println("Unknown choice.")
+			fmt.Println(translator().T("cli.menu.unknown_choice"))
 		}
 		fmt.Println()
 	}
@@ -153,7 +153,7 @@ func drawMenu(profileCount int, set settings.Settings) {
 // menuQuickConnect connects to the preferred zone or the best live one.
 func menuQuickConnect(ctx context.Context, set settings.Settings) {
 	if set.PreferredZone != "" {
-		fmt.Printf("Quick connect to preferred zone: %s\n", set.PreferredZone)
+		fmt.Println(translator().Tf("cli.menu.quick_connect", set.PreferredZone))
 		runPrivileged(ctx, "up", set.PreferredZone)
 		return
 	}
@@ -171,10 +171,10 @@ func menuReconnectDiagnostics(ctx context.Context) {
 
 // menuRecover confirms then force-cleans all tunnels.
 func menuRecover(ctx context.Context, in *bufio.Reader) {
-	fmt.Print("This removes ALL Mazzy tunnels/guards and returns to plain Wi‑Fi. Continue? [y/N] ")
+	fmt.Print(translator().T("cli.menu.confirm_recover"))
 	line, _ := in.ReadString('\n')
 	if strings.ToLower(strings.TrimSpace(line)) != "y" {
-		fmt.Println("Cancelled.")
+		fmt.Println(translator().T("cli.menu.cancelled"))
 		return
 	}
 	runPrivileged(ctx, "recover")
@@ -182,7 +182,7 @@ func menuRecover(ctx context.Context, in *bufio.Reader) {
 
 // menuProviders lets the user filter AI provider checks by type.
 func menuProviders(ctx context.Context, in *bufio.Reader) {
-	fmt.Print("Filter type (llm/agent/search, blank = all): ")
+	fmt.Print(translator().T("cli.menu.prompt.filter"))
 	line, _ := in.ReadString('\n')
 	t := strings.TrimSpace(line)
 	if t == "" {
@@ -199,10 +199,10 @@ func menuChooseZone(ctx context.Context, in *bufio.Reader, cat interface {
 	c := newCatalog()
 	entries, _ := c.List()
 	if len(entries) == 0 {
-		fmt.Println("No profiles. Import some first (option 11).")
+		fmt.Println(translator().T("cli.menu.no_profiles_opt"))
 		return
 	}
-	fmt.Println("Measuring servers...")
+	fmt.Println(translator().T("cli.catalog.measuring"))
 	pings := measureCatalogPings(ctx, c)
 
 	fmt.Printf("  %2s  %-24s %-10s %-4s %s\n", "#", "NAME", "PROTOCOL", "CC", "PING")
@@ -217,12 +217,12 @@ func menuChooseZone(ctx context.Context, in *bufio.Reader, cat interface {
 		}
 		fmt.Printf("  %2d.%s %-24s %-10s %-4s %s\n", i+1, star, e.Name, e.Protocol, e.Country, ping)
 	}
-	fmt.Print("Zone number (0 to cancel): ")
+	fmt.Print(translator().T("cli.menu.prompt.zone_num"))
 	line, _ := in.ReadString('\n')
 	n, err := strconv.Atoi(strings.TrimSpace(line))
 	if err != nil || n < 1 || n > len(entries) {
 		if n != 0 {
-			fmt.Println("Invalid selection.")
+			fmt.Println(translator().T("cli.menu.invalid_selection"))
 		}
 		return
 	}
@@ -231,7 +231,7 @@ func menuChooseZone(ctx context.Context, in *bufio.Reader, cat interface {
 
 // menuTrace prompts for a zone and traces its packet path.
 func menuTrace(ctx context.Context, in *bufio.Reader) {
-	fmt.Print("Zone name (blank = current connection): ")
+	fmt.Print(translator().T("cli.menu.prompt.zone_name"))
 	line, _ := in.ReadString('\n')
 	z := strings.TrimSpace(line)
 	if z == "" {
@@ -243,7 +243,7 @@ func menuTrace(ctx context.Context, in *bufio.Reader) {
 
 // menuImport prompts for a path and imports it.
 func menuImport(ctx context.Context, in *bufio.Reader) {
-	fmt.Print("Path to a profile file or directory: ")
+	fmt.Print(translator().T("cli.menu.prompt.path"))
 	line, _ := in.ReadString('\n')
 	path := strings.TrimSpace(line)
 	if path == "" {
@@ -271,7 +271,7 @@ func menuSettings(ctx context.Context, in *bufio.Reader, store *settings.Store) 
 		fmt.Printf("  6. Auto-mimic timezone     : %s\n", onoff(set.AutoMimic))
 		fmt.Printf("  7. Preferred zone          : %s\n", orDash(set.PreferredZone))
 		fmt.Println("  0. Back")
-		fmt.Print("Toggle #: ")
+		fmt.Print(translator().T("cli.menu.prompt.toggle"))
 		line, _ := in.ReadString('\n')
 		switch strings.TrimSpace(line) {
 		case "1":
@@ -287,19 +287,19 @@ func menuSettings(ctx context.Context, in *bufio.Reader, store *settings.Store) 
 		case "6":
 			set.AutoMimic = !set.AutoMimic
 		case "7":
-			fmt.Print("Preferred zone name (blank = best): ")
+			fmt.Print(translator().T("cli.menu.prompt.pref_zone"))
 			z, _ := in.ReadString('\n')
 			set.PreferredZone = strings.TrimSpace(z)
 		case "0", "":
 			return
 		default:
-			fmt.Println("Unknown.")
+			fmt.Println(translator().T("cli.menu.unknown_choice"))
 			continue
 		}
 		if err := store.Save(set); err != nil {
 			fmt.Fprintln(os.Stderr, "could not save settings:", err)
 		} else {
-			fmt.Println("Saved.")
+			fmt.Println(translator().T("cli.menu.saved"))
 		}
 	}
 }

@@ -530,6 +530,92 @@ var cliCatalog = map[string]map[Lang]string{
 		JA: "ネットワーク診断を実行中...",
 		KO: "네트워크 진단 실행 중...",
 	},
+
+	// --- interactive menu prompts ---
+	"cli.menu.unknown_choice": {
+		EN: "Unknown choice.", RU: "Неизвестный выбор.", DE: "Unbekannte Auswahl.",
+		ZH: "未知选项。", JA: "不明な選択。", KO: "알 수 없는 선택.",
+	},
+	"cli.menu.cancelled": {
+		EN: "Cancelled.", RU: "Отменено.", DE: "Abgebrochen.",
+		ZH: "已取消。", JA: "キャンセルしました。", KO: "취소됨.",
+	},
+	"cli.menu.invalid_selection": {
+		EN: "Invalid selection.", RU: "Неверный выбор.", DE: "Ungültige Auswahl.",
+		ZH: "无效选择。", JA: "無効な選択。", KO: "잘못된 선택.",
+	},
+	"cli.menu.saved": {
+		EN: "Saved.", RU: "Сохранено.", DE: "Gespeichert.",
+		ZH: "已保存。", JA: "保存しました。", KO: "저장됨.",
+	},
+	"cli.menu.no_profiles_opt": {
+		EN: "No profiles. Import some first (option 11).",
+		RU: "Нет профилей. Сначала импортируйте (пункт 11).",
+		DE: "Keine Profile. Zuerst importieren (Option 11).",
+		ZH: "没有配置。请先导入（选项 11）。",
+		JA: "プロファイルなし。先にインポート (オプション 11)。",
+		KO: "프로필 없음. 먼저 가져오기 (옵션 11).",
+	},
+	"cli.menu.prompt.zone_num": {
+		EN: "Zone number (0 to cancel): ",
+		RU: "Номер зоны (0 — отмена): ",
+		DE: "Zonennummer (0 zum Abbrechen): ",
+		ZH: "区域编号（0 取消）：",
+		JA: "ゾーン番号 (0 でキャンセル): ",
+		KO: "존 번호 (0은 취소): ",
+	},
+	"cli.menu.prompt.zone_name": {
+		EN: "Zone name (blank = current connection): ",
+		RU: "Имя зоны (пусто = текущее соединение): ",
+		DE: "Zonenname (leer = aktuelle Verbindung): ",
+		ZH: "区域名称（空 = 当前连接）：",
+		JA: "ゾーン名 (空 = 現在の接続): ",
+		KO: "존 이름 (비움 = 현재 연결): ",
+	},
+	"cli.menu.prompt.path": {
+		EN: "Path to a profile file or directory: ",
+		RU: "Путь к файлу или каталогу профилей: ",
+		DE: "Pfad zu einer Profildatei oder einem Verzeichnis: ",
+		ZH: "配置文件或目录的路径：",
+		JA: "プロファイルまたはディレクトリのパス: ",
+		KO: "프로필 파일 또는 디렉토리 경로: ",
+	},
+	"cli.menu.prompt.pref_zone": {
+		EN: "Preferred zone name (blank = best): ",
+		RU: "Предпочитаемая зона (пусто = лучшая): ",
+		DE: "Bevorzugter Zonenname (leer = beste): ",
+		ZH: "首选区域名称（空 = 最佳）：",
+		JA: "優先ゾーン名 (空 = 最適): ",
+		KO: "선호 존 이름 (비움 = 최적): ",
+	},
+	"cli.menu.prompt.filter": {
+		EN: "Filter type (llm/agent/search, blank = all): ",
+		RU: "Тип фильтра (llm/agent/search, пусто = все): ",
+		DE: "Filtertyp (llm/agent/search, leer = alle): ",
+		ZH: "过滤类型（llm/agent/search，空 = 全部）：",
+		JA: "フィルター種別 (llm/agent/search、空 = すべて): ",
+		KO: "필터 유형 (llm/agent/search, 비움 = 전체): ",
+	},
+	"cli.menu.prompt.toggle": {
+		EN: "Toggle #: ", RU: "Переключить #: ", DE: "Umschalten #: ",
+		ZH: "切换 #：", JA: "切り替え #: ", KO: "토글 #: ",
+	},
+	"cli.menu.confirm_recover": {
+		EN: "This removes ALL Mazzy tunnels/guards and returns to plain Wi‑Fi. Continue? [y/N] ",
+		RU: "Это удалит ВСЕ туннели/гарды Mazzy и вернёт обычный Wi‑Fi. Продолжить? [y/N] ",
+		DE: "Dies entfernt ALLE Mazzy-Tunnel/Guards und kehrt zu normalem WLAN zurück. Fortfahren? [y/N] ",
+		ZH: "这将移除所有 Mazzy 隧道/防护并返回普通 Wi‑Fi。继续？[y/N] ",
+		JA: "すべての Mazzy トンネル/ガードを削除し、通常の Wi‑Fi に戻ります。続行？[y/N] ",
+		KO: "모든 Mazzy 터널/가드를 제거하고 일반 Wi‑Fi로 돌아갑니다. 계속?[y/N] ",
+	},
+	"cli.menu.quick_connect": {
+		EN: "Quick connect to preferred zone: %s",
+		RU: "Быстрое подключение к предпочитаемой зоне: %s",
+		DE: "Schnellverbindung zur bevorzugten Zone: %s",
+		ZH: "快速连接到首选区域：%s",
+		JA: "優先ゾーンにクイック接続: %s",
+		KO: "선호 존에 빠른 연결: %s",
+	},
 }
 
 func init() {
