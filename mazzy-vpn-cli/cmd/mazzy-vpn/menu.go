@@ -23,13 +23,14 @@ func cmdMenu(ctx context.Context, _ []string) int {
 	in := bufio.NewReader(os.Stdin)
 	cat := newCatalog()
 	setStore := settings.NewStore()
+	t := translator() // localized prompts (resolves language, no hardcode)
 
 	for {
 		set := setStore.Load()
 		drawHeader(ctx)
 		drawMenu(cat.Count(), set)
 
-		fmt.Print("\nChoose: ")
+		fmt.Print("\n" + t.T("prompt.choose"))
 		line, err := in.ReadString('\n')
 		if err != nil {
 			return 0
