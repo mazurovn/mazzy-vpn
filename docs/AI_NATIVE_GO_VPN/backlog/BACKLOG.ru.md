@@ -129,7 +129,7 @@ net request_id-spoofing, нет утечки внутренних ошибок. 
 | U5 | `netadapter`: выбор адаптера (кабель/Wi‑Fi), рекомендация | P0 | DONE |
 | U6 | `netdiag`: анализ сети + фиксы (детект AdGuard tun0) | P0 | DONE |
 | U7 | bind egress к выбранному uplink в connect | P1 | DONE |
-| CLI-L10N | локализация вывода CLI через i18n | P1 | ЧАСТИЧНО (connect/status/up/best/help — 62 ключа; остаётся doctor/providers/netdiag/stealth) |
+| CLI-L10N | локализация вывода CLI через i18n | P1 | DONE (85 ключей: connect/status/up/best/test/help/providers/stealth/diagnose/dns/catalog/update; остаются вторичные строки меню) |
 | CLI-SETTINGS | команда settings/config (list/get/set) | P2 | TODO |
 | CLI-COMPLETION | bash/zsh/fish автодополнение + man-страница | P2 | TODO |
 | CLI-HELP | локализованный printUsage + per-command help | P2 | TODO |

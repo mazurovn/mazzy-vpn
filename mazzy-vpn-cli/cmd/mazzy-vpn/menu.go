@@ -162,7 +162,7 @@ func menuQuickConnect(ctx context.Context, set settings.Settings) {
 
 // menuReconnectDiagnostics runs diagnostics then reconnects to the best zone.
 func menuReconnectDiagnostics(ctx context.Context) {
-	fmt.Println("Running network diagnostics...")
+	fmt.Println(translator().T("cli.netdiag.running"))
 	cmdNetdiag(ctx, nil)
 	fmt.Println("\nRe-testing servers and reconnecting to the best live zone...")
 	runPrivileged(ctx, "disconnect")

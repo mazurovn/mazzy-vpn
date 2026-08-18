@@ -504,6 +504,32 @@ var cliCatalog = map[string]map[Lang]string{
 		JA: "更新のインストールには root が必要: sudo mazzy-vpn update --apply",
 		KO: "업데이트 설치는 root가 필요: sudo mazzy-vpn update --apply",
 	},
+
+	// --- test / netdiag ---
+	"cli.test.testing": {
+		EN: "Testing %d server(s)...",
+		RU: "Тестирование %d серверов...",
+		DE: "Teste %d Server...",
+		ZH: "正在测试 %d 个服务器...",
+		JA: "%d 台のサーバーをテスト中...",
+		KO: "%d개 서버 테스트 중...",
+	},
+	"cli.best.connect_with": {
+		EN: "Connect with: sudo mazzy-vpn up %s",
+		RU: "Подключиться: sudo mazzy-vpn up %s",
+		DE: "Verbinden mit: sudo mazzy-vpn up %s",
+		ZH: "连接：sudo mazzy-vpn up %s",
+		JA: "接続: sudo mazzy-vpn up %s",
+		KO: "연결: sudo mazzy-vpn up %s",
+	},
+	"cli.netdiag.running": {
+		EN: "Running network diagnostics...",
+		RU: "Запуск сетевой диагностики...",
+		DE: "Führe Netzwerkdiagnose aus...",
+		ZH: "正在运行网络诊断...",
+		JA: "ネットワーク診断を実行中...",
+		KO: "네트워크 진단 실행 중...",
+	},
 }
 
 func init() {
