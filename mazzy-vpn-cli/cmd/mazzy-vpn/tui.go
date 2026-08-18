@@ -335,9 +335,9 @@ func (m tuiModel) header() string {
 	switch {
 	case m.snap.Protected():
 		status = stProtected.Render("● PROTECTED") +
-			fmt.Sprintf("  %s · %s", m.iface, m.snap.EgressIP)
+			fmt.Sprintf("  %s · %s", safeDisplay(m.iface), safeDisplay(m.snap.EgressIP))
 	case m.iface != "":
-		status = stWarn.Render("▲ LINK UP") + "  " + m.iface + " (no egress)"
+		status = stWarn.Render("▲ LINK UP") + "  " + safeDisplay(m.iface) + " (no egress)"
 	default:
 		status = stDown.Render("● DISCONNECTED") + "  plain uplink"
 	}
@@ -398,7 +398,7 @@ func (m tuiModel) viewZones() string {
 		} else if z.Reachable {
 			st = stWarn.Render("▲ no icmp")
 		}
-		b.WriteString(fmt.Sprintf("%s%-26s %-9s %s\n", cur, z.Name, lat, st))
+		b.WriteString(fmt.Sprintf("%s%-26s %-9s %s\n", cur, safeDisplay(z.Name), lat, st))
 	}
 	return b.String()
 }

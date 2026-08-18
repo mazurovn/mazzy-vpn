@@ -52,15 +52,15 @@ func cmdImport(_ context.Context, args []string) int {
 		for _, f := range files {
 			e, err := cat.Import(f)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "skip %s: %v\n", filepath.Base(f), err)
+				fmt.Fprintf(os.Stderr, "skip %s: %v\n", safeDisplay(filepath.Base(f)), err)
 				failed++
 				continue
 			}
 			cc := ""
 			if e.Country != "" {
-				cc = " [" + e.Country + "]"
+				cc = " [" + safeDisplay(e.Country) + "]"
 			}
-			fmt.Printf("imported %s%s (%s)\n", e.Name, cc, e.Protocol)
+			fmt.Printf("imported %s%s (%s)\n", safeDisplay(e.Name), cc, safeDisplay(string(e.Protocol)))
 			imported++
 		}
 	}
@@ -129,7 +129,14 @@ func cmdFavorite(_ context.Context, args []string) int {
 	}
 	cat := newCatalog()
 	fav := !hasFlag(args, "--off")
-	if err := cat.SetFavorite(args[0], fav); err != nil {
+	// Accept `favorite NAME [--off]` and `favorite --off NAME`: the name is the
+	// first non-flag argument, not blindly args[0] (which could be "--off").
+	name := firstNonFlag(args)
+	if name == "" {
+		fmt.Fprintln(os.Stderr, "usage: mazzy-vpn favorite NAME [--off]")
+		return 2
+	}
+	if err := cat.SetFavorite(name, fav); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
@@ -137,7 +144,7 @@ func cmdFavorite(_ context.Context, args []string) int {
 	if !fav {
 		state = "removed from"
 	}
-	fmt.Printf("%s %s favorites\n", safeDisplay(args[0]), state)
+	fmt.Printf("%s %s favorites\n", safeDisplay(name), state)
 	return 0
 }
 
@@ -148,10 +155,15 @@ func cmdRemove(_ context.Context, args []string) int {
 		return 2
 	}
 	cat := newCatalog()
-	if err := cat.Remove(args[0]); err != nil {
+	name := firstNonFlag(args)
+	if name == "" {
+		fmt.Fprintln(os.Stderr, "usage: mazzy-vpn remove NAME")
+		return 2
+	}
+	if err := cat.Remove(name); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	fmt.Println(translator().Tf("cli.catalog.removed", safeDisplay(args[0])))
+	fmt.Println(translator().Tf("cli.catalog.removed", safeDisplay(name)))
 	return 0
 }

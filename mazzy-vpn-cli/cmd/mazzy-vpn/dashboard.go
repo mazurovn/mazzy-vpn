@@ -27,10 +27,10 @@ func printDashboard(_ context.Context, _ *livecheck.Checker, iface, proto string
 	now := time.Now().Format("15:04:05")
 	fmt.Printf("  [%s] %s %-20s iface=%s proto=%s", now, badge, status, iface, proto)
 	if s.EgressIP != "" {
-		fmt.Printf(" egress=%s", s.EgressIP)
+		fmt.Printf(" egress=%s", safeDisplay(s.EgressIP))
 	}
 	if s.Reason != "" && !s.Protected() {
-		fmt.Printf(" (%s)", s.Reason)
+		fmt.Printf(" (%s)", safeDisplay(s.Reason))
 	}
 	fmt.Println()
 }

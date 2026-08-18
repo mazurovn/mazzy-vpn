@@ -48,6 +48,17 @@ func hasFlag(args []string, flag string) bool {
 	return false
 }
 
+// firstNonFlag returns the first bare (non-"-" prefixed) argument, or "". It
+// lets subcommands accept flags in any position, e.g. `favorite --off NAME`.
+func firstNonFlag(args []string) string {
+	for _, a := range args {
+		if a != "" && a[0] != '-' {
+			return a
+		}
+	}
+	return ""
+}
+
 // flagValue returns the value following --name, or "".
 func flagValue(args []string, name string) string {
 	for i, a := range args {
@@ -71,7 +82,7 @@ func cmdDoctor(ctx context.Context, args []string) int {
 		return 0
 	}
 	for _, c := range rep.Checks {
-		fmt.Printf("[%-4s] %s: %s\n", c.Status, c.Name, c.Detail)
+		fmt.Printf("[%-4s] %s: %s\n", c.Status, safeDisplay(c.Name), safeDisplay(c.Detail))
 	}
 	fmt.Printf("\nSummary: OK=%d WARN=%d FAIL=%d\n", rep.OK, rep.Warn, rep.Fail)
 	if !rep.Healthy() {
@@ -180,9 +191,9 @@ func cmdList(_ context.Context, args []string) int {
 		if !in.Valid {
 			mark = "INVALID"
 		}
-		fmt.Printf("[%-7s] %-10s %s\n", mark, in.Protocol, in.File)
+		fmt.Printf("[%-7s] %-10s %s\n", mark, safeDisplay(in.Protocol), safeDisplay(in.File))
 		for _, p := range in.Problems {
-			fmt.Printf("            - %s\n", p)
+			fmt.Printf("            - %s\n", safeDisplay(p))
 		}
 	}
 	return 0
@@ -213,9 +224,9 @@ func cmdValidate(_ context.Context, args []string) int {
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(info)
 	} else {
-		fmt.Printf("File:     %s\nProtocol: %s\nValid:    %v\n", info.File, info.Protocol, info.Valid)
+		fmt.Printf("File:     %s\nProtocol: %s\nValid:    %v\n", safeDisplay(info.File), safeDisplay(info.Protocol), info.Valid)
 		for _, p := range info.Problems {
-			fmt.Println("  -", p)
+			fmt.Println("  -", safeDisplay(p))
 		}
 	}
 	if !info.Valid {

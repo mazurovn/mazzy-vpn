@@ -41,10 +41,10 @@ func cmdAdapters(_ context.Context, args []string) int {
 		if len(a.IPv4) > 0 {
 			ip = a.IPv4[0]
 		}
-		fmt.Printf("%-14s %-8s %-6s %-6s %s\n", a.Name, a.Kind(), up, star, ip)
+		fmt.Printf("%-14s %-8s %-6s %-6s %s\n", safeDisplay(a.Name), a.Kind(), up, star, safeDisplay(ip))
 	}
 	if hasRec {
-		fmt.Printf("\nRecommended uplink: %s\n", rec.Name)
+		fmt.Printf("\nRecommended uplink: %s\n", safeDisplay(rec.Name))
 	}
 	return 0
 }
@@ -67,17 +67,17 @@ func cmdNetdiag(_ context.Context, args []string) int {
 		return 0
 	}
 	for _, f := range rep.Findings {
-		fmt.Printf("[%-4s] %s\n", f.Level, f.Title)
+		fmt.Printf("[%-4s] %s\n", f.Level, safeDisplay(f.Title))
 		if f.Detail != "" {
-			fmt.Printf("        %s\n", f.Detail)
+			fmt.Printf("        %s\n", safeDisplay(f.Detail))
 		}
 		if f.Fix != "" {
-			fmt.Printf("        fix: %s\n", f.Fix)
+			fmt.Printf("        fix: %s\n", safeDisplay(f.Fix))
 		}
 	}
 	fmt.Printf("\nSummary: OK=%d WARN=%d FAIL=%d\n", rep.OK, rep.Warn, rep.Fail)
 	if rep.RecommendedUplink != "" {
-		fmt.Printf("Recommended uplink: %s\n", rep.RecommendedUplink)
+		fmt.Printf("Recommended uplink: %s\n", safeDisplay(rep.RecommendedUplink))
 	}
 	if !rep.Healthy() {
 		return 1

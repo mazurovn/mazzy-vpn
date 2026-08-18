@@ -32,7 +32,19 @@ func cmdUp(ctx context.Context, args []string) int {
 	var name string
 	clean := hasFlag(args, "--clean")
 	auto := hasFlag(args, "--best") || hasFlag(args, "--auto") || clean
+	// Detect the zone NAME as the first bare (non-flag) argument, skipping any
+	// value that belongs to a value-taking flag such as `--uplink eth0` (audit:
+	// otherwise the uplink value was misread as the zone name).
+	skipNext := false
 	for _, a := range args {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+		if a == "--uplink" {
+			skipNext = true
+			continue
+		}
 		if a != "" && a[0] != '-' {
 			name = a
 			break
@@ -91,8 +103,17 @@ func cmdUp(ctx context.Context, args []string) int {
 		fmt.Fprintf(os.Stderr, "profile %q not found (see: mazzy-vpn profiles)\n", name)
 		return 1
 	}
-	// Reuse the file-based connect path with the managed file.
-	return cmdConnect(ctx, []string{entry.File})
+	// Reuse the file-based connect path with the managed file, forwarding the
+	// connection flags the user passed (audit: --uplink / --no-reconnect were
+	// previously dropped here so pinning an uplink via `up` silently did nothing).
+	connectArgs := []string{entry.File}
+	if up := flagValue(args, "--uplink"); up != "" {
+		connectArgs = append(connectArgs, "--uplink", up)
+	}
+	if hasFlag(args, "--no-reconnect") {
+		connectArgs = append(connectArgs, "--no-reconnect")
+	}
+	return cmdConnect(ctx, connectArgs)
 }
 
 // cmdAuto ranks all reachable zones and returns them best-first so the caller

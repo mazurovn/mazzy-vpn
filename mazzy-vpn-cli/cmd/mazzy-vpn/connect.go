@@ -162,13 +162,13 @@ func cmdConnect(ctx context.Context, args []string) int {
 	if snap.Protected() {
 		fmt.Println(t.T("cli.connect.ok"))
 		fmt.Println(t.Tf("cli.connect.interface", conn.Interface))
-		fmt.Println(t.Tf("cli.connect.egress", snap.EgressIP))
+		fmt.Println(t.Tf("cli.connect.egress", safeDisplay(snap.EgressIP)))
 		fmt.Println(t.Tf("cli.connect.protocol", proto.Title()))
 		nfy.Connected(zoneName, snap.EgressIP)
 		maybeAutoMimic(ctx)
 		go recordZoneScore(ctx, strings.TrimSuffix(zoneName, filepath.Ext(zoneName)))
 	} else {
-		fmt.Println(t.Tf("cli.connect.not_confirmed", conn.Interface, snap.Reason))
+		fmt.Println(t.Tf("cli.connect.not_confirmed", conn.Interface, safeDisplay(snap.Reason)))
 		fmt.Println("  The tunnel may still be establishing, or this server is not routing traffic.")
 		fmt.Println("  Try another zone (mazzy-vpn test) if this persists.")
 		nfy.Failed(zoneName, snap.Reason)
@@ -238,10 +238,10 @@ dashLoop:
 				_ = conn.DisarmKillSwitch(ctx)
 			}
 			if rs.Protected() {
-				fmt.Println(t.Tf("cli.connect.reconnected", rs.EgressIP))
+				fmt.Println(t.Tf("cli.connect.reconnected", safeDisplay(rs.EgressIP)))
 				nfy.Reconnected(zoneName, rs.EgressIP)
 			} else {
-				fmt.Println(t.Tf("cli.connect.not_confirmed", conn.Interface, rs.Reason))
+				fmt.Println(t.Tf("cli.connect.not_confirmed", conn.Interface, safeDisplay(rs.Reason)))
 				nfy.Failed(zoneName, rs.Reason)
 			}
 			consecutiveFail = 0
@@ -301,12 +301,12 @@ func cmdStatus(ctx context.Context, args []string) int {
 	case snap.Protected():
 		fmt.Printf("%-10s %s\n", t.T("cli.status.state"), t.T("cli.status.protected"))
 		fmt.Printf("%-10s %s\n", t.T("cli.status.interface"), safeDisplay(liveIface))
-		fmt.Printf("%-10s %s\n", t.T("cli.status.egress"), snap.EgressIP)
+		fmt.Printf("%-10s %s\n", t.T("cli.status.egress"), safeDisplay(snap.EgressIP))
 		if profileName != "" {
 			fmt.Printf("%-10s %s\n", t.T("cli.status.profile"), safeDisplay(profileName))
 		}
 	case snap.LinkUp:
-		fmt.Printf("%-10s %s\n", t.T("cli.status.state"), t.Tf("cli.status.linkup", snap.Reason))
+		fmt.Printf("%-10s %s\n", t.T("cli.status.state"), t.Tf("cli.status.linkup", safeDisplay(snap.Reason)))
 		fmt.Printf("%-10s %s\n", t.T("cli.status.interface"), safeDisplay(liveIface))
 	default:
 		fmt.Printf("%-10s %s\n", t.T("cli.status.state"), t.T("cli.status.down"))

@@ -207,11 +207,16 @@ func downloadBinaryFromTarball(ctx context.Context, url string) (string, error) 
 		}
 		h := sha256.New()
 		if _, err := io.Copy(io.MultiWriter(tmp, h), tr); err != nil {
-			tmp.Close()
-			os.Remove(tmp.Name())
+			_ = tmp.Close()
+			_ = os.Remove(tmp.Name())
 			return "", err
 		}
-		tmp.Close()
+		// A failed Close() after writing means the file may be truncated (e.g.
+		// disk full): never return a half-written binary for installation.
+		if err := tmp.Close(); err != nil {
+			_ = os.Remove(tmp.Name())
+			return "", fmt.Errorf("flush update binary: %w", err)
+		}
 		_ = os.Chmod(tmp.Name(), 0o755)
 		fmt.Printf("  sha256: %s\n", hex.EncodeToString(h.Sum(nil))[:16])
 		return tmp.Name(), nil
@@ -254,7 +259,13 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
+		_ = out.Close()
+		return err
+	}
+	// fsync before close so the replaced binary is durably on disk; a crash
+	// mid-update must not leave a truncated, unrunnable mazzy-vpn behind.
+	if err := out.Sync(); err != nil {
+		_ = out.Close()
 		return err
 	}
 	return out.Close()

@@ -14,10 +14,13 @@ import (
 	"github.com/mazurovn/mazzy-vpn/core"
 	"github.com/mazurovn/mazzy-vpn/core/connect"
 	"github.com/mazurovn/mazzy-vpn/core/engine/wireguard"
+	"github.com/mazurovn/mazzy-vpn/core/guard"
 	"github.com/mazurovn/mazzy-vpn/core/livecheck"
 	"github.com/mazurovn/mazzy-vpn/core/lock"
 	"github.com/mazurovn/mazzy-vpn/core/measure"
+	"github.com/mazurovn/mazzy-vpn/core/netexec"
 	"github.com/mazurovn/mazzy-vpn/core/notify"
+	"github.com/mazurovn/mazzy-vpn/core/settings"
 	"github.com/mazurovn/mazzy-vpn/core/state"
 )
 
@@ -57,6 +60,13 @@ func cmdDaemon(ctx context.Context, args []string) int {
 	st := newStore()
 	lc := livecheck.New()
 	nfy := notify.New()
+	// Honor the same user settings as the foreground connect path (audit: the
+	// daemon previously ignored Notifications, so the toggle did nothing in the
+	// recommended production mode).
+	set := settings.NewStore().Load()
+	if !set.Notifications {
+		nfy.Enabled = false
+	}
 	d := &daemonState{st: st, lc: lc, nfy: nfy}
 
 	// Initial zone selection.
@@ -86,12 +96,23 @@ func cmdDaemon(ctx context.Context, args []string) int {
 	const reconnectLimit = 2 // reconnect same zone this many times
 	const failoverLimit = 4  // then fail over to another live zone
 
+	// killSwitchArmed tracks whether the fail-closed guard is currently held, so
+	// the stop path can always lift it even when there is no live conn to do so.
+	killSwitchArmed := false
+
 	for {
 		select {
 		case <-sig:
 			d.logf("stopping...")
 			if conn != nil {
+				if set.KillSwitch {
+					_ = conn.DisarmKillSwitch(ctx)
+				}
 				_ = conn.Down(ctx)
+			} else if killSwitchArmed {
+				// No live conn but the guard is held: clear the table directly so
+				// the host is not left fail-closed after the daemon exits.
+				_ = guard.New(netexec.ExecRunner{}).RemoveFailClosed(ctx)
 			}
 			nfy.Disconnected(zone)
 			_ = st.SetDesired(core.DesiredDown)
@@ -161,6 +182,16 @@ func cmdDaemon(ctx context.Context, args []string) int {
 			}
 			d.logf("⟳ egress lost; reconnecting %s...", zone)
 			nfy.Reconnecting(zone, s.Reason)
+			// Arm the fail-closed kill-switch before tearing the tunnel down so no
+			// plaintext leaks during the reconnect gap (parity with the foreground
+			// connect path). connectZone lifts it once egress is re-confirmed.
+			if set.KillSwitch {
+				if err := conn.ArmKillSwitch(ctx); err != nil {
+					d.logf("warning: could not arm kill-switch: %v", err)
+				} else {
+					killSwitchArmed = true
+				}
+			}
 			_ = conn.Down(ctx)
 			time.Sleep(backoff(fails))
 
@@ -173,6 +204,11 @@ func cmdDaemon(ctx context.Context, args []string) int {
 				}
 			}
 			conn, _ = d.connectZone(ctx, zone)
+			// Egress re-confirmed inside connectZone; lift the kill-switch.
+			if set.KillSwitch && conn != nil {
+				_ = conn.DisarmKillSwitch(ctx)
+				killSwitchArmed = false
+			}
 		}
 	}
 }

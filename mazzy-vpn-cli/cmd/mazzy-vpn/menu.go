@@ -121,7 +121,7 @@ func drawHeader(ctx context.Context) {
 		snap := livecheck.New().Check(ctx, iface)
 		switch {
 		case snap.Protected():
-			fmt.Printf("│  Status: ✔ PROTECTED  egress %-17s │\n", snap.EgressIP)
+			fmt.Printf("│  Status: ✔ PROTECTED  egress %-17s │\n", safeDisplay(snap.EgressIP))
 		default:
 			fmt.Printf("│  Status: ⚠ LINK UP (%s)%*s│\n", iface, 24-len(iface), "")
 		}
@@ -129,7 +129,7 @@ func drawHeader(ctx context.Context) {
 	// Show the physical uplink.
 	if adapters, err := netadapter.List(); err == nil {
 		if rec, _, ok := netadapter.Recommend(adapters); ok {
-			fmt.Printf("│  Uplink: %-37s│\n", rec.Name+" ("+rec.Kind()+")")
+			fmt.Printf("│  Uplink: %-37s│\n", safeDisplay(rec.Name)+" ("+rec.Kind()+")")
 		}
 	}
 	fmt.Println("└───────────────────────────────────────────────┘")

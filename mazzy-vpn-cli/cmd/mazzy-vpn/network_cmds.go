@@ -117,7 +117,7 @@ func cmdTest(ctx context.Context, args []string) int {
 			status = "✖ unreachable"
 			lat = "-"
 		}
-		fmt.Printf("%-24s %-10s %s\n", r.Name, lat, status)
+		fmt.Printf("%-24s %-10s %s\n", safeDisplay(r.Name), lat, status)
 	}
 	fmt.Printf("\n%d/%d servers answered ICMP (alive).\n", alive, len(results))
 	fmt.Println(measureNote)
