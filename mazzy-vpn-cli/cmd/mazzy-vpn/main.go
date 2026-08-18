@@ -17,7 +17,7 @@ import (
 )
 
 // version is the CLI source line; the published tag governs releases.
-const version = "2.1.0"
+const version = "2.1.1"
 
 func main() {
 	os.Exit(run(os.Args[1:]))
