@@ -10,6 +10,7 @@ import (
 
 	"strconv"
 
+	"github.com/mazurovn/mazzy-vpn/core"
 	"github.com/mazurovn/mazzy-vpn/core/guard"
 	"github.com/mazurovn/mazzy-vpn/core/netexec"
 	"github.com/mazurovn/mazzy-vpn/core/routes"
@@ -35,7 +36,7 @@ func cmdRecover(ctx context.Context, args []string) int {
 	fmt.Println("Restoring a clean network state...")
 
 	// 1. Remove our tunnel interfaces.
-	for _, iface := range []string{"vpnaw0", "vpnwg0"} {
+	for _, iface := range core.ManagedInterfaces() {
 		if _, err := r.Run(ctx, "ip", "link", "show", iface); err == nil {
 			run("removed interface "+iface, "ip", "link", "del", iface)
 		}
