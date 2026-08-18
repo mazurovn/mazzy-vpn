@@ -67,12 +67,12 @@ func cmdUp(ctx context.Context, args []string) int {
 				if len(live) > 0 {
 					ranked2 := zonescore.New().Rank(live, 24*time.Hour)
 					name = ranked2[0]
-					fmt.Println(t.Tf("cli.up.cleanest", name))
+					fmt.Println(t.Tf("cli.up.cleanest", safeDisplay(name)))
 				}
 			} else if best.ICMPAlive {
-				fmt.Println(t.Tf("cli.up.best_alive", name, best.LatencyMS))
+				fmt.Println(t.Tf("cli.up.best_alive", safeDisplay(name), best.LatencyMS))
 			} else {
-				fmt.Println(t.Tf("cli.up.best_noicmp", name))
+				fmt.Println(t.Tf("cli.up.best_noicmp", safeDisplay(name)))
 			}
 		}
 	}
@@ -133,6 +133,6 @@ func cmdAuto(ctx context.Context, args []string) int {
 	if best == nil {
 		return 1
 	}
-	fmt.Println(t.Tf("cli.up.auto_connecting", best.Name))
+	fmt.Println(t.Tf("cli.up.auto_connecting", safeDisplay(best.Name)))
 	return cmdConnect(ctx, []string{best.File})
 }
