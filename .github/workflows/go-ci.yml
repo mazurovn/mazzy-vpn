@@ -82,6 +82,14 @@ jobs:
           echo "== cli =="
           ( cd mazzy-vpn-cli && "$(go env GOPATH)/bin/staticcheck" ./... )
 
+      - name: govulncheck (deps + stdlib)
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          echo "== core =="
+          ( cd core && "$(go env GOPATH)/bin/govulncheck" ./... )
+          echo "== cli =="
+          ( cd mazzy-vpn-cli && "$(go env GOPATH)/bin/govulncheck" ./... )
+
   audit:
     runs-on: ubuntu-24.04
     steps:

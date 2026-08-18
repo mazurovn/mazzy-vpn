@@ -6,6 +6,8 @@ module github.com/mazurovn/mazzy-vpn/core
 
 go 1.25.0
 
+toolchain go1.25.13
+
 require (
 	github.com/amnezia-vpn/amneziawg-go/v3 v3.0.1
 	golang.org/x/sys v0.47.0
@@ -13,6 +15,6 @@ require (
 
 require (
 	golang.org/x/crypto v0.55.0 // indirect
-	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/net v0.58.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 )
