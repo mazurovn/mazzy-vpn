@@ -96,6 +96,31 @@ func (g *Guard) InstallFailClosed(ctx context.Context) error {
 	return g.applyRuleset(ctx, ruleset)
 }
 
+// InstallKillSwitch installs a fwmark-aware fail-closed kill-switch: only
+// loopback and packets carrying the WireGuard socket fwmark (the encrypted
+// tunnel handshake/keepalive) may egress; everything else is rejected. This is
+// the persistent kill-switch armed while a tunnel is being re-established after
+// an egress drop, so plaintext cannot leak through the plain uplink during the
+// gap, yet the new tunnel can still complete its handshake (unlike
+// InstallFailClosed, which blocks the handshake too).
+func (g *Guard) InstallKillSwitch(ctx context.Context, mark uint32) error {
+	ruleset := fmt.Sprintf(`table inet %[1]s {
+    chain output {
+        type filter hook output priority -150; policy accept;
+        oifname "lo" accept
+        meta mark %[2]d accept
+        reject with icmpx type admin-prohibited
+    }
+    chain forward {
+        type filter hook forward priority -150; policy accept;
+        reject with icmpx type admin-prohibited
+    }
+}
+`, TransitionGuardTable, mark)
+	g.deleteTable(ctx, TransitionGuardTable)
+	return g.applyRuleset(ctx, ruleset)
+}
+
 // InstallConnmark installs the CONNMARK save/restore rules for the given fwmark
 // so marked UDP reply packets keep their mark (wg-quick parity). It covers both
 // IPv4 and IPv6 via an inet table.

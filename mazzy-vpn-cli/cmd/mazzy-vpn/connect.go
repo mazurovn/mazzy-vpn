@@ -74,6 +74,17 @@ func connectOpts(uplink string) connect.Options {
 	return connect.Options{LogLevel: wireguard.LogError, Uplink: uplink}
 }
 
+// resolveNotifications reports whether desktop notifications should fire for
+// this session. The Notifications setting is authoritative (P1-2).
+func resolveNotifications(set settings.Settings) bool { return set.Notifications }
+
+// resolveAutoReconnect reports whether the foreground dashboard should auto-
+// reconnect on egress loss. The AutoReconnect setting is the default; an
+// explicit --no-reconnect flag overrides it for a one-off session (P1-3).
+func resolveAutoReconnect(set settings.Settings, args []string) bool {
+	return set.AutoReconnect && !hasFlag(args, "--no-reconnect")
+}
+
 // cmdConnect brings up a tunnel in the FOREGROUND, holding it until SIGINT/TERM,
 // then tears it down cleanly. Daemonized/service mode lands in a later step.
 func cmdConnect(ctx context.Context, args []string) int {
@@ -92,6 +103,7 @@ func cmdConnect(ctx context.Context, args []string) int {
 	}
 
 	t := translator()
+	set := settings.NewStore().Load()
 
 	// Single-flight: only one mutation at a time (parity acquire_action_lock).
 	mu, err := lock.Acquire(lockDir())
@@ -142,6 +154,11 @@ func cmdConnect(ctx context.Context, args []string) int {
 
 	zoneName := filepath.Base(path)
 	nfy := notify.New()
+	// P1-2: honor the Notifications setting (env override still respected inside
+	// notify.New via MAZZY_NO_NOTIFY). A disabled setting silences all events.
+	if !resolveNotifications(set) {
+		nfy.Enabled = false
+	}
 	if snap.Protected() {
 		fmt.Println(t.T("cli.connect.ok"))
 		fmt.Println(t.Tf("cli.connect.interface", conn.Interface))
@@ -157,7 +174,7 @@ func cmdConnect(ctx context.Context, args []string) int {
 		nfy.Failed(zoneName, snap.Reason)
 	}
 
-	autoReconnect := !hasFlag(args, "--no-reconnect")
+	autoReconnect := resolveAutoReconnect(set, args)
 	if autoReconnect {
 		fmt.Println(t.T("cli.connect.dashboard_reconnect"))
 	} else {
@@ -196,9 +213,19 @@ dashLoop:
 			// Egress lost: attempt an in-place reconnect.
 			fmt.Println(t.Tf("cli.connect.egress_lost", consecutiveFail, safeDisplay(zoneName)))
 			nfy.Reconnecting(zoneName, s.Reason)
+			// P1-1: arm the fail-closed kill-switch BEFORE tearing the tunnel
+			// down, so there is no leak window while we reconnect.
+			if set.KillSwitch {
+				if err := conn.ArmKillSwitch(ctx); err != nil {
+					fmt.Fprintf(os.Stderr, "  warning: could not arm kill-switch: %v\n", err)
+				}
+			}
 			_ = conn.Down(ctx)
 			newConn, rerr := connect.Up(ctx, proto, cfg, connectOpts(uplink))
 			if rerr != nil {
+				// Reconnect failed: keep the kill-switch ARMED (fail-closed) so no
+				// plaintext leaks while we are without a tunnel. It is lifted only
+				// once a tunnel is confirmed again, or by the final teardown below.
 				fmt.Fprintf(os.Stderr, "  reconnect failed: %v\n", rerr)
 				nfy.Failed(zoneName, rerr.Error())
 				consecutiveFail = 0
@@ -206,6 +233,10 @@ dashLoop:
 			}
 			conn = newConn
 			rs := lc.WaitProtected(ctx, conn.Interface, 15*time.Second)
+			// Egress confirmed again: it is now safe to lift the kill-switch.
+			if set.KillSwitch {
+				_ = conn.DisarmKillSwitch(ctx)
+			}
 			if rs.Protected() {
 				fmt.Println(t.Tf("cli.connect.reconnected", rs.EgressIP))
 				nfy.Reconnected(zoneName, rs.EgressIP)
@@ -218,6 +249,11 @@ dashLoop:
 	}
 
 	fmt.Println(t.T("cli.connect.disconnecting"))
+	// Always clear any still-armed session kill-switch on final teardown so the
+	// host is not left fail-closed after a graceful disconnect.
+	if set.KillSwitch {
+		_ = conn.DisarmKillSwitch(ctx)
+	}
 	if err := conn.Down(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "teardown error:", err)
 		return 1

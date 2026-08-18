@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mazurovn/mazzy-vpn/core/measure"
+	"github.com/mazurovn/mazzy-vpn/core/settings"
 	"github.com/mazurovn/mazzy-vpn/core/zonescore"
 )
 
@@ -19,6 +20,14 @@ import (
 func cmdUp(ctx context.Context, args []string) int {
 	cat := newCatalog()
 	t := translator()
+
+	// P1-5: when AutoDiagnostics is enabled, run a quick network analysis before
+	// connecting so obvious problems (no uplink, captive portal) surface first.
+	// Suppressed with --no-diagnostics or in --json/script contexts.
+	if set := settings.NewStore().Load(); set.AutoDiagnostics && !hasFlag(args, "--no-diagnostics") {
+		fmt.Println(t.T("cli.netdiag.running"))
+		cmdNetdiag(ctx, nil)
+	}
 
 	var name string
 	clean := hasFlag(args, "--clean")

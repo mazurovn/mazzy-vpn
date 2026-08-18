@@ -170,6 +170,15 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.appendLog(string(msg))
 		return m, nil
 
+	case tuiActionDoneMsg:
+		if msg.err != nil {
+			m.appendLog(msg.label + " failed: " + msg.err.Error())
+		} else {
+			m.appendLog(msg.label + ": done")
+		}
+		// Refresh status right away so the header reflects the new state.
+		return m, refreshStatusCmd()
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -208,8 +217,8 @@ func (m tuiModel) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.loading = true
 		return m, rankZonesCmd()
 	case "r":
-		m.appendLog("recover requested (needs: sudo mazzy-vpn recover)")
-		return m, nil
+		m.appendLog("recover requested")
+		return m, requestRecoverCmd()
 	}
 	return m, nil
 }
@@ -256,31 +265,55 @@ func (m tuiModel) keySettings(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "6":
 		m.set.AutoMimic = !m.set.AutoMimic
 	}
-	_ = m.setStore.Save(m.set)
+	if err := m.setStore.Save(m.set); err != nil {
+		m.appendLog("could not save settings: " + err.Error())
+	}
 	return m, nil
 }
 
-// requestConnectCmd/requestDisconnectCmd write desired intent for the daemon
-// (ADR-0006 D2: TUI is unprivileged; the daemon applies changes).
-func requestConnectCmd(zone string) tea.Cmd {
-	return func() tea.Msg {
-		if err := writeDesired(zone, "up"); err != nil {
-			return logMsg("could not write intent: " + err.Error())
-		}
-		if zone == "--best" {
-			return logMsg("intent saved: connect best zone (daemon will apply; or run: sudo mazzy-vpn up --best)")
-		}
-		return logMsg("intent saved: connect " + zone + " (or run: sudo mazzy-vpn up " + zone + ")")
+// tuiActionDoneMsg reports the outcome of a suspended privileged action.
+type tuiActionDoneMsg struct {
+	label string
+	err   error
+}
+
+// privilegedTUICmd suspends the alt-screen (tea.ExecProcess), runs the
+// privileged mazzy-vpn action so sudo/pkexec can prompt on the real terminal,
+// then resumes the UI and reports the outcome. This makes the TUI a real
+// control surface instead of a note-writer (fixes P0-1/P0-4).
+//
+// execProcess is indirected so tests can assert the built command without
+// spawning anything.
+var execProcess = tea.ExecProcess
+
+func privilegedTUICmd(label, subcmd string, sargs ...string) tea.Cmd {
+	c, err := buildPrivilegedCmd(subcmd, sargs...)
+	if err != nil {
+		return func() tea.Msg { return tuiActionDoneMsg{label: label, err: err} }
 	}
+	return execProcess(c, func(err error) tea.Msg {
+		return tuiActionDoneMsg{label: label, err: err}
+	})
+}
+
+func requestConnectCmd(zone string) tea.Cmd {
+	// Best-effort intent for any running daemon; never the "--best" sentinel the
+	// daemon cannot resolve (fixes P0-4).
+	if zone != "--best" {
+		_ = writeDesired(zone, "up")
+		return privilegedTUICmd("connect "+zone, "up", zone)
+	}
+	return privilegedTUICmd("connect best", "up", "--best")
 }
 
 func requestDisconnectCmd() tea.Cmd {
-	return func() tea.Msg {
-		if err := writeDesired("", "down"); err != nil {
-			return logMsg("could not write intent: " + err.Error())
-		}
-		return logMsg("intent saved: disconnect (or run: sudo mazzy-vpn disconnect)")
-	}
+	_ = writeDesired("", "down")
+	return privilegedTUICmd("disconnect", "disconnect")
+}
+
+func requestRecoverCmd() tea.Cmd {
+	_ = writeDesired("", "down")
+	return privilegedTUICmd("recover", "recover")
 }
 
 func (m tuiModel) View() string {

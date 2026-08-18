@@ -46,10 +46,13 @@ type Conn struct {
 	guard  *guard.Guard
 	runner netexec.Runner
 
-	ipv6GuardOn bool
-	routesOn    bool
-	dnsOn       bool
-	connmarkOn  bool
+	mark uint32 // WireGuard socket fwmark; lets the kill-switch pass the tunnel
+
+	ipv6GuardOn  bool
+	routesOn     bool
+	dnsOn        bool
+	connmarkOn   bool
+	killSwitchOn bool
 }
 
 // Options tune a connection.
@@ -92,6 +95,7 @@ func Up(ctx context.Context, proto core.Protocol, cfg *profile.Config, opts Opti
 	// (audit G1). Computed once, shared, so encrypted packets bypass the
 	// tunnel correctly.
 	mark := routes.EffectiveMark(cfg)
+	c.mark = mark
 
 	// 1. Arm IPv6 leak guard before the interface exists. We name the target
 	//    interface deterministically; the engine creates that same name.
@@ -182,6 +186,11 @@ func (c *Conn) teardown(ctx context.Context) error {
 		note(c.guard.RemoveIPv6Guard(ctx))
 		c.ipv6GuardOn = false
 	}
+	// NOTE: the fail-closed kill-switch is deliberately NOT removed here. It is a
+	// session-level guard that must survive the intermediate Down()/Up() of an
+	// in-place reconnect (otherwise a leak window reopens exactly when the tunnel
+	// is down). The owner lifts it explicitly via DisarmKillSwitch once egress is
+	// re-confirmed, and `recover`/`disconnect` clear the table unconditionally.
 	return firstErr
 }
 
@@ -189,6 +198,30 @@ func (c *Conn) teardown(ctx context.Context) error {
 // every layer and returns the first error.
 func (c *Conn) Down(ctx context.Context) error {
 	return c.teardown(ctx)
+}
+
+// ArmKillSwitch installs the fwmark-aware fail-closed guard so that, while the
+// tunnel is being re-established after an egress drop, no plaintext can leave
+// via the plain uplink (no leak window) — yet the new tunnel's own encrypted
+// handshake (carrying the socket fwmark) is still allowed out so reconnection
+// can succeed. It is idempotent. This is what the user-facing "Kill-switch
+// (fail-closed)" setting controls.
+func (c *Conn) ArmKillSwitch(ctx context.Context) error {
+	if err := c.guard.InstallKillSwitch(ctx, c.mark); err != nil {
+		return err
+	}
+	c.killSwitchOn = true
+	return nil
+}
+
+// DisarmKillSwitch removes the fail-closed transition guard once egress is
+// confirmed again. Best-effort and idempotent. Because the kill-switch is a
+// session-level nftables table (not tied to one Conn), this may be called on a
+// different Conn than the one that armed it; it clears the table regardless.
+func (c *Conn) DisarmKillSwitch(ctx context.Context) error {
+	err := c.guard.RemoveFailClosed(ctx)
+	c.killSwitchOn = false
+	return err
 }
 
 // unwind reverts partially-applied state after a failed Up. It shares the same

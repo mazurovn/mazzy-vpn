@@ -13,7 +13,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / ".github/codeql/codeql-config.yml"
 WORKFLOW = ROOT / ".github/workflows/codeql.yml"
-ACTION_SHA = "f205ea1c3313d32999d8d6a48b4f6530d4437b38"
+# codeql-action is pinned by 40-hex commit SHA. We verify the PIN FORMAT and
+# that init/analyze agree on the same SHA — not a specific literal — so routine
+# Dependabot bumps of the action cannot self-block this provenance guard.
+SHA_RE = re.compile(r"github/codeql-action/(init|analyze)@([0-9a-f]{40})\b")
 
 EXPECTED_CONFIG = """name: Mazzy VPN CodeQL configuration
 
@@ -44,13 +47,22 @@ def main() -> int:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     required = (
         "config-file: ./.github/codeql/codeql-config.yml",
-        f"github/codeql-action/init@{ACTION_SHA}",
-        f"github/codeql-action/analyze@{ACTION_SHA}",
         "security-events: write",
     )
     for marker in required:
         if marker not in workflow:
             fail(f"CodeQL workflow is missing required marker: {marker}")
+
+    # Both init and analyze must be present and pinned to the SAME 40-hex SHA.
+    pins = dict(SHA_RE.findall(workflow))
+    for step in ("init", "analyze"):
+        if step not in pins:
+            fail(f"CodeQL workflow must pin github/codeql-action/{step} to a 40-hex commit SHA")
+    if pins["init"] != pins["analyze"]:
+        fail(
+            "CodeQL init and analyze must pin the same codeql-action commit SHA "
+            f"(init={pins['init']}, analyze={pins['analyze']})"
+        )
 
     languages = set(re.findall(r"^\s+- language: ([\w-]+)$", workflow, re.MULTILINE))
     # actions/js/python/rust use the path-filterable no-build mode; go uses a
