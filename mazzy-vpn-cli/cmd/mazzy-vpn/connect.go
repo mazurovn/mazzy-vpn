@@ -193,7 +193,7 @@ dashLoop:
 			}
 			// Egress lost: attempt an in-place reconnect.
 			fmt.Printf("⟳ Egress lost (%d checks). Reconnecting %s...\n", consecutiveFail, zoneName)
-			nfy.Reconnecting(zoneName, snap.Reason)
+			nfy.Reconnecting(zoneName, s.Reason)
 			_ = conn.Down(ctx)
 			newConn, rerr := connect.Up(ctx, proto, cfg, connectOpts(uplink))
 			if rerr != nil {

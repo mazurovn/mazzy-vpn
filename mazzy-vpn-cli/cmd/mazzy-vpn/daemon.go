@@ -100,12 +100,13 @@ func cmdDaemon(ctx context.Context, args []string) int {
 			if conn == nil {
 				continue
 			}
-			sig := gatherStealthSignal(ctx)
-			if sig.EgressCountry == "" {
+			// Note: do not shadow the OS signal channel `sig` above.
+			stSig := gatherStealthSignal(ctx)
+			if stSig.EgressCountry == "" {
 				continue
 			}
-			score := stealthScoreOf(sig)
-			d.logf("stealth score: %d (egress %s)", score, sig.EgressCountry)
+			score := stealthScoreOf(stSig)
+			d.logf("stealth score: %d (egress %s)", score, stSig.EgressCountry)
 			if lastStealth >= 0 && score < lastStealth-15 {
 				d.nfy.Failed(zone, fmt.Sprintf("stealth dropped %d→%d (more detectable)", lastStealth, score))
 			}
