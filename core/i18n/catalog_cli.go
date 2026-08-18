@@ -345,6 +345,66 @@ var cliCatalog = map[string]map[Lang]string{
 		JA: "connect/up はフォアグラウンドで実行され、Ctrl+C までトンネルを保持します。",
 		KO: "connect/up는 포그라운드에서 실행되며 Ctrl+C까지 터널을 유지합니다.",
 	},
+
+	// --- providers ---
+	"cli.providers.checking": {
+		EN: "Checking %d AI provider(s) from the current egress...",
+		RU: "Проверка %d AI-провайдеров через текущий выход...",
+		DE: "Prüfe %d KI-Anbieter vom aktuellen Ausgang...",
+		ZH: "正在从当前出口检查 %d 个 AI 提供商...",
+		JA: "現在の出口から %d 個の AI プロバイダーを確認中...",
+		KO: "현재 이그레스에서 %d개 AI 제공업체 확인 중...",
+	},
+	"cli.providers.summary": {
+		EN: "%d/%d AI providers reachable from here.",
+		RU: "%d/%d AI-провайдеров доступны отсюда.",
+		DE: "%d/%d KI-Anbieter von hier erreichbar.",
+		ZH: "从此处可达 %d/%d 个 AI 提供商。",
+		JA: "ここから %d/%d の AI プロバイダーに到達可能。",
+		KO: "여기서 %d/%d AI 제공업체에 도달 가능.",
+	},
+
+	// --- analysis command banners ---
+	"cli.stealth.analyzing": {
+		EN: "Analyzing detection vectors (IPv6/DNS/timezone/ASN/Cloudflare)...",
+		RU: "Анализ векторов детектирования (IPv6/DNS/таймзона/ASN/Cloudflare)...",
+		DE: "Analysiere Erkennungsvektoren (IPv6/DNS/Zeitzone/ASN/Cloudflare)...",
+		ZH: "正在分析检测向量（IPv6/DNS/时区/ASN/Cloudflare）...",
+		JA: "検出ベクトルを分析中 (IPv6/DNS/タイムゾーン/ASN/Cloudflare)...",
+		KO: "탐지 벡터 분석 중 (IPv6/DNS/시간대/ASN/Cloudflare)...",
+	},
+	"cli.stealth.aligned": {
+		EN: "Already aligned. Nothing to do.",
+		RU: "Уже выровнено. Делать нечего.",
+		DE: "Bereits ausgerichtet. Nichts zu tun.",
+		ZH: "已对齐。无需操作。",
+		JA: "すでに整合しています。何もすることはありません。",
+		KO: "이미 정렬됨. 작업할 내용 없음.",
+	},
+	"cli.diagnose.analyzing": {
+		EN: "Analyzing connection (uplink, tunnel, servers, DNS, egress)...",
+		RU: "Анализ соединения (аплинк, туннель, серверы, DNS, выход)...",
+		DE: "Analysiere Verbindung (Uplink, Tunnel, Server, DNS, Ausgang)...",
+		ZH: "正在分析连接（上行、隧道、服务器、DNS、出口）...",
+		JA: "接続を分析中（アップリンク、トンネル、サーバー、DNS、出口）...",
+		KO: "연결 분석 중(업링크, 터널, 서버, DNS, 이그레스)...",
+	},
+	"cli.test.no_profiles": {
+		EN: "No profiles with endpoints to test. Import some first.",
+		RU: "Нет профилей с endpoint для теста. Сначала импортируйте.",
+		DE: "Keine Profile mit Endpunkten zum Testen. Zuerst importieren.",
+		ZH: "没有带 endpoint 的配置可测试。请先导入。",
+		JA: "テストする endpoint 付きプロファイルなし。先にインポートしてください。",
+		KO: "테스트할 endpoint 프로필 없음. 먼저 가져오세요.",
+	},
+	"cli.dnscheck.dot_needs_root": {
+		EN: "enabling DoT needs root: sudo mazzy-vpn dns-check --dot",
+		RU: "включение DoT требует root: sudo mazzy-vpn dns-check --dot",
+		DE: "DoT aktivieren benötigt root: sudo mazzy-vpn dns-check --dot",
+		ZH: "启用 DoT 需要 root：sudo mazzy-vpn dns-check --dot",
+		JA: "DoT の有効化には root が必要: sudo mazzy-vpn dns-check --dot",
+		KO: "DoT 활성화는 root가 필요: sudo mazzy-vpn dns-check --dot",
+	},
 }
 
 func init() {

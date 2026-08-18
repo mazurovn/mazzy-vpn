@@ -88,7 +88,7 @@ func cmdTest(ctx context.Context, args []string) int {
 		return 1
 	}
 	if len(targets) == 0 {
-		fmt.Println("No profiles with endpoints to test. Import some first.")
+		fmt.Println(translator().T("cli.test.no_profiles"))
 		return 1
 	}
 	m := newMeasurer()
@@ -139,7 +139,7 @@ func cmdBest(ctx context.Context, args []string) int {
 	results := m.RankBest(ctx, targets)
 	best, ok := measure.BestAlive(results)
 	if !ok {
-		fmt.Println("No reachable server found. Check your internet connection (mazzy-vpn netdiag).")
+		fmt.Println(translator().T("cli.up.no_reachable"))
 		return 1
 	}
 	if hasFlag(args, "--json") {
