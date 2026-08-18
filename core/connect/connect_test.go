@@ -10,7 +10,10 @@ import (
 
 	"github.com/mazurovn/mazzy-vpn/core"
 	"github.com/mazurovn/mazzy-vpn/core/bootrecovery"
+	"github.com/mazurovn/mazzy-vpn/core/dns"
+	"github.com/mazurovn/mazzy-vpn/core/guard"
 	"github.com/mazurovn/mazzy-vpn/core/profile"
+	"github.com/mazurovn/mazzy-vpn/core/routes"
 )
 
 // scriptRunner fails the Nth matching command so we can test fail-closed
@@ -122,5 +125,37 @@ func TestBootRecoveryReadyAllowsProceeding(t *testing.T) {
 	// The guard (first kernel action) should have been attempted.
 	if len(sr.calls) == 0 {
 		t.Fatal("ready gate should let the connection reach kernel actions")
+	}
+}
+
+// TestTeardownIdempotentAndUnified verifies audit N1: Down and unwind share one
+// reverse-order chain, each layer is reverted once, and a second call is a
+// safe no-op (flags cleared).
+func TestTeardownIdempotentAndUnified(t *testing.T) {
+	sr := &scriptRunner{}
+	cfg := fullTunnelCfg(t)
+	c := &Conn{
+		guard:  guard.New(sr),
+		routes: routes.New(sr, "vpnaw0", cfg),
+		dns:    dns.New(sr, "vpnaw0"),
+		// engine intentionally nil (no real TUN in a unit test).
+		ipv6GuardOn: true,
+		routesOn:    true,
+		dnsOn:       true,
+		connmarkOn:  true,
+	}
+	if err := c.Down(context.Background()); err != nil {
+		t.Fatalf("first Down should succeed best-effort: %v", err)
+	}
+	// All flags must be cleared after teardown.
+	if c.ipv6GuardOn || c.routesOn || c.dnsOn || c.connmarkOn {
+		t.Errorf("flags not cleared: guard=%v routes=%v dns=%v connmark=%v",
+			c.ipv6GuardOn, c.routesOn, c.dnsOn, c.connmarkOn)
+	}
+	calls := len(sr.calls)
+	// A second teardown (or unwind) must be a no-op: no new kernel calls.
+	c.unwind(context.Background())
+	if len(sr.calls) != calls {
+		t.Errorf("second teardown made %d extra calls; must be a no-op", len(sr.calls)-calls)
 	}
 }

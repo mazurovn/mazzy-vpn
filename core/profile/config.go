@@ -40,12 +40,16 @@ type AmneziaParams struct {
 }
 
 // amneziaKeys is the full set of AmneziaWG obfuscation keys we accept in an
-// [Interface] section and forward to UAPI.
+// [Interface] section and forward to UAPI. It includes the classic S/J/H/i
+// parameters plus the newer AmneziaWG 1.5 fields that amneziawg-go v3 accepts
+// via UAPI (header_protection_key, content_padding_addition) so a forward
+// config is passed through instead of rejected (audit N2).
 var amneziaKeys = map[string]bool{
 	"jc": true, "jmin": true, "jmax": true,
 	"s1": true, "s2": true, "s3": true, "s4": true,
 	"h1": true, "h2": true, "h3": true, "h4": true,
 	"i1": true, "i2": true, "i3": true, "i4": true, "i5": true,
+	"header_protection_key": true, "content_padding_addition": true,
 }
 
 // Get returns the raw value for a UAPI key and whether it was present.

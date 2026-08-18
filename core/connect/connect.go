@@ -151,9 +151,11 @@ func Up(ctx context.Context, proto core.Protocol, cfg *profile.Config, opts Opti
 	return c, nil
 }
 
-// Down tears the connection down in reverse order. Best-effort: it attempts
-// every layer and returns the first error.
-func (c *Conn) Down(ctx context.Context) error {
+// teardown reverts every applied layer in reverse order (best-effort) and
+// returns the first error encountered. It is the single source of truth for
+// both a normal Down and the unwind of a failed Up (audit N1), so the two can
+// never drift out of sync.
+func (c *Conn) teardown(ctx context.Context) error {
 	var firstErr error
 	note := func(err error) {
 		if err != nil && firstErr == nil {
@@ -183,27 +185,15 @@ func (c *Conn) Down(ctx context.Context) error {
 	return firstErr
 }
 
-// unwind reverts partially-applied state after a failed Up. It deliberately
-// ignores errors (already in an error path) but reverts everything applied.
+// Down tears the connection down in reverse order. Best-effort: it attempts
+// every layer and returns the first error.
+func (c *Conn) Down(ctx context.Context) error {
+	return c.teardown(ctx)
+}
+
+// unwind reverts partially-applied state after a failed Up. It shares the same
+// reverse-order chain as Down and deliberately ignores the error (already in an
+// error path).
 func (c *Conn) unwind(ctx context.Context) {
-	if c.dnsOn {
-		_ = c.dns.Down(ctx)
-		c.dnsOn = false
-	}
-	if c.connmarkOn {
-		_ = c.guard.RemoveConnmark(ctx)
-		c.connmarkOn = false
-	}
-	if c.routesOn {
-		_ = c.routes.Down(ctx)
-		c.routesOn = false
-	}
-	if c.engine != nil {
-		_ = c.engine.Down()
-		c.engine = nil
-	}
-	if c.ipv6GuardOn {
-		_ = c.guard.RemoveIPv6Guard(ctx)
-		c.ipv6GuardOn = false
-	}
+	_ = c.teardown(ctx)
 }

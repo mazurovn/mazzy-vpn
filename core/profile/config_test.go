@@ -65,6 +65,32 @@ func TestParseAmneziaFull(t *testing.T) {
 	}
 }
 
+func TestParseForwardCompatFields(t *testing.T) {
+	// AmneziaWG 1.5 fields must be accepted (audit N2) and forwarded to UAPI,
+	// not rejected as unknown keys.
+	conf := "[Interface]\nPrivateKey = " + testKey(1) + "\nAddress = 10.0.0.2/32\n" +
+		"Jc = 4\nJmin = 40\nJmax = 70\nS1 = 50\nS2 = 100\nH1 = 1\nH2 = 2\nH3 = 3\nH4 = 4\n" +
+		"header_protection_key = " + testKey(9) + "\ncontent_padding_addition = 10-20\n" +
+		"[Peer]\nPublicKey = " + testKey(2) + "\nEndpoint = 1.2.3.4:51820\nAllowedIPs = 0.0.0.0/0\n"
+	c, err := Parse(conf)
+	if err != nil {
+		t.Fatalf("parse must accept forward-compat fields: %v", err)
+	}
+	if v, ok := c.Amnezia.Get("content_padding_addition"); !ok || v != "10-20" {
+		t.Errorf("content_padding_addition not parsed: %q ok=%v", v, ok)
+	}
+	uapi, err := ToUAPI(core.AmneziaWG, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(uapi, "header_protection_key=") {
+		t.Error("header_protection_key must be forwarded to UAPI")
+	}
+	if !strings.Contains(uapi, "content_padding_addition=10-20") {
+		t.Error("content_padding_addition must be forwarded to UAPI")
+	}
+}
+
 func TestValidateAmneziaOK(t *testing.T) {
 	c, _ := Parse(amneziaConf())
 	if problems := Validate(core.AmneziaWG, c); len(problems) != 0 {
