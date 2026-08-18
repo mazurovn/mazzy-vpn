@@ -167,6 +167,8 @@ CLI-4 (redundant filepath.Join) и S1023.
 | L4-0b | trust store (untrusted/paired/owned) + pairing | P1 | DONE |
 | L4-0c | signed Grants (scopes/expiry/signature) | P1 | DONE |
 | L4-0d | каскадный отзыв при unpair (RevokeAllTo) | P1 | DONE |
+| ENG-UPD | обновление движка amneziawg-go v3.1 + новые UAPI поля | P1 | DONE |
+| FUZZ-1 | fuzzing парсера + control plane + CI smoke | P2 | DONE |
 | L4-1 | `control`: реестр агентов/харнессов/устройств | P1 | DONE |
 | L4-2 | Маршрутизация связей «кто с кем» (deny-by-default) | P1 | DONE |
 | L4-2p | Плоскость 2: `provider` region-check (LLM без блокировок) | P1 | DONE |
