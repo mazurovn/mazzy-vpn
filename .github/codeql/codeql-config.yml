@@ -2,6 +2,8 @@ name: Mazzy VPN CodeQL configuration
 
 paths-ignore:
   - desktop/src-tauri/vendor/**
+  - core/vendor/**
+  - mazzy-vpn-cli/vendor/**
 
 queries:
   - uses: security-extended
