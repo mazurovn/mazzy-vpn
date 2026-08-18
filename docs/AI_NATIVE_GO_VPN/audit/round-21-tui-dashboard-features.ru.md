@@ -26,7 +26,7 @@
 - **AI-провайдеры через наш VPN**: 12/12 reachable (OpenAI 401, Anthropic 401,
   Claude 403, Gemini 200, ChatGPT 403, Perplexity 403 — все доступны). Главная
   цель проекта — доступ к AI — достигнута.
-- **status**: `✔ PROTECTED egress=95.211.225.232` (Netherlands, реальный трафик
+- **status**: `✔ PROTECTED egress=203.0.113.10` (Netherlands, реальный трафик
   RX 7MB/TX 4MB).
 - **TUI-header**: live-статус PROTECTED + uplink wlp3s0.
 - **settings**: тоглы сохраняются в `~/.config/mazzy-vpn/settings.json`.

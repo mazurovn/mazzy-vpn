@@ -20,7 +20,26 @@ sing-box-Konfigurationsrenderer. Details:
 [Architekturdiagramme auf Englisch](docs/ARCHITECTURE.en.md) ·
 [Architektur auf Russisch](docs/ARCHITECTURE.ru.md)
 
-## Installation und Sprache
+## Native Go-CLI (v2.1.0)
+
+Die v2-Reihe liefert eine einzige, statisch gelinkte Go-Binärdatei
+(`mazzy-vpn`) mit **eingebauter** AmneziaWG/WireGuard-Engine (`amneziawg-go`
+v3.1). Kein `awg`/`wg`/`jq` nötig; `CGO_ENABLED=0`, portabel über Linux-Hosts.
+
+```bash
+tar xzf mazzy-vpn-go-2.1.0-linux-amd64.tar.gz
+cd release-v2.1.0 && sudo ./install.sh
+
+mazzy-vpn language --list        # en/ru/de/zh/ja/ko (Standard: English)
+mazzy-vpn language               # interaktives Sprachmenü
+mazzy-vpn best                   # bestes Live-Server verbinden
+```
+
+**Sechs UI-Sprachen**, Englisch als Standard; die Sprache wird aus der
+gespeicherten Einstellung, dann `MAZZY_LANG`/`LC_*`/`LANG` aufgelöst, ohne
+Hardcoding. Referenz: [Go CLI wiki](https://github.com/mazurovn/mazzy-vpn/wiki/Go-CLI).
+
+## Installation und Sprache (Legacy bash CLI)
 
 ```bash
 git clone https://github.com/mazurovn/mazzy-vpn.git

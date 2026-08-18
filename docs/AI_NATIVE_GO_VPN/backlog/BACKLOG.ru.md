@@ -172,7 +172,9 @@ CLI-4 (redundant filepath.Join) и S1023.
 | L4-1 | `control`: реестр агентов/харнессов/устройств | P1 | DONE |
 | L4-2 | Маршрутизация связей «кто с кем» (deny-by-default) | P1 | DONE |
 | L4-2p | Плоскость 2: `provider` region-check (LLM без блокировок) | P1 | DONE |
-| L4-3 | Peer-to-peer защищённые каналы между агентами (Endpoint→data plane) | P2 | TODO |
+| L4-3 | Peer-to-peer защищённые каналы между агентами (Endpoint→data plane) | P2 | DONE (control/channel.go broker) |
+| I18N-CLI | CLI команда выбора языка (6 языков, меню, без хардкода) | P1 | DONE |
+| SEC-SAN | санитизация утёкшего egress IP + home путей, фикс audit false-pass | P0 | DONE |
 | L4-4 | Multi-target routing к точкам выхода | P2 | TODO |
 
 L4-1/L4-2/L4-2p: Раунд 16 (`../audit/round-16-two-plane-routing.ru.md`).

@@ -9,9 +9,9 @@
 Реальное подключение (safe-vpn-test.sh, Netherlands):
 ```
 BASELINE (AdGuard): egress=154.47.24.155
-Mazzy VPN egress  : 95.211.225.232 (NetherlandsAmsterdamH4)
+Mazzy VPN egress  : 203.0.113.10 (NetherlandsAmsterdamH4)
 ✔ CONNECTED and protected. interface=vpnaw0 proto=AmneziaWG
-[dashboard] ✔ PROTECTED ... egress=95.211.225.232
+[dashboard] ✔ PROTECTED ... egress=203.0.113.10
 AdGuard restored: egress=94.45.193.152
 ```
 

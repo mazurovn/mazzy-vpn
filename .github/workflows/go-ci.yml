@@ -9,12 +9,10 @@ name: Go CI
 on:
   push:
     branches:
-      - main
       - feat/go-rewrite
       - "feat/go-**"
   pull_request:
     branches:
-      - main
       - feat/go-rewrite
   workflow_dispatch:
 

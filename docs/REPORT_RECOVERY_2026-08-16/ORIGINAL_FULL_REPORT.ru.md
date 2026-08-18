@@ -6,7 +6,7 @@
 **Название задачи:** `Improve pi-vpn-recovery transport-health checks and doctor surface`  
 **Control plane:** Mazzy Control Panel  
 **Child runtime:** `pi-subagents`  
-**Репозиторий реализации:** `/home/mazurov/RESEARCH/PI/MY_PLUGINS/pi-vpn-recovery`  
+**Репозиторий реализации:** `<local-workspace>/pi-vpn-recovery`  
 
 ---
 
