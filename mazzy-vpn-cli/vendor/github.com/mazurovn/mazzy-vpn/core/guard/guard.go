@@ -117,8 +117,7 @@ func (g *Guard) InstallConnmark(ctx context.Context, mark uint32) error {
 
 // RemoveConnmark deletes the CONNMARK table.
 func (g *Guard) RemoveConnmark(ctx context.Context) error {
-	_, err := g.Runner.Run(ctx, "nft", "delete", "table", "inet", ConnmarkTable)
-	return err
+	return g.deleteTableErr(ctx, ConnmarkTable)
 }
 
 // RemoveIPv6Guard deletes the IPv6 guard table.

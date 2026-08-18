@@ -87,10 +87,15 @@ func (a *Applier) Up(ctx context.Context, cfg *profile.Config) error {
 	// the WireGuard socket can reach the server via that uplink.
 	if a.Uplink != "" {
 		if host := cfg.EndpointHost(); host != "" {
-			if err := a.addEndpointRoute(ctx, host); err != nil {
+			installed, err := a.addEndpointRoute(ctx, host)
+			if err != nil {
 				return fmt.Errorf("pin endpoint via uplink %s: %w", a.Uplink, err)
 			}
-			a.appliedEndpoint = host
+			// Only record the pin when a route was actually installed (a literal
+			// IP). Hostnames are skipped, so teardown must not try to remove one.
+			if installed {
+				a.appliedEndpoint = host
+			}
 		}
 	}
 
@@ -110,19 +115,23 @@ func (a *Applier) Up(ctx context.Context, cfg *profile.Config) error {
 }
 
 // addEndpointRoute installs a host route for the server endpoint via the pinned
-// uplink, so the WireGuard socket's encrypted packets egress that interface.
-func (a *Applier) addEndpointRoute(ctx context.Context, host string) error {
+// uplink, so the WireGuard socket's encrypted packets egress that interface. It
+// reports whether a route was actually installed (false for a hostname, which
+// is skipped because it needs resolution and may change).
+func (a *Applier) addEndpointRoute(ctx context.Context, host string) (bool, error) {
 	ip, err := netip.ParseAddr(host)
 	if err != nil {
 		// Endpoint is a hostname; skip pinning (needs resolution + may change).
-		return nil
+		return false, nil
 	}
 	fam, hostRoute := "-4", ip.String()+"/32"
 	if ip.Is6() {
 		fam, hostRoute = "-6", ip.String()+"/128"
 	}
-	_, err = a.Runner.Run(ctx, "ip", fam, "route", "add", hostRoute, "dev", a.Uplink)
-	return err
+	if _, err := a.Runner.Run(ctx, "ip", fam, "route", "add", hostRoute, "dev", a.Uplink); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // delEndpointRoute removes the pinned endpoint host route on teardown.
