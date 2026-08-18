@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
+  mkdirSync,
   mkdtempSync,
   rmSync,
   statSync,
@@ -32,10 +33,23 @@ const buildEnv = {
   ...process.env,
   RUSTFLAGS: rustflags,
 };
-const lockPath = join(tmpdir(), "mazzy-vpn-desktop-release.lock");
+// Use a stable per-user lock directory created with 0700 so the lock path is
+// not a predictable, world-writable name in the shared OS temp dir (avoids the
+// symlink/predictable-temp-file attack class CodeQL flags). We derive it from
+// the user's home when available, falling back to a private mkdtemp dir.
+const lockDir = (() => {
+  try {
+    const base = join(homedir(), ".cache", "mazzy-vpn");
+    mkdirSync(base, { recursive: true, mode: 0o700 });
+    return base;
+  } catch {
+    return mkdtempSync(join(tmpdir(), "mazzy-vpn-release-"));
+  }
+})();
+const lockPath = join(lockDir, "desktop-release.lock");
 let lockFd;
 try {
-  lockFd = openSync(lockPath, "wx");
+  lockFd = openSync(lockPath, "wx", 0o600);
   writeFileSync(lockFd, `${process.pid}\n`, { encoding: "utf8" });
 } catch (error) {
   console.error(`release build already running (${lockPath}); refusing a concurrent build`);
