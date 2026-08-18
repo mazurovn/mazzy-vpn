@@ -9,7 +9,7 @@ go 1.25.0
 toolchain go1.25.13
 
 require (
-	github.com/amnezia-vpn/amneziawg-go/v3 v3.0.1
+	github.com/amnezia-vpn/amneziawg-go/v3 v3.1.20260814
 	golang.org/x/sys v0.47.0
 )
 
