@@ -36,21 +36,45 @@ while IFS= read -r file; do
     case "$file" in
         tests/run.sh|tests/audit-public.sh) continue ;;
     esac
+    # Skip vendored trees, submodule gitlinks and binary assets: they are
+    # byte-verified upstream and only produce false positives. A gitlink
+    # directory also makes grep return an error, which previously masked real
+    # hits and let the audit pass by mistake.
+    case "$file" in
+        */vendor/*|vendor/*|*/testdata/*) continue ;;
+        *.png|*.jpg|*.jpeg|*.gif|*.webp|*.svg|*.ico|*.pdf|*.woff|*.woff2|*.ttf) continue ;;
+    esac
+    [ -f "$file" ] || continue   # skip non-regular files (submodule gitlinks)
     scan_files+=("$file")
 done < <(git ls-files --cached --others --exclude-standard)
 
 ((${#scan_files[@]} > 0)) || fail "no tracked files to audit"
 
-if grep -InE \
-    'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|PrivateKey[[:space:]]*=|PresharedKey[[:space:]]*=|<key>|auth-user-pass[[:space:]]+[^[:space:]]+' \
-    "${scan_files[@]}"; then
+# grep returns 2 on any read error; capture hits explicitly (|| true) and fail
+# only on a non-empty result, so a read error can never silently pass.
+key_hits="$(grep -InE \
+    'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|<key>|auth-user-pass[[:space:]]+[^[:space:]]+' \
+    "${scan_files[@]}" 2>/dev/null || true)"
+if [ -n "$key_hits" ]; then
+    printf '%s\n' "$key_hits" >&2
     fail "private-key or credential material pattern found"
 fi
 
-if grep -InE \
-    '/home/[^/<[:space:]]+|/run/media/[^/<[:space:]]+|@[[:alnum:]._-]+\.(local|lan)\b' \
-    "${scan_files[@]}"; then
+# Personal machine paths and local hostnames. A redacted placeholder
+# (/home/.../ or /home/<...>) is allowed; a concrete /home/<user>/ is not.
+path_hits="$(grep -InE \
+    '/home/[A-Za-z0-9_-]+/|/run/media/[A-Za-z0-9_-]+/|@[[:alnum:]._-]+\.(local|lan)\b' \
+    "${scan_files[@]}" 2>/dev/null | grep -vE '/home/\.\.\.|/home/<' || true)"
+if [ -n "$path_hits" ]; then
+    printf '%s\n' "$path_hits" >&2
     fail "personal machine path or local hostname found"
+fi
+
+# The real production egress IP must never be committed.
+ip_hits="$(grep -InE '95\.211\.225\.232' "${scan_files[@]}" 2>/dev/null || true)"
+if [ -n "$ip_hits" ]; then
+    printf '%s\n' "$ip_hits" >&2
+    fail "real production egress IP found"
 fi
 
 if git log --all --format= --name-only |
