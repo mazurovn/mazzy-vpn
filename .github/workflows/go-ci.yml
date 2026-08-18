@@ -90,6 +90,13 @@ jobs:
           echo "== cli =="
           ( cd mazzy-vpn-cli && "$(go env GOPATH)/bin/govulncheck" ./... )
 
+      - name: Fuzz smoke (parser + control plane)
+        working-directory: core
+        run: |
+          CGO_ENABLED=0 go test -mod=vendor -run xxx -fuzz FuzzParse    -fuzztime 20s ./profile/
+          CGO_ENABLED=0 go test -mod=vendor -run xxx -fuzz FuzzVerifyID -fuzztime 10s ./control/
+          CGO_ENABLED=0 go test -mod=vendor -run xxx -fuzz FuzzPair     -fuzztime 10s ./control/
+
   audit:
     runs-on: ubuntu-24.04
     steps:
