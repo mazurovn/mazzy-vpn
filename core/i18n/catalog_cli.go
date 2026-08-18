@@ -405,6 +405,105 @@ var cliCatalog = map[string]map[Lang]string{
 		JA: "DoT の有効化には root が必要: sudo mazzy-vpn dns-check --dot",
 		KO: "DoT 활성화는 root가 필요: sudo mazzy-vpn dns-check --dot",
 	},
+
+	// --- catalog (import/profiles/favorite/remove) ---
+	"cli.catalog.imported": {
+		EN: "\nImported %d profile(s), %d skipped.",
+		RU: "\nИмпортировано профилей: %d, пропущено: %d.",
+		DE: "\n%d Profil(e) importiert, %d übersprungen.",
+		ZH: "\n已导入 %d 个配置，跳过 %d 个。",
+		JA: "\n%d 個のプロファイルをインポート、%d 個をスキップ。",
+		KO: "\n%d개 프로필 가져옴, %d개 건너뜀.",
+	},
+	"cli.catalog.none": {
+		EN: "No managed profiles. Import some with: mazzy-vpn import <FILE|DIR>",
+		RU: "Нет управляемых профилей. Импорт: mazzy-vpn import <FILE|DIR>",
+		DE: "Keine verwalteten Profile. Importieren mit: mazzy-vpn import <FILE|DIR>",
+		ZH: "没有受管配置。导入：mazzy-vpn import <FILE|DIR>",
+		JA: "管理プロファイルなし。インポート: mazzy-vpn import <FILE|DIR>",
+		KO: "관리 프로필 없음. 가져오기: mazzy-vpn import <FILE|DIR>",
+	},
+	"cli.catalog.measuring": {
+		EN: "Measuring servers...",
+		RU: "Измерение серверов...",
+		DE: "Server werden gemessen...",
+		ZH: "正在测量服务器...",
+		JA: "サーバーを測定中...",
+		KO: "서버 측정 중...",
+	},
+	"cli.catalog.removed": {
+		EN: "removed %s",
+		RU: "удалён %s",
+		DE: "%s entfernt",
+		ZH: "已移除 %s",
+		JA: "%s を削除しました",
+		KO: "%s 제거됨",
+	},
+
+	// --- update ---
+	"cli.update.current": {
+		EN: "Current version: %s", RU: "Текущая версия: %s",
+		DE: "Aktuelle Version: %s", ZH: "当前版本：%s",
+		JA: "現在のバージョン: %s", KO: "현재 버전: %s",
+	},
+	"cli.update.checking": {
+		EN: "Checking %s for updates...",
+		RU: "Проверка обновлений на %s...",
+		DE: "Prüfe %s auf Updates...",
+		ZH: "正在检查 %s 的更新...",
+		JA: "%s の更新を確認中...",
+		KO: "%s 업데이트 확인 중...",
+	},
+	"cli.update.latest": {
+		EN: "Latest release : %s", RU: "Последний релиз: %s",
+		DE: "Neueste Version: %s", ZH: "最新发布：%s",
+		JA: "最新リリース: %s", KO: "최신 릴리스: %s",
+	},
+	"cli.update.uptodate": {
+		EN: "You are up to date.",
+		RU: "У вас последняя версия.",
+		DE: "Sie sind auf dem neuesten Stand.",
+		ZH: "已是最新版本。",
+		JA: "最新の状態です。",
+		KO: "최신 상태입니다.",
+	},
+	"cli.update.available": {
+		EN: "A newer version is available: %s",
+		RU: "Доступна новая версия: %s",
+		DE: "Eine neuere Version ist verfügbar: %s",
+		ZH: "有新版本可用：%s",
+		JA: "新しいバージョンが利用可能: %s",
+		KO: "새 버전이 있습니다: %s",
+	},
+	"cli.update.hint_apply": {
+		EN: "\nRun 'sudo mazzy-vpn update --apply' to download and install it.",
+		RU: "\nЗапустите 'sudo mazzy-vpn update --apply', чтобы скачать и установить.",
+		DE: "\nFühren Sie 'sudo mazzy-vpn update --apply' aus, um es zu installieren.",
+		ZH: "\n运行 'sudo mazzy-vpn update --apply' 下载并安装。",
+		JA: "\n'sudo mazzy-vpn update --apply' でダウンロードしてインストール。",
+		KO: "\n'sudo mazzy-vpn update --apply'로 다운로드 및 설치하세요.",
+	},
+	"cli.update.downloading": {
+		EN: "Downloading %s...", RU: "Скачивание %s...",
+		DE: "Lade %s herunter...", ZH: "正在下载 %s...",
+		JA: "%s をダウンロード中...", KO: "%s 다운로드 중...",
+	},
+	"cli.update.updated": {
+		EN: "✔ Updated to %s. Restart mazzy-vpn to use it.",
+		RU: "✔ Обновлено до %s. Перезапустите mazzy-vpn.",
+		DE: "✔ Auf %s aktualisiert. mazzy-vpn neu starten.",
+		ZH: "✔ 已更新到 %s。重启 mazzy-vpn 以使用。",
+		JA: "✔ %s に更新しました。mazzy-vpn を再起動してください。",
+		KO: "✔ %s로 업데이트됨. mazzy-vpn을 다시 시작하세요.",
+	},
+	"cli.update.needs_root": {
+		EN: "installing an update needs root: sudo mazzy-vpn update --apply",
+		RU: "установка обновления требует root: sudo mazzy-vpn update --apply",
+		DE: "Update-Installation benötigt root: sudo mazzy-vpn update --apply",
+		ZH: "安装更新需要 root：sudo mazzy-vpn update --apply",
+		JA: "更新のインストールには root が必要: sudo mazzy-vpn update --apply",
+		KO: "업데이트 설치는 root가 필요: sudo mazzy-vpn update --apply",
+	},
 }
 
 func init() {
