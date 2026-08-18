@@ -8,7 +8,11 @@ import (
 	"fmt"
 	"os"
 
+	"strconv"
+
+	"github.com/mazurovn/mazzy-vpn/core/guard"
 	"github.com/mazurovn/mazzy-vpn/core/netexec"
+	"github.com/mazurovn/mazzy-vpn/core/routes"
 )
 
 // cmdRecover forcibly tears down ANY Mazzy VPN tunnel and guards, returning the
@@ -37,22 +41,23 @@ func cmdRecover(ctx context.Context, args []string) int {
 		}
 	}
 
-	// 2. Remove our nftables guard tables.
-	for _, tbl := range []string{"mazzy_vpn_ipv6_guard", "mazzy_vpn_transition_guard"} {
+	// 2. Remove our nftables guard tables (including the CONNMARK table, N5).
+	for _, tbl := range []string{guard.IPv6GuardTable, guard.TransitionGuardTable, guard.ConnmarkTable} {
 		run("removed nft table "+tbl, "nft", "delete", "table", "inet", tbl)
 	}
 
 	// 3. Remove our policy-routing rules (may exist in duplicate).
+	mark := strconv.Itoa(routes.DefaultMark)
 	for i := 0; i < 4; i++ {
-		_, _ = r.Run(ctx, "ip", "-4", "rule", "del", "not", "fwmark", "51820", "table", "51820")
-		_, _ = r.Run(ctx, "ip", "-6", "rule", "del", "not", "fwmark", "51820", "table", "51820")
+		_, _ = r.Run(ctx, "ip", "-4", "rule", "del", "not", "fwmark", mark, "table", mark)
+		_, _ = r.Run(ctx, "ip", "-6", "rule", "del", "not", "fwmark", mark, "table", mark)
 		_, _ = r.Run(ctx, "ip", "-4", "rule", "del", "table", "main", "suppress_prefixlength", "0")
 		_, _ = r.Run(ctx, "ip", "-6", "rule", "del", "table", "main", "suppress_prefixlength", "0")
 	}
 	fmt.Println("  ✔ cleared policy-routing rules")
 
 	// 4. Flush our routing table.
-	run("flushed table 51820", "ip", "route", "flush", "table", "51820")
+	run("flushed table "+mark, "ip", "route", "flush", "table", mark)
 
 	// 5. Clear the persisted intent so nothing tries to resume.
 	_ = newStore().SetDesired("down")
@@ -83,7 +88,7 @@ func cmdDisconnect(ctx context.Context, _ []string) int {
 		fmt.Fprintf(os.Stderr, "failed to remove %s: %v\n", iface, err)
 		return 1
 	}
-	for _, tbl := range []string{"mazzy_vpn_ipv6_guard", "mazzy_vpn_transition_guard"} {
+	for _, tbl := range []string{guard.IPv6GuardTable, guard.TransitionGuardTable, guard.ConnmarkTable} {
 		_, _ = r.Run(ctx, "nft", "delete", "table", "inet", tbl)
 	}
 	_ = newStore().SetDesired("down")

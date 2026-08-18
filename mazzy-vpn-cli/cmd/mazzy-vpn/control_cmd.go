@@ -78,16 +78,8 @@ func nodeKeypair() (ed25519.PublicKey, ed25519.PrivateKey, string, error) {
 		return nil, nil, "", err
 	}
 	id := control.DeriveID(pub)
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
-		return nil, nil, "", err
-	}
 	s := storedIdentity{ID: id, PrivKey: base64.StdEncoding.EncodeToString(priv)}
-	data, _ := json.MarshalIndent(s, "", "  ")
-	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
-		return nil, nil, "", err
-	}
-	if err := os.Rename(tmp, p); err != nil {
+	if err := writeJSONAtomic(p, s); err != nil {
 		return nil, nil, "", err
 	}
 	return pub, priv, id, nil
@@ -134,14 +126,29 @@ func controlPair(id, pubB64 string) int {
 		}
 	}
 	recs = append(recs, trustRecord{ID: id, PubKey: pubB64})
-	_ = os.MkdirAll(filepath.Dir(trustFile()), 0o700)
-	data, _ := json.MarshalIndent(recs, "", "  ")
-	if err := os.WriteFile(trustFile(), data, 0o600); err != nil {
+	if err := writeJSONAtomic(trustFile(), recs); err != nil {
 		fmt.Fprintln(os.Stderr, "save trust:", err)
 		return 1
 	}
 	fmt.Printf("✔ paired with %s\n", id)
 	return 0
+}
+
+// writeJSONAtomic marshals v and writes it to path via temp+rename (0600), so a
+// crash mid-write can never leave a truncated trust/identity file.
+func writeJSONAtomic(path string, v any) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 func controlList() int {
