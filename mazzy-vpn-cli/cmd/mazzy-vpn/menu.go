@@ -215,7 +215,7 @@ func menuChooseZone(ctx context.Context, in *bufio.Reader, cat interface {
 		if ping == "" {
 			ping = "—"
 		}
-		fmt.Printf("  %2d.%s %-24s %-10s %-4s %s\n", i+1, star, e.Name, e.Protocol, e.Country, ping)
+		fmt.Printf("  %2d.%s %-24s %-10s %-4s %s\n", i+1, star, safeDisplay(e.Name), e.Protocol, safeDisplay(e.Country), ping)
 	}
 	fmt.Print(translator().T("cli.menu.prompt.zone_num"))
 	line, _ := in.ReadString('\n')
@@ -269,7 +269,7 @@ func menuSettings(ctx context.Context, in *bufio.Reader, store *settings.Store) 
 		fmt.Printf("  4. Auto-reconnect          : %s\n", onoff(set.AutoReconnect))
 		fmt.Printf("  5. Kill-switch (fail-closed): %s\n", onoff(set.KillSwitch))
 		fmt.Printf("  6. Auto-mimic timezone     : %s\n", onoff(set.AutoMimic))
-		fmt.Printf("  7. Preferred zone          : %s\n", orDash(set.PreferredZone))
+		fmt.Printf("  7. Preferred zone          : %s\n", orDash(safeDisplay(set.PreferredZone)))
 		fmt.Println("  0. Back")
 		fmt.Print(translator().T("cli.menu.prompt.toggle"))
 		line, _ := in.ReadString('\n')

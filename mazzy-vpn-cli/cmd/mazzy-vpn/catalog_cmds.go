@@ -113,9 +113,9 @@ func cmdProfiles(ctx context.Context, args []string) int {
 			if ping == "" {
 				ping = "n/a"
 			}
-			fmt.Printf("%-3d %-24s %-10s %-4s %-8s %s\n", i+1, e.Name, e.Protocol, e.Country, ping, star)
+			fmt.Printf("%-3d %-24s %-10s %-4s %-8s %s\n", i+1, safeDisplay(e.Name), e.Protocol, safeDisplay(e.Country), ping, star)
 		} else {
-			fmt.Printf("%-3d %-24s %-10s %-4s %s\n", i+1, e.Name, e.Protocol, e.Country, star)
+			fmt.Printf("%-3d %-24s %-10s %-4s %s\n", i+1, safeDisplay(e.Name), e.Protocol, safeDisplay(e.Country), star)
 		}
 	}
 	return 0
@@ -137,7 +137,7 @@ func cmdFavorite(_ context.Context, args []string) int {
 	if !fav {
 		state = "removed from"
 	}
-	fmt.Printf("%s %s favorites\n", args[0], state)
+	fmt.Printf("%s %s favorites\n", safeDisplay(args[0]), state)
 	return 0
 }
 
