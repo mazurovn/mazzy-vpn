@@ -1,4 +1,4 @@
-# github.com/amnezia-vpn/amneziawg-go/v3 v3.0.1
+# github.com/amnezia-vpn/amneziawg-go/v3 v3.1.20260814
 ## explicit; go 1.25.0
 github.com/amnezia-vpn/amneziawg-go/v3/conn
 github.com/amnezia-vpn/amneziawg-go/v3/conn/winrio

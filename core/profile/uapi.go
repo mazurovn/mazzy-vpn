@@ -87,12 +87,14 @@ func writePeer(b *strings.Builder, p *Peer) error {
 }
 
 // amneziaUAPIOrder is the deterministic emit order for AmneziaWG fields. The
-// newer 1.5 fields (header_protection_key, content_padding_addition) are
-// emitted last (audit N2) and only when present.
+// newer 1.5+ fields (header_protection_key, content_padding_addition,
+// random_trailers, disable_cookies) are emitted last (audit N2) and only when
+// present.
 var amneziaUAPIOrder = []string{
 	"jc", "jmin", "jmax", "s1", "s2", "s3", "s4",
 	"h1", "h2", "h3", "h4", "i1", "i2", "i3", "i4", "i5",
 	"header_protection_key", "content_padding_addition",
+	"random_trailers", "disable_cookies",
 }
 
 // writeAmnezia emits each present AmneziaWG field verbatim. amneziawg-go's
