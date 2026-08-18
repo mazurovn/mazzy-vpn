@@ -137,6 +137,27 @@ func (b *GrantBook) Allows(from, to string, scope Scope, now time.Time) bool {
 	return false
 }
 
+// scopesOn returns the distinct, non-expired scopes granted on the from->to
+// edge at time now (used to enumerate a channel's live scopes).
+func (b *GrantBook) scopesOn(from, to string, now time.Time) []Scope {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	seen := map[Scope]bool{}
+	var out []Scope
+	for _, g := range b.grants[key(from, to)] {
+		if g.Expired(now) {
+			continue
+		}
+		for _, s := range g.Scopes {
+			if !seen[s] {
+				seen[s] = true
+				out = append(out, s)
+			}
+		}
+	}
+	return out
+}
+
 // Revoke removes all grants from->to.
 func (b *GrantBook) Revoke(from, to string) {
 	b.mu.Lock()
