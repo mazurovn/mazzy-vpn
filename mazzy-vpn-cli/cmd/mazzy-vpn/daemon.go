@@ -185,6 +185,13 @@ type daemonState struct {
 }
 
 func (d *daemonState) logf(format string, a ...any) {
+	// Sanitize any string args (zone/egress names may be user-controlled) so a
+	// crafted value cannot inject terminal escapes into the daemon log line.
+	for i, v := range a {
+		if s, ok := v.(string); ok {
+			a[i] = safeDisplay(s)
+		}
+	}
 	fmt.Printf("%s "+format+"\n", append([]any{time.Now().Format("15:04:05")}, a...)...)
 }
 
