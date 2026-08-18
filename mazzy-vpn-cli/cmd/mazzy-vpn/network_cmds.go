@@ -88,7 +88,7 @@ func cmdTest(ctx context.Context, args []string) int {
 		return 1
 	}
 	if len(targets) == 0 {
-		fmt.Println("No profiles with endpoints to test. Import some first.")
+		fmt.Println(translator().T("cli.test.no_profiles"))
 		return 1
 	}
 	m := newMeasurer()
@@ -100,7 +100,7 @@ func cmdTest(ctx context.Context, args []string) int {
 		_ = enc.Encode(results)
 		return 0
 	}
-	fmt.Printf("Testing %d server(s)...\n\n", len(targets))
+	fmt.Println(translator().Tf("cli.test.testing", len(targets)) + "\n")
 	fmt.Printf("%-24s %-10s %s\n", "NAME", "PING", "STATUS")
 	alive := 0
 	for _, r := range results {
@@ -139,7 +139,7 @@ func cmdBest(ctx context.Context, args []string) int {
 	results := m.RankBest(ctx, targets)
 	best, ok := measure.BestAlive(results)
 	if !ok {
-		fmt.Println("No reachable server found. Check your internet connection (mazzy-vpn netdiag).")
+		fmt.Println(translator().T("cli.up.no_reachable"))
 		return 1
 	}
 	if hasFlag(args, "--json") {
@@ -149,10 +149,10 @@ func cmdBest(ctx context.Context, args []string) int {
 		return 0
 	}
 	if best.ICMPAlive {
-		fmt.Printf("Best zone: %s (%d ms, ✔ alive)\n", best.Name, best.LatencyMS)
+		fmt.Println(translator().Tf("cli.up.best_alive", best.Name, best.LatencyMS))
 	} else {
-		fmt.Printf("Best zone: %s (no ICMP reply; may still work)\n", best.Name)
+		fmt.Println(translator().Tf("cli.up.best_noicmp", best.Name))
 	}
-	fmt.Printf("Connect with: sudo mazzy-vpn up %s\n", best.Name)
+	fmt.Println(translator().Tf("cli.best.connect_with", best.Name))
 	return 0
 }

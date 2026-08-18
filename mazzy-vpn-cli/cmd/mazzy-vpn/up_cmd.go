@@ -18,6 +18,7 @@ import (
 // --auto. This is the ergonomic connect path (no file paths).
 func cmdUp(ctx context.Context, args []string) int {
 	cat := newCatalog()
+	t := translator()
 
 	var name string
 	clean := hasFlag(args, "--clean")
@@ -34,10 +35,10 @@ func cmdUp(ctx context.Context, args []string) int {
 			// No name given and not explicitly auto: fall back to auto-best for
 			// convenience, but tell the user.
 			if cat.Count() == 0 {
-				fmt.Fprintln(os.Stderr, "no managed profiles; import first: mazzy-vpn import <DIR>")
+				fmt.Fprintln(os.Stderr, t.T("cli.up.no_profiles"))
 				return 2
 			}
-			fmt.Println("No profile named; selecting the best reachable zone...")
+			fmt.Println(t.T("cli.up.selecting_best"))
 			auto = true
 		}
 		if auto {
@@ -50,7 +51,7 @@ func cmdUp(ctx context.Context, args []string) int {
 			ranked := m.RankBest(ctx, targets)
 			best, ok := measure.BestAlive(ranked)
 			if !ok {
-				fmt.Fprintln(os.Stderr, "no reachable server found; check your connection (mazzy-vpn netdiag)")
+				fmt.Fprintln(os.Stderr, t.T("cli.up.no_reachable"))
 				return 1
 			}
 			name = best.Name
@@ -66,12 +67,12 @@ func cmdUp(ctx context.Context, args []string) int {
 				if len(live) > 0 {
 					ranked2 := zonescore.New().Rank(live, 24*time.Hour)
 					name = ranked2[0]
-					fmt.Printf("Cleanest live zone: %s\n", name)
+					fmt.Println(t.Tf("cli.up.cleanest", name))
 				}
 			} else if best.ICMPAlive {
-				fmt.Printf("Best zone: %s (%d ms, ✔ alive)\n", name, best.LatencyMS)
+				fmt.Println(t.Tf("cli.up.best_alive", name, best.LatencyMS))
 			} else {
-				fmt.Printf("Best zone: %s (no ICMP reply; may still work)\n", name)
+				fmt.Println(t.Tf("cli.up.best_noicmp", name))
 			}
 		}
 	}
@@ -90,12 +91,13 @@ func cmdUp(ctx context.Context, args []string) int {
 // ordered plan; with root it connects to the best zone.
 func cmdAuto(ctx context.Context, args []string) int {
 	cat := newCatalog()
+	t := translator()
 	targets, err := targetsFromCatalog(cat)
 	if err != nil || len(targets) == 0 {
-		fmt.Fprintln(os.Stderr, "no profiles with endpoints; import first: mazzy-vpn import <DIR>")
+		fmt.Fprintln(os.Stderr, t.T("cli.up.no_profiles"))
 		return 1
 	}
-	fmt.Println("Ranking zones by reachability and latency...")
+	fmt.Println(t.T("cli.up.ranking"))
 	ranked := newMeasurer().RankBest(ctx, targets)
 
 	// Prefer ICMP-alive servers; they are proven reachable.
@@ -114,7 +116,7 @@ func cmdAuto(ctx context.Context, args []string) int {
 		}
 	}
 	if len(reachable) == 0 {
-		fmt.Fprintln(os.Stderr, "no reachable server found; check your connection (mazzy-vpn netdiag)")
+		fmt.Fprintln(os.Stderr, t.T("cli.up.no_reachable"))
 		return 1
 	}
 
@@ -131,6 +133,6 @@ func cmdAuto(ctx context.Context, args []string) int {
 	if best == nil {
 		return 1
 	}
-	fmt.Printf("Auto-connecting to best zone: %s\n", best.Name)
+	fmt.Println(t.Tf("cli.up.auto_connecting", best.Name))
 	return cmdConnect(ctx, []string{best.File})
 }

@@ -125,7 +125,8 @@ func cmdProviders(ctx context.Context, args []string) int {
 		return 0
 	}
 
-	fmt.Printf("Checking %d AI provider(s) from the current egress...\n\n", len(targets))
+	t := translator()
+	fmt.Println(t.Tf("cli.providers.checking", len(targets)) + "\n")
 	fmt.Printf("%-20s %-8s %-10s %s\n", "PROVIDER", "TYPE", "LATENCY", "STATUS")
 	ok := 0
 	for _, r := range results {
@@ -138,6 +139,6 @@ func cmdProviders(ctx context.Context, args []string) int {
 		}
 		fmt.Printf("%-20s %-8s %-10s %s\n", r.Name, r.Type, lat, status)
 	}
-	fmt.Printf("\n%d/%d AI providers reachable from here.\n", ok, len(results))
+	fmt.Println("\n" + t.Tf("cli.providers.summary", ok, len(results)))
 	return 0
 }

@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if (( EUID != 0 )); then
+    echo "Run this installer with sudo." >&2
+    exit 1
+fi
+
+SOURCE_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+HOME_DIR=/home/mazurov
+VPN_BIN=/opt/adguardvpn_cli/adguardvpn-cli
+
+install -D -o root -g root -m 0755 \
+    "$SOURCE_DIR/scripts/adguard-vpn-watchdog" \
+    /usr/local/libexec/adguard-vpn-watchdog
+for unit in adguard-vpn-managed.service adguard-vpn-watchdog.service adguard-vpn-watchdog.timer; do
+    install -D -o root -g root -m 0644 "$SOURCE_DIR/systemd/$unit" "/etc/systemd/system/$unit"
+done
+
+systemctl daemon-reload
+
+# Preserve the pre-migration logs, then cleanly replace the manually launched
+# process with the systemd-owned process. The fallback TERM is limited to the
+# exact AdGuard VPN service command.
+mkdir -p "$HOME_DIR/.local/state/adguardvpn-debug/exports"
+HOME="$HOME_DIR" timeout 20 "$VPN_BIN" export-logs \
+    -o "$HOME_DIR/.local/state/adguardvpn-debug/exports" -f >/dev/null 2>&1 || true
+HOME="$HOME_DIR" timeout 30 "$VPN_BIN" disconnect >/dev/null 2>&1 || true
+
+for _ in {1..20}; do
+    if ! pgrep -f '^/opt/adguardvpn_cli/adguardvpn-cli connect --no-fork' >/dev/null; then
+        break
+    fi
+    sleep 0.5
+done
+if pgrep -f '^/opt/adguardvpn_cli/adguardvpn-cli connect --no-fork' >/dev/null; then
+    pkill -TERM -f '^/opt/adguardvpn_cli/adguardvpn-cli connect --no-fork' || true
+    sleep 2
+fi
+
+systemctl enable --now adguard-vpn-managed.service
+for _ in {1..30}; do
+    if HOME="$HOME_DIR" timeout 3 "$VPN_BIN" status 2>/dev/null | grep -q '^Connected to'; then
+        break
+    fi
+    sleep 1
+done
+
+systemctl enable --now adguard-vpn-watchdog.timer
+
+printf '\nInstalled.\n'
+systemctl --no-pager --full status adguard-vpn-managed.service | head -n 12 || true
+systemctl --no-pager list-timers adguard-vpn-watchdog.timer || true

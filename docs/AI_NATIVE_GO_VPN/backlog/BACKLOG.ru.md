@@ -129,6 +129,10 @@ net request_id-spoofing, нет утечки внутренних ошибок. 
 | U5 | `netadapter`: выбор адаптера (кабель/Wi‑Fi), рекомендация | P0 | DONE |
 | U6 | `netdiag`: анализ сети + фиксы (детект AdGuard tun0) | P0 | DONE |
 | U7 | bind egress к выбранному uplink в connect | P1 | DONE |
+| CLI-L10N | локализация вывода CLI через i18n | P1 | DONE (85 ключей: connect/status/up/best/test/help/providers/stealth/diagnose/dns/catalog/update; остаются вторичные строки меню) |
+| CLI-SETTINGS | команда settings/config (list/get/set) | P2 | TODO |
+| CLI-COMPLETION | bash/zsh/fish автодополнение + man-страница | P2 | TODO |
+| CLI-HELP | локализованный printUsage + per-command help | P2 | TODO |
 
 U1-U6 (Раунд 19, `../audit/round-19-cli-ux-features.ru.md`): 65+ функций,
 15 CLI-команд. Исправлены UX-1 (TCP→UDP probe для WG) и UX-2 (link-local
@@ -138,7 +142,7 @@ U1-U6 (Раунд 19, `../audit/round-19-cli-ux-features.ru.md`): 65+ функц
 
 | ID | Задача | Приор | Статус |
 |---|---|---|---|
-| P3-1 | CLI: один автономный статический бинарник | P0 | В РАБОТЕ (doctor/list/validate/connect/status) |
+| P3-1 | CLI: один автономный статический бинарник | P0 | DONE (48 команд, TUI, static) |
 
 P3-1: Раунд 17 (`../audit/round-17-cli-real-configs.ru.md`). `mazzy-vpn-cli/`
 собран, работает на РЕАЛЬНЫХ конфигах (6 AmneziaWG + OpenVPN). Исправлен P0:
