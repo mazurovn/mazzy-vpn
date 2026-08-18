@@ -65,6 +65,18 @@ func (p Protocol) Interface() string {
 	}
 }
 
+// ManagedInterfaces returns every VPN interface name this tool may create,
+// across all supported protocols. It is the single source of truth so cleanup
+// paths (recover/disconnect) and interface detection never drift from the
+// per-protocol Interface() naming.
+func ManagedInterfaces() []string {
+	return []string{
+		AmneziaWG.Interface(),
+		WireGuard.Interface(),
+		OpenVPN.Interface(),
+	}
+}
+
 // DesiredState is the persisted connection intent. Parity with DESIRED state.
 type DesiredState string
 

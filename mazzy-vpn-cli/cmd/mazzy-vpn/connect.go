@@ -280,7 +280,7 @@ func cmdStatus(ctx context.Context, args []string) int {
 
 // detectLiveInterface returns the first present Mazzy VPN interface, or "".
 func detectLiveInterface() string {
-	for _, name := range []string{"vpnaw0", "vpnwg0"} {
+	for _, name := range core.ManagedInterfaces() {
 		if _, err := net.InterfaceByName(name); err == nil {
 			return name
 		}
