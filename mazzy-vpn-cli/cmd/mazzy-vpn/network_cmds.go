@@ -149,10 +149,10 @@ func cmdBest(ctx context.Context, args []string) int {
 		return 0
 	}
 	if best.ICMPAlive {
-		fmt.Println(translator().Tf("cli.up.best_alive", best.Name, best.LatencyMS))
+		fmt.Println(translator().Tf("cli.up.best_alive", safeDisplay(best.Name), best.LatencyMS))
 	} else {
-		fmt.Println(translator().Tf("cli.up.best_noicmp", best.Name))
+		fmt.Println(translator().Tf("cli.up.best_noicmp", safeDisplay(best.Name)))
 	}
-	fmt.Println(translator().Tf("cli.best.connect_with", best.Name))
+	fmt.Println(translator().Tf("cli.best.connect_with", safeDisplay(best.Name)))
 	return 0
 }

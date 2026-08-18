@@ -152,6 +152,6 @@ func cmdRemove(_ context.Context, args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	fmt.Println(translator().Tf("cli.catalog.removed", args[0]))
+	fmt.Println(translator().Tf("cli.catalog.removed", safeDisplay(args[0])))
 	return 0
 }

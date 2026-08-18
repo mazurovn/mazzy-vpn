@@ -153,7 +153,7 @@ func drawMenu(profileCount int, set settings.Settings) {
 // menuQuickConnect connects to the preferred zone or the best live one.
 func menuQuickConnect(ctx context.Context, set settings.Settings) {
 	if set.PreferredZone != "" {
-		fmt.Println(translator().Tf("cli.menu.quick_connect", set.PreferredZone))
+		fmt.Println(translator().Tf("cli.menu.quick_connect", safeDisplay(set.PreferredZone)))
 		runPrivileged(ctx, "up", set.PreferredZone)
 		return
 	}

@@ -17,6 +17,22 @@ import (
 	"github.com/mazurovn/mazzy-vpn/core/profile"
 )
 
+// safeDisplay sanitizes a user-controlled string (profile name, path, zone,
+// uplink) before printing it to the terminal, stripping ASCII control and
+// C1 characters so a crafted name cannot inject ANSI escape sequences or move
+// the cursor. Printable Unicode is preserved.
+func safeDisplay(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\t' {
+			return ' '
+		}
+		if r < 0x20 || (r >= 0x7f && r <= 0x9f) {
+			return -1 // drop control / C1
+		}
+		return r
+	}, s)
+}
+
 // hasFlag reports whether args contain a flag.
 func hasFlag(args []string, flag string) bool {
 	for _, a := range args {

@@ -101,10 +101,10 @@ func cmdConnect(ctx context.Context, args []string) int {
 	}
 	defer mu.Unlock()
 
-	fmt.Println(t.Tf("cli.connect.connecting", filepath.Base(path), proto.Title()))
+	fmt.Println(t.Tf("cli.connect.connecting", safeDisplay(filepath.Base(path)), proto.Title()))
 	uplink := resolveUplink(args)
 	if uplink != "" {
-		fmt.Println(t.Tf("cli.connect.pin_uplink", uplink))
+		fmt.Println(t.Tf("cli.connect.pin_uplink", safeDisplay(uplink)))
 	}
 	conn, err := connect.Up(ctx, proto, cfg, connectOpts(uplink))
 	if err != nil {
@@ -194,7 +194,7 @@ dashLoop:
 				continue
 			}
 			// Egress lost: attempt an in-place reconnect.
-			fmt.Println(t.Tf("cli.connect.egress_lost", consecutiveFail, zoneName))
+			fmt.Println(t.Tf("cli.connect.egress_lost", consecutiveFail, safeDisplay(zoneName)))
 			nfy.Reconnecting(zoneName, s.Reason)
 			_ = conn.Down(ctx)
 			newConn, rerr := connect.Up(ctx, proto, cfg, connectOpts(uplink))
@@ -267,7 +267,7 @@ func cmdStatus(ctx context.Context, args []string) int {
 		fmt.Printf("%-10s %s\n", t.T("cli.status.interface"), liveIface)
 		fmt.Printf("%-10s %s\n", t.T("cli.status.egress"), snap.EgressIP)
 		if profileName != "" {
-			fmt.Printf("%-10s %s\n", t.T("cli.status.profile"), profileName)
+			fmt.Printf("%-10s %s\n", t.T("cli.status.profile"), safeDisplay(profileName))
 		}
 	case snap.LinkUp:
 		fmt.Printf("%-10s %s\n", t.T("cli.status.state"), t.Tf("cli.status.linkup", snap.Reason))
@@ -275,7 +275,7 @@ func cmdStatus(ctx context.Context, args []string) int {
 	default:
 		fmt.Printf("%-10s %s\n", t.T("cli.status.state"), t.T("cli.status.down"))
 		if profileName != "" {
-			fmt.Printf("%-10s %s (%s)\n", t.T("cli.status.last"), profileName, protoName)
+			fmt.Printf("%-10s %s (%s)\n", t.T("cli.status.last"), safeDisplay(profileName), protoName)
 		}
 	}
 	return 0
