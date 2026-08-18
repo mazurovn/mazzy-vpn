@@ -77,7 +77,33 @@ an agent launcher: the other six adapters, relay/E2EE, Web/Telegram clients and
 agent-provider lifecycle remain planned. Diagnostics distinguishes an installed
 binary from a configured, running instance.
 
-## Install
+## Go native CLI (v2.1.0)
+
+The v2 line ships a single, statically-linked Go binary (`mazzy-vpn`) that
+**embeds** the AmneziaWG/WireGuard engine (vendored `amneziawg-go` v3.1). It
+needs **no** `awg`, `awg-quick`, `wg` or `jq`, and `CGO_ENABLED=0` makes it
+portable across Linux hosts. Sources: [`core/`](core/) (engine) and
+[`mazzy-vpn-cli/`](mazzy-vpn-cli/) (CLI + TUI).
+
+```bash
+# From the v2.1.0 release tarball:
+tar xzf mazzy-vpn-go-2.1.0-linux-amd64.tar.gz
+cd release-v2.1.0 && sudo ./install.sh    # static binary, no apt/compilation
+
+mazzy-vpn language --list        # en/ru/de/zh/ja/ko (default English)
+mazzy-vpn language               # interactive language menu
+mazzy-vpn best                   # connect the cleanest live server
+mazzy-vpn providers              # AI provider reachability
+mazzy-vpn stealth                # detection score
+mazzy-vpn control id             # control-plane identity (AI-native)
+```
+
+**Six UI languages**, English by default; the language is resolved from the
+saved setting, then `MAZZY_LANG`/`LC_ALL`/`LC_MESSAGES`/`LANG`, with no
+hardcoding. Full reference:
+[Go CLI wiki](https://github.com/mazurovn/mazzy-vpn/wiki/Go-CLI).
+
+## Install (legacy bash CLI)
 
 ```bash
 cd /path/to/mazzy-vpn
