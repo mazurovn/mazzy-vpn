@@ -19,6 +19,8 @@ EXPECTED_CONFIG = """name: Mazzy VPN CodeQL configuration
 
 paths-ignore:
   - desktop/src-tauri/vendor/**
+  - core/vendor/**
+  - mazzy-vpn-cli/vendor/**
 
 queries:
   - uses: security-extended
@@ -51,11 +53,17 @@ def main() -> int:
             fail(f"CodeQL workflow is missing required marker: {marker}")
 
     languages = set(re.findall(r"^\s+- language: ([\w-]+)$", workflow, re.MULTILINE))
-    expected_languages = {"actions", "javascript-typescript", "python", "rust"}
+    # actions/js/python/rust use the path-filterable no-build mode; go uses a
+    # manual build of the owned core + cli (its vendor tree is byte-verified via
+    # go.sum checksums and excluded above, same guarantee as the glib crate).
+    expected_no_build = {"actions", "javascript-typescript", "python", "rust"}
+    expected_languages = expected_no_build | {"go"}
     if languages != expected_languages:
         fail(f"unexpected CodeQL language matrix: {sorted(languages)}")
-    if workflow.count("build-mode: none") != len(expected_languages):
-        fail("every CodeQL language must use the path-filterable no-build mode")
+    if workflow.count("build-mode: none") != len(expected_no_build):
+        fail("every non-Go CodeQL language must use the path-filterable no-build mode")
+    if workflow.count("build-mode: manual") != 1:
+        fail("Go CodeQL analysis must use a single manual (vendored) build")
 
     desktop_workflow = (ROOT / ".github/workflows/desktop.yml").read_text(
         encoding="utf-8"
