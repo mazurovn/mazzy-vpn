@@ -4,6 +4,12 @@ All notable changes to Mazzy VPN are documented here.
 
 ## Unreleased
 
+## pi extension 0.1.1 - 2026-08-19
+
+### Added
+- Anonymized screenshot for the README and the pi.dev gallery (`pi.image`);
+  bundled in the npm tarball. Data is neutral (RFC 5737 doc IP, generic zone).
+
 ## pi extension 0.1.0 - 2026-08-19
 
 ### Added
