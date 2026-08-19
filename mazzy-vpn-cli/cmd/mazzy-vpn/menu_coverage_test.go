@@ -24,7 +24,7 @@ func TestMenuCoversUserFacingCommands(t *testing.T) {
 
 	// action -> a token that must be present in menu.go when it is wired.
 	required := map[string]string{
-		"quick connect": `runPrivileged(ctx, "up"`,
+		"quick connect": "menuQuickConnect",
 		"choose zone":   "menuChooseZone",
 		"disconnect":    `runPrivileged(ctx, "disconnect"`,
 		"recover":       `runPrivileged(ctx, "recover"`,
@@ -47,7 +47,12 @@ func TestMenuCoversUserFacingCommands(t *testing.T) {
 		"remove":   "menuRemove",
 		"mimic":    `runPrivileged(ctx, "mimic"`,
 		"language": "menuLanguage",
-		"daemon":   "menuDaemon",
+		// Non-blocking dashboard + background/log additions (the old blocking
+		// foreground "daemon" menu action is replaced by the detached background
+		// daemon so the user lands back in the menu):
+		"background": "menuBackground",
+		"view log":   "menuViewLog",
+		"stop bg":    "menuStopBackground",
 	}
 
 	for action, token := range required {

@@ -20,6 +20,7 @@ import (
 	"github.com/mazurovn/mazzy-vpn/core/measure"
 	"github.com/mazurovn/mazzy-vpn/core/netexec"
 	"github.com/mazurovn/mazzy-vpn/core/notify"
+	"github.com/mazurovn/mazzy-vpn/core/runstatus"
 	"github.com/mazurovn/mazzy-vpn/core/settings"
 	"github.com/mazurovn/mazzy-vpn/core/state"
 )
@@ -41,13 +42,31 @@ func cmdDaemon(ctx context.Context, args []string) int {
 
 	explicit := ""
 	autoBest := false
+	background := false // persistent: survives menu quit / terminal close
+	session := false    // detached but tied to the menu session (stopped on quit)
 	for _, a := range args {
 		switch {
 		case a == "--best" || a == "--auto":
 			autoBest = true
+		case a == "--background" || a == "--detach":
+			background = true
+		case a == "--session":
+			session = true
 		case a != "" && a[0] != '-':
 			explicit = a
 		}
+	}
+
+	// Detached modes: fork a copy into a new session and return, so the caller
+	// (menu/TUI) lands back in the dashboard while the VPN keeps running. The
+	// detached child re-enters here with the marker set and runs the loop below.
+	// --background persists (heartbeat Background=true); --session is stopped when
+	// the user quits the menu.
+	if detached, derr := maybeDaemonize(background || session); derr != nil {
+		fmt.Fprintln(os.Stderr, "background:", derr)
+		return 1
+	} else if detached {
+		return 0
 	}
 
 	mu, err := lock.Acquire(lockDir())
@@ -80,6 +99,21 @@ func cmdDaemon(ctx context.Context, args []string) int {
 		}
 	}
 
+	// Heartbeat: the (root) daemon publishes a world-readable status file so the
+	// unprivileged menu/TUI can render a live dashboard without holding the
+	// terminal. It is removed on clean shutdown (see the stop path below).
+	// A --session daemon publishes the same heartbeat as --background; the only
+	// difference is lifecycle (the menu stops sessions on quit, backgrounds
+	// persist). Persist the persistence bit so the reader can distinguish them.
+	rw := runstatus.NewWriter(zone, "", "", background)
+	d.rw = rw
+	defer rw.Close()
+
+	// Clear any stale down-intent left by a previous session's Disconnect so this
+	// freshly-started daemon does not immediately pause itself on its first tick.
+	_ = st.SetDesired(core.DesiredUp)
+	_ = writeDesired(zone, "up")
+
 	conn, _ := d.connectZone(ctx, zone)
 
 	sig := make(chan os.Signal, 1)
@@ -93,6 +127,7 @@ func cmdDaemon(ctx context.Context, args []string) int {
 	lastStealth := -1
 
 	fails := 0
+	paused := false          // true after a Disconnect intent; blocks auto-reconnect
 	const reconnectLimit = 2 // reconnect same zone this many times
 	const failoverLimit = 4  // then fail over to another live zone
 
@@ -114,6 +149,8 @@ func cmdDaemon(ctx context.Context, args []string) int {
 				// the host is not left fail-closed after the daemon exits.
 				_ = guard.New(netexec.ExecRunner{}).RemoveFailClosed(ctx)
 			}
+			rw.SetState(runstatus.StateDown, "", "")
+			rw.Close()
 			nfy.Disconnected(zone)
 			_ = st.SetDesired(core.DesiredDown)
 			return 0
@@ -129,28 +166,50 @@ func cmdDaemon(ctx context.Context, args []string) int {
 			score := stealthScoreOf(stSig)
 			d.logf("stealth score: %d (egress %s)", score, stSig.EgressCountry)
 			if lastStealth >= 0 && score < lastStealth-15 {
-				d.nfy.Failed(zone, fmt.Sprintf("stealth dropped %d→%d (more detectable)", lastStealth, score))
+				msg := fmt.Sprintf("stealth dropped %d→%d (more detectable)", lastStealth, score)
+				d.nfy.Failed(zone, msg)
+				rw.Error(msg)
 			}
 			lastStealth = score
 		case <-ticker.C:
-			// Honor an intent written by the (unprivileged) TUI (ADR-0006 D2).
+			// Honor an intent written by the (unprivileged) TUI/menu (ADR-0006 D2).
 			if di, ok := readDesired(); ok {
-				if di.Desired == "down" && conn != nil {
-					d.logf("TUI requested disconnect")
-					_ = conn.Down(ctx)
-					conn = nil
-					nfy.Disconnected(zone)
-					continue
-				}
-				if di.Desired == "up" && di.Zone != "" && di.Zone != "--best" && di.Zone != zone {
-					d.logf("TUI requested zone switch: %s → %s", zone, di.Zone)
+				if di.Desired == "down" {
+					// Paused: tear down if up, and (critically) do NOT auto-reconnect
+					// until the intent flips back to "up". Without this guard the loop
+					// below would immediately revive the tunnel, making the user's
+					// Disconnect ineffective while a daemon runs.
 					if conn != nil {
+						d.logf("disconnect requested; pausing auto-reconnect")
 						_ = conn.Down(ctx)
 						conn = nil
+						rw.SetState(runstatus.StateDown, "", "")
+						nfy.Disconnected(zone)
 					}
-					zone = di.Zone
-					fails = 0
+					paused = true
+					continue
 				}
+				if di.Desired == "up" {
+					if paused {
+						d.logf("reconnect requested; resuming")
+						paused = false
+						fails = 0
+					}
+					if di.Zone != "" && di.Zone != "--best" && di.Zone != zone {
+						d.logf("zone switch requested: %s → %s", zone, di.Zone)
+						if conn != nil {
+							_ = conn.Down(ctx)
+							conn = nil
+						}
+						zone = di.Zone
+						rw.SetZone(zone)
+						fails = 0
+					}
+				}
+			}
+			// While paused (Disconnect intent) do nothing until intent resumes.
+			if paused {
+				continue
 			}
 			if conn == nil {
 				time.Sleep(backoff(fails))
@@ -170,17 +229,24 @@ func cmdDaemon(ctx context.Context, args []string) int {
 				}
 				continue
 			}
+			tickStart := time.Now()
 			s := lc.Check(ctx, conn.Interface)
 			if s.Protected() {
 				fails = 0
+				rw.SetState(runstatus.StateProtected, conn.Interface, s.EgressIP)
+				rw.Tick(int(time.Since(tickStart).Milliseconds()), true)
 				continue
 			}
+			rw.Tick(0, false)
 			fails++
 			if fails < reconnectLimit {
 				d.logf("egress check failed (%d)", fails)
+				rw.Error(s.Reason)
 				continue
 			}
 			d.logf("⟳ egress lost; reconnecting %s...", zone)
+			rw.SetState(runstatus.StateReconnect, conn.Interface, "")
+			rw.Error("egress lost: " + s.Reason)
 			nfy.Reconnecting(zone, s.Reason)
 			// Arm the fail-closed kill-switch before tearing the tunnel down so no
 			// plaintext leaks during the reconnect gap (parity with the foreground
@@ -209,6 +275,9 @@ func cmdDaemon(ctx context.Context, args []string) int {
 				_ = conn.DisarmKillSwitch(ctx)
 				killSwitchArmed = false
 			}
+			if conn != nil {
+				rw.Reconnected()
+			}
 		}
 	}
 }
@@ -218,6 +287,7 @@ type daemonState struct {
 	st  *state.Store
 	lc  *livecheck.Checker
 	nfy *notify.Notifier
+	rw  *runstatus.Writer
 }
 
 func (d *daemonState) logf(format string, a ...any) {
@@ -251,15 +321,26 @@ func (d *daemonState) connectZone(ctx context.Context, name string) (*connect.Co
 		d.nfy.Failed(name, err.Error())
 		return nil, false
 	}
+	if d.rw != nil {
+		d.rw.SetZone(name)
+		d.rw.SetState(runstatus.StateConnecting, c.Interface, "")
+	}
 	snap := d.lc.WaitProtected(ctx, c.Interface, 20*time.Second)
 	if snap.Protected() {
 		d.logf("✔ protected. egress=%s", snap.EgressIP)
 		d.nfy.Connected(name, snap.EgressIP)
+		if d.rw != nil {
+			d.rw.SetState(runstatus.StateProtected, c.Interface, snap.EgressIP)
+		}
 		_ = d.st.Write(state.State{Protocol: proto, Profile: name, Desired: core.DesiredUp, Mode: core.ModeNormal})
 		return c, true
 	}
 	d.logf("⚠ egress not confirmed: %s", snap.Reason)
 	d.nfy.Failed(name, snap.Reason)
+	if d.rw != nil {
+		d.rw.SetState(runstatus.StateLinkUp, c.Interface, "")
+		d.rw.Error("egress not confirmed: " + snap.Reason)
+	}
 	return c, false
 }
 

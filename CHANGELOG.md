@@ -4,6 +4,43 @@ All notable changes to Mazzy VPN are documented here.
 
 ## Unreleased
 
+## CLI 2.2.0 - 2026-08-19
+
+### Added
+- Non-blocking interactive menu: connecting no longer drops you into a
+  blocking log that only Ctrl+C can exit. Connect launches the self-healing
+  daemon detached and returns you straight to the menu.
+- Live dashboard header in the menu and TUI: connection badge, egress, a
+  latency sparkline graph with min/avg/max, recent errors, an error-rate
+  (errors/min) estimate and a reconnect counter — all rendered from a shared
+  heartbeat without holding the terminal.
+- Activity log viewer: press `l` in the menu/TUI to read the daemon log, and
+  a key to return. Persisted across background runs.
+- Optional background mode (menu option 6 / TUI `b`): runs the VPN in a
+  detached session (`setsid`) that survives closing the terminal window;
+  ordinary connects stay tied to the menu session and stop on quit.
+- `stop` subcommand and menu/TUI `k` to terminate a running daemon.
+- New `core/runstatus` package: world-readable status heartbeat written by the
+  privileged daemon and read by the unprivileged menu/TUI, with bounded latency
+  and error ring buffers and a Unicode sparkline renderer.
+
+### Fixed
+- Cross-privilege dashboard read: the runtime directory is now `0755`
+  (traversable) so an unprivileged menu can read the root daemon's heartbeat
+  and log; the `0600` mutation lock remains the exclusivity boundary.
+- Liveness detection: a root-owned daemon PID probed from an unprivileged menu
+  returns `EPERM` from `Signal(0)`, which still proves the process is alive.
+  It is no longer misreported as dead (which had hidden the dashboard).
+- Stop now works from the unprivileged menu: it routes through the elevated
+  `stop` subcommand instead of a doomed unprivileged `SIGTERM` (`EPERM`).
+- Disconnect is effective while a daemon runs: a durable down-intent pauses the
+  daemon's auto-reconnect instead of the daemon immediately reviving the
+  tunnel; Quick connect resumes it in place. A freshly started daemon clears a
+  stale down-intent so it does not pause itself.
+- The heartbeat is flushed on creation, so the dashboard shows a connecting
+  state from the first moment; directory/file modes are chmod'd explicitly to
+  defeat a restrictive umask.
+
 ## 1.4.7 / Desktop 0.4.8 - 2026-08-12
 
 - Make the DEB Desktop autonomous: the package-owned engine, agent daemon,

@@ -53,11 +53,15 @@ func cmdMenu(ctx context.Context, _ []string) int {
 		case "3": // reconnect with diagnostics
 			menuReconnectDiagnostics(ctx)
 		case "4": // disconnect
-			reportResult("disconnect", runPrivileged(ctx, "disconnect"))
+			menuDisconnect(ctx)
 		case "5": // recover / clean
 			menuRecover(ctx, in)
-		case "6": // run in background (daemon)
-			menuDaemon(ctx, set)
+		case "6": // run in background (detached daemon)
+			menuBackground(ctx, set)
+		case "l", "L", "log": // view the activity log
+			menuViewLog(ctx, in)
+		case "k", "K", "stop": // stop the background daemon
+			menuStopBackground(ctx)
 		// -- Diagnostics --
 		case "7": // test servers
 			cmdTest(ctx, nil)
@@ -98,6 +102,15 @@ func cmdMenu(ctx context.Context, _ []string) int {
 		case "24": // update from GitHub
 			cmdUpdate(ctx, nil)
 		case "0", "q", "quit", "exit":
+			// Stop a menu-scoped (--session) daemon on exit, but leave a persistent
+			// (--background) daemon running so it survives closing the terminal.
+			// Route through the elevated `stop` so a root-owned daemon is actually
+			// terminated (unprivileged SIGTERM would EPERM).
+			if snap, ok := daemonRunning(); ok && !snap.Background {
+				if runPrivileged(ctx, "stop") == 0 {
+					fmt.Println(translator().T("cli.bg.stopped"))
+				}
+			}
 			fmt.Println("Bye.")
 			return 0
 		case "":
@@ -109,8 +122,15 @@ func cmdMenu(ctx context.Context, _ []string) int {
 	}
 }
 
-// drawHeader samples the live connection status and prints a compact banner.
+// drawHeader renders the menu banner. When a background daemon is publishing a
+// heartbeat it shows the rich live dashboard (status, egress, latency graph,
+// recent errors, error-rate); otherwise it samples a one-shot live status so
+// the user still sees whether a foreground/manual tunnel is up.
 func drawHeader(ctx context.Context) {
+	// Prefer the rich dashboard fed by a background daemon's heartbeat.
+	if drawLiveDashboard() {
+		return
+	}
 	iface := detectLiveInterface()
 	fmt.Println("┌───────────────────────────────────────────────┐")
 	fmt.Println("│  Mazzy VPN                                      │")
@@ -152,7 +172,8 @@ func drawMenu(profileCount int, set settings.Settings) {
 	fmt.Println("   3. 🔄 Reconnect with diagnostics")
 	fmt.Println("   4. ⏹  Disconnect")
 	fmt.Println("   5. 🧹 Recover / clean (panic → plain Wi‑Fi)")
-	fmt.Println("   6. 🛰  Run in background (daemon)")
+	fmt.Println("   6. 🛰  Run in background (survives closing terminal)")
+	fmt.Println("   l. 📜 View activity log     k. ⏹  Stop background daemon")
 	fmt.Println("  Diagnostics")
 	fmt.Println("   7. 📶 Test servers (live ping)")
 	fmt.Println("   8. 🏆 Best zone")
@@ -177,14 +198,31 @@ func drawMenu(profileCount int, set settings.Settings) {
 	fmt.Println("   0. Quit")
 }
 
-// menuQuickConnect connects to the preferred zone or the best live one.
+// menuQuickConnect connects to the preferred zone or the best live one. It runs
+// the self-healing daemon DETACHED in --session mode: the connection comes up
+// with auto-reconnect/failover, the user lands right back in the menu (no
+// blocking log / Ctrl+C), and the live dashboard header tracks it. The session
+// daemon is stopped automatically when the user quits the menu.
 func menuQuickConnect(ctx context.Context, set settings.Settings) {
-	if set.PreferredZone != "" {
-		fmt.Println(translator().Tf("cli.menu.quick_connect", safeDisplay(set.PreferredZone)))
-		reportResult("connect", runPrivileged(ctx, "up", set.PreferredZone))
+	zone := set.PreferredZone
+	if zone == "" {
+		zone = "--best"
+	} else {
+		fmt.Println(translator().Tf("cli.menu.quick_connect", safeDisplay(zone)))
+	}
+	// If a daemon is already running (possibly paused by a prior Disconnect),
+	// resume it in place via the up-intent instead of spawning a second daemon
+	// (the lock would reject the duplicate anyway).
+	if _, ok := daemonRunning(); ok {
+		z := zone
+		if z == "--best" {
+			z = "" // let the daemon keep its current/best zone
+		}
+		_ = writeDesired(z, "up")
+		fmt.Println(translator().T("cli.menu.action_ok_resume"))
 		return
 	}
-	reportResult("connect", runPrivileged(ctx, "up", "--best"))
+	reportResult("connect", runPrivileged(ctx, "daemon", zone, "--session"))
 }
 
 // menuReconnectDiagnostics runs diagnostics then reconnects to the best zone.
@@ -260,7 +298,8 @@ func menuChooseZone(ctx context.Context, in *bufio.Reader, cat interface {
 		fmt.Println(translator().Tf("cli.menu.ovpn_unsupported", safeDisplay(selected.Name)))
 		return
 	}
-	reportResult("connect", runPrivileged(ctx, "up", selected.Name))
+	// Detached --session daemon: connect + auto-reconnect, then back to the menu.
+	reportResult("connect", runPrivileged(ctx, "daemon", selected.Name, "--session"))
 }
 
 // menuFavorite lists zones and toggles the favorite flag on a chosen one.
@@ -331,15 +370,70 @@ func menuLanguage(ctx context.Context, in *bufio.Reader) {
 	cmdLanguage(ctx, []string{code})
 }
 
-// menuDaemon starts the self-healing background daemon for the preferred zone
-// (or --best). Runs in the foreground of the menu until interrupted, but under
-// the daemon's own reconnect/failover logic rather than the one-shot connect.
-func menuDaemon(ctx context.Context, set settings.Settings) {
+// menuDisconnect brings the tunnel down. When a self-healing daemon owns the
+// connection, a bare `disconnect` would be futile (the daemon reconnects on its
+// next tick), so we first record a durable down-intent that pauses the daemon's
+// auto-reconnect, then tear the tunnel down. A subsequent Quick connect clears
+// the intent and resumes.
+func menuDisconnect(ctx context.Context) {
+	if _, ok := daemonRunning(); ok {
+		_ = writeDesired("", "down")
+	}
+	reportResult("disconnect", runPrivileged(ctx, "disconnect"))
+}
+
+// menuBackground starts a DETACHED background daemon that survives closing the
+// terminal, then returns to the menu. Elevation (sudo/pkexec) prompts on the
+// terminal now; the daemon self-detaches into a new session afterward. The
+// menu's live dashboard header then reflects its heartbeat.
+func menuBackground(ctx context.Context, set settings.Settings) {
+	t := translator()
+	if snap, ok := daemonRunning(); ok {
+		fmt.Println(t.Tf("cli.bg.running", snap.PID, safeDisplay(snap.Zone)))
+		return
+	}
 	zone := set.PreferredZone
 	if zone == "" {
 		zone = "--best"
 	}
-	reportResult("daemon", runPrivileged(ctx, "daemon", zone))
+	fmt.Println(t.Tf("cli.bg.starting", safeDisplay(zone)))
+	// runPrivileged elevates and runs `daemon <zone> --background`; the elevated
+	// process forks the detached child and returns 0 immediately.
+	reportResult("background", runPrivileged(ctx, "daemon", zone, "--background"))
+}
+
+// menuStopBackground stops a running background daemon via the elevated `stop`
+// subcommand, so a root-owned daemon is actually terminated (an unprivileged
+// SIGTERM would fail with EPERM).
+func menuStopBackground(ctx context.Context) {
+	t := translator()
+	if _, ok := daemonRunning(); !ok {
+		fmt.Println(t.T("cli.bg.none"))
+		return
+	}
+	if runPrivileged(ctx, "stop") == 0 {
+		fmt.Println(t.T("cli.bg.stopped"))
+		return
+	}
+	fmt.Println(t.T("cli.bg.none"))
+}
+
+// menuViewLog shows the tail of the daemon activity log, then waits for Enter
+// so the user can page back to the menu (the "log on a key, back on a key" UX).
+func menuViewLog(_ context.Context, in *bufio.Reader) {
+	t := translator()
+	const n = 40
+	lines := tailLog(n)
+	fmt.Println(t.Tf("cli.log.title", n))
+	if len(lines) == 0 {
+		fmt.Println("  " + t.T("cli.log.empty"))
+	} else {
+		for _, ln := range lines {
+			fmt.Println("  " + safeDisplay(ln))
+		}
+	}
+	fmt.Println("\n" + t.T("cli.log.hint"))
+	_, _ = in.ReadString('\n')
 }
 
 // menuTrace prompts for a zone and traces its packet path.

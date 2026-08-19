@@ -17,7 +17,7 @@ import (
 )
 
 // version is the CLI source line; the published tag governs releases.
-const version = "2.1.1"
+const version = "2.2.0"
 
 func main() {
 	os.Exit(run(os.Args[1:]))
@@ -82,6 +82,8 @@ func run(args []string) int {
 		return cmdAuto(ctx, rest)
 	case "daemon":
 		return cmdDaemon(ctx, rest)
+	case "stop":
+		return cmdStop(ctx, rest)
 	case "connect":
 		return cmdConnect(ctx, rest)
 	case "disconnect", "down":
@@ -146,8 +148,14 @@ Usage:
   auto-reconnects if the egress drops. Add --no-reconnect to disable.
 
  %s
-  sudo mazzy-vpn daemon NAME          run persistently with auto-reconnect
+  sudo mazzy-vpn daemon NAME              run persistently with auto-reconnect
+  sudo mazzy-vpn daemon NAME --background  detach; survives closing the terminal
   sudo systemctl enable --now mazzy-vpn@NAME   start at boot (systemd)
+
+  The interactive menu now keeps you IN the menu after connecting: a live
+  dashboard header shows status, egress, a latency graph, recent errors and
+  the error rate. Press 'l' to view the activity log, 'k' to stop a background
+  daemon. Notifications toggle in Settings.
 
  %s
   mazzy-vpn test [--json]             probe all servers (latency/reachability)

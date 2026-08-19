@@ -15,6 +15,7 @@ import (
 	"github.com/mazurovn/mazzy-vpn/core/livecheck"
 	"github.com/mazurovn/mazzy-vpn/core/measure"
 	"github.com/mazurovn/mazzy-vpn/core/netadapter"
+	"github.com/mazurovn/mazzy-vpn/core/runstatus"
 	"github.com/mazurovn/mazzy-vpn/core/settings"
 )
 
@@ -37,6 +38,7 @@ const (
 	scrMain screen = iota
 	scrZones
 	scrSettings
+	scrLog
 )
 
 // tickMsg drives the live header refresh.
@@ -193,6 +195,9 @@ func (m tuiModel) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case scrSettings:
 		return m.keySettings(k)
 	}
+	if m.scr == scrLog {
+		return m.keyLog(k)
+	}
 	// Main screen global hotkeys.
 	switch k.String() {
 	case "q", "ctrl+c":
@@ -201,6 +206,19 @@ func (m tuiModel) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "c":
 		m.appendLog("quick connect requested (best zone)")
 		return m, requestConnectCmd("--best")
+	case "b":
+		m.appendLog("background daemon requested")
+		return m, requestBackgroundCmd()
+	case "k":
+		if _, ok := daemonRunning(); !ok {
+			m.appendLog("no background daemon running")
+			return m, nil
+		}
+		m.appendLog("stop background daemon requested")
+		return m, requestStopCmd()
+	case "l":
+		m.scr = scrLog
+		return m, nil
 	case "z":
 		m.scr = scrZones
 		m.loading = true
@@ -243,6 +261,14 @@ func (m tuiModel) keyZones(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.scr = scrMain
 			return m, requestConnectCmd(z.Name)
 		}
+	}
+	return m, nil
+}
+
+func (m tuiModel) keyLog(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch k.String() {
+	case "esc", "q", "l":
+		m.scr = scrMain
 	}
 	return m, nil
 }
@@ -311,6 +337,19 @@ func requestDisconnectCmd() tea.Cmd {
 	return privilegedTUICmd("disconnect", "disconnect")
 }
 
+// requestBackgroundCmd starts a detached background daemon (best zone) via the
+// elevation path, then returns to the dashboard. The daemon self-detaches so it
+// survives the TUI exiting or the terminal closing.
+func requestBackgroundCmd() tea.Cmd {
+	return privilegedTUICmd("background", "daemon", "--best", "--background")
+}
+
+// requestStopCmd stops a running daemon via the elevated `stop` subcommand, so a
+// root-owned daemon is actually terminated instead of failing with EPERM.
+func requestStopCmd() tea.Cmd {
+	return privilegedTUICmd("stop", "stop")
+}
+
 func requestRecoverCmd() tea.Cmd {
 	_ = writeDesired("", "down")
 	return privilegedTUICmd("recover", "recover")
@@ -325,12 +364,19 @@ func (m tuiModel) View() string {
 		return m.viewZones()
 	case scrSettings:
 		return m.viewSettings()
+	case scrLog:
+		return m.viewLog()
 	default:
 		return m.viewMain()
 	}
 }
 
 func (m tuiModel) header() string {
+	// If a background daemon is publishing a heartbeat, render the rich dashboard
+	// (latency graph, error-rate, recent errors) instead of the one-line status.
+	if h, ok := m.dashboardHeader(); ok {
+		return h
+	}
 	var status string
 	switch {
 	case m.snap.Protected():
@@ -349,12 +395,83 @@ func (m tuiModel) header() string {
 	return stBox.Render(title + "\n" + status)
 }
 
+// dashboardHeader renders the rich header from a background daemon's heartbeat.
+// ok is false when no fresh heartbeat exists, so the caller falls back.
+func (m tuiModel) dashboardHeader() (string, bool) {
+	snap, ok := daemonRunning()
+	if !ok {
+		return "", false
+	}
+	t := translator()
+	var status string
+	switch snap.State {
+	case runstatus.StateProtected:
+		status = stProtected.Render("● PROTECTED") + "  " +
+			safeDisplay(snap.Interface) + " · " + safeDisplay(snap.Egress)
+	case runstatus.StateReconnect:
+		status = stWarn.Render("⟳ RECONNECTING") + "  " + safeDisplay(snap.Zone)
+	case runstatus.StateConnecting:
+		status = stWarn.Render("… CONNECTING") + "  " + safeDisplay(snap.Zone)
+	case runstatus.StateLinkUp:
+		status = stWarn.Render("▲ LINK UP") + "  " + safeDisplay(snap.Interface) + " (no egress)"
+	default:
+		status = stDown.Render("● DISCONNECTED")
+	}
+	mode := "fg"
+	if snap.Background {
+		mode = "bg"
+	}
+	up := ""
+	if snap.StartedAt > 0 {
+		up = shortDur(time.Since(time.Unix(snap.StartedAt, 0)))
+	}
+	title := "Mazzy VPN" + strings.Repeat(" ", 18) +
+		stDim.Render(fmt.Sprintf("zone %s · %s %s · %s", trunc(safeDisplay(snap.Zone), 16), t.T("cli.dash.uptime"), up, mode))
+
+	series := snap.LatencySeries()
+	spark := runstatus.Sparkline(series, 44)
+	mn, avg, mx := runstatus.LatencyStats(series)
+	graph := stDim.Render(t.T("cli.dash.graph")+" ") + spark +
+		stDim.Render(fmt.Sprintf("  %d/%d/%d ms", mn, avg, mx))
+
+	rate := snap.ErrorRatePerMin(10 * time.Minute)
+	errLine := stDim.Render(fmt.Sprintf("%s %d · %.1f %s · reconnects %d",
+		t.T("cli.dash.errors"), len(snap.Errors), rate, t.T("cli.dash.errrate"), snap.Reconnects))
+	if recent := snap.RecentErrors(1); len(recent) > 0 {
+		ts := time.Unix(recent[0].TS, 0).Format("15:04:05")
+		errLine += "\n" + stWarn.Render("  "+trunc(ts+" "+safeDisplay(recent[0].Reason), 50))
+	}
+
+	body := title + "\n" + status + "\n" + graph + "\n" + errLine
+	return stBox.Render(body), true
+}
+
 func (m tuiModel) actionBar() string {
-	line1 := fmt.Sprintf("%s Connect best   %s Zones   %s Disconnect   %s Recover",
-		stKey.Render("[c]"), stKey.Render("[z]"), stKey.Render("[d]"), stKey.Render("[r]"))
-	line2 := fmt.Sprintf("%s Test/rank   %s Settings   %s Quit",
-		stKey.Render("[t]"), stKey.Render("[s]"), stKey.Render("[q]"))
+	line1 := fmt.Sprintf("%s Connect best   %s Background   %s Zones   %s Disconnect   %s Recover",
+		stKey.Render("[c]"), stKey.Render("[b]"), stKey.Render("[z]"), stKey.Render("[d]"), stKey.Render("[r]"))
+	line2 := fmt.Sprintf("%s Test/rank   %s Log   %s Stop bg   %s Settings   %s Quit",
+		stKey.Render("[t]"), stKey.Render("[l]"), stKey.Render("[k]"), stKey.Render("[s]"), stKey.Render("[q]"))
 	return line1 + "\n" + line2
+}
+
+// viewLog shows the persisted daemon activity log (background runs) plus the
+// in-session ring, so the log is one keypress away and dismissible with esc.
+func (m tuiModel) viewLog() string {
+	var b strings.Builder
+	b.WriteString(m.header() + "\n\n")
+	b.WriteString(stLogTitle.Render("  Activity log (esc/l back)") + "\n")
+	lines := tailLog(60)
+	if len(lines) == 0 && len(m.logs) == 0 {
+		b.WriteString(stDim.Render("  (no activity yet)") + "\n")
+		return b.String()
+	}
+	for _, ln := range lines {
+		b.WriteString("  " + safeDisplay(ln) + "\n")
+	}
+	for _, ln := range m.logs {
+		b.WriteString("  " + ln + "\n")
+	}
+	return b.String()
 }
 
 func (m tuiModel) logPane() string {

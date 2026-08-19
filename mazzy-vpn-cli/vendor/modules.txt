@@ -72,6 +72,7 @@ github.com/mazurovn/mazzy-vpn/core/notify
 github.com/mazurovn/mazzy-vpn/core/pathtrace
 github.com/mazurovn/mazzy-vpn/core/profile
 github.com/mazurovn/mazzy-vpn/core/routes
+github.com/mazurovn/mazzy-vpn/core/runstatus
 github.com/mazurovn/mazzy-vpn/core/settings
 github.com/mazurovn/mazzy-vpn/core/state
 github.com/mazurovn/mazzy-vpn/core/stealth

@@ -689,6 +689,100 @@ var cliCatalog = map[string]map[Lang]string{
 		JA: "権限昇格用の mazzy-vpn 実行ファイルが見つかりません。",
 		KO: "권한 상승을 위한 mazzy-vpn 실행 파일을 찾을 수 없습니다.",
 	},
+
+	// -- Background mode + live dashboard (menu) --
+	"cli.bg.started": {
+		EN: "✔ Background daemon started; you can close this terminal.",
+		RU: "✔ Фоновый демон запущен; можно закрыть терминал.",
+		DE: "✔ Hintergrund-Daemon gestartet; Sie können dieses Terminal schließen.",
+		ZH: "✔ 后台守护进程已启动；可以关闭此终端。",
+		JA: "✔ バックグラウンドデーモンを開始しました。このターミナルを閉じても構いません。",
+		KO: "✔ 백그라운드 데몬이 시작되었습니다. 이 터미널을 닫아도 됩니다.",
+	},
+	"cli.bg.starting": {
+		EN: "Starting background daemon for %s...",
+		RU: "Запуск фонового демона для %s...",
+		DE: "Starte Hintergrund-Daemon für %s...",
+		ZH: "正在为 %s 启动后台守护进程...",
+		JA: "%s のバックグラウンドデーモンを開始中...",
+		KO: "%s용 백그라운드 데몬을 시작하는 중...",
+	},
+	"cli.bg.stopped": {
+		EN: "✔ Background daemon stopped.",
+		RU: "✔ Фоновый демон остановлен.",
+		DE: "✔ Hintergrund-Daemon gestoppt.",
+		ZH: "✔ 后台守护进程已停止。",
+		JA: "✔ バックグラウンドデーモンを停止しました。",
+		KO: "✔ 백그라운드 데몬이 중지되었습니다.",
+	},
+	"cli.bg.none": {
+		EN: "No background daemon is running.",
+		RU: "Фоновый демон не запущен.",
+		DE: "Es läuft kein Hintergrund-Daemon.",
+		ZH: "没有正在运行的后台守护进程。",
+		JA: "実行中のバックグラウンドデーモンはありません。",
+		KO: "실행 중인 백그라운드 데몬이 없습니다.",
+	},
+	"cli.bg.running": {
+		EN: "● Background daemon active (pid %d, zone %s)",
+		RU: "● Фоновый демон активен (pid %d, зона %s)",
+		DE: "● Hintergrund-Daemon aktiv (pid %d, Zone %s)",
+		ZH: "● 后台守护进程运行中（pid %d，区域 %s）",
+		JA: "● バックグラウンドデーモン稼働中 (pid %d, ゾーン %s)",
+		KO: "● 백그라운드 데몬 활성 (pid %d, 존 %s)",
+	},
+	"cli.dash.graph": {
+		EN: "Latency", RU: "Задержка", DE: "Latenz",
+		ZH: "延迟", JA: "レイテンシ", KO: "지연",
+	},
+	"cli.dash.errors": {
+		EN: "Recent errors", RU: "Последние ошибки", DE: "Letzte Fehler",
+		ZH: "最近的错误", JA: "最近のエラー", KO: "최근 오류",
+	},
+	"cli.dash.no_errors": {
+		EN: "no errors", RU: "ошибок нет", DE: "keine Fehler",
+		ZH: "无错误", JA: "エラーなし", KO: "오류 없음",
+	},
+	"cli.dash.errrate": {
+		EN: "err/min", RU: "ошиб/мин", DE: "Fehler/min",
+		ZH: "错误/分", JA: "エラー/分", KO: "오류/분",
+	},
+	"cli.dash.uptime": {
+		EN: "uptime", RU: "аптайм", DE: "Laufzeit",
+		ZH: "运行时间", JA: "稼働時間", KO: "가동 시간",
+	},
+	"cli.log.title": {
+		EN: "── Activity log (last %d lines) ──",
+		RU: "── Журнал активности (последние %d строк) ──",
+		DE: "── Aktivitätsprotokoll (letzte %d Zeilen) ──",
+		ZH: "── 活动日志（最近 %d 行）──",
+		JA: "── アクティビティログ (最新 %d 行) ──",
+		KO: "── 활동 로그 (마지막 %d줄) ──",
+	},
+	"cli.log.empty": {
+		EN: "(no log yet — start a background daemon to record activity)",
+		RU: "(журнал пуст — запустите фоновый демон для записи активности)",
+		DE: "(noch kein Protokoll — starten Sie einen Hintergrund-Daemon)",
+		ZH: "（暂无日志 — 启动后台守护进程以记录活动）",
+		JA: "(ログはまだありません — バックグラウンドデーモンを開始してください)",
+		KO: "(아직 로그 없음 — 백그라운드 데몬을 시작하세요)",
+	},
+	"cli.menu.action_ok_resume": {
+		EN: "✔ Resuming the running daemon.",
+		RU: "✔ Возобновление работающего демона.",
+		DE: "✔ Laufenden Daemon wird fortgesetzt.",
+		ZH: "✔ 正在恢复运行中的守护进程。",
+		JA: "✔ 実行中のデーモンを再開します。",
+		KO: "✔ 실행 중인 데몬을 재개합니다.",
+	},
+	"cli.log.hint": {
+		EN: "Press Enter to return to the menu.",
+		RU: "Нажмите Enter, чтобы вернуться в меню.",
+		DE: "Drücken Sie Enter, um zum Menü zurückzukehren.",
+		ZH: "按 Enter 返回菜单。",
+		JA: "Enter を押してメニューに戻ります。",
+		KO: "Enter를 눌러 메뉴로 돌아갑니다.",
+	},
 }
 
 func init() {
