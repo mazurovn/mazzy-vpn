@@ -122,6 +122,20 @@ VPN profiles. Choose the interface language at the beginning or pass
 Real keys and personal VPN profiles are intentionally excluded from Git.
 Publish templates only; keep operational profiles in `/etc/vpnctl/profiles`.
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/assets/cli/status.png" width="32%" alt="mazzy-vpn up --best + status">
+  <img src="docs/assets/cli/test.png" width="32%" alt="mazzy-vpn test (live server ranking)">
+  <img src="docs/assets/cli/doctor.png" width="32%" alt="mazzy-vpn doctor + verify">
+</p>
+
+<p align="center"><sub>Connect to the best live zone · rank servers by latency · host &amp; config diagnostics. (Screens use documentation-only data: RFC 5737 IP <code>203.0.113.42</code>, generic zone names.)</sub></p>
+
+> Managing Mazzy VPN from inside [pi](https://pi.dev)? See the
+> [`@mazurovn/mazzy-vpn-pi`](https://www.npmjs.com/package/@mazurovn/mazzy-vpn-pi)
+> extension.
+
 ## Go native CLI (v2)
 
 The v2 line introduces a **single statically-linked Go binary** (`mazzy-vpn`)
