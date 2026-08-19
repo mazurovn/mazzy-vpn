@@ -14,7 +14,7 @@ sources and design docs are published — this doc is the published record.
 - **Connect automatically.** On an interactive session start, if the tunnel is
   not already up, it auto-connects to the best live zone via the CLI's
   self-healing background daemon (survives the pi session).
-- **Manage the VPN.** `/vpn` commands + a Ctrl+Alt+V toggle + LLM-callable tools
+- **Manage the VPN.** `/mazzy-vpn` commands (alias `/vpn`) + a Ctrl+Alt+V toggle + LLM-callable tools
   for status / connect / switch / disconnect / recover / verify.
 - **"If there is no connection."** A bounded background monitor samples status
   every 30s (configurable) and, after two consecutive unprotected samples,
@@ -27,7 +27,7 @@ sources and design docs are published — this doc is the published record.
 
 Tools (LLM-callable): `vpn_status`, `vpn_connect`, `vpn_disconnect`,
 `vpn_verify_configs`, `vpn_best_zone`.
-Commands: `/vpn status|connect [zone]|disconnect|recover|best|verify|doctor`.
+Commands: `/mazzy-vpn status|connect [zone]|disconnect|recover|best|verify|doctor` (alias `/vpn`).
 Shortcut: `Ctrl+Alt+V` connect/disconnect toggle.
 UI: live footer status + a widget above the editor (state · interface · egress).
 
