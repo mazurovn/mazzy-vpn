@@ -4,6 +4,17 @@ All notable changes to Mazzy VPN are documented here.
 
 ## Unreleased
 
+## pi extension 0.1.0 - 2026-08-19
+
+### Added
+- **Mazzy VPN extension for pi** (`@mazurovn/mazzy-vpn-pi`, tag `pi-ext-v0.1.0`):
+  connect to and manage Mazzy VPN from inside pi. Auto-connect, live status
+  widget, monitor + auto-reconnect, `/mazzy-vpn` commands (alias `/vpn`), a
+  Ctrl+Alt+V toggle, and LLM-callable tools (`vpn_status`, `vpn_connect`,
+  `vpn_disconnect`, `vpn_verify_configs`, `vpn_best_zone`). Drives the mazzy-vpn
+  Go CLI; never re-implements VPN logic. Published to npm and the pi.dev gallery
+  (via the `pi-package` keyword). Source: `pi-extension/`.
+
 ## CLI 2.3.0 - 2026-08-19
 
 ### Fixed
