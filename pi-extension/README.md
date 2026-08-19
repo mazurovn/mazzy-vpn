@@ -1,5 +1,7 @@
 # Mazzy VPN — pi extension
 
+![Mazzy VPN extension in pi](./assets/screenshot.png)
+
 Connect to and manage **Mazzy VPN from inside pi**. The extension is a thin,
 typed driver over the audited `mazzy-vpn` Go CLI (2.3.0+) — it never
 re-implements VPN logic. It gives pi (and the model) a real control surface to:
