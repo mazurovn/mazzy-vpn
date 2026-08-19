@@ -18,21 +18,31 @@ type desiredIntent struct {
 	TS      int64  `json:"ts"`
 }
 
-// desiredPath returns the per-user intent file path.
+// desiredMaxAge bounds how long a written intent stays actionable. Beyond this
+// the daemon ignores it (P0-B: a leftover "down" from a previous session must
+// not wedge a freshly-started daemon forever). It also gates cross-boot files.
+const desiredMaxAge = 2 * time.Minute
+
+// desiredPath returns the intent-file path. It lives in the SHARED runtime dir
+// (runDir → /run/mazzy-vpn, honored via MAZZY_RUN_DIR) — the exact same
+// privilege-neutral location as the heartbeat — so the unprivileged writer
+// (menu/TUI) and the root daemon reader agree on ONE file.
+//
+// P0-A: the previous implementation used os.UserConfigDir() = $HOME/.config,
+// which differs between the unprivileged writer (HOME=/home/user) and the root
+// daemon started via sudo (HOME=/root), so Disconnect/pause intents were written
+// to a file the daemon never read. Anchoring to runDir() removes that split.
 func desiredPath() string {
-	if d := os.Getenv("MAZZY_CONFIG_HOME"); d != "" {
-		return filepath.Join(d, "desired.json")
-	}
-	if h, err := os.UserConfigDir(); err == nil {
-		return filepath.Join(h, "mazzy-vpn", "desired.json")
-	}
-	return filepath.Join(os.TempDir(), "mazzy-vpn", "desired.json")
+	return filepath.Join(runDir(), "desired.json")
 }
 
-// writeDesired atomically records the desired connection intent.
+// writeDesired atomically records the desired connection intent in the shared
+// runtime dir. The file is world-readable (0644) so a root daemon can read an
+// intent written by the unprivileged UI; the directory is created 0755 to match
+// the heartbeat's cross-privilege visibility.
 func writeDesired(zone, desired string) error {
 	p := desiredPath()
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(desiredIntent{Zone: zone, Desired: desired, TS: time.Now().Unix()}, "", "  ")
@@ -40,13 +50,18 @@ func writeDesired(zone, desired string) error {
 		return err
 	}
 	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return err
 	}
+	// Best-effort: relax perms even if a prior umask tightened the temp file, so
+	// the root reader can always see an intent from the unprivileged writer.
+	_ = os.Chmod(tmp, 0o644)
 	return os.Rename(tmp, p)
 }
 
-// readDesired reads the intent file (used by the daemon).
+// readDesired reads the intent file (used by the daemon). It returns ok=false
+// for a missing, unparseable, OR STALE intent so the daemon never acts on an
+// order older than desiredMaxAge (P0-B). A zero/negative TS is treated as stale.
 func readDesired() (desiredIntent, bool) {
 	data, err := os.ReadFile(desiredPath())
 	if err != nil {
@@ -56,5 +71,18 @@ func readDesired() (desiredIntent, bool) {
 	if json.Unmarshal(data, &di) != nil {
 		return desiredIntent{}, false
 	}
+	if !intentFresh(di, time.Now()) {
+		return desiredIntent{}, false
+	}
 	return di, true
+}
+
+// intentFresh reports whether an intent is recent enough to act on. Extracted so
+// the staleness rule is unit-testable without touching the clock indirectly.
+func intentFresh(di desiredIntent, now time.Time) bool {
+	if di.TS <= 0 {
+		return false
+	}
+	age := now.Sub(time.Unix(di.TS, 0))
+	return age >= 0 && age <= desiredMaxAge
 }

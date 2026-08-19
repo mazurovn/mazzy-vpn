@@ -48,15 +48,30 @@ func cmdRecover(ctx context.Context, args []string) int {
 		run("removed nft table "+tbl, "nft", "delete", "table", "inet", tbl)
 	}
 
-	// 3. Remove our policy-routing rules (may exist in duplicate).
+	// 3. Remove our policy-routing rules (may exist in duplicate). Each rule del
+	// succeeds once per existing copy and then fails with ENOENT, so we count
+	// only the real deletions and report honestly — a panic button must not claim
+	// to have cleared rules it never touched (audit P1-D).
 	mark := strconv.Itoa(routes.DefaultMark)
+	rulesCleared := 0
 	for i := 0; i < 4; i++ {
-		_, _ = r.Run(ctx, "ip", "-4", "rule", "del", "not", "fwmark", mark, "table", mark)
-		_, _ = r.Run(ctx, "ip", "-6", "rule", "del", "not", "fwmark", mark, "table", mark)
-		_, _ = r.Run(ctx, "ip", "-4", "rule", "del", "table", "main", "suppress_prefixlength", "0")
-		_, _ = r.Run(ctx, "ip", "-6", "rule", "del", "table", "main", "suppress_prefixlength", "0")
+		for _, spec := range [][]string{
+			{"-4", "rule", "del", "not", "fwmark", mark, "table", mark},
+			{"-6", "rule", "del", "not", "fwmark", mark, "table", mark},
+			{"-4", "rule", "del", "table", "main", "suppress_prefixlength", "0"},
+			{"-6", "rule", "del", "table", "main", "suppress_prefixlength", "0"},
+		} {
+			if _, err := r.Run(ctx, "ip", spec...); err == nil {
+				rulesCleared++
+			}
+		}
 	}
-	fmt.Println("  ✔ cleared policy-routing rules")
+	if rulesCleared > 0 {
+		fmt.Printf("  ✔ cleared %d policy-routing rule(s)\n", rulesCleared)
+		steps += rulesCleared
+	} else {
+		fmt.Println("  • no policy-routing rules to clear")
+	}
 
 	// 4. Flush our routing table.
 	run("flushed table "+mark, "ip", "route", "flush", "table", mark)

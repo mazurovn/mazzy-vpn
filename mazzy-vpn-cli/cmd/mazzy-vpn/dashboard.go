@@ -6,8 +6,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/mattn/go-runewidth"
 	"github.com/mazurovn/mazzy-vpn/core/livecheck"
 	"github.com/mazurovn/mazzy-vpn/core/runstatus"
 )
@@ -129,14 +131,31 @@ func shortDur(d time.Duration) string {
 	}
 }
 
-// trunc shortens s to at most n runes, adding an ellipsis when cut.
+// trunc shortens s to at most n DISPLAY COLUMNS (not runes), adding an ellipsis
+// when cut. Using display width keeps dashboard boxes aligned when zone/egress
+// names contain double-width CJK or emoji glyphs — the app ships zh/ja/ko
+// locales, so rune-count truncation previously misaligned the borders (audit
+// P2-5). The ellipsis costs one column, so the visible content fits in n.
 func trunc(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
+	if n <= 0 {
+		return ""
+	}
+	if runewidth.StringWidth(s) <= n {
 		return s
 	}
-	if n <= 1 {
-		return string(r[:n])
+	if n == 1 {
+		return "…"
 	}
-	return string(r[:n-1]) + "…"
+	budget := n - 1 // reserve one column for the ellipsis
+	var b strings.Builder
+	w := 0
+	for _, r := range s {
+		rw := runewidth.RuneWidth(r)
+		if w+rw > budget {
+			break
+		}
+		b.WriteRune(r)
+		w += rw
+	}
+	return b.String() + "…"
 }

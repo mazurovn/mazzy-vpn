@@ -13,11 +13,15 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 )
 
-// version is the CLI source line; the published tag governs releases.
-const version = "2.2.0"
+// version is the CLI version. It is a var (not const) so release builds can
+// stamp the exact tag with the linker, keeping ONE source of truth (audit
+// P1-F): `go build -ldflags "-X main.version=$(git describe --tags)"`. The
+// baseline default matches the current git tag for un-stamped/dev builds.
+var version = "2.2.1"
 
 func main() {
 	os.Exit(run(os.Args[1:]))
@@ -97,16 +101,27 @@ func run(args []string) int {
 	case "status":
 		return cmdStatus(ctx, rest)
 	case "version", "--version", "-v":
-		fmt.Println("mazzy-vpn", version)
+		fmt.Println("mazzy-vpn", displayVersion())
 		return 0
 	case "help", "--help", "-h":
-		printUsage()
+		// help is a success path: write usage to STDOUT so `mazzy-vpn help | less`
+		// works (audit P2-4). Only the unknown-command branch uses stderr.
+		printUsageTo(os.Stdout)
 		return 0
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", cmd)
 		printUsage()
 		return 2
 	}
+}
+
+// displayVersion returns the version without a leftover leading "v" so a
+// tag-stamped build (v2.2.0) and a dev build (2.2.0) print identically.
+func displayVersion() string {
+	if len(version) > 1 && (version[0] == 'v' || version[0] == 'V') {
+		return version[1:]
+	}
+	return version
 }
 
 // isTTY reports whether stdin and stdout are both terminals (so the full-screen
@@ -123,9 +138,13 @@ func isTTY() bool {
 	return true
 }
 
-func printUsage() {
+// printUsage writes the usage text to stderr (used by the error/unknown-command
+// paths). printUsageTo lets the success `help` path target stdout.
+func printUsage() { printUsageTo(os.Stderr) }
+
+func printUsageTo(w io.Writer) {
 	t := translator()
-	fmt.Fprintf(os.Stderr, `mazzy-vpn — %s
+	fmt.Fprintf(w, `mazzy-vpn — %s
 
 Usage:
   mazzy-vpn                           full-screen TUI dashboard (or menu if piped)

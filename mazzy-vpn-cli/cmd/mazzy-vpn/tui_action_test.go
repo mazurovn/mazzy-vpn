@@ -16,9 +16,11 @@ func TestTUIConnect_ElevatesAndNoBestSentinelIntent(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("non-root only: exercises the elevation build path")
 	}
-	// Point the intent file at a temp dir so we can inspect it.
+	// Point the intent file at a temp dir so we can inspect it. The intent file
+	// now lives in the SHARED runtime dir (runDir) so the unprivileged writer and
+	// the root daemon reader agree on one path (audit P0-A); tests pin it here.
 	dir := t.TempDir()
-	t.Setenv("MAZZY_CONFIG_HOME", dir)
+	t.Setenv("MAZZY_RUN_DIR", dir)
 
 	// Stub elevator so buildPrivilegedCmd resolves sudo deterministically.
 	origLookup := elevatorLookup
@@ -41,7 +43,7 @@ func TestTUIConnect_ElevatesAndNoBestSentinelIntent(t *testing.T) {
 	// --best must NOT write the sentinel intent the daemon cannot resolve (P0-4).
 	cmd := requestConnectCmd("--best")
 	_ = cmd() // runs the (stubbed) exec builder
-	if _, err := os.Stat(dir + "/desired.json"); err == nil {
+	if _, err := os.Stat(desiredPath()); err == nil {
 		t.Error("connect --best must not write a desired.json '--best' sentinel")
 	}
 	if captured == nil {
@@ -59,7 +61,7 @@ func TestTUIConnect_ElevatesAndNoBestSentinelIntent(t *testing.T) {
 	captured = nil
 	cmd = requestConnectCmd("Berlin")
 	_ = cmd()
-	if data, err := os.ReadFile(dir + "/desired.json"); err != nil {
+	if data, err := os.ReadFile(desiredPath()); err != nil {
 		t.Errorf("concrete zone should record desired intent: %v", err)
 	} else if !strings.Contains(string(data), "Berlin") {
 		t.Errorf("intent should reference the zone, got %s", data)

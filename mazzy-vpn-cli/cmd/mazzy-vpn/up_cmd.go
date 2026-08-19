@@ -32,24 +32,10 @@ func cmdUp(ctx context.Context, args []string) int {
 	var name string
 	clean := hasFlag(args, "--clean")
 	auto := hasFlag(args, "--best") || hasFlag(args, "--auto") || clean
-	// Detect the zone NAME as the first bare (non-flag) argument, skipping any
-	// value that belongs to a value-taking flag such as `--uplink eth0` (audit:
-	// otherwise the uplink value was misread as the zone name).
-	skipNext := false
-	for _, a := range args {
-		if skipNext {
-			skipNext = false
-			continue
-		}
-		if a == "--uplink" {
-			skipNext = true
-			continue
-		}
-		if a != "" && a[0] != '-' {
-			name = a
-			break
-		}
-	}
+	// Detect the zone NAME via the shared value-flag-aware parser, so a value
+	// token like `--uplink eth0` is never misread as the zone name (audit P2-7:
+	// one parser for every subcommand, no per-command reimplementation).
+	name = firstNonFlagValueAware(args)
 
 	if auto || name == "" {
 		if name == "" && !auto {
@@ -76,8 +62,11 @@ func cmdUp(ctx context.Context, args []string) int {
 				return 1
 			}
 			name = best.Name
-			// --clean: among the live zones, prefer the ones the stealth cache
-			// knows are cleanest (non-datacenter, high stealth score).
+			// --clean: among the CURRENTLY-LIVE zones only, prefer the ones the
+			// stealth cache knows are cleanest (non-datacenter, high stealth score).
+			// We rank strictly within the ICMP-alive set and keep the BestAlive pick
+			// if the cache yields nothing, so --clean can never downgrade a proven-
+			// live choice to a cached-clean-but-now-dead one (audit P1-G).
 			if clean {
 				live := []string{}
 				for _, r := range ranked {
@@ -86,9 +75,10 @@ func cmdUp(ctx context.Context, args []string) int {
 					}
 				}
 				if len(live) > 0 {
-					ranked2 := zonescore.New().Rank(live, 24*time.Hour)
-					name = ranked2[0]
-					fmt.Println(t.Tf("cli.up.cleanest", safeDisplay(name)))
+					if ranked2 := zonescore.New().Rank(live, 24*time.Hour); len(ranked2) > 0 && ranked2[0] != "" {
+						name = ranked2[0]
+						fmt.Println(t.Tf("cli.up.cleanest", safeDisplay(name)))
+					}
 				}
 			} else if best.ICMPAlive {
 				fmt.Println(t.Tf("cli.up.best_alive", safeDisplay(name), best.LatencyMS))
@@ -157,12 +147,15 @@ func cmdAuto(ctx context.Context, args []string) int {
 		return 0
 	}
 
-	// With root: connect to the best zone. (Foreground; real failover across
-	// zones needs the daemon mode planned for a later step.)
+	// With root: hand the best zone to the self-healing daemon, which delivers
+	// the automatic failover this command's contract promises — a plain
+	// foreground connect to reachable[0] would strand the user if that zone is
+	// ICMP-alive but not actually routing (audit P1-H). The daemon verifies
+	// egress and fails over across the remaining live zones on its own.
 	best, _ := cat.Get(reachable[0])
 	if best == nil {
 		return 1
 	}
 	fmt.Println(t.Tf("cli.up.auto_connecting", safeDisplay(best.Name)))
-	return cmdConnect(ctx, []string{best.File})
+	return cmdDaemon(ctx, []string{best.Name})
 }

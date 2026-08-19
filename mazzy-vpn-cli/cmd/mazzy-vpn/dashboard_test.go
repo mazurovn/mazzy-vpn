@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mattn/go-runewidth"
 	"github.com/mazurovn/mazzy-vpn/core/runstatus"
 )
 
@@ -242,5 +243,25 @@ func TestTrunc(t *testing.T) {
 	}
 	if got := trunc("abcdefgh", 4); got != "abc…" {
 		t.Errorf("trunc = %q, want abc…", got)
+	}
+}
+
+// TestTruncDisplayWidth is the regression guard for audit P2-5: truncation must
+// budget by DISPLAY COLUMNS so double-width CJK/emoji never overflow a box.
+func TestTruncDisplayWidth(t *testing.T) {
+	// Each CJK glyph is 2 columns wide. "東京サーバー" = 6 runes / 12 columns.
+	if w := runewidth.StringWidth(trunc("東京サーバー", 6)); w > 6 {
+		t.Errorf("CJK trunc exceeded 6 columns: width=%d", w)
+	}
+	// A pure-ASCII string still truncates by rune==column.
+	if got := trunc("abcdefgh", 4); got != "abc…" {
+		t.Errorf("ascii trunc = %q, want abc…", got)
+	}
+	// n<=0 yields empty; n==1 yields just the ellipsis.
+	if got := trunc("anything", 0); got != "" {
+		t.Errorf("trunc n=0 = %q, want empty", got)
+	}
+	if got := trunc("anything", 1); got != "…" {
+		t.Errorf("trunc n=1 = %q, want …", got)
 	}
 }

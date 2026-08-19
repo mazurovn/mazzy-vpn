@@ -17,8 +17,10 @@ import (
 	"github.com/mazurovn/mazzy-vpn/core"
 	"github.com/mazurovn/mazzy-vpn/core/connect"
 	"github.com/mazurovn/mazzy-vpn/core/engine/wireguard"
+	"github.com/mazurovn/mazzy-vpn/core/guard"
 	"github.com/mazurovn/mazzy-vpn/core/livecheck"
 	"github.com/mazurovn/mazzy-vpn/core/lock"
+	"github.com/mazurovn/mazzy-vpn/core/netexec"
 	"github.com/mazurovn/mazzy-vpn/core/notify"
 	"github.com/mazurovn/mazzy-vpn/core/profile"
 	"github.com/mazurovn/mazzy-vpn/core/settings"
@@ -124,10 +126,13 @@ func cmdConnect(ctx context.Context, args []string) int {
 		return 1
 	}
 
-	// Persist the working intent so status/reconnect can find it.
+	// Persist the working intent so status/reconnect can find it. Store the
+	// catalog-style name (no extension) so `status` reports the same label
+	// whether the connection came up via the foreground path or the daemon
+	// (audit P1-C: Berlin.conf vs Berlin were previously inconsistent).
 	st := newStore()
 	if err := st.Write(state.State{
-		Protocol: proto, Profile: filepath.Base(path),
+		Protocol: proto, Profile: profileDisplayName(path),
 		Desired: core.DesiredUp, Mode: core.ModeNormal,
 	}); err != nil {
 		fmt.Fprintln(os.Stderr, "warning: could not persist state:", err)
@@ -152,7 +157,7 @@ func cmdConnect(ctx context.Context, args []string) int {
 	close(spinDone)
 	fmt.Println()
 
-	zoneName := filepath.Base(path)
+	zoneName := profileDisplayName(path)
 	nfy := notify.New()
 	// P1-2: honor the Notifications setting (env override still respected inside
 	// notify.New via MAZZY_NO_NOTIFY). A disabled setting silences all events.
@@ -166,7 +171,7 @@ func cmdConnect(ctx context.Context, args []string) int {
 		fmt.Println(t.Tf("cli.connect.protocol", proto.Title()))
 		nfy.Connected(zoneName, snap.EgressIP)
 		maybeAutoMimic(ctx)
-		go recordZoneScore(ctx, strings.TrimSuffix(zoneName, filepath.Ext(zoneName)))
+		go recordZoneScore(ctx, zoneName)
 	} else {
 		fmt.Println(t.Tf("cli.connect.not_confirmed", conn.Interface, safeDisplay(snap.Reason)))
 		fmt.Println("  The tunnel may still be establishing, or this server is not routing traffic.")
@@ -191,6 +196,11 @@ func cmdConnect(ctx context.Context, args []string) int {
 
 	consecutiveFail := 0
 	const failLimit = 3 // ~15s of no egress before reconnect
+	// killSwitchArmed tracks whether the fail-closed guard is currently held so
+	// the final teardown can always lift it — even after a run of failed
+	// reconnects where `conn` no longer reflects the armed table (audit P1-E:
+	// parity with the daemon path, which already had this fallback).
+	killSwitchArmed := false
 dashLoop:
 	for {
 		select {
@@ -218,6 +228,8 @@ dashLoop:
 			if set.KillSwitch {
 				if err := conn.ArmKillSwitch(ctx); err != nil {
 					fmt.Fprintf(os.Stderr, "  warning: could not arm kill-switch: %v\n", err)
+				} else {
+					killSwitchArmed = true
 				}
 			}
 			_ = conn.Down(ctx)
@@ -225,7 +237,8 @@ dashLoop:
 			if rerr != nil {
 				// Reconnect failed: keep the kill-switch ARMED (fail-closed) so no
 				// plaintext leaks while we are without a tunnel. It is lifted only
-				// once a tunnel is confirmed again, or by the final teardown below.
+				// once a tunnel is confirmed again, or by the final teardown below
+				// (which now clears the guard directly even without a live conn).
 				fmt.Fprintf(os.Stderr, "  reconnect failed: %v\n", rerr)
 				nfy.Failed(zoneName, rerr.Error())
 				consecutiveFail = 0
@@ -236,6 +249,7 @@ dashLoop:
 			// Egress confirmed again: it is now safe to lift the kill-switch.
 			if set.KillSwitch {
 				_ = conn.DisarmKillSwitch(ctx)
+				killSwitchArmed = false
 			}
 			if rs.Protected() {
 				fmt.Println(t.Tf("cli.connect.reconnected", safeDisplay(rs.EgressIP)))
@@ -250,9 +264,15 @@ dashLoop:
 
 	fmt.Println(t.T("cli.connect.disconnecting"))
 	// Always clear any still-armed session kill-switch on final teardown so the
-	// host is not left fail-closed after a graceful disconnect.
+	// host is not left fail-closed after a graceful disconnect. Disarm through the
+	// live conn first; if the guard was armed during a failed-reconnect gap where
+	// `conn` may not reflect it, remove the fail-closed table directly so we never
+	// leave the host sealed on exit (audit P1-E).
 	if set.KillSwitch {
 		_ = conn.DisarmKillSwitch(ctx)
+		if killSwitchArmed {
+			_ = guard.New(netexec.ExecRunner{}).RemoveFailClosed(ctx)
+		}
 	}
 	if err := conn.Down(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "teardown error:", err)
@@ -262,6 +282,15 @@ dashLoop:
 	_ = st.SetDesired(core.DesiredDown)
 	fmt.Println(t.T("cli.connect.disconnected"))
 	return 0
+}
+
+// profileDisplayName normalizes a profile file path to the catalog-style name
+// used everywhere the user sees it: the basename without its extension. This is
+// the single normalization both the foreground connect and the daemon use so
+// `status` cannot report two different labels for the same zone (audit P1-C).
+func profileDisplayName(path string) string {
+	base := filepath.Base(path)
+	return strings.TrimSuffix(base, filepath.Ext(base))
 }
 
 // cmdStatus reports the persisted intent (foreground model has no daemon yet).

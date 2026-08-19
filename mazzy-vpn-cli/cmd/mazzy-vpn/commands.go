@@ -69,6 +69,37 @@ func flagValue(args []string, name string) string {
 	return ""
 }
 
+// valueFlags are the flags that CONSUME the following token as their value, so a
+// positional parser must skip that token instead of mistaking it for a name.
+// Keeping this in one place means any new value-flag is honored everywhere and
+// cannot regress the "value read as zone name" bug (audit P2-7).
+var valueFlags = map[string]bool{
+	"--uplink": true,
+	"--proto":  true,
+	"--type":   true,
+}
+
+// firstNonFlagValueAware returns the first bare (non-flag) argument, skipping the
+// value token that belongs to a value-taking flag (e.g. `--uplink eth0`). This
+// is the single positional parser the subcommands share.
+func firstNonFlagValueAware(args []string) string {
+	skipNext := false
+	for _, a := range args {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+		if valueFlags[a] {
+			skipNext = true
+			continue
+		}
+		if a != "" && a[0] != '-' {
+			return a
+		}
+	}
+	return ""
+}
+
 // cmdDoctor runs host diagnostics.
 func cmdDoctor(ctx context.Context, args []string) int {
 	rep := doctor.Run(ctx, nil)

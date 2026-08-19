@@ -4,6 +4,33 @@ All notable changes to Mazzy VPN are documented here.
 
 ## Unreleased
 
+## CLI 2.2.1 - 2026-08-19
+
+### Fixed (deep audit pass — see docs/audits/cli-audit-2026-08.md)
+- **Disconnect/pause now work under a root daemon (P0-A):** the TUI→daemon
+  intent file moved from `$HOME/.config` (which differed between the
+  unprivileged UI writer and the root daemon reader under sudo) to the shared
+  runtime dir alongside the heartbeat, so both sides agree on one file.
+- **Stale intents no longer wedge a fresh daemon (P0-B):** intents older than
+  2 minutes (or with a zero/future timestamp) are ignored.
+- **`status` reports a consistent profile label (P1-C):** foreground connect and
+  the daemon now normalize the zone name identically (no `Berlin.conf` vs
+  `Berlin`).
+- **`recover` reports honestly (P1-D):** counts real policy-routing deletions
+  instead of always printing "cleared".
+- **No fail-closed host after failed reconnects (P1-E):** the foreground connect
+  path now tracks the kill-switch and removes the fail-closed table directly on
+  teardown, matching the daemon.
+- **Self-update integrity (P2-2):** the downloaded binary is verified against the
+  release's published `SHA256SUMS` before install; refuses on mismatch.
+- **`auto` honors its failover contract (P1-H):** delegates to the self-healing
+  daemon instead of a single foreground connect.
+- Version is now linker-stampable for a single source of truth (P1-F); `--clean`
+  only re-ranks live zones (P1-G); local/fork builds are not falsely offered an
+  "update" (P2-1); `help` prints to stdout (P2-4); dashboard truncation is
+  display-width aware for CJK/emoji locales (P2-5); one shared value-flag-aware
+  argument parser (P2-7); single rollback path in the binary replace (P2-3).
+
 ## CLI 2.2.0 - 2026-08-19
 
 ### Added
