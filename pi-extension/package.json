@@ -1,0 +1,46 @@
+{
+  "name": "@mazurovn/mazzy-vpn-pi",
+  "version": "0.1.0",
+  "description": "Mazzy VPN extension for pi — connect to and manage Mazzy VPN from inside pi: auto-connect, live status widget, monitor + auto-reconnect, and LLM-callable tools to connect/switch/disconnect/recover/verify (bypass blocks). Drives the mazzy-vpn Go CLI.",
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "author": "Nik m (@mazurovn)",
+  "homepage": "https://github.com/mazurovn/mazzy-vpn#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mazurovn/mazzy-vpn.git",
+    "directory": "pi-extension"
+  },
+  "bugs": {
+    "url": "https://github.com/mazurovn/mazzy-vpn/issues"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-extension",
+    "mazzy",
+    "mazzy-vpn",
+    "vpn",
+    "amneziawg",
+    "wireguard"
+  ],
+  "files": [
+    "index.ts",
+    "client.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  }
+}
