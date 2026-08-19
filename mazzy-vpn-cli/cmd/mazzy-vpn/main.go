@@ -21,7 +21,7 @@ import (
 // stamp the exact tag with the linker, keeping ONE source of truth (audit
 // P1-F): `go build -ldflags "-X main.version=$(git describe --tags)"`. The
 // baseline default matches the current git tag for un-stamped/dev builds.
-var version = "2.2.1"
+var version = "2.3.0"
 
 func main() {
 	os.Exit(run(os.Args[1:]))
@@ -50,6 +50,8 @@ func run(args []string) int {
 		return cmdList(ctx, rest)
 	case "validate":
 		return cmdValidate(ctx, rest)
+	case "verify", "audit":
+		return cmdVerify(ctx, rest)
 	case "import":
 		return cmdImport(ctx, rest)
 	case "profiles":
@@ -199,6 +201,7 @@ Usage:
   mazzy-vpn providers [--type llm|agent|search] [--json]   check AI providers
   mazzy-vpn list DIR [--json]         validate profiles in a directory
   mazzy-vpn validate FILE             validate a single profile
+  mazzy-vpn verify [--no-dns] [--json]  audit ALL managed configs' health
   mazzy-vpn update [--apply]          check/install a newer release from GitHub
   mazzy-vpn version | help
 

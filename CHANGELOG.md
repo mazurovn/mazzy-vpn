@@ -4,6 +4,31 @@ All notable changes to Mazzy VPN are documented here.
 
 ## Unreleased
 
+## CLI 2.3.0 - 2026-08-19
+
+### Fixed
+- **`test`/`rank` no longer appears to hang.** Ranking a large catalog used a
+  tiny ICMP pool (4) with no overall deadline or progress, so 50 profiles took
+  ~40s on a blank screen. Ranking now scales concurrency, is time-bounded,
+  honors cancellation, and shows a live `probing k/N…` indicator. Real 50-profile
+  `test` completes in ~3s.
+
+### Added
+- **Import auto-distribution.** `import` scans folders recursively, classifies
+  each profile by protocol (AmneziaWG / WireGuard / OpenVPN) and prints a
+  distribution summary. When a server ships as both a WireGuard/AmneziaWG
+  `.conf` and an OpenVPN `.ovpn`, the unconnectable OpenVPN twin is skipped so
+  the catalog is not doubled.
+- **`mazzy-vpn verify` (alias `audit`)** — health audit of every managed config:
+  parses, validates, connectability, and endpoint DNS resolvability, with a
+  problem+fix per profile and a machine `--json` mode. Wired into the menu (`v`).
+- **Doctor catalog health** — `doctor` now shows a one-line offline summary:
+  `catalog: N profiles (X connectable, Y OpenVPN-only)`.
+- **TUI zone picker visualization** — animated "measuring" spinner and a latency
+  quality bar (excellent/great/good/fair/slow) per alive zone, with an
+  `alive/total` footer.
+- Design/roadmap for the client journey: docs/design/cli-ux-roadmap-2026-08.md.
+
 ## CLI 2.2.1 - 2026-08-19
 
 ### Fixed (deep audit pass — see docs/audits/cli-audit-2026-08.md)

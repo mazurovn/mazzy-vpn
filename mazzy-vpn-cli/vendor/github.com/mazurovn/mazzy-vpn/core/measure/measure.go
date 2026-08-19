@@ -159,23 +159,53 @@ type Target struct {
 // RankBest probes all targets concurrently and returns them sorted best-first
 // (reachable + lowest latency). Concurrency is bounded to avoid a probe storm.
 func (m *Measurer) RankBest(ctx context.Context, targets []Target) []Result {
-	// Keep ICMP concurrency low: firing many pings at once through a busy VPN
-	// tunnel (e.g. AdGuard's tun0) causes false timeouts. A small pool gives
-	// stable, accurate liveness results.
-	const maxConcurrent = 4
+	return m.RankBestProgress(ctx, targets, nil)
+}
+
+// RankBestProgress is RankBest with an optional progress callback invoked once
+// per completed probe (done, total). It lets a UI render a live "probing k/N"
+// indicator so a large catalog never looks like a hang. The callback runs on a
+// worker goroutine and must be cheap/thread-safe; nil disables it.
+//
+// Concurrency scales with the catalog size (bounded) so 50 profiles no longer
+// serialize into ~40s of dead air — the tiny ICMP pool was the single biggest
+// cause of the "test/rank hangs" report. It stays modest to avoid false
+// timeouts through a busy VPN tunnel, but honoring ctx cancellation plus the
+// per-probe deadline guarantees bounded work.
+func (m *Measurer) RankBestProgress(ctx context.Context, targets []Target, progress func(done, total int)) []Result {
+	maxConcurrent := 8
+	if len(targets) > 24 {
+		maxConcurrent = 12
+	}
+	if len(targets) > 0 && len(targets) < maxConcurrent {
+		maxConcurrent = len(targets)
+	}
 	sem := make(chan struct{}, maxConcurrent)
 	results := make([]Result, len(targets))
 	done := make(chan int, len(targets))
 
 	for i, t := range targets {
-		sem <- struct{}{}
+		select {
+		case <-ctx.Done():
+			// Context cancelled/timed out: stop launching new probes and mark the
+			// remainder cancelled so the caller still gets a complete slice.
+			results[i] = Result{Name: t.Name, Endpoint: t.Endpoint, Err: "cancelled", latency: m.timeout() + time.Second}
+			done <- i
+			continue
+		case sem <- struct{}{}:
+		}
 		go func(idx int, tg Target) {
 			defer func() { <-sem; done <- idx }()
 			results[idx] = m.Probe(ctx, tg.Name, tg.Endpoint)
 		}(i, t)
 	}
+	completed := 0
 	for range targets {
 		<-done
+		completed++
+		if progress != nil {
+			progress(completed, len(targets))
+		}
 	}
 
 	// Ranking priority:

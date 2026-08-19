@@ -88,6 +88,8 @@ func cmdMenu(ctx context.Context, _ []string) int {
 			menuImport(ctx, in)
 		case "18": // profiles
 			cmdProfiles(ctx, nil)
+		case "v", "V", "verify": // audit every config's health
+			cmdVerify(ctx, nil)
 		case "19": // favorite/unfavorite a zone
 			menuFavorite(ctx, in, cat)
 		case "20": // remove a profile
@@ -187,7 +189,7 @@ func drawMenu(profileCount int, set settings.Settings) {
 	fmt.Println("  16. 🤖 Check AI providers")
 	fmt.Println("  Profiles & settings")
 	fmt.Println("  17. 📥 Import config / folder")
-	fmt.Println("  18. 📋 List profiles")
+	fmt.Println("  18. 📋 List profiles          v. 🩺 Verify configs (health audit)")
 	fmt.Println("  19. ★ Favorite / unfavorite a zone")
 	fmt.Println("  20. 🗑  Remove a profile")
 	fmt.Println("  21. ⚙️  Settings")

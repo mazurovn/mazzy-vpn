@@ -115,11 +115,46 @@ func cmdDoctor(ctx context.Context, args []string) int {
 	for _, c := range rep.Checks {
 		fmt.Printf("[%-4s] %s: %s\n", c.Status, safeDisplay(c.Name), safeDisplay(c.Detail))
 	}
+	// Catalog health line: a quick, offline count so the user sees whether their
+	// profiles are usable without running the full `verify` audit.
+	if line := catalogHealthLine(); line != "" {
+		fmt.Println(line)
+	}
 	fmt.Printf("\nSummary: OK=%d WARN=%d FAIL=%d\n", rep.OK, rep.Warn, rep.Fail)
 	if !rep.Healthy() {
 		return 1
 	}
 	return 0
+}
+
+// catalogHealthLine returns a one-line offline summary of catalog health for the
+// doctor output: how many profiles are connectable (WG/AWG) vs OpenVPN-only.
+// Empty when the catalog is empty. It never touches the network.
+func catalogHealthLine() string {
+	entries, err := newCatalog().List()
+	if err != nil || len(entries) == 0 {
+		return "[WARN] catalog: no profiles imported (run: mazzy-vpn import <dir>)"
+	}
+	connectable, ovpn := 0, 0
+	for _, e := range entries {
+		a := auditProfile(context.Background(), catalogEntry{
+			Name: e.Name, File: e.File, Protocol: e.Protocol, Country: e.Country,
+		}, false)
+		switch {
+		case a.Connectable:
+			connectable++
+		default:
+			if e.Protocol == core.OpenVPN {
+				ovpn++
+			}
+		}
+	}
+	status := "OK"
+	if connectable == 0 {
+		status = "WARN"
+	}
+	return fmt.Sprintf("[%-4s] catalog: %d profiles (%d connectable, %d OpenVPN-only) — run `mazzy-vpn verify` for details",
+		status, len(entries), connectable, ovpn)
 }
 
 // profileInfo is the machine-first summary of one profile file.

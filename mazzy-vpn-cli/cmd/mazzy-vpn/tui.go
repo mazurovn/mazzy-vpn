@@ -83,6 +83,9 @@ type tuiModel struct {
 	zonesErr string
 	cursor   int
 
+	// spin advances every tick so the "measuring…" overlay visibly animates
+	// instead of looking frozen while a large catalog is probed.
+	spin     int
 	quitting bool
 }
 
@@ -101,6 +104,12 @@ func (m tuiModel) Init() tea.Cmd {
 // tickCmd schedules the next header refresh.
 func tickCmd() tea.Cmd {
 	return tea.Tick(2*time.Second, func(t time.Time) tea.Msg { return tickMsg(t) })
+}
+
+// fastTickCmd is a quicker cadence used while a probe wave is in flight so the
+// "measuring…" spinner animates smoothly instead of updating every 2s.
+func fastTickCmd() tea.Cmd {
+	return tea.Tick(150*time.Millisecond, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
 // refreshStatusCmd samples the live status without blocking input.
@@ -123,7 +132,9 @@ func refreshStatusCmd() tea.Cmd {
 	}
 }
 
-// rankZonesCmd ranks zones asynchronously (D5: bounded by measure timeouts).
+// rankZonesCmd ranks zones asynchronously under a bounded deadline so the picker
+// can never hang on a large/dead catalog (D5). The bound scales with the number
+// of targets; progress is surfaced via the overlay's "Measuring…" state.
 func rankZonesCmd() tea.Cmd {
 	return func() tea.Msg {
 		cat := newCatalog()
@@ -131,7 +142,7 @@ func rankZonesCmd() tea.Cmd {
 		if err != nil || len(targets) == 0 {
 			return zonesMsg{err: "no profiles with endpoints; import first"}
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), rankBudget(len(targets)))
 		defer cancel()
 		return zonesMsg{results: newMeasurer().RankBest(ctx, targets)}
 	}
@@ -152,6 +163,12 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
+		m.spin++
+		// Animate faster while the zones overlay is probing so the spinner is
+		// smooth; otherwise the slower status cadence is enough.
+		if m.loading {
+			return m, tea.Batch(fastTickCmd(), refreshStatusCmd())
+		}
 		return m, tea.Batch(tickCmd(), refreshStatusCmd())
 
 	case statusMsg:
@@ -492,9 +509,16 @@ func (m tuiModel) viewMain() string {
 	return m.header() + "\n" + m.actionBar() + "\n\n" + m.logPane() + "\n"
 }
 
+// spinFrames animates the "measuring" indicator so a long probe wave never
+// looks frozen.
+var spinFrames = []string{"⠹", "⠸", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
 func (m tuiModel) viewZones() string {
 	if m.loading {
-		return m.header() + "\n\n  Measuring servers (ping via uplink)...\n"
+		frame := spinFrames[m.spin%len(spinFrames)]
+		return m.header() + "\n\n  " + stKey.Render(frame) +
+			" Measuring servers via the physical uplink…\n" +
+			stDim.Render("  (ranking live servers; this is bounded — press esc to cancel)") + "\n"
 	}
 	if m.zonesErr != "" {
 		return m.header() + "\n\n  " + m.zonesErr + "\n\n  [esc] back\n"
@@ -502,6 +526,7 @@ func (m tuiModel) viewZones() string {
 	var b strings.Builder
 	b.WriteString(m.header() + "\n\n")
 	b.WriteString(stLogTitle.Render("  Zones (↑/↓ select, Enter connect, esc back)") + "\n")
+	alive := 0
 	for i, z := range m.zones {
 		cur := "  "
 		if i == m.cursor {
@@ -509,15 +534,38 @@ func (m tuiModel) viewZones() string {
 		}
 		st := stDown.Render("✖ down")
 		lat := "-"
+		bar := ""
 		if z.ICMPAlive {
 			st = stProtected.Render("● alive")
 			lat = fmt.Sprintf("%d ms", z.LatencyMS)
+			bar = latencyBar(z.LatencyMS)
+			alive++
 		} else if z.Reachable {
 			st = stWarn.Render("▲ no icmp")
 		}
-		b.WriteString(fmt.Sprintf("%s%-26s %-9s %s\n", cur, safeDisplay(z.Name), lat, st))
+		b.WriteString(fmt.Sprintf("%s%-26s %-9s %-10s %s\n", cur, safeDisplay(z.Name), lat, st, bar))
 	}
+	b.WriteString(stDim.Render(fmt.Sprintf("\n  %d/%d alive", alive, len(m.zones))) + "\n")
 	return b.String()
+}
+
+// latencyBar renders a compact quality bar from a latency in ms: greener/fuller
+// is faster. Purely visual, so the user can eyeball the best server at a glance.
+func latencyBar(ms int64) string {
+	switch {
+	case ms <= 0:
+		return ""
+	case ms < 50:
+		return stProtected.Render("█████ excellent")
+	case ms < 100:
+		return stProtected.Render("████░ great")
+	case ms < 160:
+		return stWarn.Render("███░░ good")
+	case ms < 250:
+		return stWarn.Render("██░░░ fair")
+	default:
+		return stDown.Render("█░░░░ slow")
+	}
 }
 
 func (m tuiModel) viewSettings() string {
