@@ -153,5 +153,7 @@ Gitleaks 검사를 실행합니다.
 ## 저자 및 라이선스
 
 Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
-[GNU AGPL v3.0 이상](LICENSE)으로 배포됩니다. AGPL과 원저자 고지를 유지하는
-조건으로 수정 및 재배포할 수 있습니다.
+[PolyForm Noncommercial 1.0.0](LICENSE)(source-available)으로 배포됩니다.
+개인·연구·교육·자선(비상업) 용도는 무료입니다. **상업적 사용은 별도의 상업
+라이선스가 필요**합니다 — [COMMERCIAL.md](COMMERCIAL.md) 참조. **Enterprise 에디션**을
+계획 중입니다. 원저자 고지를 유지하세요.

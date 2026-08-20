@@ -1,6 +1,6 @@
 #!/bin/sh
 # Copyright (C) 2026 Nik m (@mazurovn)
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 set -eu
 
 restore_legacy_cli() {

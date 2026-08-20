@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Nik m (@mazurovn)
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod agent_control;
@@ -569,7 +569,7 @@ mod tests {
         let info = platform_info();
         assert_eq!(info.desktop_version, env!("CARGO_PKG_VERSION"));
         assert!(info.author.contains("Nik m"));
-        assert_eq!(info.license, "AGPL-3.0-or-later");
+        assert_eq!(info.license, "PolyForm-Noncommercial-1.0.0");
     }
 
     #[test]

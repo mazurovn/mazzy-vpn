@@ -161,5 +161,8 @@ Regressionstests, ShellCheck, einem öffentlichen Audit und Gitleaks geprüft.
 ## Autor und Lizenz
 
 Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn).
-Lizenz: [GNU AGPL v3.0 oder später](LICENSE). Änderungen und Weitergabe sind
-unter Einhaltung der AGPL und unter Beibehaltung der Urheberhinweise erlaubt.
+Lizenz: [PolyForm Noncommercial 1.0.0](LICENSE) (source-available). Kostenlos
+für private, Forschungs-/wissenschaftliche, Bildungs- und gemeinnützige
+(nichtkommerzielle) Nutzung. **Kommerzielle Nutzung erfordert eine separate
+Lizenz** — siehe [COMMERCIAL.md](COMMERCIAL.md). Eine **Enterprise-Edition** ist
+geplant. Urheberhinweise sind beizubehalten.

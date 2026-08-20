@@ -4,6 +4,122 @@ All notable changes to Mazzy VPN are documented here.
 
 ## Unreleased
 
+### Changed
+- **License: now PolyForm Noncommercial 1.0.0** (source-available). Free for
+  personal, research/scientific, educational and charitable (noncommercial) use;
+  **commercial use requires a separate commercial license** (see COMMERCIAL.md).
+  An **Enterprise edition** is planned on top of this core. This replaces the
+  previous AGPL-3.0-or-later licensing for all future versions; already-released
+  AGPL versions remain available under AGPL. Updated LICENSE, all SPDX headers
+  (238 files), package/Cargo/tauri metadata, READMEs (7 languages), CONTRIBUTING,
+  wiki, and desktop About.
+
+## pi extension 0.1.1 - 2026-08-19
+
+### Added
+- Anonymized screenshot for the README and the pi.dev gallery (`pi.image`);
+  bundled in the npm tarball. Data is neutral (RFC 5737 doc IP, generic zone).
+
+## pi extension 0.1.0 - 2026-08-19
+
+### Added
+- **Mazzy VPN extension for pi** (`@mazurovn/mazzy-vpn-pi`, tag `pi-ext-v0.1.0`):
+  connect to and manage Mazzy VPN from inside pi. Auto-connect, live status
+  widget, monitor + auto-reconnect, `/mazzy-vpn` commands (alias `/vpn`), a
+  Ctrl+Alt+V toggle, and LLM-callable tools (`vpn_status`, `vpn_connect`,
+  `vpn_disconnect`, `vpn_verify_configs`, `vpn_best_zone`). Drives the mazzy-vpn
+  Go CLI; never re-implements VPN logic. Published to npm and the pi.dev gallery
+  (via the `pi-package` keyword). Source: `pi-extension/`.
+
+## CLI 2.3.0 - 2026-08-19
+
+### Fixed
+- **`test`/`rank` no longer appears to hang.** Ranking a large catalog used a
+  tiny ICMP pool (4) with no overall deadline or progress, so 50 profiles took
+  ~40s on a blank screen. Ranking now scales concurrency, is time-bounded,
+  honors cancellation, and shows a live `probing k/N…` indicator. Real 50-profile
+  `test` completes in ~3s.
+
+### Added
+- **Import auto-distribution.** `import` scans folders recursively, classifies
+  each profile by protocol (AmneziaWG / WireGuard / OpenVPN) and prints a
+  distribution summary. When a server ships as both a WireGuard/AmneziaWG
+  `.conf` and an OpenVPN `.ovpn`, the unconnectable OpenVPN twin is skipped so
+  the catalog is not doubled.
+- **`mazzy-vpn verify` (alias `audit`)** — health audit of every managed config:
+  parses, validates, connectability, and endpoint DNS resolvability, with a
+  problem+fix per profile and a machine `--json` mode. Wired into the menu (`v`).
+- **Doctor catalog health** — `doctor` now shows a one-line offline summary:
+  `catalog: N profiles (X connectable, Y OpenVPN-only)`.
+- **TUI zone picker visualization** — animated "measuring" spinner and a latency
+  quality bar (excellent/great/good/fair/slow) per alive zone, with an
+  `alive/total` footer.
+- Design/roadmap for the client journey: docs/design/cli-ux-roadmap-2026-08.md.
+
+## CLI 2.2.1 - 2026-08-19
+
+### Fixed (deep audit pass — see docs/audits/cli-audit-2026-08.md)
+- **Disconnect/pause now work under a root daemon (P0-A):** the TUI→daemon
+  intent file moved from `$HOME/.config` (which differed between the
+  unprivileged UI writer and the root daemon reader under sudo) to the shared
+  runtime dir alongside the heartbeat, so both sides agree on one file.
+- **Stale intents no longer wedge a fresh daemon (P0-B):** intents older than
+  2 minutes (or with a zero/future timestamp) are ignored.
+- **`status` reports a consistent profile label (P1-C):** foreground connect and
+  the daemon now normalize the zone name identically (no `Berlin.conf` vs
+  `Berlin`).
+- **`recover` reports honestly (P1-D):** counts real policy-routing deletions
+  instead of always printing "cleared".
+- **No fail-closed host after failed reconnects (P1-E):** the foreground connect
+  path now tracks the kill-switch and removes the fail-closed table directly on
+  teardown, matching the daemon.
+- **Self-update integrity (P2-2):** the downloaded binary is verified against the
+  release's published `SHA256SUMS` before install; refuses on mismatch.
+- **`auto` honors its failover contract (P1-H):** delegates to the self-healing
+  daemon instead of a single foreground connect.
+- Version is now linker-stampable for a single source of truth (P1-F); `--clean`
+  only re-ranks live zones (P1-G); local/fork builds are not falsely offered an
+  "update" (P2-1); `help` prints to stdout (P2-4); dashboard truncation is
+  display-width aware for CJK/emoji locales (P2-5); one shared value-flag-aware
+  argument parser (P2-7); single rollback path in the binary replace (P2-3).
+
+## CLI 2.2.0 - 2026-08-19
+
+### Added
+- Non-blocking interactive menu: connecting no longer drops you into a
+  blocking log that only Ctrl+C can exit. Connect launches the self-healing
+  daemon detached and returns you straight to the menu.
+- Live dashboard header in the menu and TUI: connection badge, egress, a
+  latency sparkline graph with min/avg/max, recent errors, an error-rate
+  (errors/min) estimate and a reconnect counter — all rendered from a shared
+  heartbeat without holding the terminal.
+- Activity log viewer: press `l` in the menu/TUI to read the daemon log, and
+  a key to return. Persisted across background runs.
+- Optional background mode (menu option 6 / TUI `b`): runs the VPN in a
+  detached session (`setsid`) that survives closing the terminal window;
+  ordinary connects stay tied to the menu session and stop on quit.
+- `stop` subcommand and menu/TUI `k` to terminate a running daemon.
+- New `core/runstatus` package: world-readable status heartbeat written by the
+  privileged daemon and read by the unprivileged menu/TUI, with bounded latency
+  and error ring buffers and a Unicode sparkline renderer.
+
+### Fixed
+- Cross-privilege dashboard read: the runtime directory is now `0755`
+  (traversable) so an unprivileged menu can read the root daemon's heartbeat
+  and log; the `0600` mutation lock remains the exclusivity boundary.
+- Liveness detection: a root-owned daemon PID probed from an unprivileged menu
+  returns `EPERM` from `Signal(0)`, which still proves the process is alive.
+  It is no longer misreported as dead (which had hidden the dashboard).
+- Stop now works from the unprivileged menu: it routes through the elevated
+  `stop` subcommand instead of a doomed unprivileged `SIGTERM` (`EPERM`).
+- Disconnect is effective while a daemon runs: a durable down-intent pauses the
+  daemon's auto-reconnect instead of the daemon immediately reviving the
+  tunnel; Quick connect resumes it in place. A freshly started daemon clears a
+  stale down-intent so it does not pause itself.
+- The heartbeat is flushed on creation, so the dashboard shows a connecting
+  state from the first moment; directory/file modes are chmod'd explicitly to
+  defeat a restrictive umask.
+
 ## 1.4.7 / Desktop 0.4.8 - 2026-08-12
 
 - Make the DEB Desktop autonomous: the package-owned engine, agent daemon,

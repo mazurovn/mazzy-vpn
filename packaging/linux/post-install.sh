@@ -1,6 +1,6 @@
 #!/bin/sh
 # Copyright (C) 2026 Nik m (@mazurovn)
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 set -eu
 
 start_opted_in_engine() {
@@ -47,7 +47,7 @@ migrate_legacy_cli() {
                 continue
                 ;;
         esac
-        if ! grep -Fqx '# SPDX-License-Identifier: AGPL-3.0-or-later' "$legacy" ||
+        if ! grep -Fqx '# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0' "$legacy" ||
            ! grep -Fqx 'PRODUCT_NAME="Mazzy VPN"' "$legacy" ||
            ! grep -Eq '^VERSION="[0-9]+\.[0-9]+\.[0-9]+"$' "$legacy"; then
             printf '%s\n' "Mazzy VPN: unrelated /usr/local command left unchanged: $legacy" >&2
@@ -98,7 +98,7 @@ migrate_legacy_agentd() {
             return 0
             ;;
     esac
-    if ! grep -Fqx '# SPDX-License-Identifier: AGPL-3.0-or-later' "$legacy" ||
+    if ! grep -Fqx '# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0' "$legacy" ||
        ! grep -Fqx 'PROTOCOL = "mazzy-agent-egress/1"' "$legacy" ||
        ! grep -Eq '^VERSION = "[0-9]+\.[0-9]+\.[0-9]+"$' "$legacy"; then
         printf '%s\n' "Mazzy VPN: unrelated /usr/local command left unchanged: $legacy" >&2

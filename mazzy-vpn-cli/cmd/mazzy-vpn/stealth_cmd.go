@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright © 2026 Nik m (@mazurovn). All rights reserved.
 
 package main
@@ -63,7 +63,7 @@ func maybeAutoMimic(ctx context.Context) {
 		return
 	}
 	if _, err := mgr.ApplySystemTZ(sig.EgressCountry); err == nil {
-		fmt.Printf("  timezone  : %s (auto-aligned to %s)\n", plan.ToTZ, sig.EgressCountry)
+		fmt.Printf("  timezone  : %s (auto-aligned to %s)\n", safeDisplay(plan.ToTZ), safeDisplay(sig.EgressCountry))
 	}
 }
 
@@ -185,7 +185,9 @@ func cmdStealth(ctx context.Context, args []string) int {
 		return 0
 	}
 
-	fmt.Printf("\nEgress: %s (%s, %s)\n", sig.EgressIPv4, sig.EgressCountry, sig.EgressCity)
+	// Egress IP/country/city come from an untrusted remote JSON API; sanitize
+	// before printing so a crafted response cannot inject terminal escapes.
+	fmt.Printf("\nEgress: %s (%s, %s)\n", safeDisplay(sig.EgressIPv4), safeDisplay(sig.EgressCountry), safeDisplay(sig.EgressCity))
 	fmt.Printf("System timezone: %s\n\n", safeDisplay(sig.SystemTimezone))
 	for _, f := range rep.Findings {
 		glyph := "●"
@@ -195,12 +197,12 @@ func cmdStealth(ctx context.Context, args []string) int {
 		case stealth.Warn:
 			glyph = "▲"
 		}
-		fmt.Printf("%s [%s] %s\n", glyph, f.Level, f.Title)
+		fmt.Printf("%s [%s] %s\n", glyph, f.Level, safeDisplay(f.Title))
 		if f.Detail != "" {
-			fmt.Printf("    %s\n", f.Detail)
+			fmt.Printf("    %s\n", safeDisplay(f.Detail))
 		}
 		if f.Fix != "" {
-			fmt.Printf("    fix: %s\n", f.Fix)
+			fmt.Printf("    fix: %s\n", safeDisplay(f.Fix))
 		}
 	}
 	bar := stealthBar(rep.Score)
@@ -244,14 +246,14 @@ func cmdMimic(ctx context.Context, args []string) int {
 	mgr := &mimicry.Manager{Runner: execRunner{}, CurrentTZ: systemTimezone}
 	plan, ok := mgr.PlanFor(sig.EgressCountry)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "no timezone mapping for %s\n", sig.EgressCountry)
+		fmt.Fprintf(os.Stderr, "no timezone mapping for %s\n", safeDisplay(sig.EgressCountry))
 		return 1
 	}
 
 	// --process: print env vars to launch an app as-if-local (no system change).
 	if hasFlag(args, "--process") {
 		env := mgr.ProcessEnv(sig.EgressCountry)
-		fmt.Printf("# launch an app as if local to %s:\n", sig.EgressCountry)
+		fmt.Printf("# launch an app as if local to %s:\n", safeDisplay(sig.EgressCountry))
 		fmt.Printf("env %s <your-app>\n", strings.Join(env, " "))
 		fmt.Println("\n# for a browser, also disable WebRTC IP leak, e.g. Chromium:")
 		fmt.Printf("env %s chromium --force-webrtc-ip-handling-policy=disable_non_proxied_udp\n",
@@ -259,7 +261,7 @@ func cmdMimic(ctx context.Context, args []string) int {
 		return 0
 	}
 
-	fmt.Printf("Egress country: %s\n", sig.EgressCountry)
+	fmt.Printf("Egress country: %s\n", safeDisplay(sig.EgressCountry))
 	fmt.Printf("Timezone: %s → %s\n", plan.FromTZ, plan.ToTZ)
 	if !plan.NeedsChange {
 		fmt.Println(translator().T("cli.stealth.aligned"))
@@ -278,7 +280,7 @@ func cmdMimic(ctx context.Context, args []string) int {
 		fmt.Fprintln(os.Stderr, "failed to set timezone:", err)
 		return 1
 	}
-	fmt.Printf("✔ System timezone set to %s (matches egress %s).\n", plan.ToTZ, sig.EgressCountry)
+	fmt.Printf("✔ System timezone set to %s (matches egress %s).\n", safeDisplay(plan.ToTZ), safeDisplay(sig.EgressCountry))
 	fmt.Println("  Restart browsers/apps so they pick up the new timezone.")
 	return 0
 }

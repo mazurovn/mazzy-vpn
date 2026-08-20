@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright © 2026 Nik m (@mazurovn). All rights reserved.
 
 package main
@@ -87,10 +87,26 @@ func cmdUpdate(ctx context.Context, args []string) int {
 	}
 
 	fmt.Println(t.Tf("cli.update.downloading", assetName))
-	bin, err := downloadBinaryFromTarball(ctx, asset)
+	bin, gotSum, err := downloadBinaryFromTarball(ctx, asset)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "download failed:", err)
 		return 1
+	}
+
+	// Verify the extracted binary against the release's published SHA256SUMS
+	// asset when present (audit P2-2). The old code computed a sha but never
+	// checked it, trusting only a size heuristic. If the release ships no
+	// checksum asset we proceed (best-effort) but say so, so a supply-chain
+	// mismatch cannot pass silently when checksums ARE published.
+	if want, ok := expectedTarballSum(ctx, rel, assetName); ok {
+		if !strings.EqualFold(want, gotSum) {
+			_ = os.Remove(bin)
+			fmt.Fprintf(os.Stderr, "checksum mismatch: published %s but downloaded %s; refusing to install\n", short(want), short(gotSum))
+			return 1
+		}
+		fmt.Printf("  ✔ checksum verified (%s)\n", short(gotSum))
+	} else {
+		fmt.Println("  ⚠ no SHA256SUMS asset in the release; installing unverified (size-checked only)")
 	}
 
 	// Install atomically next to the current binary.
@@ -134,8 +150,10 @@ func latestRelease(ctx context.Context) (*ghRelease, error) {
 }
 
 // isNewer reports whether tag (e.g. "v2.1.0") is newer than cur (e.g.
-// "2.0.0-dev"). It compares dotted numeric components; a -dev/-rc suffix on cur
-// is treated as older than the same release.
+// "2.0.0-dev"). It compares dotted numeric components; a genuine prerelease
+// suffix (-dev/-rc/-beta/-alpha) on cur is treated as older than the same clean
+// release. A local/fork build marker (e.g. "-vpn.local") is NOT a prerelease and
+// must not be nagged to "update" to an equal upstream tag (audit P2-1).
 func isNewer(tag, cur string) bool {
 	tv := parseVer(tag)
 	cv := parseVer(cur)
@@ -144,8 +162,24 @@ func isNewer(tag, cur string) bool {
 			return tv[i] > cv[i]
 		}
 	}
-	// Equal numeric: a "-dev"/"-rc" current is older than a clean tag.
-	return strings.ContainsAny(cur, "-") && !strings.ContainsAny(tag, "-")
+	// Equal numeric: only a real prerelease current is older than a clean tag.
+	return isPrerelease(cur) && !isPrerelease(tag)
+}
+
+// isPrerelease reports whether a version string carries a genuine prerelease
+// marker. Local/build metadata (".local", "+build", "-vpn.local") does not count,
+// so a project-local build is treated as equal to its numeric release.
+func isPrerelease(v string) bool {
+	lower := strings.ToLower(v)
+	if strings.Contains(lower, ".local") || strings.Contains(lower, "+") {
+		return false
+	}
+	for _, marker := range []string{"-dev", "-rc", "-alpha", "-beta", "-pre", "-snapshot"} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // parseVer extracts up to 3 numeric components from a version string.
@@ -167,26 +201,28 @@ func parseVer(s string) [3]int {
 }
 
 // downloadBinaryFromTarball fetches a release tarball and extracts the
-// mazzy-vpn binary to a temp file, returning its path.
-func downloadBinaryFromTarball(ctx context.Context, url string) (string, error) {
+// mazzy-vpn binary to a temp file, returning its path AND the full lowercase
+// sha256 of the extracted binary so the caller can verify it against the
+// release's published checksum (audit P2-2).
+func downloadBinaryFromTarball(ctx context.Context, url string) (path, sum string, err error) {
 	cctx, cancel := context.WithTimeout(ctx, 120*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(cctx, http.MethodGet, url, nil)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	req.Header.Set("User-Agent", "mazzy-vpn-updater")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("download returned %d", resp.StatusCode)
+		return "", "", fmt.Errorf("download returned %d", resp.StatusCode)
 	}
 	gz, err := gzip.NewReader(resp.Body)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer gz.Close()
 	tr := tar.NewReader(gz)
@@ -196,30 +232,103 @@ func downloadBinaryFromTarball(ctx context.Context, url string) (string, error) 
 			break
 		}
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 		if filepath.Base(hdr.Name) != "mazzy-vpn" || hdr.Typeflag != tar.TypeReg {
 			continue
 		}
 		tmp, err := os.CreateTemp("", "mazzy-vpn-update-*")
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 		h := sha256.New()
 		if _, err := io.Copy(io.MultiWriter(tmp, h), tr); err != nil {
-			tmp.Close()
-			os.Remove(tmp.Name())
-			return "", err
+			_ = tmp.Close()
+			_ = os.Remove(tmp.Name())
+			return "", "", err
 		}
-		tmp.Close()
+		// A failed Close() after writing means the file may be truncated (e.g.
+		// disk full): never return a half-written binary for installation.
+		if err := tmp.Close(); err != nil {
+			_ = os.Remove(tmp.Name())
+			return "", "", fmt.Errorf("flush update binary: %w", err)
+		}
 		_ = os.Chmod(tmp.Name(), 0o755)
-		fmt.Printf("  sha256: %s\n", hex.EncodeToString(h.Sum(nil))[:16])
-		return tmp.Name(), nil
+		full := hex.EncodeToString(h.Sum(nil))
+		fmt.Printf("  sha256: %s\n", short(full))
+		return tmp.Name(), full, nil
 	}
-	return "", fmt.Errorf("mazzy-vpn binary not found in tarball")
+	return "", "", fmt.Errorf("mazzy-vpn binary not found in tarball")
 }
 
-// replaceBinary atomically swaps the running binary with the new one.
+// short returns the first 16 hex chars of a checksum for compact display.
+func short(sum string) string {
+	if len(sum) > 16 {
+		return sum[:16]
+	}
+	return sum
+}
+
+// expectedTarballSum fetches the release's SHA256SUMS asset (if any) and returns
+// the checksum recorded for assetName. ok is false when no checksum asset is
+// published or the asset is not listed, so the caller can decide policy. Lines
+// are the standard `<hex>  <name>` sha256sum format.
+func expectedTarballSum(ctx context.Context, rel *ghRelease, assetName string) (sum string, ok bool) {
+	sumsURL := ""
+	for _, a := range rel.Assets {
+		if strings.EqualFold(a.Name, "SHA256SUMS") || strings.HasSuffix(a.Name, "SHA256SUMS") {
+			sumsURL = a.BrowserDownloadURL
+			break
+		}
+	}
+	if sumsURL == "" {
+		return "", false
+	}
+	cctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(cctx, http.MethodGet, sumsURL, nil)
+	if err != nil {
+		return "", false
+	}
+	req.Header.Set("User-Agent", "mazzy-vpn-updater")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return "", false
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return "", false
+	}
+	return matchSumLine(string(body), assetName)
+}
+
+// matchSumLine finds the sha256 recorded for assetName in a standard SHA256SUMS
+// body (`<hex>  <name>` lines). The name column may carry a leading '*' (binary
+// mode) or a path prefix. Extracted as a pure function so the parser is unit-
+// testable without a network fetch.
+func matchSumLine(body, assetName string) (sum string, ok bool) {
+	for _, line := range strings.Split(body, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 2 {
+			continue
+		}
+		name := strings.TrimPrefix(f[len(f)-1], "*")
+		if filepath.Base(name) == assetName {
+			return strings.ToLower(f[0]), true
+		}
+	}
+	return "", false
+}
+
+// replaceBinary atomically swaps the running binary with the new one, keeping a
+// single, consistent rollback path (audit P2-3): the pre-update binary is moved
+// aside to `<target>.old`; on any copy failure it is restored and the temp
+// backup removed, so we never leave a half-installed binary OR an orphaned
+// `.old`. Both the rename and the cross-device (copy) branch share this cleanup.
 func replaceBinary(target, newBin string) error {
 	// Basic sanity: the new binary must be a non-empty ELF-ish file.
 	fi, err := os.Stat(newBin)
@@ -228,18 +337,23 @@ func replaceBinary(target, newBin string) error {
 	}
 	backup := target + ".old"
 	_ = os.Remove(backup)
+
+	renamed := true
 	if err := os.Rename(target, backup); err != nil {
-		// Cross-device or busy: try copy instead.
-		if err2 := copyFile(newBin, target); err2 != nil {
-			return err2
-		}
-		return nil
+		// Cross-device or busy: we cannot move the old binary aside, so there is
+		// no backup to keep. Copy the new binary directly over the target.
+		renamed = false
 	}
+
 	if err := copyFile(newBin, target); err != nil {
-		_ = os.Rename(backup, target) // rollback
+		if renamed {
+			_ = os.Rename(backup, target) // restore the original from the backup
+		}
 		return err
 	}
-	_ = os.Remove(backup)
+	if renamed {
+		_ = os.Remove(backup) // success: drop the backup
+	}
 	return nil
 }
 
@@ -254,7 +368,13 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
+		_ = out.Close()
+		return err
+	}
+	// fsync before close so the replaced binary is durably on disk; a crash
+	// mid-update must not leave a truncated, unrunnable mazzy-vpn behind.
+	if err := out.Sync(); err != nil {
+		_ = out.Close()
 		return err
 	}
 	return out.Close()

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright © 2026 Nik m (@mazurovn). All rights reserved.
 
 package measure
@@ -98,4 +98,69 @@ func TestRankBestOrdersByReachabilityThenLatency(t *testing.T) {
 	if ranked[len(ranked)-1].Name != "down" {
 		t.Errorf("unreachable should rank last, got %s", ranked[len(ranked)-1].Name)
 	}
+}
+
+// TestRankBestProgressReportsEachProbe verifies the progress callback fires once
+// per completed probe and ends at total==N, so a UI can show live motion.
+func TestRankBestProgressReportsEachProbe(t *testing.T) {
+	m := &Measurer{Dialer: &fakeDialer{}, Resolver: &fakeResolver{}, Timeout: time.Second}
+	targets := []Target{
+		{"a", "192.0.2.1:51820"},
+		{"b", "192.0.2.2:51820"},
+		{"c", "192.0.2.3:51820"},
+	}
+	var calls int
+	var lastDone, lastTotal int
+	_ = m.RankBestProgress(context.Background(), targets, func(done, total int) {
+		calls++
+		lastDone, lastTotal = done, total
+	})
+	if calls != len(targets) {
+		t.Errorf("progress fired %d times, want %d", calls, len(targets))
+	}
+	if lastDone != len(targets) || lastTotal != len(targets) {
+		t.Errorf("final progress = %d/%d, want %d/%d", lastDone, lastTotal, len(targets), len(targets))
+	}
+}
+
+// TestRankBestProgressHonorsCancel ensures a cancelled context still returns a
+// full result slice (the remainder marked cancelled) instead of hanging.
+func TestRankBestProgressHonorsCancel(t *testing.T) {
+	// Slow dialer so probes would otherwise take a while.
+	fd := &fakeDialer{latency: map[string]time.Duration{}}
+	for i := 0; i < 20; i++ {
+		fd.latency[net.JoinHostPort("192.0.2."+itoaTest(i), "51820")] = 2 * time.Second
+	}
+	m := &Measurer{Dialer: fd, Resolver: &fakeResolver{}, Timeout: 3 * time.Second}
+	var targets []Target
+	for i := 0; i < 20; i++ {
+		targets = append(targets, Target{Name: "t" + itoaTest(i), Endpoint: net.JoinHostPort("192.0.2."+itoaTest(i), "51820")})
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // cancel immediately
+	done := make(chan []Result, 1)
+	go func() { done <- m.RankBestProgress(ctx, targets, nil) }()
+	select {
+	case res := <-done:
+		if len(res) != len(targets) {
+			t.Errorf("cancelled rank returned %d results, want %d (full slice)", len(res), len(targets))
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("RankBestProgress hung under cancellation")
+	}
+}
+
+// itoaTest is a tiny int->string for test endpoint synthesis.
+func itoaTest(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var b [3]byte
+	i := len(b)
+	for n > 0 {
+		i--
+		b[i] = byte('0' + n%10)
+		n /= 10
+	}
+	return string(b[i:])
 }

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright © 2026 Nik m (@mazurovn). All rights reserved.
 //
 // Command mazzy-vpn is the autonomous Go CLI for Mazzy VPN. It links the
@@ -13,11 +13,15 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 )
 
-// version is the CLI source line; the published tag governs releases.
-const version = "2.1.1"
+// version is the CLI version. It is a var (not const) so release builds can
+// stamp the exact tag with the linker, keeping ONE source of truth (audit
+// P1-F): `go build -ldflags "-X main.version=$(git describe --tags)"`. The
+// baseline default matches the current git tag for un-stamped/dev builds.
+var version = "2.3.0"
 
 func main() {
 	os.Exit(run(os.Args[1:]))
@@ -46,6 +50,8 @@ func run(args []string) int {
 		return cmdList(ctx, rest)
 	case "validate":
 		return cmdValidate(ctx, rest)
+	case "verify", "audit":
+		return cmdVerify(ctx, rest)
 	case "import":
 		return cmdImport(ctx, rest)
 	case "profiles":
@@ -82,6 +88,8 @@ func run(args []string) int {
 		return cmdAuto(ctx, rest)
 	case "daemon":
 		return cmdDaemon(ctx, rest)
+	case "stop":
+		return cmdStop(ctx, rest)
 	case "connect":
 		return cmdConnect(ctx, rest)
 	case "disconnect", "down":
@@ -95,16 +103,27 @@ func run(args []string) int {
 	case "status":
 		return cmdStatus(ctx, rest)
 	case "version", "--version", "-v":
-		fmt.Println("mazzy-vpn", version)
+		fmt.Println("mazzy-vpn", displayVersion())
 		return 0
 	case "help", "--help", "-h":
-		printUsage()
+		// help is a success path: write usage to STDOUT so `mazzy-vpn help | less`
+		// works (audit P2-4). Only the unknown-command branch uses stderr.
+		printUsageTo(os.Stdout)
 		return 0
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", cmd)
 		printUsage()
 		return 2
 	}
+}
+
+// displayVersion returns the version without a leftover leading "v" so a
+// tag-stamped build (v2.2.0) and a dev build (2.2.0) print identically.
+func displayVersion() string {
+	if len(version) > 1 && (version[0] == 'v' || version[0] == 'V') {
+		return version[1:]
+	}
+	return version
 }
 
 // isTTY reports whether stdin and stdout are both terminals (so the full-screen
@@ -121,9 +140,13 @@ func isTTY() bool {
 	return true
 }
 
-func printUsage() {
+// printUsage writes the usage text to stderr (used by the error/unknown-command
+// paths). printUsageTo lets the success `help` path target stdout.
+func printUsage() { printUsageTo(os.Stderr) }
+
+func printUsageTo(w io.Writer) {
 	t := translator()
-	fmt.Fprintf(os.Stderr, `mazzy-vpn — %s
+	fmt.Fprintf(w, `mazzy-vpn — %s
 
 Usage:
   mazzy-vpn                           full-screen TUI dashboard (or menu if piped)
@@ -146,8 +169,14 @@ Usage:
   auto-reconnects if the egress drops. Add --no-reconnect to disable.
 
  %s
-  sudo mazzy-vpn daemon NAME          run persistently with auto-reconnect
+  sudo mazzy-vpn daemon NAME              run persistently with auto-reconnect
+  sudo mazzy-vpn daemon NAME --background  detach; survives closing the terminal
   sudo systemctl enable --now mazzy-vpn@NAME   start at boot (systemd)
+
+  The interactive menu now keeps you IN the menu after connecting: a live
+  dashboard header shows status, egress, a latency graph, recent errors and
+  the error rate. Press 'l' to view the activity log, 'k' to stop a background
+  daemon. Notifications toggle in Settings.
 
  %s
   mazzy-vpn test [--json]             probe all servers (latency/reachability)
@@ -172,6 +201,7 @@ Usage:
   mazzy-vpn providers [--type llm|agent|search] [--json]   check AI providers
   mazzy-vpn list DIR [--json]         validate profiles in a directory
   mazzy-vpn validate FILE             validate a single profile
+  mazzy-vpn verify [--no-dns] [--json]  audit ALL managed configs' health
   mazzy-vpn update [--apply]          check/install a newer release from GitHub
   mazzy-vpn version | help
 

@@ -35,7 +35,7 @@
     "shortDescription": "AI-ready, self-healing multi-protocol VPN client",
     "longDescription": "An open AI-ready VPN client and control center for resilient access to AI tools, the web, video and corporate resources. Linux connections currently support AmneziaWG, WireGuard, OpenVPN and L2TP/IPsec, with a versioned 13-protocol catalog and safe detection foundation for future audited adapters.",
     "copyright": "Copyright © 2026 Nik m (@mazurovn)",
-    "license": "AGPL-3.0-or-later",
+    "license": "PolyForm-Noncommercial-1.0.0",
     "homepage": "https://github.com/mazurovn/mazzy-vpn",
     "icon": [
       "icons/32x32.png",

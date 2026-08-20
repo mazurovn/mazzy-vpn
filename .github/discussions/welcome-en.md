@@ -6,7 +6,7 @@ access or provide servers: you use configurations from your provider or your
 own infrastructure.
 
 Author and maintainer: [Nik m (@mazurovn)](https://github.com/mazurovn).
-License: GNU AGPL-3.0-or-later.
+License: PolyForm Noncommercial 1.0.0 (source-available; commercial license available).
 
 ## Current status
 

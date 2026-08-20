@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright © 2026 Nik m (@mazurovn). All rights reserved.
 
 package main
@@ -48,11 +48,53 @@ func hasFlag(args []string, flag string) bool {
 	return false
 }
 
+// firstNonFlag returns the first bare (non-"-" prefixed) argument, or "". It
+// lets subcommands accept flags in any position, e.g. `favorite --off NAME`.
+func firstNonFlag(args []string) string {
+	for _, a := range args {
+		if a != "" && a[0] != '-' {
+			return a
+		}
+	}
+	return ""
+}
+
 // flagValue returns the value following --name, or "".
 func flagValue(args []string, name string) string {
 	for i, a := range args {
 		if a == name && i+1 < len(args) {
 			return args[i+1]
+		}
+	}
+	return ""
+}
+
+// valueFlags are the flags that CONSUME the following token as their value, so a
+// positional parser must skip that token instead of mistaking it for a name.
+// Keeping this in one place means any new value-flag is honored everywhere and
+// cannot regress the "value read as zone name" bug (audit P2-7).
+var valueFlags = map[string]bool{
+	"--uplink": true,
+	"--proto":  true,
+	"--type":   true,
+}
+
+// firstNonFlagValueAware returns the first bare (non-flag) argument, skipping the
+// value token that belongs to a value-taking flag (e.g. `--uplink eth0`). This
+// is the single positional parser the subcommands share.
+func firstNonFlagValueAware(args []string) string {
+	skipNext := false
+	for _, a := range args {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+		if valueFlags[a] {
+			skipNext = true
+			continue
+		}
+		if a != "" && a[0] != '-' {
+			return a
 		}
 	}
 	return ""
@@ -71,13 +113,48 @@ func cmdDoctor(ctx context.Context, args []string) int {
 		return 0
 	}
 	for _, c := range rep.Checks {
-		fmt.Printf("[%-4s] %s: %s\n", c.Status, c.Name, c.Detail)
+		fmt.Printf("[%-4s] %s: %s\n", c.Status, safeDisplay(c.Name), safeDisplay(c.Detail))
+	}
+	// Catalog health line: a quick, offline count so the user sees whether their
+	// profiles are usable without running the full `verify` audit.
+	if line := catalogHealthLine(); line != "" {
+		fmt.Println(line)
 	}
 	fmt.Printf("\nSummary: OK=%d WARN=%d FAIL=%d\n", rep.OK, rep.Warn, rep.Fail)
 	if !rep.Healthy() {
 		return 1
 	}
 	return 0
+}
+
+// catalogHealthLine returns a one-line offline summary of catalog health for the
+// doctor output: how many profiles are connectable (WG/AWG) vs OpenVPN-only.
+// Empty when the catalog is empty. It never touches the network.
+func catalogHealthLine() string {
+	entries, err := newCatalog().List()
+	if err != nil || len(entries) == 0 {
+		return "[WARN] catalog: no profiles imported (run: mazzy-vpn import <dir>)"
+	}
+	connectable, ovpn := 0, 0
+	for _, e := range entries {
+		a := auditProfile(context.Background(), catalogEntry{
+			Name: e.Name, File: e.File, Protocol: e.Protocol, Country: e.Country,
+		}, false)
+		switch {
+		case a.Connectable:
+			connectable++
+		default:
+			if e.Protocol == core.OpenVPN {
+				ovpn++
+			}
+		}
+	}
+	status := "OK"
+	if connectable == 0 {
+		status = "WARN"
+	}
+	return fmt.Sprintf("[%-4s] catalog: %d profiles (%d connectable, %d OpenVPN-only) — run `mazzy-vpn verify` for details",
+		status, len(entries), connectable, ovpn)
 }
 
 // profileInfo is the machine-first summary of one profile file.
@@ -180,9 +257,9 @@ func cmdList(_ context.Context, args []string) int {
 		if !in.Valid {
 			mark = "INVALID"
 		}
-		fmt.Printf("[%-7s] %-10s %s\n", mark, in.Protocol, in.File)
+		fmt.Printf("[%-7s] %-10s %s\n", mark, safeDisplay(in.Protocol), safeDisplay(in.File))
 		for _, p := range in.Problems {
-			fmt.Printf("            - %s\n", p)
+			fmt.Printf("            - %s\n", safeDisplay(p))
 		}
 	}
 	return 0
@@ -213,9 +290,9 @@ func cmdValidate(_ context.Context, args []string) int {
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(info)
 	} else {
-		fmt.Printf("File:     %s\nProtocol: %s\nValid:    %v\n", info.File, info.Protocol, info.Valid)
+		fmt.Printf("File:     %s\nProtocol: %s\nValid:    %v\n", safeDisplay(info.File), safeDisplay(info.Protocol), info.Valid)
 		for _, p := range info.Problems {
-			fmt.Println("  -", p)
+			fmt.Println("  -", safeDisplay(p))
 		}
 	}
 	if !info.Valid {

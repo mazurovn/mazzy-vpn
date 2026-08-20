@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copyright (C) 2026 Nik m (@mazurovn)
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Strict read-only acceptance gate before and after a real reboot.
 
 set -Eeuo pipefail

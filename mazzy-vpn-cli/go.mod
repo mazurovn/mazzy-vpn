@@ -1,5 +1,5 @@
 // mazzy-vpn-cli: autonomous Go CLI for Mazzy VPN (Phase 3 transition binary).
-// Author: Nik m (@mazurovn). License: AGPL-3.0-or-later.
+// Author: Nik m (@mazurovn). License: PolyForm-Noncommercial-1.0.0 (see COMMERCIAL.md).
 module github.com/mazurovn/mazzy-vpn/cli
 
 go 1.25.0
@@ -9,6 +9,7 @@ toolchain go1.25.13
 require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/mattn/go-runewidth v0.0.16
 	github.com/mazurovn/mazzy-vpn/core v0.0.0
 )
 
@@ -23,7 +24,6 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
-	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect

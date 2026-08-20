@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright © 2026 Nik m (@mazurovn). All rights reserved.
 
 package main
@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -74,12 +75,17 @@ func gatherSignal(ctx context.Context) diagnose.Signal {
 func plainInternetOK(ctx context.Context) bool {
 	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	req, _ := http.NewRequestWithContext(cctx, http.MethodGet, "https://api.ipify.org", nil)
+	req, err := http.NewRequestWithContext(cctx, http.MethodGet, "https://api.ipify.org", nil)
+	if err != nil {
+		return false
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return false
 	}
-	resp.Body.Close()
+	// Drain then close so the connection can be reused and nothing leaks.
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
 	return resp.StatusCode == 200
 }
 
@@ -118,15 +124,15 @@ func cmdDiagnose(ctx context.Context, args []string) int {
 		case diagnose.Info:
 			glyph = "●"
 		}
-		fmt.Printf("%s [%s] %s\n", glyph, p.Level, p.Title)
+		fmt.Printf("%s [%s] %s\n", glyph, p.Level, safeDisplay(p.Title))
 		if p.Cause != "" {
-			fmt.Printf("    why: %s\n", p.Cause)
+			fmt.Printf("    why: %s\n", safeDisplay(p.Cause))
 		}
 		if p.Fix != "" {
-			fmt.Printf("    fix: %s\n", p.Fix)
+			fmt.Printf("    fix: %s\n", safeDisplay(p.Fix))
 		}
 	}
-	fmt.Printf("\n→ %s\n", rep.Summary)
+	fmt.Printf("\n→ %s\n", safeDisplay(rep.Summary))
 	if !rep.Healthy() {
 		return 1
 	}
@@ -195,7 +201,7 @@ func cmdTrace(ctx context.Context, args []string) int {
 		case pathtrace.Warn:
 			glyph = "▲"
 		}
-		fmt.Printf("  %s %-22s %s (%d ms)\n", glyph, st.Name, st.Detail, st.Duration)
+		fmt.Printf("  %s %-22s %s (%d ms)\n", glyph, safeDisplay(st.Name), safeDisplay(st.Detail), st.Duration)
 	}
 	if result.Healthy() {
 		fmt.Println("\n→ Packet path is clear.")

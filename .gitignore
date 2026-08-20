@@ -46,3 +46,4 @@ tools/mazzy-control-panel/
 # Go workspace (local module linking; not published).
 go.work
 go.work.sum
+tools/mazzy-control-panel.bak-*/

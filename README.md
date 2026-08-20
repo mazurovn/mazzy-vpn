@@ -10,13 +10,14 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License: AGPL-3.0-or-later" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-8f7dff"></a>
+  <a href="LICENSE"><img alt="License: PolyForm Noncommercial 1.0.0" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-8f7dff"></a>
+  <a href="COMMERCIAL.md"><img alt="Commercial license available" src="https://img.shields.io/badge/commercial-license%20available-ef70ff"></a>
   <a href="https://github.com/mazurovn/mazzy-vpn/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mazurovn/mazzy-vpn/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Linux" src="https://img.shields.io/badge/platform-Linux-65e7ff">
-  <a href="https://github.com/mazurovn/mazzy-vpn/releases/tag/v2.1.0"><img alt="Release 2.1.0" src="https://img.shields.io/badge/release-2.1.0-ef70ff"></a>
+  <a href="https://github.com/mazurovn/mazzy-vpn/releases/tag/v2.3.0"><img alt="Release 2.3.0" src="https://img.shields.io/badge/release-2.3.0-ef70ff"></a>
 </p>
 
-Mazzy VPN is an open-source AI-ready VPN client for Linux with Desktop, tray,
+Mazzy VPN is a source-available AI-ready VPN client for Linux with Desktop, tray,
 guided terminal UI and an automation-friendly CLI. It is designed for stable
 AI sessions and agents, learning, video, the open web, remote work and
 corporate portals. It manages your AmneziaWG, WireGuard, OpenVPN and
@@ -29,7 +30,7 @@ profiles from a VPN provider or your organization. No account, telemetry or
 project-hosted server is required.
 
 The current release line is the **Go native CLI**
-[v2.1.0](https://github.com/mazurovn/mazzy-vpn/releases/tag/v2.1.0) (single
+[v2.3.0](https://github.com/mazurovn/mazzy-vpn/releases/tag/v2.3.0) (single
 static binary, embedded engine, 6 UI languages). The legacy bash
 [CLI/TUI 1.4.7](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.7) and
 [Desktop 0.4.8](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.8)
@@ -122,6 +123,20 @@ VPN profiles. Choose the interface language at the beginning or pass
 Real keys and personal VPN profiles are intentionally excluded from Git.
 Publish templates only; keep operational profiles in `/etc/vpnctl/profiles`.
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/assets/cli/status.png" width="32%" alt="mazzy-vpn up --best + status">
+  <img src="docs/assets/cli/test.png" width="32%" alt="mazzy-vpn test (live server ranking)">
+  <img src="docs/assets/cli/doctor.png" width="32%" alt="mazzy-vpn doctor + verify">
+</p>
+
+<p align="center"><sub>Connect to the best live zone · rank servers by latency · host &amp; config diagnostics. (Screens use documentation-only data: RFC 5737 IP <code>203.0.113.42</code>, generic zone names.)</sub></p>
+
+> Managing Mazzy VPN from inside [pi](https://pi.dev)? See the
+> [`@mazurovn/mazzy-vpn-pi`](https://www.npmjs.com/package/@mazurovn/mazzy-vpn-pi)
+> extension.
+
 ## Go native CLI (v2)
 
 The v2 line introduces a **single statically-linked Go binary** (`mazzy-vpn`)
@@ -163,8 +178,12 @@ for the full command reference in all six languages.
 Mazzy VPN was created by [Nik m (@mazurovn)](https://github.com/mazurovn).
 Copyright © 2026 Nik m.
 
-The project is open source under
-[GNU Affero General Public License v3.0 or later](LICENSE). Modified versions
-may be made and distributed, but the AGPL source-sharing obligations must be
-preserved. The Mazzy VPN name and original authorship notices must not be
-misrepresented.
+The project is **source-available** under the
+[PolyForm Noncommercial License 1.0.0](LICENSE). It is **free for personal,
+research/scientific, educational, and charitable (noncommercial) use**.
+**Commercial use requires a separate commercial license** — see
+[COMMERCIAL.md](COMMERCIAL.md). An **Enterprise edition** (centralized fleet
+management, SSO/SCIM, audit, SLA support) is planned on top of this core.
+
+This is source-available software, not an OSI-approved open-source license. The
+Mazzy VPN name and original authorship notices must not be misrepresented.
