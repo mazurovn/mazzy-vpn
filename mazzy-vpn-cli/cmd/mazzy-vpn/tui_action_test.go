@@ -12,7 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func TestTUIConnect_ElevatesAndNoBestSentinelIntent(t *testing.T) {
+func TestTUIConnect_StartsNonBlockingSessionDaemon(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("non-root only: exercises the elevation build path")
 	}
@@ -40,7 +40,8 @@ func TestTUIConnect_ElevatesAndNoBestSentinelIntent(t *testing.T) {
 	}
 	t.Cleanup(func() { execProcess = origExec })
 
-	// --best must NOT write the sentinel intent the daemon cannot resolve (P0-4).
+	// --best must start a detached session daemon instead of foreground `up`,
+	// which used to suspend Bubble Tea until the VPN disconnected.
 	cmd := requestConnectCmd("--best")
 	_ = cmd() // runs the (stubbed) exec builder
 	if _, err := os.Stat(desiredPath()); err == nil {
@@ -50,23 +51,25 @@ func TestTUIConnect_ElevatesAndNoBestSentinelIntent(t *testing.T) {
 		t.Fatal("expected an exec.Cmd to be built for connect --best")
 	}
 	joined := strings.Join(captured.Args, " ")
-	if !strings.Contains(joined, "up") || !strings.Contains(joined, "--best") {
-		t.Errorf("expected 'up --best' action, got %v", captured.Args)
+	if !strings.Contains(joined, "daemon") || !strings.Contains(joined, "--best") || !strings.Contains(joined, "--session") {
+		t.Errorf("expected 'daemon --best --session' action, got %v", captured.Args)
+	}
+	if strings.Contains(joined, " up ") {
+		t.Errorf("TUI must not use blocking foreground up: %v", captured.Args)
 	}
 	if !strings.HasSuffix(captured.Path, "sudo") {
 		t.Errorf("expected elevation via sudo, got %q", captured.Path)
 	}
 
-	// A concrete zone DOES record intent (for a running daemon) AND elevates.
+	// A concrete zone starts the same non-blocking session mode.
 	captured = nil
 	cmd = requestConnectCmd("Berlin")
 	_ = cmd()
-	if data, err := os.ReadFile(desiredPath()); err != nil {
-		t.Errorf("concrete zone should record desired intent: %v", err)
-	} else if !strings.Contains(string(data), "Berlin") {
-		t.Errorf("intent should reference the zone, got %s", data)
+	if captured == nil {
+		t.Fatal("expected a command for concrete zone")
 	}
-	if captured == nil || !strings.Contains(strings.Join(captured.Args, " "), "Berlin") {
-		t.Errorf("expected 'up Berlin' action, got %v", captured)
+	joined = strings.Join(captured.Args, " ")
+	if !strings.Contains(joined, "daemon") || !strings.Contains(joined, "Berlin") || !strings.Contains(joined, "--session") {
+		t.Errorf("expected 'daemon Berlin --session' action, got %v", captured.Args)
 	}
 }

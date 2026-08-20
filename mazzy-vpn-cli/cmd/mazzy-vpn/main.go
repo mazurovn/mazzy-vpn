@@ -21,7 +21,7 @@ import (
 // stamp the exact tag with the linker, keeping ONE source of truth (audit
 // P1-F): `go build -ldflags "-X main.version=$(git describe --tags)"`. The
 // baseline default matches the current git tag for un-stamped/dev builds.
-var version = "2.3.0"
+var version = "2.4.0"
 
 func main() {
 	os.Exit(run(os.Args[1:]))
@@ -38,6 +38,22 @@ func run(args []string) int {
 		return cmdMenu(ctx, nil)
 	}
 	cmd, rest := args[0], args[1:]
+
+	// Resolve all help forms before dispatch so `COMMAND -h` can never trigger
+	// network, filesystem, elevation, or catalog side effects.
+	if cmd == "help" {
+		if len(rest) == 0 {
+			printUsageTo(os.Stdout)
+			return 0
+		}
+		if hasFlag(rest, "-h") || hasFlag(rest, "--help") {
+			return printCommandHelp("help")
+		}
+		return printCommandHelp(rest[0])
+	}
+	if hasFlag(rest, "-h") || hasFlag(rest, "--help") {
+		return printCommandHelp(cmd)
+	}
 
 	switch cmd {
 	case "tui":
@@ -105,9 +121,8 @@ func run(args []string) int {
 	case "version", "--version", "-v":
 		fmt.Println("mazzy-vpn", displayVersion())
 		return 0
-	case "help", "--help", "-h":
-		// help is a success path: write usage to STDOUT so `mazzy-vpn help | less`
-		// works (audit P2-4). Only the unknown-command branch uses stderr.
+	case "--help", "-h":
+		// Root help is a success path and writes to stdout.
 		printUsageTo(os.Stdout)
 		return 0
 	default:

@@ -37,8 +37,14 @@ type screen int
 const (
 	scrMain screen = iota
 	scrZones
+	scrProfiles
+	scrImport
+	scrRemoveConfirm
+	scrDiagnostics
 	scrSettings
+	scrLanguage
 	scrLog
+	scrHelp
 )
 
 // tickMsg drives the live header refresh.
@@ -78,10 +84,18 @@ type tuiModel struct {
 	logs    []string
 	maxLogs int
 
-	// zones overlay
-	zones    []measure.Result
-	zonesErr string
-	cursor   int
+	// zones/profile overlays
+	zones         []measure.Result
+	zonesErr      string
+	profiles      []profileRow
+	cursor        int
+	input         string
+	pendingDelete string
+
+	// graphWindow selects 1m/5m/20m/session and graphCursor walks historical
+	// samples (0 = newest), making the dashboard graph genuinely interactive.
+	graphWindow int
+	graphCursor int
 
 	// spin advances every tick so the "measuring…" overlay visibly animates
 	// instead of looking frozen while a large catalog is probed.
@@ -195,8 +209,14 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.appendLog(msg.label + ": done")
 		}
+		m.set = m.setStore.Load()
+		m.profiles = loadProfileRows()
 		// Refresh status right away so the header reflects the new state.
 		return m, refreshStatusCmd()
+
+	case quitAfterStopMsg:
+		m.quitting = true
+		return m, tea.Quit
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -209,15 +229,29 @@ func (m tuiModel) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch m.scr {
 	case scrZones:
 		return m.keyZones(k)
+	case scrProfiles:
+		return m.keyProfiles(k)
+	case scrImport:
+		return m.keyImport(k)
+	case scrRemoveConfirm:
+		return m.keyRemoveConfirm(k)
+	case scrDiagnostics:
+		return m.keyDiagnostics(k)
 	case scrSettings:
 		return m.keySettings(k)
-	}
-	if m.scr == scrLog {
+	case scrLanguage:
+		return m.keyLanguage(k)
+	case scrLog:
 		return m.keyLog(k)
+	case scrHelp:
+		return m.keyHelp(k)
 	}
 	// Main screen global hotkeys.
 	switch k.String() {
 	case "q", "ctrl+c":
+		if snap, ok := daemonRunning(); ok && !snap.Background {
+			return m, stopSessionAndQuitCmd()
+		}
 		m.quitting = true
 		return m, tea.Quit
 	case "c":
@@ -244,16 +278,42 @@ func (m tuiModel) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "d":
 		m.appendLog("disconnect requested")
 		return m, requestDisconnectCmd()
+	case "p":
+		m.scr = scrProfiles
+		m.profiles = loadProfileRows()
+		m.cursor = 0
+		return m, nil
+	case "x":
+		m.scr = scrDiagnostics
+		return m, nil
 	case "s":
 		m.scr = scrSettings
 		m.cursor = 0
 		return m, nil
 	case "t":
+		m.scr = scrZones
 		m.loading = true
+		m.cursor = 0
 		return m, rankZonesCmd()
 	case "r":
-		m.appendLog("recover requested")
-		return m, requestRecoverCmd()
+		m.scr = scrRemoveConfirm
+		m.pendingDelete = "__RECOVER__"
+		return m, nil
+	case "?":
+		m.scr = scrHelp
+		return m, nil
+	case "g":
+		m.graphWindow = (m.graphWindow + 1) % len(graphWindows)
+		m.graphCursor = 0
+		return m, nil
+	case "left":
+		m.graphCursor++
+		return m, nil
+	case "right":
+		if m.graphCursor > 0 {
+			m.graphCursor--
+		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -307,6 +367,12 @@ func (m tuiModel) keySettings(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.set.KillSwitch = !m.set.KillSwitch
 	case "6":
 		m.set.AutoMimic = !m.set.AutoMimic
+	case "7":
+		m.scr = scrLanguage
+		m.cursor = languageCursor()
+		return m, nil
+	default:
+		return m, nil
 	}
 	if err := m.setStore.Save(m.set); err != nil {
 		m.appendLog("could not save settings: " + err.Error())
@@ -340,13 +406,19 @@ func privilegedTUICmd(label, subcmd string, sargs ...string) tea.Cmd {
 }
 
 func requestConnectCmd(zone string) tea.Cmd {
-	// Best-effort intent for any running daemon; never the "--best" sentinel the
-	// daemon cannot resolve (fixes P0-4).
-	if zone != "--best" {
-		_ = writeDesired(zone, "up")
-		return privilegedTUICmd("connect "+zone, "up", zone)
+	// Resume/switch an existing daemon without spawning a competing process.
+	if _, ok := daemonRunning(); ok {
+		intentZone := zone
+		if intentZone == "--best" {
+			intentZone = ""
+		}
+		_ = writeDesired(intentZone, "up")
+		return func() tea.Msg { return tuiActionDoneMsg{label: "connect " + zone} }
 	}
-	return privilegedTUICmd("connect best", "up", "--best")
+	// Start a detached menu-scoped daemon so Bubble Tea immediately returns to
+	// the live dashboard. The old `up` path was foreground and blocked the TUI
+	// until disconnect.
+	return privilegedTUICmd("connect "+zone, "daemon", zone, "--session")
 }
 
 func requestDisconnectCmd() tea.Cmd {
@@ -379,10 +451,22 @@ func (m tuiModel) View() string {
 	switch m.scr {
 	case scrZones:
 		return m.viewZones()
+	case scrProfiles:
+		return m.viewProfiles()
+	case scrImport:
+		return m.viewImport()
+	case scrRemoveConfirm:
+		return m.viewRemoveConfirm()
+	case scrDiagnostics:
+		return m.viewDiagnostics()
 	case scrSettings:
 		return m.viewSettings()
+	case scrLanguage:
+		return m.viewLanguage()
 	case scrLog:
 		return m.viewLog()
+	case scrHelp:
+		return m.viewHelp()
 	default:
 		return m.viewMain()
 	}
@@ -445,29 +529,25 @@ func (m tuiModel) dashboardHeader() (string, bool) {
 	title := "Mazzy VPN" + strings.Repeat(" ", 18) +
 		stDim.Render(fmt.Sprintf("zone %s · %s %s · %s", trunc(safeDisplay(snap.Zone), 16), t.T("cli.dash.uptime"), up, mode))
 
-	series := snap.LatencySeries()
+	series, windowLabel, selected := m.graphSeries(snap)
 	spark := runstatus.Sparkline(series, 44)
 	mn, avg, mx := runstatus.LatencyStats(series)
-	graph := stDim.Render(t.T("cli.dash.graph")+" ") + spark +
-		stDim.Render(fmt.Sprintf("  %d/%d/%d ms", mn, avg, mx))
+	graph := stDim.Render(t.T("cli.dash.graph")+" ["+windowLabel+"] ") + spark +
+		stDim.Render(fmt.Sprintf("  %d/%d/%d ms%s", mn, avg, mx, selected))
 
 	rate := snap.ErrorRatePerMin(10 * time.Minute)
 	errLine := stDim.Render(fmt.Sprintf("%s %d · %.1f %s · reconnects %d",
 		t.T("cli.dash.errors"), len(snap.Errors), rate, t.T("cli.dash.errrate"), snap.Reconnects))
-	if recent := snap.RecentErrors(1); len(recent) > 0 {
-		ts := time.Unix(recent[0].TS, 0).Format("15:04:05")
-		errLine += "\n" + stWarn.Render("  "+trunc(ts+" "+safeDisplay(recent[0].Reason), 50))
-	}
 
 	body := title + "\n" + status + "\n" + graph + "\n" + errLine
 	return stBox.Render(body), true
 }
 
 func (m tuiModel) actionBar() string {
-	line1 := fmt.Sprintf("%s Connect best   %s Background   %s Zones   %s Disconnect   %s Recover",
-		stKey.Render("[c]"), stKey.Render("[b]"), stKey.Render("[z]"), stKey.Render("[d]"), stKey.Render("[r]"))
-	line2 := fmt.Sprintf("%s Test/rank   %s Log   %s Stop bg   %s Settings   %s Quit",
-		stKey.Render("[t]"), stKey.Render("[l]"), stKey.Render("[k]"), stKey.Render("[s]"), stKey.Render("[q]"))
+	line1 := fmt.Sprintf("%s Connect   %s Zones   %s Profiles   %s Diagnostics   %s Disconnect   %s Recover",
+		stKey.Render("[c]"), stKey.Render("[z]"), stKey.Render("[p]"), stKey.Render("[x]"), stKey.Render("[d]"), stKey.Render("[r]"))
+	line2 := fmt.Sprintf("%s Graph window   %s Log   %s Stop bg   %s Settings   %s Help   %s Quit",
+		stKey.Render("[g]"), stKey.Render("[l]"), stKey.Render("[k]"), stKey.Render("[s]"), stKey.Render("[?]"), stKey.Render("[q]"))
 	return line1 + "\n" + line2
 }
 
@@ -494,6 +574,14 @@ func (m tuiModel) viewLog() string {
 func (m tuiModel) logPane() string {
 	title := stLogTitle.Render("Activity")
 	n := 8
+	// Preserve the five-row status pane on common 80x24 terminals by shrinking
+	// secondary activity history before clipping operational state.
+	if m.height > 0 && m.height < 30 {
+		n = 3
+	}
+	if m.height > 0 && m.height < 24 {
+		n = 1
+	}
 	start := 0
 	if len(m.logs) > n {
 		start = len(m.logs) - n
@@ -506,7 +594,7 @@ func (m tuiModel) logPane() string {
 }
 
 func (m tuiModel) viewMain() string {
-	return m.header() + "\n" + m.actionBar() + "\n\n" + m.logPane() + "\n"
+	return m.header() + "\n" + m.actionBar() + "\n\n" + m.statusPane() + "\n" + m.logPane() + "\n"
 }
 
 // spinFrames animates the "measuring" indicator so a long probe wave never
@@ -584,6 +672,7 @@ func (m tuiModel) viewSettings() string {
 	b.WriteString(fmt.Sprintf("  %s Auto-reconnect          %s\n", stKey.Render("[4]"), onoff(m.set.AutoReconnect)))
 	b.WriteString(fmt.Sprintf("  %s Kill-switch             %s\n", stKey.Render("[5]"), onoff(m.set.KillSwitch)))
 	b.WriteString(fmt.Sprintf("  %s Auto-mimic timezone     %s\n", stKey.Render("[6]"), onoff(m.set.AutoMimic)))
+	b.WriteString(fmt.Sprintf("  %s Language               %s\n", stKey.Render("[7]"), safeDisplay(string(resolveLang()))))
 	return b.String()
 }
 

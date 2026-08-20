@@ -119,3 +119,30 @@ func TestLatencyStats(t *testing.T) {
 		t.Errorf("all-zero series should yield 0/0/0")
 	}
 }
+
+func TestDerivedDashboardMetrics(t *testing.T) {
+	s := Snapshot{
+		Checks: 4, Fails: 1, UpdatedAt: time.Now().Add(-2 * time.Second).Unix(),
+		Samples: []Sample{
+			{LatencyMS: 10, OK: true},
+			{LatencyMS: 20, OK: true},
+			{LatencyMS: 0, OK: false},
+			{LatencyMS: 40, OK: true},
+		},
+	}
+	if got := s.LossPercent(); got != 25 {
+		t.Errorf("loss = %.1f, want 25", got)
+	}
+	if got := s.LatencyPercentile(50); got != 20 {
+		t.Errorf("p50 = %d, want 20", got)
+	}
+	if got := s.LatencyPercentile(95); got != 40 {
+		t.Errorf("p95 = %d, want 40", got)
+	}
+	if got := s.JitterMS(); got != 15 { // |20-10| + |40-20| / 2
+		t.Errorf("jitter = %d, want 15", got)
+	}
+	if age := s.HeartbeatAge(); age < time.Second || age > 5*time.Second {
+		t.Errorf("heartbeat age = %v, want about 2s", age)
+	}
+}

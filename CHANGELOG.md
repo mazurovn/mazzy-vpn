@@ -14,6 +14,25 @@ All notable changes to Mazzy VPN are documented here.
   (238 files), package/Cargo/tauri metadata, READMEs (7 languages), CONTRIBUTING,
   wiki, and desktop About.
 
+## CLI 2.4.0 - 2026-08-20
+
+### Added
+- Full-screen **Profiles** workflow: recursive file/folder/provider-bundle
+  import, managed profile list, connect, favorite, verify and confirmed removal.
+- Full-screen **Diagnostics** hub for doctor, verify, test/rank, adapters,
+  network analysis, diagnosis, trace, stealth, DNS, provider and update checks.
+- Language selector and contextual Help/About screen inside the default TUI.
+- Universal side-effect-free help: `mazzy-vpn COMMAND -h`, `COMMAND --help`
+  and `mazzy-vpn help COMMAND`.
+- Interactive dashboard windows (1m/5m/20m/session), historical sample cursor,
+  p50/p95, loss, jitter, heartbeat age, and a fixed five-row status/error pane.
+
+### Fixed
+- TUI connect now starts/resumes a detached session daemon and immediately
+  returns to the dashboard instead of blocking in foreground `up`.
+- Destructive recover now requires confirmation in the full-screen TUI.
+- Test/rank opens the ranked zones view instead of completing invisibly.
+
 ## pi extension 0.1.1 - 2026-08-19
 
 ### Added

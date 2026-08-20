@@ -11,8 +11,10 @@ package runstatus
 
 import (
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 )
 
@@ -113,6 +115,74 @@ func (s Snapshot) RecentErrors(n int) []ErrEvent {
 		out = append(out, s.Errors[i])
 	}
 	return out
+}
+
+// LossPercent returns the failed health-check percentage over the session.
+func (s Snapshot) LossPercent() float64 {
+	if s.Checks <= 0 {
+		return 0
+	}
+	return 100 * float64(s.Fails) / float64(s.Checks)
+}
+
+// LatencyPercentile returns a nearest-rank percentile over successful samples.
+// Samples with no confirmed egress (<=0) are excluded.
+func (s Snapshot) LatencyPercentile(p float64) int {
+	values := make([]int, 0, len(s.Samples))
+	for _, sample := range s.Samples {
+		if sample.OK && sample.LatencyMS > 0 {
+			values = append(values, sample.LatencyMS)
+		}
+	}
+	if len(values) == 0 {
+		return 0
+	}
+	sort.Ints(values)
+	if p <= 0 {
+		return values[0]
+	}
+	if p >= 100 {
+		return values[len(values)-1]
+	}
+	rank := int(math.Ceil(p/100*float64(len(values)))) - 1
+	if rank < 0 {
+		rank = 0
+	}
+	return values[rank]
+}
+
+// JitterMS returns the mean absolute difference between consecutive successful
+// egress-check durations. It is an application-probe stability metric, not
+// WireGuard peer jitter.
+func (s Snapshot) JitterMS() int {
+	total, pairs := 0, 0
+	previous := 0
+	for _, sample := range s.Samples {
+		if !sample.OK || sample.LatencyMS <= 0 {
+			continue
+		}
+		if previous > 0 {
+			delta := sample.LatencyMS - previous
+			if delta < 0 {
+				delta = -delta
+			}
+			total += delta
+			pairs++
+		}
+		previous = sample.LatencyMS
+	}
+	if pairs == 0 {
+		return 0
+	}
+	return total / pairs
+}
+
+// HeartbeatAge reports how long ago the daemon updated this snapshot.
+func (s Snapshot) HeartbeatAge() time.Duration {
+	if s.UpdatedAt <= 0 {
+		return 0
+	}
+	return time.Since(time.Unix(s.UpdatedAt, 0))
 }
 
 // Path returns the heartbeat file path. It honors MAZZY_RUN_DIR (tests/dev) and
