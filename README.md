@@ -14,7 +14,7 @@
   <a href="COMMERCIAL.md"><img alt="Commercial license available" src="https://img.shields.io/badge/commercial-license%20available-ef70ff"></a>
   <a href="https://github.com/mazurovn/mazzy-vpn/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mazurovn/mazzy-vpn/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Linux" src="https://img.shields.io/badge/platform-Linux-65e7ff">
-  <a href="https://github.com/mazurovn/mazzy-vpn/releases/tag/v2.1.0"><img alt="Release 2.1.0" src="https://img.shields.io/badge/release-2.1.0-ef70ff"></a>
+  <a href="https://github.com/mazurovn/mazzy-vpn/releases/tag/v2.3.0"><img alt="Release 2.3.0" src="https://img.shields.io/badge/release-2.3.0-ef70ff"></a>
 </p>
 
 Mazzy VPN is a source-available AI-ready VPN client for Linux with Desktop, tray,
@@ -30,7 +30,7 @@ profiles from a VPN provider or your organization. No account, telemetry or
 project-hosted server is required.
 
 The current release line is the **Go native CLI**
-[v2.1.0](https://github.com/mazurovn/mazzy-vpn/releases/tag/v2.1.0) (single
+[v2.3.0](https://github.com/mazurovn/mazzy-vpn/releases/tag/v2.3.0) (single
 static binary, embedded engine, 6 UI languages). The legacy bash
 [CLI/TUI 1.4.7](https://github.com/mazurovn/mazzy-vpn/releases/tag/v1.4.7) and
 [Desktop 0.4.8](https://github.com/mazurovn/mazzy-vpn/releases/tag/desktop-v0.4.8)
