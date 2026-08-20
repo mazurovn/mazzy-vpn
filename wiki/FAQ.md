@@ -9,7 +9,7 @@
 ## Кто автор и какая лицензия?
 
 Автор и сопровождающий — [Nik m (@mazurovn)](https://github.com/mazurovn).
-Copyright © 2026 Nik m. Код распространяется по GNU AGPL-3.0-or-later.
+Copyright © 2026 Nik m. Код — source-available по PolyForm Noncommercial 1.0.0 (коммерческое использование требует отдельной лицензии, см. COMMERCIAL.md).
 Изменённую сборку нельзя выдавать за официальный релиз или публиковать без
 соблюдения условий лицензии и сохранения авторства.
 
@@ -144,7 +144,7 @@ their own infrastructure.
 
 The author and maintainer is
 [Nik m (@mazurovn)](https://github.com/mazurovn). Copyright © 2026 Nik m.
-The code is licensed under GNU AGPL-3.0-or-later. A modified build must not be
+The code is source-available under PolyForm Noncommercial 1.0.0 (commercial use requires a separate license; see COMMERCIAL.md). A modified build must not be
 presented as an official release or distributed without following the license
 and preserving authorship.
 

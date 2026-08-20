@@ -10,13 +10,14 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License: AGPL-3.0-or-later" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-8f7dff"></a>
+  <a href="LICENSE"><img alt="License: PolyForm Noncommercial 1.0.0" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-8f7dff"></a>
+  <a href="COMMERCIAL.md"><img alt="Commercial license available" src="https://img.shields.io/badge/commercial-license%20available-ef70ff"></a>
   <a href="https://github.com/mazurovn/mazzy-vpn/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mazurovn/mazzy-vpn/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Linux" src="https://img.shields.io/badge/platform-Linux-65e7ff">
   <a href="https://github.com/mazurovn/mazzy-vpn/releases/tag/v2.1.0"><img alt="Release 2.1.0" src="https://img.shields.io/badge/release-2.1.0-ef70ff"></a>
 </p>
 
-Mazzy VPN is an open-source AI-ready VPN client for Linux with Desktop, tray,
+Mazzy VPN is a source-available AI-ready VPN client for Linux with Desktop, tray,
 guided terminal UI and an automation-friendly CLI. It is designed for stable
 AI sessions and agents, learning, video, the open web, remote work and
 corporate portals. It manages your AmneziaWG, WireGuard, OpenVPN and
@@ -177,8 +178,12 @@ for the full command reference in all six languages.
 Mazzy VPN was created by [Nik m (@mazurovn)](https://github.com/mazurovn).
 Copyright © 2026 Nik m.
 
-The project is open source under
-[GNU Affero General Public License v3.0 or later](LICENSE). Modified versions
-may be made and distributed, but the AGPL source-sharing obligations must be
-preserved. The Mazzy VPN name and original authorship notices must not be
-misrepresented.
+The project is **source-available** under the
+[PolyForm Noncommercial License 1.0.0](LICENSE). It is **free for personal,
+research/scientific, educational, and charitable (noncommercial) use**.
+**Commercial use requires a separate commercial license** — see
+[COMMERCIAL.md](COMMERCIAL.md). An **Enterprise edition** (centralized fleet
+management, SSO/SCIM, audit, SLA support) is planned on top of this core.
+
+This is source-available software, not an OSI-approved open-source license. The
+Mazzy VPN name and original authorship notices must not be misrepresented.

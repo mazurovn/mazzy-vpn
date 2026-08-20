@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (C) 2026 Nik m (@mazurovn)
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Keep CodeQL focused on owned code while the vendored crate is byte-verified."""
 
 from __future__ import annotations

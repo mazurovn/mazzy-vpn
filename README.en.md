@@ -3,7 +3,7 @@
 Created and maintained by
 [Nik m (@mazurovn)](https://github.com/mazurovn).
 
-Mazzy VPN is an open-source AI-ready VPN client for Linux with Desktop, tray,
+Mazzy VPN is a source-available AI-ready VPN client for Linux with Desktop, tray,
 an interactive terminal UI and an automation-friendly CLI. It is built for
 stable AI sessions and agents, learning, video, the open web, remote work and
 corporate portals. It combines AmneziaWG, WireGuard, OpenVPN and NetworkManager
@@ -259,7 +259,7 @@ source delta before cargo-deny; the advisory ignore list remains empty.
 Production status also requires clean-device install/upgrade/remove,
 rollback/fault and signing gates on every supported distribution.
 
-About records the Desktop/engine/platform versions, author, copyright, AGPL
+About records the Desktop/engine/platform versions, author, copyright, license
 license, privacy principles and safe-operation rules.
 
 Desktop 0.4 is a functional Linux control-center preview, not the final
@@ -406,8 +406,11 @@ mode `600`.
 Mazzy VPN was created by [Nik m (@mazurovn)](https://github.com/mazurovn).
 Copyright © 2026 Nik m.
 
-The project is open source under the
-[GNU Affero General Public License v3.0 or later](LICENSE). You may study, use,
-modify and distribute it, provided that derivative versions comply with the
-AGPL and preserve the original authorship notices. See
+The project is **source-available** under the
+[PolyForm Noncommercial License 1.0.0](LICENSE). It is **free for personal,
+research/scientific, educational and charitable (noncommercial) use**.
+**Commercial use requires a separate commercial license** — see
+[COMMERCIAL.md](COMMERCIAL.md). An **Enterprise edition** is planned on top of
+this core. This is source-available software, not an OSI-approved open-source
+license; preserve the original authorship notices. See
 [AUTHORS.md](AUTHORS.md) and [CONTRIBUTING.md](CONTRIBUTING.md).

@@ -1,5 +1,5 @@
 // mazzy-vpn-cli: autonomous Go CLI for Mazzy VPN (Phase 3 transition binary).
-// Author: Nik m (@mazurovn). License: AGPL-3.0-or-later.
+// Author: Nik m (@mazurovn). License: PolyForm-Noncommercial-1.0.0 (see COMMERCIAL.md).
 module github.com/mazurovn/mazzy-vpn/cli
 
 go 1.25.0

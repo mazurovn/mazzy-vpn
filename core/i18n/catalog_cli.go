@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright © 2026 Nik m (@mazurovn). All rights reserved.
 
 package i18n

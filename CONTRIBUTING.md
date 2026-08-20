@@ -3,7 +3,7 @@
 Thank you for helping improve Mazzy VPN.
 
 The project is maintained by [Nik m (@mazurovn)](https://github.com/mazurovn)
-and licensed under `AGPL-3.0-or-later`. By contributing, you agree that your
+and licensed under `PolyForm-Noncommercial-1.0.0`. By contributing, you agree that your
 contribution may be distributed under that license. Keep existing copyright,
 author and SPDX notices intact.
 

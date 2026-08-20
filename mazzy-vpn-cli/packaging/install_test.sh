@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Copyright © 2026 Nik m (@mazurovn). All rights reserved.
 #
 # Scenario matrix for install.sh. Exercises every rootless code path in a loop

@@ -4,6 +4,16 @@ All notable changes to Mazzy VPN are documented here.
 
 ## Unreleased
 
+### Changed
+- **License: now PolyForm Noncommercial 1.0.0** (source-available). Free for
+  personal, research/scientific, educational and charitable (noncommercial) use;
+  **commercial use requires a separate commercial license** (see COMMERCIAL.md).
+  An **Enterprise edition** is planned on top of this core. This replaces the
+  previous AGPL-3.0-or-later licensing for all future versions; already-released
+  AGPL versions remain available under AGPL. Updated LICENSE, all SPDX headers
+  (238 files), package/Cargo/tauri metadata, READMEs (7 languages), CONTRIBUTING,
+  wiki, and desktop About.
+
 ## pi extension 0.1.1 - 2026-08-19
 
 ### Added
