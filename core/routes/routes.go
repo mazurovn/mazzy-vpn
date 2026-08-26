@@ -199,11 +199,17 @@ func (a *Applier) addDefault(ctx context.Context, isV6 bool) error {
 	if isV6 {
 		def = "::/0"
 	}
-	// ip -N rule add not fwmark <t> table <t>
+	// Idempotent rule installation: the kernel does NOT deduplicate ip rules, so
+	// a plain `rule add` after a crash/switch that left a stale copy accumulates
+	// duplicates (observed: the same fwmark/suppress rule present 2-3× after zone
+	// switches). Delete every pre-existing copy, then add exactly one.
+	// ip -N rule [del×N] add not fwmark <t> table <t>
+	a.delAllRuleCopies(ctx, fam, "not", "fwmark", tbl, "table", tbl)
 	if _, err := a.Runner.Run(ctx, "ip", fam, "rule", "add", "not", "fwmark", tbl, "table", tbl); err != nil {
 		return err
 	}
-	// ip -N rule add table main suppress_prefixlength 0
+	// ip -N rule [del×N] add table main suppress_prefixlength 0
+	a.delAllRuleCopies(ctx, fam, "table", "main", "suppress_prefixlength", "0")
 	if _, err := a.Runner.Run(ctx, "ip", fam, "rule", "add", "table", "main", "suppress_prefixlength", "0"); err != nil {
 		return err
 	}
@@ -225,15 +231,23 @@ func (a *Applier) addDefault(ctx context.Context, isV6 bool) error {
 func (a *Applier) delDefault(ctx context.Context, isV6 bool) error {
 	fam := a.famFlag(isV6)
 	tbl := strconv.FormatUint(uint64(a.Table), 10)
-	var firstErr error
-	try := func(args ...string) {
-		if _, err := a.Runner.Run(ctx, "ip", args...); err != nil && firstErr == nil {
-			firstErr = err
+	// Remove ALL copies, not just one: a duplicate left by a prior session would
+	// otherwise survive teardown and keep suppressing/leaking routing.
+	a.delAllRuleCopies(ctx, fam, "not", "fwmark", tbl, "table", tbl)
+	a.delAllRuleCopies(ctx, fam, "table", "main", "suppress_prefixlength", "0")
+	return nil
+}
+
+// delAllRuleCopies deletes every existing copy of one ip rule. `ip rule del`
+// removes a single matching rule and returns non-zero once none remain, so we
+// loop until it fails (bounded to defeat any pathological accumulation).
+func (a *Applier) delAllRuleCopies(ctx context.Context, fam string, ruleSpec ...string) {
+	args := append([]string{fam, "rule", "del"}, ruleSpec...)
+	for i := 0; i < 8; i++ {
+		if _, err := a.Runner.Run(ctx, "ip", args...); err != nil {
+			return
 		}
 	}
-	try(fam, "rule", "del", "not", "fwmark", tbl, "table", tbl)
-	try(fam, "rule", "del", "table", "main", "suppress_prefixlength", "0")
-	return firstErr
 }
 
 // allowedDefaults reports whether any peer AllowedIPs contains a /0 for each

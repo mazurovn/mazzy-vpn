@@ -138,7 +138,7 @@ func TestPrivilegedSubcommandsMatchDispatch(t *testing.T) {
 	real := map[string]bool{
 		"up": true, "connect": true, "disconnect": true,
 		"recover": true, "auto": true, "daemon": true, "mimic": true,
-		"stop": true, "trust": true, "disarm": true,
+		"stop": true, "trust": true, "disarm": true, "probe": true,
 	}
 	for k := range privilegedSubcommands {
 		if !real[k] {

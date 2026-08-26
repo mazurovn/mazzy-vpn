@@ -5,6 +5,13 @@ All notable changes to Mazzy VPN are documented here.
 ## CLI 2.4.2 - 2026-08-26
 
 ### Added
+- **`sudo mazzy-vpn probe [NAME|--all]`** — HARD deep connectivity test: for
+  each zone it validates the config, probes the endpoint + path MTU through the
+  uplink, then ACTUALLY brings the tunnel up and measures real egress plus the
+  WireGuard tx/rx byte counters. It distinguishes WORKS · SERVER NOT ROUTING
+  (tunnel up, tx≫rx, no egress — the server accepts the handshake but does not
+  forward internet traffic) · DEAD (no handshake) · BAD CONFIG. Needs exclusive
+  tunnel access, so it requires root and refuses while a daemon is running.
 - **`sudo mazzy-vpn disarm`** (menu: `!`) — the HARD reset: kills the daemon
   (SIGTERM→SIGKILL), removes ALL our firewall/routing state including the
   fail-closed kill-switch, reverts per-link DNS and flushes resolver caches,
@@ -40,6 +47,10 @@ All notable changes to Mazzy VPN are documented here.
   unprivileged dashboard shows real link facts without extra probes.
 
 ### Fixed
+- **Duplicate policy-routing rules**: zone switches / unclean teardowns could
+  leave multiple copies of the fwmark and suppress_prefixlength ip rules. Rule
+  installation is now idempotent (delete-all-copies before add) and teardown
+  removes every copy.
 - Soft-fail log/dashboard messages now aggregate **every** probe endpoint's
   failure ("api.ipify.org: timeout; checkip.amazonaws.com: …") instead of
   showing only the last one, with the noisy Go `Get "…":` prefixes stripped.

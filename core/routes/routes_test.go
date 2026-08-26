@@ -180,3 +180,27 @@ func TestUplinkHostnameEndpointSkipped(t *testing.T) {
 		}
 	}
 }
+
+// TestAddDefaultIsIdempotent is the regression guard for the duplicate-rule
+// bug: Up must DELETE any pre-existing copy of each policy rule before adding,
+// so repeated Up (crash/switch) can never accumulate duplicate ip rules.
+func TestAddDefaultIsIdempotent(t *testing.T) {
+	fake := &netexectest.Fake{}
+	cfg := fullTunnelConf()
+	a := New(fake, "vpnaw0", cfg)
+	if err := a.Up(context.Background(), cfg); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	joined := strings.Join(fake.Calls, "\n")
+	// The delete must appear before the add for each rule (delete-before-add).
+	delFwmark := strings.Index(joined, "ip -4 rule del not fwmark 51820 table 51820")
+	addFwmark := strings.Index(joined, "ip -4 rule add not fwmark 51820 table 51820")
+	if delFwmark < 0 || addFwmark < 0 || delFwmark > addFwmark {
+		t.Errorf("fwmark rule must be delete-before-add; del@%d add@%d", delFwmark, addFwmark)
+	}
+	delSup := strings.Index(joined, "ip -4 rule del table main suppress_prefixlength 0")
+	addSup := strings.Index(joined, "ip -4 rule add table main suppress_prefixlength 0")
+	if delSup < 0 || addSup < 0 || delSup > addSup {
+		t.Errorf("suppress rule must be delete-before-add; del@%d add@%d", delSup, addSup)
+	}
+}

@@ -88,6 +88,8 @@ func run(args []string) int {
 		return cmdRemove(ctx, rest)
 	case "test":
 		return cmdTest(ctx, rest)
+	case "probe", "deeptest":
+		return cmdProbe(ctx, rest)
 	case "best":
 		return cmdBest(ctx, rest)
 	case "adapters", "interfaces":
@@ -210,6 +212,7 @@ Usage:
 
  %s
   mazzy-vpn test [--json]             probe all servers (latency/reachability)
+  sudo mazzy-vpn probe [NAME|--all]   HARD deep test: real connect + egress + tx/rx verdict per zone
   mazzy-vpn best [--json]             print the best zone to connect to
   mazzy-vpn adapters [--json]         list network interfaces + recommendation
   mazzy-vpn netdiag [--json]          analyze the network + suggest fixes
