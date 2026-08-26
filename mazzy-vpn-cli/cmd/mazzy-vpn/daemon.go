@@ -193,7 +193,6 @@ func cmdDaemon(ctx context.Context, args []string) int {
 	const reconnectLimit = 2 // reconnect same zone this many times
 	const softFailLimit = 6  // ~1 min of probe failures with a FRESH handshake before reconnecting
 	const failoverLimit = 4  // then fail over to another live zone
-	const zoneCooldown = 10 * time.Minute
 
 	// killSwitchArmed tracks whether the fail-closed guard is currently held, so
 	// the stop path can always lift it even when there is no live conn to do so.
@@ -351,9 +350,7 @@ func cmdDaemon(ctx context.Context, args []string) int {
 				fails++
 				nextAttempt = time.Now().Add(backoff(fails))
 				if fails >= failoverLimit {
-					cooldown[zone] = time.Now().Add(zoneCooldown)
-					if nz, okz := d.pickBestLive(ctx, cooldown); okz && nz != zone {
-						d.logf("⟳ failing over: %s → %s", zone, nz)
+					if nz, changed := d.failoverZone(ctx, zone, cooldown); changed {
 						zone = nz
 						rw.SetZone(zone)
 						fails = 0
@@ -434,9 +431,7 @@ func cmdDaemon(ctx context.Context, args []string) int {
 			// After several failures, fail over to another live zone (excluding
 			// zones that recently failed egress, this one included).
 			if fails >= failoverLimit {
-				cooldown[zone] = time.Now().Add(zoneCooldown)
-				if nz, okz := d.pickBestLive(ctx, cooldown); okz && nz != zone {
-					d.logf("⟳ zone %s unhealthy; failing over to %s", zone, nz)
+				if nz, changed := d.failoverZone(ctx, zone, cooldown); changed {
 					zone = nz
 					rw.SetZone(zone)
 					fails = 0
@@ -596,6 +591,51 @@ func (d *daemonState) pickBestLive(ctx context.Context, avoid map[string]time.Ti
 		return "", false
 	}
 	return best.Name, true
+}
+
+// zoneCooldown is how long a zone that repeatedly failed EGRESS is quarantined
+// from failover selection.
+const zoneCooldown = 10 * time.Minute
+
+// failoverZone quarantines the failing zone and picks a replacement. It ranks
+// live zones first; when ranking finds nothing (all servers down — or
+// measurement itself impaired, e.g. while the kill-switch is armed), it falls
+// back to BLINDLY trying the next catalog zone rather than hammering the same
+// dead one forever (the "Belgium loop": 7 minutes of silent non-failover).
+// Every decision is logged so the operator can see WHY.
+func (d *daemonState) failoverZone(ctx context.Context, zone string, cooldown map[string]time.Time) (string, bool) {
+	cooldown[zone] = time.Now().Add(zoneCooldown)
+	d.logf("zone %s quarantined for %s after repeated egress failures", zone, zoneCooldown)
+	if nz, ok := d.pickBestLive(ctx, cooldown); ok && nz != zone {
+		d.logf("⟳ failing over: %s → %s (ranked best live)", zone, nz)
+		return nz, true
+	}
+	if nz, ok := d.nextCatalogZone(zone, cooldown); ok {
+		d.logf("⟳ failover: ranking found no live zone (all down or measurement blocked); blind fallback %s → %s", zone, nz)
+		return nz, true
+	}
+	d.logf("failover: no alternative zone available; retrying %s", zone)
+	return zone, false
+}
+
+// nextCatalogZone returns the first catalog zone that is neither the current
+// one nor quarantined — the last-resort candidate when ranking is impossible.
+func (d *daemonState) nextCatalogZone(zone string, cooldown map[string]time.Time) (string, bool) {
+	targets, err := targetsFromCatalog(newCatalog())
+	if err != nil {
+		return "", false
+	}
+	now := time.Now()
+	for _, t := range targets {
+		if t.Name == zone {
+			continue
+		}
+		if until, bad := cooldown[t.Name]; bad && now.Before(until) {
+			continue
+		}
+		return t.Name, true
+	}
+	return "", false
 }
 
 // backoff returns an increasing but bounded delay for reconnect attempts.

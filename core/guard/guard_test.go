@@ -101,7 +101,7 @@ func TestConnmarkRuleset(t *testing.T) {
 func TestKillSwitchRuleset(t *testing.T) {
 	cf := &captureFake{}
 	g := New(cf)
-	if err := g.InstallKillSwitch(context.Background(), 51820); err != nil {
+	if err := g.InstallKillSwitch(context.Background(), 51820, []string{"vpnaw0"}); err != nil {
 		t.Fatalf("install: %v", err)
 	}
 	rs := cf.lastRuleset

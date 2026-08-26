@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/mazurovn/mazzy-vpn/core/netexec"
 )
@@ -96,19 +97,42 @@ func (g *Guard) InstallFailClosed(ctx context.Context) error {
 	return g.applyRuleset(ctx, ruleset)
 }
 
-// InstallKillSwitch installs a fwmark-aware fail-closed kill-switch: only
-// loopback and packets carrying the WireGuard socket fwmark (the encrypted
-// tunnel handshake/keepalive) may egress; everything else is rejected. This is
-// the persistent kill-switch armed while a tunnel is being re-established after
-// an egress drop, so plaintext cannot leak through the plain uplink during the
-// gap, yet the new tunnel can still complete its handshake (unlike
-// InstallFailClosed, which blocks the handshake too).
-func (g *Guard) InstallKillSwitch(ctx context.Context, mark uint32) error {
+// InstallKillSwitch installs a fwmark-aware fail-closed kill-switch armed
+// while a tunnel is being re-established after an egress drop. Allowed out:
+//
+//   - loopback;
+//   - packets INTO a managed tunnel interface (they leave the host encrypted,
+//     so this is not a plaintext leak) — without this the daemon's own egress
+//     verification through the re-established tunnel was rejected, the
+//     kill-switch could never be disarmed, and the host stayed sealed until a
+//     manual disconnect/recover (the "Belgium loop" incident);
+//   - packets carrying the WireGuard socket fwmark (encrypted handshake);
+//   - ICMP echo-requests, so zone-liveness ranking (failover!) keeps working
+//     while sealed. This reveals only which servers we ping — an acceptable
+//     trade for a transition guard whose job is enabling recovery.
+//
+// Everything else is rejected: no plaintext application traffic can leave via
+// the plain uplink during the gap.
+func (g *Guard) InstallKillSwitch(ctx context.Context, mark uint32, tunnelIfaces []string) error {
+	tunAccept := ""
+	if len(tunnelIfaces) > 0 {
+		quoted := make([]string, 0, len(tunnelIfaces))
+		for _, n := range tunnelIfaces {
+			if n != "" {
+				quoted = append(quoted, `"`+n+`"`)
+			}
+		}
+		if len(quoted) > 0 {
+			tunAccept = "        oifname { " + strings.Join(quoted, ", ") + " } accept\n"
+		}
+	}
 	ruleset := fmt.Sprintf(`table inet %[1]s {
     chain output {
         type filter hook output priority -150; policy accept;
         oifname "lo" accept
-        meta mark %[2]d accept
+%[3]s        meta mark %[2]d accept
+        meta l4proto icmp icmp type echo-request accept
+        meta l4proto ipv6-icmp icmpv6 type echo-request accept
         reject with icmpx type admin-prohibited
     }
     chain forward {
@@ -116,7 +140,7 @@ func (g *Guard) InstallKillSwitch(ctx context.Context, mark uint32) error {
         reject with icmpx type admin-prohibited
     }
 }
-`, TransitionGuardTable, mark)
+`, TransitionGuardTable, mark, tunAccept)
 	g.deleteTable(ctx, TransitionGuardTable)
 	return g.applyRuleset(ctx, ruleset)
 }

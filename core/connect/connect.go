@@ -268,7 +268,10 @@ func (c *Conn) Transfer() (rx, tx int64, ok bool) {
 // can succeed. It is idempotent. This is what the user-facing "Kill-switch
 // (fail-closed)" setting controls.
 func (c *Conn) ArmKillSwitch(ctx context.Context) error {
-	if err := c.guard.InstallKillSwitch(ctx, c.mark); err != nil {
+	// Allow egress into ANY managed tunnel name (not just this Conn's): during
+	// a reconnect the next Conn may come up under a sibling name, and its
+	// verification traffic must pass while the guard is held.
+	if err := c.guard.InstallKillSwitch(ctx, c.mark, core.ManagedInterfaces()); err != nil {
 		return err
 	}
 	c.killSwitchOn = true

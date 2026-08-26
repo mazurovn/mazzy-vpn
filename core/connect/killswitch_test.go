@@ -70,7 +70,7 @@ func TestArmDisarmKillSwitch(t *testing.T) {
 func TestKillSwitchAllowsTunnelHandshake(t *testing.T) {
 	cf := newRulesetCapture()
 	g := guard.New(cf)
-	if err := g.InstallKillSwitch(context.Background(), 51820); err != nil {
+	if err := g.InstallKillSwitch(context.Background(), 51820, []string{"vpnaw0"}); err != nil {
 		t.Fatalf("install: %v", err)
 	}
 	rs := cf.lastRuleset

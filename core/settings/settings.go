@@ -53,9 +53,24 @@ type Store struct {
 }
 
 // DefaultPath returns the per-user settings path (honors MAZZY_CONFIG_HOME).
+//
+// Root-under-sudo reads the INVOKING user's settings: the daemon/connect run
+// elevated, but the toggles (kill-switch, notifications, …) belong to the
+// human who configured them in the menu. Without this the root daemon read
+// /root/.config (absent) and silently fell back to defaults — the incident
+// where a user with kill_switch:false got a fail-closed kill-switch anyway
+// because root's defaults said true.
 func DefaultPath() string {
 	if d := os.Getenv("MAZZY_CONFIG_HOME"); d != "" {
 		return filepath.Join(d, "settings.json")
+	}
+	if os.Geteuid() == 0 {
+		if su := os.Getenv("SUDO_USER"); su != "" && su != "root" {
+			p := filepath.Join("/home", su, ".config", "mazzy-vpn", "settings.json")
+			if _, err := os.Stat(p); err == nil {
+				return p
+			}
+		}
 	}
 	if h, err := os.UserConfigDir(); err == nil {
 		return filepath.Join(h, "mazzy-vpn", "settings.json")
