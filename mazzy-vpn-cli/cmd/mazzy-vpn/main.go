@@ -122,6 +122,8 @@ func run(args []string) int {
 		return cmdDisconnect(ctx, rest)
 	case "recover", "clean", "panic":
 		return cmdRecover(ctx, rest)
+	case "trust":
+		return cmdTrust(ctx, rest)
 	case "providers", "ai":
 		return cmdProviders(ctx, rest)
 	case "update", "self-update":
@@ -196,6 +198,7 @@ Usage:
  %s
   sudo mazzy-vpn daemon NAME              run persistently with auto-reconnect
   sudo mazzy-vpn daemon NAME --background  detach; survives closing the terminal
+  sudo mazzy-vpn trust [--revoke]         passwordless daemon control (sudoers drop-in)
   sudo systemctl enable --now mazzy-vpn@NAME   start at boot (systemd)
 
   The interactive menu now keeps you IN the menu after connecting: a live

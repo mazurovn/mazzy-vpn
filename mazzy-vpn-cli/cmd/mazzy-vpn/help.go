@@ -51,6 +51,7 @@ var commandHelpRegistry = map[string]commandHelp{
 	"connect":    {"sudo mazzy-vpn connect FILE [--uplink IF] [--no-reconnect]", "Connect using a raw profile path.", nil, []string{"--uplink", "--no-reconnect"}},
 	"disconnect": {"sudo mazzy-vpn disconnect", "Bring down the active tunnel.", []string{"down"}, nil},
 	"recover":    {"sudo mazzy-vpn recover [--reset-catalog]", "Force-clean tunnels and guards.", []string{"clean", "panic"}, []string{"--reset-catalog"}},
+	"trust":      {"sudo mazzy-vpn trust [--revoke] [--user NAME]", "Allow passwordless daemon control via a sudoers drop-in.", nil, []string{"--revoke", "--user"}},
 	"providers":  {"mazzy-vpn providers [--type TYPE] [--json]", "Check configured AI providers.", []string{"ai"}, []string{"--type", "--json"}},
 	"update":     {"mazzy-vpn update [--apply]", "Check or install a GitHub release.", []string{"self-update"}, []string{"--apply"}},
 	"status":     {"mazzy-vpn status [--json]", "Show live connection state.", nil, []string{"--json"}},

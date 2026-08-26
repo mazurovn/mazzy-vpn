@@ -36,6 +36,13 @@ Full analysis in `docs/AUDIT_2026-08-26_DAEMON_SELFHEAL.ru.md`.
 - Reconnect counter no longer increments for unconfirmed reconnects.
 
 ### Added
+- **`sudo mazzy-vpn trust [--revoke]`**: one-command passwordless daemon
+  control. Installs a visudo-validated sudoers drop-in that lets the invoking
+  user run daemon/stop/disconnect/recover/up/auto/mimic without a password —
+  so the menu/TUI stops prompting on every action. Escalation-safe: the rule
+  pins the absolute binary path, refuses binaries or directories the user
+  could overwrite, and excludes raw-path `connect` (catalog-only verbs cannot
+  be turned into a root file-read oracle).
 - Heartbeat state **paused** (⏸ in TUI/menu): a daemon holding the tunnel down
   after Disconnect is now distinguishable from a dead one.
 - Dashboard: protocol name, "status Ns old" staleness warning, and the newest
