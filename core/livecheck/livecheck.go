@@ -163,23 +163,45 @@ func (c *Checker) probeURLs() []string {
 func (c *Checker) egress(ctx context.Context, iface string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*c.timeout())
 	defer cancel()
-	var lastErr error
+	// Collect EVERY endpoint's failure, not just the last one: "all three
+	// probes failed, each like this" is a far stronger diagnostic than a single
+	// error that hides whether the others were even tried.
+	var errs []string
 	for _, u := range c.probeURLs() {
 		ip, err := c.egressVia(ctx, iface, u)
 		if err == nil && ip != "" {
 			return ip, nil
 		}
-		if err != nil {
-			lastErr = err
+		if err == nil {
+			err = errBadIP
 		}
+		errs = append(errs, probeHost(u)+": "+compactNetErr(err.Error()))
 		if ctx.Err() != nil {
 			break
 		}
 	}
-	if lastErr == nil {
-		lastErr = errBadIP
+	if len(errs) == 0 {
+		return "", errBadIP
 	}
-	return "", lastErr
+	return "", lcErr(strings.Join(errs, "; "))
+}
+
+// probeHost reduces a probe URL to its host for compact error summaries.
+func probeHost(u string) string {
+	s := strings.TrimPrefix(strings.TrimPrefix(u, "https://"), "http://")
+	if i := strings.IndexByte(s, '/'); i >= 0 {
+		s = s[:i]
+	}
+	return s
+}
+
+// compactNetErr strips the noisy Go net/http prefixes ('Get "https://…": ')
+// that would otherwise repeat the host we already print.
+func compactNetErr(msg string) string {
+	if i := strings.LastIndex(msg, `": `); i >= 0 && strings.HasPrefix(msg, "Get \"") {
+		return msg[i+3:]
+	}
+	return msg
 }
 
 // egressVia performs one probe against a single endpoint.

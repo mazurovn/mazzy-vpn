@@ -2,6 +2,19 @@
 
 All notable changes to Mazzy VPN are documented here.
 
+## CLI 2.4.2 - 2026-08-26
+
+### Added
+- Dashboard link-health row (menu + TUI): WireGuard **handshake age**, tunnel
+  **traffic ↓/↑**, session **loss %**, **egress country/city** and the
+  **stealth score** — all published by the daemon into the heartbeat, so the
+  unprivileged dashboard shows real link facts without extra probes.
+
+### Fixed
+- Soft-fail log/dashboard messages now aggregate **every** probe endpoint's
+  failure ("api.ipify.org: timeout; checkip.amazonaws.com: …") instead of
+  showing only the last one, with the noisy Go `Get "…":` prefixes stripped.
+
 ## CLI 2.4.1 - 2026-08-26
 
 Reliability release: the self-healing daemon no longer wedges, lies, or leaks.

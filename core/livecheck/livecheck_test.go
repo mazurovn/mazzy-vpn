@@ -161,3 +161,23 @@ func indexOf(s, sub string) int {
 	}
 	return -1
 }
+
+// TestReasonAggregatesAllProbeErrors: when every endpoint fails, the Reason
+// must name EACH endpoint with its own failure, not just the last one.
+func TestReasonAggregatesAllProbeErrors(t *testing.T) {
+	c := &Checker{
+		linkUp: func(string) bool { return true },
+		httpGet: func(_ context.Context, _ string, url string) (string, error) {
+			return "", errors.New(`Get "` + url + `": context deadline exceeded`)
+		},
+	}
+	s := c.Check(context.Background(), "vpnaw0")
+	for _, host := range []string{"api.ipify.org", "checkip.amazonaws.com", "icanhazip.com"} {
+		if !contains(s.Reason, host) {
+			t.Errorf("Reason must mention %s, got: %s", host, s.Reason)
+		}
+	}
+	if contains(s.Reason, `Get "https://`) {
+		t.Errorf("noisy Get-prefix should be stripped, got: %s", s.Reason)
+	}
+}

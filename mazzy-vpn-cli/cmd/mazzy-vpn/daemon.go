@@ -239,6 +239,7 @@ func cmdDaemon(ctx context.Context, args []string) int {
 			}
 			score := stealthScoreOf(stSig)
 			d.logf("stealth score: %d (egress %s)", score, stSig.EgressCountry)
+			rw.SetStealth(score, stSig.EgressCountry, stSig.EgressCity)
 			if lastStealth >= 0 && score < lastStealth-15 {
 				msg := fmt.Sprintf("stealth dropped %d→%d (more detectable)", lastStealth, score)
 				d.nfy.Failed(zone, msg)
@@ -361,6 +362,13 @@ func cmdDaemon(ctx context.Context, args []string) int {
 				softFails = 0
 				delete(cooldown, zone)
 				rw.SetState(runstatus.StateProtected, conn.Interface, s.EgressIP)
+				// Publish link facts the unprivileged dashboard cannot read itself.
+				hsAge := int64(0)
+				if age, hsOK := conn.HandshakeAge(); hsOK {
+					hsAge = int64(age.Seconds())
+				}
+				rx, tx, _ := conn.Transfer()
+				rw.SetLinkHealth(hsAge, rx, tx)
 				rw.Tick(int(time.Since(tickStart).Milliseconds()), true)
 				continue
 			}

@@ -237,6 +237,30 @@ func (c *Conn) HandshakeAge() (time.Duration, bool) {
 	return age, true
 }
 
+// Transfer returns cumulative received/sent bytes across all peers, from the
+// engine's UAPI counters. ok is false when the device is down.
+func (c *Conn) Transfer() (rx, tx int64, ok bool) {
+	if c.engine == nil {
+		return 0, 0, false
+	}
+	dump, err := c.engine.IpcGet()
+	if err != nil {
+		return 0, 0, false
+	}
+	for _, line := range strings.Split(dump, "\n") {
+		if v, found := strings.CutPrefix(line, "rx_bytes="); found {
+			if n, e := strconv.ParseInt(strings.TrimSpace(v), 10, 64); e == nil {
+				rx += n
+			}
+		} else if v, found := strings.CutPrefix(line, "tx_bytes="); found {
+			if n, e := strconv.ParseInt(strings.TrimSpace(v), 10, 64); e == nil {
+				tx += n
+			}
+		}
+	}
+	return rx, tx, true
+}
+
 // ArmKillSwitch installs the fwmark-aware fail-closed guard so that, while the
 // tunnel is being re-established after an egress drop, no plaintext can leave
 // via the plain uplink (no leak window) — yet the new tunnel's own encrypted

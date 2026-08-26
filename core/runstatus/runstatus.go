@@ -72,6 +72,16 @@ type Snapshot struct {
 	Reconnects int        `json:"reconnects"`
 	Samples    []Sample   `json:"samples"`
 	Errors     []ErrEvent `json:"errors"`
+
+	// Link-health extras for the dashboard (published by the daemon each tick).
+	HandshakeAgeS int64 `json:"handshake_age_s,omitempty"` // last WireGuard handshake age; 0 = unknown
+	RxBytes       int64 `json:"rx_bytes,omitempty"`        // cumulative received via the tunnel
+	TxBytes       int64 `json:"tx_bytes,omitempty"`        // cumulative sent via the tunnel
+
+	// Egress identity + stealth (from the daemon's periodic stealth pass).
+	EgressCountry string `json:"egress_country,omitempty"`
+	EgressCity    string `json:"egress_city,omitempty"`
+	StealthScore  int    `json:"stealth_score,omitempty"` // 0 = not measured yet
 }
 
 // Fresh reports whether the heartbeat was updated within the given window. A
@@ -321,6 +331,36 @@ func (w *Writer) Close() {
 	defer w.mu.Unlock()
 	w.closed = true
 	_ = os.Remove(w.path)
+}
+
+// SetLinkHealth publishes the WireGuard link facts the unprivileged dashboard
+// cannot read itself (UAPI needs the device owner): handshake age and transfer
+// counters. Zero values mean "unknown" and clear the fields.
+func (w *Writer) SetLinkHealth(handshakeAgeS, rxBytes, txBytes int64) {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.snap.HandshakeAgeS = handshakeAgeS
+	w.snap.RxBytes = rxBytes
+	w.snap.TxBytes = txBytes
+	w.flush()
+}
+
+// SetStealth records the egress identity and stealth score from the daemon's
+// periodic stealth pass, so the dashboard shows WHERE the exit is and how
+// detectable it looks without any extra probes by the reader.
+func (w *Writer) SetStealth(score int, country, city string) {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.snap.StealthScore = score
+	w.snap.EgressCountry = country
+	w.snap.EgressCity = city
+	w.flush()
 }
 
 // SetProtocol records the connected protocol title (e.g. "AmneziaWG") so the

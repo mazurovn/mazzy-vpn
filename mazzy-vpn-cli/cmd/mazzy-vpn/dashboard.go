@@ -80,6 +80,9 @@ func drawLiveDashboard() bool {
 	fmt.Println(line)
 	fmt.Printf("│ zone %s · %s %s · %s\n",
 		trunc(safeDisplay(snap.Zone), 24), t.T("cli.dash.uptime"), up, mode)
+	if lh := linkHealthLine(snap); lh != "" {
+		fmt.Println("│ " + trunc(lh, 54))
+	}
 
 	// Latency graph + stats.
 	series := snap.LatencySeries()
@@ -121,6 +124,49 @@ func dashBadge(s runstatus.State) (string, string) {
 	default:
 		return "✖", "DISCONNECTED"
 	}
+}
+
+// fmtBytes renders a byte count compactly (1.2 GiB, 340 MiB, 12 KiB).
+func fmtBytes(n int64) string {
+	switch {
+	case n < 0:
+		return "0 B"
+	case n < 1024:
+		return fmt.Sprintf("%d B", n)
+	case n < 1024*1024:
+		return fmt.Sprintf("%.0f KiB", float64(n)/1024)
+	case n < 1024*1024*1024:
+		return fmt.Sprintf("%.0f MiB", float64(n)/(1024*1024))
+	default:
+		return fmt.Sprintf("%.1f GiB", float64(n)/(1024*1024*1024))
+	}
+}
+
+// linkHealthLine renders the link-facts row shared by the menu dashboard and
+// the TUI header: handshake age, traffic, loss and egress identity/stealth.
+// Empty when the heartbeat has none of these yet (old daemon / just started).
+func linkHealthLine(snap runstatus.Snapshot) string {
+	parts := []string{}
+	if snap.HandshakeAgeS > 0 {
+		parts = append(parts, "hs "+shortDur(time.Duration(snap.HandshakeAgeS)*time.Second))
+	}
+	if snap.RxBytes > 0 || snap.TxBytes > 0 {
+		parts = append(parts, "↓"+fmtBytes(snap.RxBytes)+" ↑"+fmtBytes(snap.TxBytes))
+	}
+	if snap.Checks > 0 {
+		parts = append(parts, fmt.Sprintf("loss %.1f%%", snap.LossPercent()))
+	}
+	if snap.EgressCountry != "" {
+		geo := safeDisplay(snap.EgressCountry)
+		if snap.EgressCity != "" {
+			geo += " " + safeDisplay(snap.EgressCity)
+		}
+		parts = append(parts, geo)
+	}
+	if snap.StealthScore > 0 {
+		parts = append(parts, fmt.Sprintf("stealth %d", snap.StealthScore))
+	}
+	return strings.Join(parts, " · ")
 }
 
 // shortDur formats a duration compactly (e.g. 3m, 2h05m, 45s).

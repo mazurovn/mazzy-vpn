@@ -555,6 +555,9 @@ func (m tuiModel) dashboardHeader() (string, bool) {
 	}
 
 	body := title + "\n" + status + "\n" + graph + "\n" + errLine
+	if lh := linkHealthLine(snap); lh != "" {
+		body = title + "\n" + status + "\n" + stDim.Render(trunc(lh, 76)) + "\n" + graph + "\n" + errLine
+	}
 	return stBox.Render(body), true
 }
 

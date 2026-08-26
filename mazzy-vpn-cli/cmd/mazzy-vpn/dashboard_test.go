@@ -333,3 +333,39 @@ func backdateHeartbeat(t *testing.T, dir string, ts int64) {
 		t.Fatalf("write status: %v", err)
 	}
 }
+
+// TestFmtBytes covers the human-readable byte units.
+func TestFmtBytes(t *testing.T) {
+	cases := map[int64]string{
+		0:                  "0 B",
+		512:                "512 B",
+		2048:               "2 KiB",
+		5 << 20:            "5 MiB",
+		3 << 30:            "3.0 GiB",
+		-5:                 "0 B",
+		1536 * 1024 * 1024: "1.5 GiB",
+	}
+	for in, want := range cases {
+		if got := fmtBytes(in); got != want {
+			t.Errorf("fmtBytes(%d) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestLinkHealthLine renders only the facts present in the heartbeat.
+func TestLinkHealthLine(t *testing.T) {
+	if got := linkHealthLine(runstatus.Snapshot{}); got != "" {
+		t.Errorf("empty snapshot must yield empty line, got %q", got)
+	}
+	snap := runstatus.Snapshot{
+		HandshakeAgeS: 12, RxBytes: 5 << 20, TxBytes: 2048,
+		Checks: 100, Fails: 2,
+		EgressCountry: "NL", EgressCity: "Haarlem", StealthScore: 85,
+	}
+	got := linkHealthLine(snap)
+	for _, want := range []string{"hs 12s", "↓5 MiB ↑2 KiB", "loss 2.0%", "NL Haarlem", "stealth 85"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("line %q missing %q", got, want)
+		}
+	}
+}
