@@ -22,6 +22,7 @@ import (
 	"github.com/mazurovn/mazzy-vpn/core/measure"
 	"github.com/mazurovn/mazzy-vpn/core/netexec"
 	"github.com/mazurovn/mazzy-vpn/core/notify"
+	"github.com/mazurovn/mazzy-vpn/core/reachcache"
 	"github.com/mazurovn/mazzy-vpn/core/runstatus"
 	"github.com/mazurovn/mazzy-vpn/core/settings"
 	"github.com/mazurovn/mazzy-vpn/core/state"
@@ -386,17 +387,29 @@ func cmdDaemon(ctx context.Context, args []string) int {
 					fails = 0
 					softFails = 0
 					delete(cooldown, zone)
+					reachcache.New().RecordOK(zone) // proven-working: rank it first next time
 					continue
 				}
-				// Egress was NOT confirmed within connectZone's 20s poll. This zone
-				// handshakes but does not actually route traffic (or is too slow).
-				// WALK to the next zone immediately instead of sitting here
-				// reconnecting a non-routing server — this is the user's ask:
-				// "run through all points until a really WORKING one is found and
-				// mark the unavailable ones", rather than clinging to the
-				// fastest-ping server forever. connectZone already gave it a full
-				// egress-confirmation window, so one failure is enough to move on.
+				// Egress was NOT confirmed within connectZone's 20s poll. Decide
+				// between "dead server → walk now" and "handshakes → give grace":
+				//
+				//   - NO fresh handshake  → the server is down/blocked at the crypto
+				//     layer. Quarantine and WALK to the next zone immediately (the
+				//     user's ask: run through all points until a WORKING one, mark
+				//     the unavailable ones — no clinging to a fast-ping dead box).
+				//   - handshake IS fresh  → the tunnel is up; egress might be
+				//     genuinely broken (server not routing) OR the probe endpoints
+				//     are transiently blocked (a healthy zone must NOT be quarantined
+				//     on one blip — gate finding F4). Keep the conn and let the
+				//     health-check path's softFail tolerance run; it reconnects/fails
+				//     over only after softFailLimit ticks of confirmed egress loss.
 				if conn != nil {
+					if age, hsOK := conn.HandshakeAge(); hsOK && age < 3*time.Minute {
+						// Keep conn under watch; the health path grants grace.
+						fails = 0
+						nextAttempt = time.Time{}
+						continue
+					}
 					_ = conn.Down(ctx)
 					conn = nil
 				}
@@ -427,6 +440,7 @@ func cmdDaemon(ctx context.Context, args []string) int {
 				fails = 0
 				softFails = 0
 				delete(cooldown, zone)
+				reachcache.New().RecordOK(zone)
 				rw.SetState(runstatus.StateProtected, conn.Interface, s.EgressIP)
 				// Publish link facts the unprivileged dashboard cannot read itself.
 				hsAge := int64(0)
@@ -634,6 +648,22 @@ func (d *daemonState) pickBestLive(ctx context.Context, avoid map[string]time.Ti
 		return "", false // all zones quarantined → hold, never re-pick a bad one
 	}
 	ranked := newMeasurer().RankBest(ctx, targets)
+	// Bias by REAL egress history: among ICMP-alive candidates, prefer zones
+	// that recently ROUTED and sink zones that recently failed egress. Without
+	// this, selection re-picks the fastest-ping server even when it accepts the
+	// tunnel but forwards nothing (the "wrong config gets picked" complaint).
+	alive := make([]string, 0, len(ranked))
+	rankIdx := map[string]measure.Result{}
+	for _, r := range ranked {
+		if r.ICMPAlive {
+			alive = append(alive, r.Name)
+		}
+		rankIdx[r.Name] = r
+	}
+	if len(alive) > 0 {
+		alive = reachcache.New().Reorder(alive, 6*time.Hour)
+		return alive[0], true
+	}
 	best, ok := measure.BestAlive(ranked)
 	if !ok {
 		return "", false
@@ -670,8 +700,13 @@ const zoneCooldown = 10 * time.Minute
 // dead one forever (the "Belgium loop": 7 minutes of silent non-failover).
 // Every decision is logged so the operator can see WHY.
 func (d *daemonState) failoverZone(ctx context.Context, zone string, cooldown map[string]time.Time) (string, bool) {
-	cooldown[zone] = time.Now().Add(zoneCooldown)
-	d.logf("zone %s quarantined for %s after repeated egress failures", zone, zoneCooldown)
+	// Quarantine once per cooldown window: refreshing it every retry (F6) would
+	// keep the current zone's 10-min timer perpetually reset and spam the log.
+	if until, active := cooldown[zone]; !active || time.Now().After(until) {
+		cooldown[zone] = time.Now().Add(zoneCooldown)
+		reachcache.New().RecordFail(zone) // persist "did not route" for future ranking
+		d.logf("zone %s quarantined for %s after egress failure", zone, zoneCooldown)
+	}
 	if nz, ok := d.pickBestLive(ctx, cooldown); ok && nz != zone {
 		d.logf("⟳ failing over: %s → %s (ranked best live)", zone, nz)
 		return nz, true

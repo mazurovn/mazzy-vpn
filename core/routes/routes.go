@@ -232,18 +232,23 @@ func (a *Applier) delDefault(ctx context.Context, isV6 bool) error {
 	fam := a.famFlag(isV6)
 	tbl := strconv.FormatUint(uint64(a.Table), 10)
 	// Remove ALL copies, not just one: a duplicate left by a prior session would
-	// otherwise survive teardown and keep suppressing/leaking routing.
+	// otherwise survive teardown and keep suppressing/leaking routing. Teardown
+	// is best-effort by design (the hard guarantee is `recover`/`disarm`, which
+	// unconditionally clear the tables), so this does not fail on a residual copy.
 	a.delAllRuleCopies(ctx, fam, "not", "fwmark", tbl, "table", tbl)
 	a.delAllRuleCopies(ctx, fam, "table", "main", "suppress_prefixlength", "0")
 	return nil
 }
 
 // delAllRuleCopies deletes every existing copy of one ip rule. `ip rule del`
-// removes a single matching rule and returns non-zero once none remain, so we
-// loop until it fails (bounded to defeat any pathological accumulation).
+// removes a single matching rule and exits non-zero once none remain (the
+// expected terminal condition), so we stop at the first failure. Bounded to
+// defeat any pathological accumulation; if the bound is somehow reached the
+// caller's next `recover` clears the remainder.
 func (a *Applier) delAllRuleCopies(ctx context.Context, fam string, ruleSpec ...string) {
 	args := append([]string{fam, "rule", "del"}, ruleSpec...)
-	for i := 0; i < 8; i++ {
+	const maxCopies = 8
+	for i := 0; i < maxCopies; i++ {
 		if _, err := a.Runner.Run(ctx, "ip", args...); err != nil {
 			return
 		}

@@ -92,11 +92,11 @@ func TestIntentStalenessEnforced(t *testing.T) {
 		di   desiredIntent
 		want bool
 	}{
-		{"fresh", desiredIntent{Desired: "up", TS: now.Unix()}, true},
-		{"recent-within-window", desiredIntent{Desired: "down", TS: now.Add(-1 * time.Minute).Unix()}, true},
-		{"stale-beyond-window", desiredIntent{Desired: "down", TS: now.Add(-10 * time.Minute).Unix()}, false},
+		{"fresh", desiredIntent{Desired: "up", TS: now.UnixNano()}, true},
+		{"recent-within-window", desiredIntent{Desired: "down", TS: now.Add(-1 * time.Minute).UnixNano()}, true},
+		{"stale-beyond-window", desiredIntent{Desired: "down", TS: now.Add(-10 * time.Minute).UnixNano()}, false},
 		{"zero-ts", desiredIntent{Desired: "down", TS: 0}, false},
-		{"future-ts-clock-skew", desiredIntent{Desired: "up", TS: now.Add(5 * time.Minute).Unix()}, false},
+		{"future-ts-clock-skew", desiredIntent{Desired: "up", TS: now.Add(5 * time.Minute).UnixNano()}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -117,7 +117,7 @@ func TestReadDesiredDropsStaleFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Backdate it by rewriting with an old timestamp.
-	old := desiredIntent{Zone: "Berlin", Desired: "down", TS: time.Now().Add(-time.Hour).Unix()}
+	old := desiredIntent{Zone: "Berlin", Desired: "down", TS: time.Now().Add(-time.Hour).UnixNano()}
 	writeRawDesired(t, old)
 	if _, ok := readDesired(); ok {
 		t.Error("a stale down-intent must be ignored by readDesired (P0-B)")

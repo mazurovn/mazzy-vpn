@@ -54,6 +54,15 @@ func cmdUp(ctx context.Context, args []string) int {
 				fmt.Fprintln(os.Stderr, "no profiles with endpoints to rank")
 				return 1
 			}
+			// Auto-best with real failover: hand the pick to the daemon, which
+			// verifies egress and WALKS to another zone if this one handshakes but
+			// does not route (gate finding #1: the old foreground `up --best` path
+			// had NO failover and looped forever on a fast-ping/non-routing pick).
+			// A named `up <zone>` still uses the direct single-shot path below.
+			if !clean && os.Geteuid() == 0 {
+				fmt.Println(t.T("cli.up.selecting_best"))
+				return cmdDaemon(ctx, []string{"--best"})
+			}
 			m := newMeasurer()
 			ranked := m.RankBest(ctx, targets)
 			best, ok := measure.BestAlive(ranked)
@@ -147,15 +156,11 @@ func cmdAuto(ctx context.Context, args []string) int {
 		return 0
 	}
 
-	// With root: hand the best zone to the self-healing daemon, which delivers
-	// the automatic failover this command's contract promises — a plain
-	// foreground connect to reachable[0] would strand the user if that zone is
-	// ICMP-alive but not actually routing (audit P1-H). The daemon verifies
-	// egress and fails over across the remaining live zones on its own.
-	best, _ := cat.Get(reachable[0])
-	if best == nil {
-		return 1
-	}
-	fmt.Println(t.Tf("cli.up.auto_connecting", safeDisplay(best.Name)))
-	return cmdDaemon(ctx, []string{best.Name})
+	// With root: hand the pick to the self-healing daemon via the --best
+	// sentinel so IT selects with the egress-history bias (reachcache) and
+	// walks across live zones on egress failure. Passing a fixed zone here
+	// would bypass that bias and could strand the user on an ICMP-alive but
+	// non-routing server (audit P1-H, gate finding #1/#2).
+	fmt.Println(t.Tf("cli.up.auto_connecting", safeDisplay(reachable[0])))
+	return cmdDaemon(ctx, []string{"--best"})
 }

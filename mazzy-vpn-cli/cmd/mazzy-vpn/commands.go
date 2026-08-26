@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/mazurovn/mazzy-vpn/core"
 	"github.com/mazurovn/mazzy-vpn/core/doctor"
@@ -159,7 +160,11 @@ func liveConnectionLine(ctx context.Context) string {
 		}
 	}
 	if iface := detectLiveInterface(); iface != "" {
-		if livecheck.New().Check(ctx, iface).Protected() {
+		// Bound the live probe so plain `doctor` stays fast even with a broken
+		// tunnel present (the multi-URL check could otherwise take ~15s).
+		cctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+		defer cancel()
+		if livecheck.New().Check(cctx, iface).Protected() {
 			return "[OK  ] connection: tunnel " + safeDisplay(iface) + " is routing (no daemon)"
 		}
 		return "[WARN] connection: tunnel " + safeDisplay(iface) + " up but NOT routing (try: sudo mazzy-vpn doctor --heal)"

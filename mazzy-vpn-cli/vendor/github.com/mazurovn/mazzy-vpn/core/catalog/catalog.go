@@ -17,7 +17,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/mazurovn/mazzy-vpn/core"
 	"github.com/mazurovn/mazzy-vpn/core/profile"
@@ -86,8 +88,18 @@ func sudoUserCatalogDir() (string, bool) {
 		return "", false
 	}
 	p := filepath.Join(u.HomeDir, ".config", "mazzy-vpn", "profiles")
-	if fi, err := os.Stat(p); err != nil || !fi.IsDir() {
+	// SECURITY: Lstat (not Stat) so a symlink at `p` is NOT followed — otherwise
+	// a least-privilege sudoer (allowed to run only mazzy-vpn as root) could
+	// plant ~/.config/mazzy-vpn/profiles → /etc and make root chmod/write there.
+	// Require a real directory owned by the invoking user.
+	fi, err := os.Lstat(p)
+	if err != nil || !fi.IsDir() || fi.Mode()&os.ModeSymlink != 0 {
 		return "", false
+	}
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+		if uid, err := strconv.ParseUint(u.Uid, 10, 32); err != nil || st.Uid != uint32(uid) {
+			return "", false // not owned by the invoking user: untrusted
+		}
 	}
 	return p, true
 }

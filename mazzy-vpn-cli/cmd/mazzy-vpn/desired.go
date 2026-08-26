@@ -18,7 +18,7 @@ import (
 type desiredIntent struct {
 	Zone    string `json:"zone"`
 	Desired string `json:"desired"` // "up" | "down"
-	TS      int64  `json:"ts"`
+	TS      int64  `json:"ts"`      // unix NANOSECONDS: 1s resolution lost two same-second intents
 }
 
 // desiredMaxAge bounds how long a written intent stays actionable. Beyond this
@@ -48,7 +48,7 @@ func writeDesired(zone, desired string) error {
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(desiredIntent{Zone: zone, Desired: desired, TS: time.Now().Unix()}, "", "  ")
+	data, err := json.MarshalIndent(desiredIntent{Zone: zone, Desired: desired, TS: time.Now().UnixNano()}, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -86,6 +86,6 @@ func intentFresh(di desiredIntent, now time.Time) bool {
 	if di.TS <= 0 {
 		return false
 	}
-	age := now.Sub(time.Unix(di.TS, 0))
+	age := now.Sub(time.Unix(0, di.TS)) // TS is UnixNano
 	return age >= 0 && age <= desiredMaxAge
 }

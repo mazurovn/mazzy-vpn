@@ -71,6 +71,7 @@ github.com/mazurovn/mazzy-vpn/core/netexec
 github.com/mazurovn/mazzy-vpn/core/notify
 github.com/mazurovn/mazzy-vpn/core/pathtrace
 github.com/mazurovn/mazzy-vpn/core/profile
+github.com/mazurovn/mazzy-vpn/core/reachcache
 github.com/mazurovn/mazzy-vpn/core/routes
 github.com/mazurovn/mazzy-vpn/core/runstatus
 github.com/mazurovn/mazzy-vpn/core/settings

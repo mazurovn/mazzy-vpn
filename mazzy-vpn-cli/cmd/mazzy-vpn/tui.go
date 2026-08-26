@@ -300,13 +300,16 @@ func (m tuiModel) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.pendingDelete = "__RECOVER__"
 		return m, nil
 	case "!":
-		// HARD reset (disarm): kill daemon + all rules/kill-switch, restore DNS.
-		m.appendLog("HARD RESET (disarm) requested")
-		return m, privilegedTUICmd("disarm", "disarm")
+		// HARD reset (disarm): confirm first — a stray keypress must not wipe all
+		// networking (gate finding F7: parity with the line menu's [y/N]).
+		m.scr = scrRemoveConfirm
+		m.pendingDelete = "__DISARM__"
+		return m, nil
 	case "P":
-		// Deep probe every zone (stops the daemon for exclusive access).
-		m.appendLog("DEEP PROBE requested — stopping daemon, testing every zone")
-		return m, privilegedTUICmd("probe", "probe", "--all")
+		// Deep probe every zone (stops the daemon): confirm first.
+		m.scr = scrRemoveConfirm
+		m.pendingDelete = "__PROBE__"
+		return m, nil
 	case "?":
 		m.scr = scrHelp
 		return m, nil

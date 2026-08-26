@@ -139,16 +139,26 @@ func (m tuiModel) keyRemoveConfirm(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		name := m.pendingDelete
 		m.pendingDelete = ""
 		m.scr = scrProfiles
-		if name == "__RECOVER__" {
+		switch name {
+		case "__RECOVER__":
 			m.scr = scrMain
 			m.appendLog("recover requested")
 			return m, requestRecoverCmd()
+		case "__DISARM__":
+			m.scr = scrMain
+			m.appendLog("HARD RESET (disarm) requested")
+			return m, privilegedTUICmd("disarm", "disarm")
+		case "__PROBE__":
+			m.scr = scrMain
+			m.appendLog("DEEP PROBE requested — stopping daemon, testing every zone")
+			return m, privilegedTUICmd("probe", "probe", "--all")
 		}
 		return m, removeProfileCmd(name)
 	case "n", "esc", "q":
-		if m.pendingDelete == "__RECOVER__" {
+		switch m.pendingDelete {
+		case "__RECOVER__", "__DISARM__", "__PROBE__":
 			m.scr = scrMain
-		} else {
+		default:
 			m.scr = scrProfiles
 		}
 		m.pendingDelete = ""
@@ -241,9 +251,16 @@ func (m tuiModel) viewImport() string {
 }
 
 func (m tuiModel) viewRemoveConfirm() string {
-	if m.pendingDelete == "__RECOVER__" {
+	switch m.pendingDelete {
+	case "__RECOVER__":
 		return m.header() + "\n\n" + stWarn.Render("  Recover will force-clean all Mazzy VPN tunnels and guards.") +
 			"\n  Continue? [y/N]\n"
+	case "__DISARM__":
+		return m.header() + "\n\n" + stWarn.Render("  ⛔ HARD RESET: kill the daemon and remove ALL rules/kill-switch, restore DNS.") +
+			"\n  This briefly drops all networking to return you to a clean state. Continue? [y/N]\n"
+	case "__PROBE__":
+		return m.header() + "\n\n" + stWarn.Render("  🧪 DEEP PROBE connects every zone for real to find which servers route.") +
+			"\n  This STOPS the VPN for a few minutes. Continue? [y/N]\n"
 	}
 	return m.header() + "\n\n" + stWarn.Render("  Remove profile: "+safeDisplay(m.pendingDelete)+"?") +
 		"\n  This removes the managed catalog copy. Continue? [y/N]\n"

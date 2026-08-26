@@ -224,12 +224,15 @@ func probeOne(ctx context.Context, name, uplink string) ProbeResult {
 		res.Verdict = "WORKS"
 	case res.Handshake && res.TxBytes > res.RxBytes*4 && res.TxBytes > 2000:
 		// We sent real data into the tunnel but the server returned almost
-		// nothing — it accepts the handshake but does not route internet egress.
+		// nothing — definite one-way traffic: it accepts the handshake but does
+		// not forward internet egress.
 		res.Verdict = "SERVER_NOT_ROUTING"
-		res.VerdictNote = fmt.Sprintf("tunnel up, no egress: tx=%dB rx=%dB (server accepts the tunnel but does not forward traffic)", res.TxBytes, res.RxBytes)
+		res.VerdictNote = fmt.Sprintf("tunnel up, one-way traffic: tx=%dB rx=%dB (server accepts the tunnel but forwards nothing)", res.TxBytes, res.RxBytes)
 	case res.Handshake:
-		res.Verdict = "SERVER_NOT_ROUTING"
-		res.VerdictNote = fmt.Sprintf("handshake ok but egress unconfirmed: %s", snap.Reason)
+		// Handshake up but egress not confirmed in the window, and traffic is not
+		// clearly one-way — could be a slow/flaky server or blocked probes.
+		res.Verdict = "NO_EGRESS"
+		res.VerdictNote = fmt.Sprintf("handshake ok but egress unconfirmed (tx=%dB rx=%dB): %s", res.TxBytes, res.RxBytes, snap.Reason)
 	default:
 		res.Verdict = "DEAD"
 		res.VerdictNote = "no WireGuard handshake (server down or blocked)"
@@ -246,6 +249,8 @@ func printProbeLine(r ProbeResult) {
 		glyph = "✔"
 	case "SERVER_NOT_ROUTING":
 		glyph, label = "▲", "SERVER NOT ROUTING"
+	case "NO_EGRESS":
+		glyph, label = "▲", "NO EGRESS"
 	case "BAD_CONFIG":
 		glyph, label = "✖", "BAD CONFIG"
 	}
@@ -273,7 +278,7 @@ func printProbeSummary(rs []ProbeResult) {
 		case "WORKS":
 			works++
 			usable = append(usable, r.Name)
-		case "SERVER_NOT_ROUTING":
+		case "SERVER_NOT_ROUTING", "NO_EGRESS":
 			notrouting++
 		case "BAD_CONFIG":
 			bad++
@@ -281,7 +286,7 @@ func printProbeSummary(rs []ProbeResult) {
 			dead++
 		}
 	}
-	fmt.Printf("\n→ %d work · %d server-not-routing · %d dead · %d bad-config (of %d)\n",
+	fmt.Printf("\n→ %d work · %d no-egress · %d dead · %d bad-config (of %d)\n",
 		works, notrouting, dead, bad, len(rs))
 	if len(usable) > 0 {
 		fmt.Println("  usable zones: " + safeDisplay(joinStrs(usable)))
