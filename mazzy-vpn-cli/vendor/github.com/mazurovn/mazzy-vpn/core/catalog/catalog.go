@@ -13,7 +13,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -45,16 +47,54 @@ var (
 // New returns a Catalog rooted at dir.
 func New(dir string) *Catalog { return &Catalog{Dir: dir} }
 
-// DefaultDir returns the per-user catalog directory, honoring MAZZY_CONFIG_DIR.
+// DefaultDir returns the catalog directory, honoring MAZZY_CONFIG_DIR.
+//
+// Root-under-sudo reads the INVOKING user's catalog: the daemon/connect run
+// elevated (HOME=/root under sudo), but the profiles were imported by the human
+// into ~/.config. Without this the root daemon read /root/.config (a different,
+// usually empty or stale catalog) — so zones the user imported were "profile
+// not found" when the daemon tried to connect/switch to them, and the daemon
+// and the interactive CLI silently used two divergent catalogs. Parity with
+// the desired.json (P0-A) and settings SUDO_USER fixes. An explicit
+// MAZZY_CONFIG_DIR (e.g. the systemd unit) still wins.
 func DefaultDir() string {
 	if d := os.Getenv("MAZZY_CONFIG_DIR"); d != "" {
 		return d
+	}
+	if p, ok := sudoUserCatalogDir(); ok {
+		return p
 	}
 	if h, err := os.UserConfigDir(); err == nil {
 		return filepath.Join(h, "mazzy-vpn", "profiles")
 	}
 	return filepath.Join(os.TempDir(), "mazzy-vpn", "profiles")
 }
+
+// sudoUserCatalogDir returns the invoking user's catalog dir when running as
+// root under sudo. Uses the real user database (never a blind /home/<name>) and
+// only when the dir already exists, so a normal root install is unaffected.
+func sudoUserCatalogDir() (string, bool) {
+	if os.Geteuid() != 0 {
+		return "", false
+	}
+	su := os.Getenv("SUDO_USER")
+	if su == "" || su == "root" || !sudoUserNameRe.MatchString(su) {
+		return "", false
+	}
+	u, err := user.Lookup(su)
+	if err != nil || u.HomeDir == "" {
+		return "", false
+	}
+	p := filepath.Join(u.HomeDir, ".config", "mazzy-vpn", "profiles")
+	if fi, err := os.Stat(p); err != nil || !fi.IsDir() {
+		return "", false
+	}
+	return p, true
+}
+
+// sudoUserNameRe accepts conventional Unix user names only (no path traversal
+// via a crafted SUDO_USER).
+var sudoUserNameRe = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}\$?$`)
 
 func (c *Catalog) metaFile() string { return filepath.Join(c.Dir, ".catalog.json") }
 

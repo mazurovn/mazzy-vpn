@@ -158,3 +158,20 @@ func TestFileWithinDir(t *testing.T) {
 		t.Error("parent-escape must not be within")
 	}
 }
+
+// TestSudoUserNameReRejectsTraversal guards the catalog SUDO_USER resolution.
+func TestSudoUserNameReRejectsTraversal(t *testing.T) {
+	for _, bad := range []string{"../etc", "a/b", "root", "", "user name"} {
+		if bad == "root" {
+			continue // separately rejected
+		}
+		if sudoUserNameRe.MatchString(bad) {
+			t.Errorf("%q must be rejected by the name regexp", bad)
+		}
+	}
+	for _, ok := range []string{"mazurov", "svc-account", "user_1"} {
+		if !sudoUserNameRe.MatchString(ok) {
+			t.Errorf("%q should be accepted", ok)
+		}
+	}
+}
