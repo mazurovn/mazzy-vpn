@@ -767,14 +767,6 @@ var cliCatalog = map[string]map[Lang]string{
 		JA: "(ログはまだありません — バックグラウンドデーモンを開始してください)",
 		KO: "(아직 로그 없음 — 백그라운드 데몬을 시작하세요)",
 	},
-	"cli.menu.action_ok_resume": {
-		EN: "✔ Resuming the running daemon.",
-		RU: "✔ Возобновление работающего демона.",
-		DE: "✔ Laufenden Daemon wird fortgesetzt.",
-		ZH: "✔ 正在恢复运行中的守护进程。",
-		JA: "✔ 実行中のデーモンを再開します。",
-		KO: "✔ 실행 중인 데몬을 재개합니다.",
-	},
 	"cli.log.hint": {
 		EN: "Press Enter to return to the menu.",
 		RU: "Нажмите Enter, чтобы вернуться в меню.",

@@ -10,8 +10,11 @@ import (
 	"time"
 )
 
-// desiredIntent is the TUI→daemon control file (ADR-0006 D2). The unprivileged
-// TUI writes it; the privileged daemon polls and applies it.
+// desiredIntent is the UI→daemon control file (ADR-0006 D2). It is written
+// ONLY by privileged code paths (cmdDaemon's forward, recordDownIntent inside
+// disconnect/stop/recover): /run/mazzy-vpn is root-owned 0755, so an
+// unprivileged process cannot write here — the TUI/menu reach it through the
+// elevated commands. The daemon polls and applies it each tick.
 type desiredIntent struct {
 	Zone    string `json:"zone"`
 	Desired string `json:"desired"` // "up" | "down"
@@ -24,9 +27,9 @@ type desiredIntent struct {
 const desiredMaxAge = 2 * time.Minute
 
 // desiredPath returns the intent-file path. It lives in the SHARED runtime dir
-// (runDir → /run/mazzy-vpn, honored via MAZZY_RUN_DIR) — the exact same
-// privilege-neutral location as the heartbeat — so the unprivileged writer
-// (menu/TUI) and the root daemon reader agree on ONE file.
+// (runDir → /run/mazzy-vpn, honored via MAZZY_RUN_DIR) — the same location as
+// the heartbeat — so every privileged writer and the daemon agree on ONE file,
+// and the unprivileged UI can still READ it (0644).
 //
 // P0-A: the previous implementation used os.UserConfigDir() = $HOME/.config,
 // which differs between the unprivileged writer (HOME=/home/user) and the root
