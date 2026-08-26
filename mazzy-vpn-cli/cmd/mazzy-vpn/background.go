@@ -58,6 +58,13 @@ func maybeDaemonize(background bool) (detached bool, err error) {
 	if !background || os.Getenv(daemonizedEnv) == "1" {
 		return false, nil
 	}
+	// Under systemd (Type=notify), self-daemonizing would make the READY/WATCHDOG
+	// notifications come from a pid that is not MAINPID (NotifyAccess=main drops
+	// them) and the unit would hang until TimeoutStartSec. systemd already
+	// provides the detachment --background exists for, so run in the foreground.
+	if os.Getenv("NOTIFY_SOCKET") != "" {
+		return false, nil
+	}
 	self, e := os.Executable()
 	if e != nil || self == "" {
 		return false, fmt.Errorf("cannot locate self executable")

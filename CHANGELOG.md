@@ -5,6 +5,25 @@ All notable changes to Mazzy VPN are documented here.
 ## CLI 2.4.2 - 2026-08-26
 
 ### Added
+- **`sudo mazzy-vpn doctor --heal`** — active connection rescuer with an
+  escalation ladder: already protected → noop; daemon mid-reconnect → 90s
+  grace; paused → resume and verify; unhealthy → SIGTERM (SIGKILL fallback) →
+  full `recover` → fresh daemon on the best zone, each rung verified by a real
+  egress check. Granted passwordless via `trust` scoped to exactly
+  `doctor --heal` — designed for agents/cron keeping the link 24/7.
+- **Honest latency graph**: the daemon pings the VPN server (ICMP via the
+  physical uplink, asynchronously) each healthy tick; the dashboard graph,
+  p50/p95 and jitter now use the real RTT instead of the HTTPS probe duration
+  (which bundled TCP+TLS+HTTP and overstated latency several-fold).
+- **systemd watchdog**: the daemon speaks sd_notify (READY/WATCHDOG/STOPPING
+  from the 5s heartbeat pulse); the packaged unit is now `Type=notify` with
+  `WatchdogSec=90` and `Restart=always` — systemd revives the daemon even
+  after a hard wedge or OOM kill. Under systemd, `--background` self-forking
+  is disabled and a foreign daemon owning the VPN fails the unit start
+  honestly instead of hanging it.
+- **Legacy cleanup in `recover`**: removes the defunct
+  `/etc/modules-load.d/amneziawg.conf` (content-checked) that errored on every
+  boot; `--purge-legacy` also deletes leftover awg/awg-quick binaries.
 - Dashboard link-health row (menu + TUI): WireGuard **handshake age**, tunnel
   **traffic ↓/↑**, session **loss %**, **egress country/city** and the
   **stealth score** — all published by the daemon into the heartbeat, so the

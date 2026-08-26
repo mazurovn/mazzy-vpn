@@ -226,6 +226,7 @@ Usage:
 
  %s
   mazzy-vpn doctor [--json]           host diagnostics (no awg/jq required)
+  sudo mazzy-vpn doctor --heal        actively rescue the connection (resume/recover/restart)
   mazzy-vpn providers [--type llm|agent|search] [--json]   check AI providers
   mazzy-vpn list DIR [--json]         validate profiles in a directory
   mazzy-vpn validate FILE             validate a single profile

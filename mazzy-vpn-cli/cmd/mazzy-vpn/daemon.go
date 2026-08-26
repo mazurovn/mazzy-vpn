@@ -6,8 +6,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -69,6 +71,14 @@ func cmdDaemon(ctx context.Context, args []string) int {
 	}
 	if snap, running, err := forwardToActiveDaemon(requestedZone); err != nil {
 		fmt.Fprintf(os.Stderr, "request active daemon: %v\n", err)
+		return 1
+	} else if running && os.Getenv("NOTIFY_SOCKET") != "" {
+		// Under a Type=notify systemd unit, forward-and-exit would end the main
+		// process without READY=1 and systemd would mark the service failed.
+		// Another daemon owning the VPN while the unit starts is a real conflict:
+		// report it honestly and let systemd's restart policy retry.
+		fmt.Fprintf(os.Stderr, "another mazzy-vpn daemon (pid %d, zone %s) already owns the VPN; stop it before using the systemd unit\n",
+			snap.PID, safeDisplay(snap.Zone))
 		return 1
 	} else if running {
 		switch {
@@ -150,10 +160,14 @@ func cmdDaemon(ctx context.Context, args []string) int {
 				return
 			case <-hb.C:
 				rw.Touch()
+				// Feed the systemd watchdog from the same pulse: if even this
+				// goroutine dies, systemd (WatchdogSec) restarts the daemon.
+				sdNotify("WATCHDOG=1")
 			}
 		}
 	}()
 	defer close(hbDone)
+	sdNotify("READY=1")
 
 	// Clear any stale down-intent left by a previous session's Disconnect so this
 	// freshly-started daemon does not immediately pause itself on its first tick.
@@ -203,6 +217,7 @@ func cmdDaemon(ctx context.Context, args []string) int {
 
 	stop := func() int {
 		d.logf("stopping...")
+		sdNotify("STOPPING=1")
 		// Teardown must run even when ctx is already cancelled (SIGTERM path).
 		sctx := context.WithoutCancel(ctx)
 		if conn != nil {
@@ -369,7 +384,7 @@ func cmdDaemon(ctx context.Context, args []string) int {
 				}
 				rx, tx, _ := conn.Transfer()
 				rw.SetLinkHealth(hsAge, rx, tx)
-				rw.Tick(int(time.Since(tickStart).Milliseconds()), true)
+				rw.TickPing(int(time.Since(tickStart).Milliseconds()), d.serverPingMS(ctx), true)
 				continue
 			}
 			rw.Tick(0, false)
@@ -452,6 +467,41 @@ type daemonState struct {
 	lc  *livecheck.Checker
 	nfy *notify.Notifier
 	rw  *runstatus.Writer
+	// endpointHost is the current zone's server host (set by connectZone), and
+	// png pings it via the PHYSICAL uplink each healthy tick — the honest link
+	// metric for the dashboard graph (the HTTPS probe duration bundles
+	// TCP+TLS+HTTP and overstates latency several-fold).
+	endpointHost string
+	png          *measure.Pinger
+	pingBusy     atomic.Bool  // one in-flight ping at a time
+	lastPingMS   atomic.Int32 // most recent completed RTT (0 = none yet)
+}
+
+// serverPingMS returns the most recent completed ICMP RTT to the current
+// server and kicks off the next measurement in the background. The ping (up
+// to 2s) deliberately never runs inline in the tick handler: blocking there
+// would delay SIGTERM/intent handling on every healthy tick.
+func (d *daemonState) serverPingMS(ctx context.Context) int {
+	if d.endpointHost == "" {
+		return 0
+	}
+	if d.png == nil {
+		d.png = measure.NewPinger()
+		d.png.Timeout = 2 * time.Second
+		d.png.Interface = settingsUplink()
+	}
+	if d.pingBusy.CompareAndSwap(false, true) {
+		host := d.endpointHost
+		go func() {
+			defer d.pingBusy.Store(false)
+			if ms, ok := d.png.Ping(ctx, host); ok {
+				d.lastPingMS.Store(int32(ms + 0.5))
+			} else {
+				d.lastPingMS.Store(0)
+			}
+		}()
+	}
+	return int(d.lastPingMS.Load())
 }
 
 func (d *daemonState) logf(format string, a ...any) {
@@ -479,6 +529,12 @@ func (d *daemonState) connectZone(ctx context.Context, name string) (*connect.Co
 	if err != nil {
 		d.logf("load %s: %v", name, err)
 		return nil, false
+	}
+	// Remember the server host for the per-tick ICMP metric (graph source).
+	if host, _, herr := net.SplitHostPort(cfg.Endpoint()); herr == nil {
+		d.endpointHost = host
+	} else {
+		d.endpointHost = cfg.Endpoint()
 	}
 	d.logf("connecting %s (%s)...", name, proto.Title())
 	c, err := connect.Up(ctx, proto, cfg, connect.Options{LogLevel: wireguard.LogError, Uplink: settingsUplink()})

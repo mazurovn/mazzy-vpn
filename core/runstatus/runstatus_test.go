@@ -184,3 +184,22 @@ func TestSetProtocolRecordsProtocol(t *testing.T) {
 		t.Fatalf("protocol not recorded: %+v ok=%v", s, ok)
 	}
 }
+
+// TestEffectiveMSPrefersPing: the graph/stats must use the honest ICMP RTT
+// when measured and fall back to the HTTPS probe duration otherwise.
+func TestEffectiveMSPrefersPing(t *testing.T) {
+	if (Sample{LatencyMS: 250, PingMS: 40}).EffectiveMS() != 40 {
+		t.Error("ping must win over probe duration")
+	}
+	if (Sample{LatencyMS: 250}).EffectiveMS() != 250 {
+		t.Error("probe duration is the fallback")
+	}
+	s := Snapshot{Samples: []Sample{{LatencyMS: 250, PingMS: 40, OK: true}, {LatencyMS: 260, OK: true}}}
+	series := s.LatencySeries()
+	if series[0] != 40 || series[1] != 260 {
+		t.Errorf("series = %v, want [40 260]", series)
+	}
+	if p := s.LatencyPercentile(100); p != 260 {
+		t.Errorf("p100 = %d, want 260", p)
+	}
+}

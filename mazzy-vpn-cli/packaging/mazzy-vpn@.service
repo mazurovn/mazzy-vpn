@@ -13,13 +13,20 @@ Wants=network-online.target
 After=network-online.target nss-lookup.target
 
 [Service]
-Type=simple
+# Type=notify + WatchdogSec: the daemon sends READY=1 on startup and WATCHDOG=1
+# from its 5s heartbeat pulse; if the process wedges hard enough to stop even
+# the pulse, systemd kills and restarts it. Restart=always additionally covers
+# crashes and OOM kills — the last-resort guard the in-process self-healing
+# cannot provide for itself.
+Type=notify
+NotifyAccess=main
+WatchdogSec=90
 # The catalog is read from this user's config; adjust if you import as root.
 Environment=MAZZY_CONFIG_DIR=/root/.config/mazzy-vpn/profiles
 ExecStart=/usr/local/bin/mazzy-vpn daemon %i
 # Give the daemon time to tear down cleanly on stop.
 TimeoutStopSec=20
-Restart=on-failure
+Restart=always
 RestartSec=5
 # Hardening: the daemon needs network admin to manage the TUN and nftables.
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW

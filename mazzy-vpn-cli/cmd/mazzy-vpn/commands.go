@@ -100,8 +100,12 @@ func firstNonFlagValueAware(args []string) string {
 	return ""
 }
 
-// cmdDoctor runs host diagnostics.
+// cmdDoctor runs host diagnostics. With --heal it becomes the active rescuer:
+// diagnose, then climb the rescue ladder until the connection is PROTECTED.
 func cmdDoctor(ctx context.Context, args []string) int {
+	if hasFlag(args, "--heal") {
+		return healConnection(ctx)
+	}
 	rep := doctor.Run(ctx, nil)
 	if hasFlag(args, "--json") {
 		enc := json.NewEncoder(os.Stdout)

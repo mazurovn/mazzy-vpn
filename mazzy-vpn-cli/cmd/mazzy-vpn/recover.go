@@ -8,8 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
-
 	"strconv"
+	"strings"
 
 	"github.com/mazurovn/mazzy-vpn/core"
 	"github.com/mazurovn/mazzy-vpn/core/guard"
@@ -96,6 +96,42 @@ func cmdRecover(ctx context.Context, args []string) int {
 
 	// 4. Flush our routing table.
 	run("flushed table "+mark, "ip", "route", "flush", "table", mark)
+
+	// 5. Legacy leftovers from the pre-Go awg/amnezia era. The modules-load stanza
+	//    references a kernel module that no longer exists and errors on EVERY
+	//    boot; it is removed unconditionally. The old awg binaries are inert but
+	//    confusing — reported always, deleted only with an explicit --purge-legacy.
+	const legacyModulesConf = "/etc/modules-load.d/amneziawg.conf"
+	// Content check before deleting: remove only when the file actually loads
+	// the defunct module — a repurposed file with this name is left alone.
+	if data, err := os.ReadFile(legacyModulesConf); err == nil {
+		if strings.Contains(strings.ToLower(string(data)), "amneziawg") {
+			if os.Remove(legacyModulesConf) == nil {
+				fmt.Println("  ✔ removed legacy " + legacyModulesConf + " (failed on every boot)")
+				steps++
+			}
+		} else {
+			fmt.Println("  • " + legacyModulesConf + " exists but does not reference amneziawg; left untouched")
+		}
+	}
+	legacyBins := []string{}
+	for _, b := range []string{"/usr/bin/awg", "/usr/bin/awg-quick", "/usr/local/bin/awg", "/usr/local/bin/awg-quick"} {
+		if fi, err := os.Lstat(b); err == nil && !fi.IsDir() {
+			legacyBins = append(legacyBins, b)
+		}
+	}
+	if len(legacyBins) > 0 {
+		if hasFlag(args, "--purge-legacy") {
+			for _, b := range legacyBins {
+				if os.Remove(b) == nil {
+					fmt.Println("  ✔ removed legacy binary " + b)
+					steps++
+				}
+			}
+		} else {
+			fmt.Printf("  • legacy awg binaries present (%s) — remove with: sudo mazzy-vpn recover --purge-legacy\n", strings.Join(legacyBins, ", "))
+		}
+	}
 
 	if hasFlag(args, "--reset-catalog") {
 		fmt.Println("  ⚠ --reset-catalog: removing managed profiles")

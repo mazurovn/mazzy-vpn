@@ -19,12 +19,23 @@ func TestSudoersContentShape(t *testing.T) {
 		t.Fatalf("missing NOPASSWD spec:\n%s", c)
 	}
 	for _, sc := range trustedSubcommands {
+		if sc == "doctor" {
+			continue // scoped separately below
+		}
 		if !strings.Contains(c, "/usr/local/bin/mazzy-vpn "+sc+",") && !strings.Contains(c, "/usr/local/bin/mazzy-vpn "+sc+"\n") {
 			t.Errorf("bare form for %q missing", sc)
 		}
 		if !strings.Contains(c, "/usr/local/bin/mazzy-vpn "+sc+" *") {
 			t.Errorf("wildcard form for %q missing", sc)
 		}
+	}
+	// doctor is scoped to --heal only: plain `doctor` (or any other flag) must
+	// NOT get a passwordless rule.
+	if !strings.Contains(c, "/usr/local/bin/mazzy-vpn doctor --heal") {
+		t.Error("doctor --heal rule missing")
+	}
+	if strings.Contains(c, "mazzy-vpn doctor,") || strings.Contains(c, "mazzy-vpn doctor *") {
+		t.Error("unscoped doctor rule must not be granted")
 	}
 	// `connect` must NEVER appear: it takes a raw path and would become a
 	// root file-read oracle under NOPASSWD (security gate finding #3).

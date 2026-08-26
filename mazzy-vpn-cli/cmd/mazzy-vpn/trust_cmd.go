@@ -25,7 +25,10 @@ const sudoersDropin = "/etc/sudoers.d/mazzy-vpn"
 // line in the parse error — an arbitrary-file read oracle, security gate
 // finding #3). The catalog-only verbs (`up NAME`, `daemon NAME`) resolve names
 // through an exact manifest lookup and cover every UI flow.
-var trustedSubcommands = []string{"daemon", "stop", "disconnect", "recover", "up", "auto", "mimic"}
+// `doctor` is included for its --heal mode so unattended automation (agents,
+// cron) can rescue the connection without a password; plain doctor is
+// read-only anyway, and --heal wields only the already-trusted verbs' powers.
+var trustedSubcommands = []string{"daemon", "stop", "disconnect", "recover", "up", "auto", "mimic", "doctor"}
 
 // cmdTrust installs (or removes, with --revoke) a sudoers drop-in that lets ONE
 // user run the privileged mazzy-vpn subcommands without a password prompt, so
@@ -161,6 +164,13 @@ func binarySafeForNopasswd(bin string) error {
 func sudoersContent(user, bin string) string {
 	var rules []string
 	for _, sc := range trustedSubcommands {
+		if sc == "doctor" {
+			// Scope doctor to exactly the capability that justifies it: --heal.
+			// Plain doctor is unprivileged anyway, and future doctor flags should
+			// not inherit passwordless root by default.
+			rules = append(rules, bin+" doctor --heal", bin+" doctor --heal *")
+			continue
+		}
 		rules = append(rules, bin+" "+sc, bin+" "+sc+" *")
 	}
 	return "# Managed by `mazzy-vpn trust` — passwordless daemon control for the menu/TUI.\n" +

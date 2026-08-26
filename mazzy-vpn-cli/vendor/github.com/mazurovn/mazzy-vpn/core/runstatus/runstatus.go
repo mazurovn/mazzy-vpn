@@ -43,9 +43,21 @@ const (
 
 // Sample is one latency reading for the dashboard graph.
 type Sample struct {
-	TS        int64 `json:"ts"`         // unix seconds
-	LatencyMS int   `json:"latency_ms"` // egress probe latency (0 = no egress)
-	OK        bool  `json:"ok"`         // egress confirmed at this tick
+	TS        int64 `json:"ts"`                // unix seconds
+	LatencyMS int   `json:"latency_ms"`        // egress HTTPS probe duration (0 = no egress)
+	PingMS    int   `json:"ping_ms,omitempty"` // ICMP RTT to the VPN server via the uplink (0 = not measured)
+	OK        bool  `json:"ok"`                // egress confirmed at this tick
+}
+
+// EffectiveMS is the value the graph and stats should use: the honest ICMP RTT
+// when measured, else the HTTPS probe duration. The HTTPS number bundles
+// TCP+TLS+HTTP over the whole probe chain and overstates latency ~3-5×; ICMP
+// to the actual server is the real link quality.
+func (sm Sample) EffectiveMS() int {
+	if sm.PingMS > 0 {
+		return sm.PingMS
+	}
+	return sm.LatencyMS
 }
 
 // ErrEvent is one recorded error/degradation for the "recent errors" panel.
@@ -93,11 +105,12 @@ func (s Snapshot) Fresh(within time.Duration) bool {
 	return time.Since(time.Unix(s.UpdatedAt, 0)) <= within
 }
 
-// LatencySeries returns just the latency values, oldest→newest, for the graph.
+// LatencySeries returns the effective latency values (ICMP when measured,
+// HTTPS probe duration otherwise), oldest→newest, for the graph.
 func (s Snapshot) LatencySeries() []int {
 	out := make([]int, len(s.Samples))
 	for i, sm := range s.Samples {
-		out[i] = sm.LatencyMS
+		out[i] = sm.EffectiveMS()
 	}
 	return out
 }
@@ -146,8 +159,8 @@ func (s Snapshot) LossPercent() float64 {
 func (s Snapshot) LatencyPercentile(p float64) int {
 	values := make([]int, 0, len(s.Samples))
 	for _, sample := range s.Samples {
-		if sample.OK && sample.LatencyMS > 0 {
-			values = append(values, sample.LatencyMS)
+		if sample.OK && sample.EffectiveMS() > 0 {
+			values = append(values, sample.EffectiveMS())
 		}
 	}
 	if len(values) == 0 {
@@ -174,18 +187,18 @@ func (s Snapshot) JitterMS() int {
 	total, pairs := 0, 0
 	previous := 0
 	for _, sample := range s.Samples {
-		if !sample.OK || sample.LatencyMS <= 0 {
+		if !sample.OK || sample.EffectiveMS() <= 0 {
 			continue
 		}
 		if previous > 0 {
-			delta := sample.LatencyMS - previous
+			delta := sample.EffectiveMS() - previous
 			if delta < 0 {
 				delta = -delta
 			}
 			total += delta
 			pairs++
 		}
-		previous = sample.LatencyMS
+		previous = sample.EffectiveMS()
 	}
 	if pairs == 0 {
 		return 0
@@ -279,7 +292,11 @@ func (w *Writer) SetZone(zone string) {
 
 // Tick records one health sample (latencyMS, ok) and flushes. A zero or
 // negative latency with ok=false denotes a missed egress at this tick.
-func (w *Writer) Tick(latencyMS int, ok bool) {
+func (w *Writer) Tick(latencyMS int, ok bool) { w.TickPing(latencyMS, 0, ok) }
+
+// TickPing is Tick with an additional ICMP RTT to the VPN server (0 = not
+// measured this tick). The dashboard graph prefers the ping when present.
+func (w *Writer) TickPing(latencyMS, pingMS int, ok bool) {
 	if w == nil {
 		return
 	}
@@ -289,7 +306,7 @@ func (w *Writer) Tick(latencyMS int, ok bool) {
 	if !ok {
 		w.snap.Fails++
 	}
-	w.snap.Samples = append(w.snap.Samples, Sample{TS: time.Now().Unix(), LatencyMS: latencyMS, OK: ok})
+	w.snap.Samples = append(w.snap.Samples, Sample{TS: time.Now().Unix(), LatencyMS: latencyMS, PingMS: pingMS, OK: ok})
 	if len(w.snap.Samples) > maxSamples {
 		w.snap.Samples = w.snap.Samples[len(w.snap.Samples)-maxSamples:]
 	}
