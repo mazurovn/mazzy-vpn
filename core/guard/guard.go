@@ -118,7 +118,10 @@ func (g *Guard) InstallKillSwitch(ctx context.Context, mark uint32, tunnelIfaces
 	if len(tunnelIfaces) > 0 {
 		quoted := make([]string, 0, len(tunnelIfaces))
 		for _, n := range tunnelIfaces {
-			if n != "" {
+			// Strict whitelist before interpolation into the ruleset: a name
+			// containing a quote/space/newline could otherwise inject nft rules.
+			// Kernel interface names are ≤15 chars from a safe alphabet anyway.
+			if ifaceRe.MatchString(n) {
 				quoted = append(quoted, `"`+n+`"`)
 			}
 		}

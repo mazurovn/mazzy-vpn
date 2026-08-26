@@ -121,3 +121,23 @@ func TestKillSwitchRuleset(t *testing.T) {
 		t.Errorf("expected pre-delete for idempotency; calls=%v", cf.Calls)
 	}
 }
+
+// TestKillSwitchRejectsMaliciousIfaceNames: names that could inject nft rules
+// must be dropped before ruleset interpolation.
+func TestKillSwitchRejectsMaliciousIfaceNames(t *testing.T) {
+	cf := &captureFake{}
+	g := New(cf)
+	bad := []string{`vpn"0`, "a b", "x\nreject", ""}
+	if err := g.InstallKillSwitch(context.Background(), 51820, append(bad, "vpnaw0")); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	rs := cf.lastRuleset
+	if !strings.Contains(rs, `oifname { "vpnaw0" } accept`) {
+		t.Errorf("valid iface must survive filtering:\n%s", rs)
+	}
+	for _, b := range bad {
+		if b != "" && strings.Contains(rs, b) {
+			t.Errorf("malicious iface %q leaked into the ruleset:\n%s", b, rs)
+		}
+	}
+}
