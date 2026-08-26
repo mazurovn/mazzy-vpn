@@ -58,6 +58,37 @@ func DefaultDir() string {
 
 func (c *Catalog) metaFile() string { return filepath.Join(c.Dir, ".catalog.json") }
 
+// fileWithinDir reports whether p resolves to a location inside c.Dir. It is
+// the single guard against a path-injection: a hand-edited manifest, a crafted
+// profile name, or a stored File value must never let a catalog operation
+// read/delete a file outside the managed store (defense in depth — names are
+// already sanitized on import, but Get/Remove also trust the stored File).
+func (c *Catalog) fileWithinDir(p string) bool {
+	dir, err := filepath.Abs(c.Dir)
+	if err != nil {
+		return false
+	}
+	fp, err := filepath.Abs(p)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(dir, fp)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
+}
+
+// validLookupName rejects a name that could traverse the filesystem when it is
+// (directly or via a stored File) turned into a path. Managed names never
+// contain separators or "..", so this is a cheap correctness gate.
+func validLookupName(name string) bool {
+	if name == "" || name == "." || name == ".." {
+		return false
+	}
+	return !strings.ContainsAny(name, "/\\") && !strings.Contains(name, "..")
+}
+
 // ensureDir makes the managed directory with private permissions.
 func (c *Catalog) ensureDir() error {
 	if err := os.MkdirAll(c.Dir, 0o700); err != nil {
@@ -172,12 +203,18 @@ func (c *Catalog) List() ([]Entry, error) {
 
 // Get returns one entry by name.
 func (c *Catalog) Get(name string) (*Entry, error) {
+	if !validLookupName(name) {
+		return nil, ErrNotFound
+	}
 	entries, err := c.load()
 	if err != nil {
 		return nil, err
 	}
 	for i := range entries {
 		if entries[i].Name == name {
+			if !c.fileWithinDir(entries[i].File) {
+				return nil, fmt.Errorf("catalog: profile %q resolves outside the managed store", name)
+			}
 			return &entries[i], nil
 		}
 	}
@@ -194,7 +231,11 @@ func (c *Catalog) Remove(name string) error {
 	found := false
 	for _, e := range entries {
 		if e.Name == name {
-			_ = os.Remove(e.File)
+			// Only ever delete inside the managed store — never a path a crafted
+			// manifest could point at (e.g. an absolute /etc/... File value).
+			if c.fileWithinDir(e.File) {
+				_ = os.Remove(e.File)
+			}
 			found = true
 			continue
 		}

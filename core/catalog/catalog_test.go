@@ -117,3 +117,44 @@ func TestInferCountry(t *testing.T) {
 		}
 	}
 }
+
+// TestGetRejectsTraversalNames guards the path-injection hardening: a lookup
+// name with separators or ".." must never resolve, and a manifest whose stored
+// File escapes the managed dir must be refused.
+func TestGetRejectsTraversalNames(t *testing.T) {
+	c := &Catalog{Dir: t.TempDir()}
+	for _, bad := range []string{"../etc/shadow", "a/b", "..", "", `x\y`} {
+		if _, err := c.Get(bad); err == nil {
+			t.Errorf("Get(%q) must fail", bad)
+		}
+	}
+}
+
+// TestValidLookupName unit-checks the name gate.
+func TestValidLookupName(t *testing.T) {
+	for _, ok := range []string{"Berlin", "USA-NewYork_S1", "zone123"} {
+		if !validLookupName(ok) {
+			t.Errorf("%q should be valid", ok)
+		}
+	}
+	for _, bad := range []string{"", ".", "..", "a/b", "a\\b", "../x", "x/../y"} {
+		if validLookupName(bad) {
+			t.Errorf("%q must be rejected", bad)
+		}
+	}
+}
+
+// TestFileWithinDir checks the containment predicate.
+func TestFileWithinDir(t *testing.T) {
+	dir := t.TempDir()
+	c := &Catalog{Dir: dir}
+	if !c.fileWithinDir(filepath.Join(dir, "Berlin.conf")) {
+		t.Error("in-dir file must be within")
+	}
+	if c.fileWithinDir("/etc/shadow") {
+		t.Error("/etc/shadow must not be within")
+	}
+	if c.fileWithinDir(filepath.Join(dir, "..", "escape.conf")) {
+		t.Error("parent-escape must not be within")
+	}
+}
