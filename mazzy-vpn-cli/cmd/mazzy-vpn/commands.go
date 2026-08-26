@@ -14,7 +14,9 @@ import (
 
 	"github.com/mazurovn/mazzy-vpn/core"
 	"github.com/mazurovn/mazzy-vpn/core/doctor"
+	"github.com/mazurovn/mazzy-vpn/core/livecheck"
 	"github.com/mazurovn/mazzy-vpn/core/profile"
+	"github.com/mazurovn/mazzy-vpn/core/runstatus"
 )
 
 // safeDisplay sanitizes a user-controlled string (profile name, path, zone,
@@ -119,16 +121,50 @@ func cmdDoctor(ctx context.Context, args []string) int {
 	for _, c := range rep.Checks {
 		fmt.Printf("[%-4s] %s: %s\n", c.Status, safeDisplay(c.Name), safeDisplay(c.Detail))
 	}
+	// Live connection line: plain doctor previously said nothing about the actual
+	// VPN state, so it looked "broken" during a real connection problem. Show the
+	// daemon/egress state so doctor reflects reality.
+	fmt.Println(liveConnectionLine(ctx))
 	// Catalog health line: a quick, offline count so the user sees whether their
 	// profiles are usable without running the full `verify` audit.
 	if line := catalogHealthLine(); line != "" {
 		fmt.Println(line)
 	}
 	fmt.Printf("\nSummary: OK=%d WARN=%d FAIL=%d\n", rep.OK, rep.Warn, rep.Fail)
+	fmt.Println("  Tips: `sudo mazzy-vpn doctor --heal` fixes the connection · `sudo mazzy-vpn probe --all` deep-tests every zone")
 	if !rep.Healthy() {
 		return 1
 	}
 	return 0
+}
+
+// liveConnectionLine reports the ACTUAL connection state for doctor: the live
+// daemon's state when present, else a one-shot egress check on any live tunnel,
+// else "no VPN". This is what makes plain doctor honest about the connection.
+func liveConnectionLine(ctx context.Context) string {
+	if snap, ok := daemonRunning(); ok {
+		switch snap.State {
+		case runstatus.StateProtected:
+			return "[OK  ] connection: PROTECTED via " + safeDisplay(snap.Zone) + " (egress " + safeDisplay(snap.Egress) + ")"
+		case runstatus.StateReconnect, runstatus.StateConnecting:
+			note := ""
+			if r := snap.RecentErrors(1); len(r) > 0 {
+				note = " — " + safeDisplay(r[0].Reason)
+			}
+			return "[WARN] connection: daemon " + string(snap.State) + " on " + safeDisplay(snap.Zone) + note
+		case runstatus.StatePaused:
+			return "[WARN] connection: daemon PAUSED (run: sudo mazzy-vpn daemon <zone> to resume)"
+		default:
+			return "[WARN] connection: daemon state " + string(snap.State)
+		}
+	}
+	if iface := detectLiveInterface(); iface != "" {
+		if livecheck.New().Check(ctx, iface).Protected() {
+			return "[OK  ] connection: tunnel " + safeDisplay(iface) + " is routing (no daemon)"
+		}
+		return "[WARN] connection: tunnel " + safeDisplay(iface) + " up but NOT routing (try: sudo mazzy-vpn doctor --heal)"
+	}
+	return "[INFO] connection: no VPN active (plain uplink)"
 }
 
 // catalogHealthLine returns a one-line offline summary of catalog health for the

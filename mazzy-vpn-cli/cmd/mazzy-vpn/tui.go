@@ -299,6 +299,14 @@ func (m tuiModel) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.scr = scrRemoveConfirm
 		m.pendingDelete = "__RECOVER__"
 		return m, nil
+	case "!":
+		// HARD reset (disarm): kill daemon + all rules/kill-switch, restore DNS.
+		m.appendLog("HARD RESET (disarm) requested")
+		return m, privilegedTUICmd("disarm", "disarm")
+	case "P":
+		// Deep probe every zone (stops the daemon for exclusive access).
+		m.appendLog("DEEP PROBE requested — stopping daemon, testing every zone")
+		return m, privilegedTUICmd("probe", "probe", "--all")
 	case "?":
 		m.scr = scrHelp
 		return m, nil
@@ -564,9 +572,11 @@ func (m tuiModel) dashboardHeader() (string, bool) {
 func (m tuiModel) actionBar() string {
 	line1 := fmt.Sprintf("%s Connect   %s Zones   %s Profiles   %s Diagnostics   %s Disconnect   %s Recover",
 		stKey.Render("[c]"), stKey.Render("[z]"), stKey.Render("[p]"), stKey.Render("[x]"), stKey.Render("[d]"), stKey.Render("[r]"))
-	line2 := fmt.Sprintf("%s Graph window   %s Log   %s Stop bg   %s Settings   %s Help   %s Quit",
+	line2 := fmt.Sprintf("%s Graph   %s Log   %s Stop bg   %s Settings   %s Help   %s Quit",
 		stKey.Render("[g]"), stKey.Render("[l]"), stKey.Render("[k]"), stKey.Render("[s]"), stKey.Render("[?]"), stKey.Render("[q]"))
-	return line1 + "\n" + line2
+	line3 := fmt.Sprintf("%s HARD RESET (disarm)   %s Deep probe all zones",
+		stKey.Render("[!]"), stKey.Render("[P]"))
+	return line1 + "\n" + line2 + "\n" + line3
 }
 
 // viewLog shows the persisted daemon activity log (background runs) plus the

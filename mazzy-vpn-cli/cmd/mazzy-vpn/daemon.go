@@ -208,9 +208,16 @@ func cmdDaemon(ctx context.Context, args []string) int {
 	lastStealth := -1
 
 	fails := 0
-	softFails := 0           // egress probes failing while the handshake is fresh
-	paused := startPaused    // true after a Disconnect intent; blocks auto-reconnect
-	reconnecting := false    // an egress loss triggered a teardown; next success is a "reconnect"
+	softFails := 0        // egress probes failing while the handshake is fresh
+	paused := startPaused // true after a Disconnect intent; blocks auto-reconnect
+	reconnecting := false // an egress loss triggered a teardown; next success is a "reconnect"
+	// lastIntentTS makes intents EDGE-triggered: each desired.json is acted on
+	// exactly once (by timestamp), never re-applied every tick. Without this a
+	// still-fresh user intent (e.g. "connect Zurich") re-pinned the daemon each
+	// tick and dragged it back to that zone right after an autonomous failover
+	// had moved on — an infinite Zurich→Denmark→Zurich loop until the intent
+	// aged out (observed incident).
+	var lastIntentTS int64
 	const reconnectLimit = 2 // reconnect same zone this many times
 	const softFailLimit = 6  // ~1 min of probe failures with a FRESH handshake before reconnecting
 	const failoverLimit = 4  // then fail over to another live zone
@@ -283,7 +290,11 @@ func cmdDaemon(ctx context.Context, args []string) int {
 			lastStealth = score
 		case <-ticker.C:
 			// Honor an intent written by the (unprivileged) TUI/menu (ADR-0006 D2).
-			if di, ok := readDesired(); ok {
+			// Edge-triggered: act only on an intent NEWER than the last applied,
+			// so a still-fresh intent cannot re-pin the zone every tick and fight
+			// autonomous failover.
+			if di, ok := readDesired(); ok && di.TS > lastIntentTS {
+				lastIntentTS = di.TS
 				if di.Desired == "down" {
 					// Paused: tear down if up, and (critically) do NOT auto-reconnect
 					// until the intent flips back to "up". Without this guard the loop
@@ -377,17 +388,28 @@ func cmdDaemon(ctx context.Context, args []string) int {
 					delete(cooldown, zone)
 					continue
 				}
-				// Not confirmed. A non-nil conn (link up, egress unverified) stays
-				// under watch: the health ticks below will confirm or fail it.
-				fails++
-				nextAttempt = time.Now().Add(backoff(fails))
-				if fails >= failoverLimit {
-					if nz, changed := d.failoverZone(ctx, zone, cooldown); changed {
-						zone = nz
-						rw.SetZone(zone)
-						fails = 0
-						nextAttempt = time.Time{}
-					}
+				// Egress was NOT confirmed within connectZone's 20s poll. This zone
+				// handshakes but does not actually route traffic (or is too slow).
+				// WALK to the next zone immediately instead of sitting here
+				// reconnecting a non-routing server — this is the user's ask:
+				// "run through all points until a really WORKING one is found and
+				// mark the unavailable ones", rather than clinging to the
+				// fastest-ping server forever. connectZone already gave it a full
+				// egress-confirmation window, so one failure is enough to move on.
+				if conn != nil {
+					_ = conn.Down(ctx)
+					conn = nil
+				}
+				if nz, changed := d.failoverZone(ctx, zone, cooldown); changed {
+					zone = nz
+					rw.SetZone(zone)
+					fails = 0
+					nextAttempt = time.Time{}
+				} else {
+					// No other candidate (every zone quarantined): back off and
+					// retry this one; cooldowns expire so the walk resumes later.
+					fails++
+					nextAttempt = time.Now().Add(backoff(fails))
 				}
 				continue
 			}

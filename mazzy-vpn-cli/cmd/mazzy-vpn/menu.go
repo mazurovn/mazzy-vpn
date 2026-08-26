@@ -65,6 +65,8 @@ func cmdMenu(ctx context.Context, _ []string) int {
 		case "k", "K", "stop": // stop the background daemon
 			menuStopBackground(ctx)
 		// -- Diagnostics --
+		case "P", "probe": // HARD deep test: real connect + egress per zone
+			menuProbe(ctx, in)
 		case "7": // test servers
 			cmdTest(ctx, nil)
 		case "8": // best zone
@@ -180,6 +182,7 @@ func drawMenu(profileCount int, set settings.Settings) {
 	fmt.Println("   6. 🛰  Run in background (survives closing terminal)")
 	fmt.Println("   l. 📜 View activity log     k. ⏹  Stop background daemon")
 	fmt.Println("  Diagnostics")
+	fmt.Println("   P. 🧪 DEEP PROBE all zones (real connect + egress + tx/rx verdict)")
 	fmt.Println("   7. 📶 Test servers (live ping)")
 	fmt.Println("   8. 🏆 Best zone")
 	fmt.Println("   9. 🔌 Network adapters")
@@ -244,6 +247,26 @@ func menuRecover(ctx context.Context, in *bufio.Reader) {
 		return
 	}
 	reportResult("recover", runPrivileged(ctx, "recover"))
+}
+
+// menuProbe runs the HARD deep test across every zone. It needs exclusive
+// tunnel access, so it stops any running daemon first (with the user's OK) —
+// this briefly drops the VPN — then connects each zone for real and reports a
+// per-server verdict (works / server-not-routing / dead / bad-config).
+func menuProbe(ctx context.Context, in *bufio.Reader) {
+	fmt.Print("🧪 DEEP PROBE connects every zone for real to find which servers actually route.\n" +
+		"   This STOPS the VPN for a few minutes. Continue? [y/N] ")
+	line, _ := in.ReadString('\n')
+	if strings.ToLower(strings.TrimSpace(line)) != "y" {
+		fmt.Println(translator().T("cli.menu.cancelled"))
+		return
+	}
+	if _, ok := daemonRunning(); ok {
+		fmt.Println("stopping the daemon for exclusive tunnel access...")
+		runPrivileged(ctx, "stop")
+	}
+	reportResult("probe", runPrivileged(ctx, "probe", "--all"))
+	fmt.Println("\nReconnect when done, e.g.: menu → 1 (Quick connect) or 6 (Background).")
 }
 
 // menuDisarm confirms then performs the HARD reset: kill the daemon, drop all
