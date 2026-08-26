@@ -515,8 +515,16 @@ func (m tuiModel) dashboardHeader() (string, bool) {
 		status = stWarn.Render("… CONNECTING") + "  " + safeDisplay(snap.Zone)
 	case runstatus.StateLinkUp:
 		status = stWarn.Render("▲ LINK UP") + "  " + safeDisplay(snap.Interface) + " (no egress)"
+	case runstatus.StatePaused:
+		// A paused daemon is alive and deliberately down; without this case it
+		// rendered as DISCONNECTED and looked like a dead daemon.
+		status = stWarn.Render("⏸ PAUSED") + "  " + safeDisplay(snap.Zone) + stDim.Render("  (press c to resume)")
 	default:
 		status = stDown.Render("● DISCONNECTED")
+	}
+	// Surface a wedged/busy writer instead of silently rendering old numbers.
+	if age := snap.HeartbeatAge(); age > 15*time.Second {
+		status += stWarn.Render(fmt.Sprintf("  ⚠ status %s old", shortDur(age)))
 	}
 	mode := "fg"
 	if snap.Background {
@@ -526,8 +534,12 @@ func (m tuiModel) dashboardHeader() (string, bool) {
 	if snap.StartedAt > 0 {
 		up = shortDur(time.Since(time.Unix(snap.StartedAt, 0)))
 	}
+	proto := ""
+	if snap.Protocol != "" {
+		proto = " · " + safeDisplay(snap.Protocol)
+	}
 	title := "Mazzy VPN" + strings.Repeat(" ", 18) +
-		stDim.Render(fmt.Sprintf("zone %s · %s %s · %s", trunc(safeDisplay(snap.Zone), 16), t.T("cli.dash.uptime"), up, mode))
+		stDim.Render(fmt.Sprintf("zone %s%s · %s %s · %s", trunc(safeDisplay(snap.Zone), 16), proto, t.T("cli.dash.uptime"), up, mode))
 
 	series, windowLabel, selected := m.graphSeries(snap)
 	spark := runstatus.Sparkline(series, 44)
@@ -538,6 +550,11 @@ func (m tuiModel) dashboardHeader() (string, bool) {
 	rate := snap.ErrorRatePerMin(10 * time.Minute)
 	errLine := stDim.Render(fmt.Sprintf("%s %d · %.1f %s · reconnects %d",
 		t.T("cli.dash.errors"), len(snap.Errors), rate, t.T("cli.dash.errrate"), snap.Reconnects))
+	// The newest error inline: counts alone said "something is wrong" while
+	// hiding WHAT — the user had to open the log to learn the reason.
+	if recent := snap.RecentErrors(1); len(recent) > 0 {
+		errLine += "\n" + stDim.Render("last: "+trunc(time.Unix(recent[0].TS, 0).Format("15:04:05")+" "+safeDisplay(recent[0].Reason), 72))
+	}
 
 	body := title + "\n" + status + "\n" + graph + "\n" + errLine
 	return stBox.Render(body), true

@@ -24,6 +24,15 @@ type Signal struct {
 	ServerName       string
 	AnyServerAlive   bool // at least one managed server is alive
 	ProfilesImported int
+
+	// Daemon heartbeat facts (previously invisible to diagnose, which made it
+	// blind to the most common real-world states: a paused daemon, a daemon
+	// stuck in a reconnect loop, or a wedged loop with a stale heartbeat).
+	DaemonAlive        bool   // a daemon process exists (PID alive)
+	DaemonState        string // heartbeat state: protected/connecting/reconnecting/paused/...
+	DaemonHeartbeatAge int64  // seconds since the heartbeat was last written
+	DaemonReconnects   int    // reconnects this session
+	DaemonLastError    string // most recent recorded error reason
 }
 
 // Severity of a problem.
@@ -81,6 +90,30 @@ func Analyze(s Signal) *Report {
 	r := &Report{}
 	add := func(sev Severity, title, cause, fix string) {
 		r.Problems = append(r.Problems, Problem{Severity: sev, Level: sev.String(), Title: title, Cause: cause, Fix: fix})
+	}
+
+	// --- Daemon states the user cannot see from the outside ---
+	// These come FIRST because they explain "the VPN does nothing and I don't
+	// know why" better than any downstream network symptom.
+	if s.DaemonAlive {
+		switch s.DaemonState {
+		case "paused":
+			add(Warn, "Daemon is paused (Disconnect intent)",
+				"A background daemon is alive but deliberately holding the tunnel down after a disconnect. It will NOT auto-reconnect until resumed.",
+				"Resume: sudo mazzy-vpn daemon <zone> (or Connect in the menu). Stop it fully: sudo mazzy-vpn stop.")
+		case "reconnecting", "connecting":
+			cause := "The daemon is in a reconnect cycle"
+			if s.DaemonLastError != "" {
+				cause += "; last error: " + s.DaemonLastError
+			}
+			add(Warn, "Daemon is reconnecting", cause+".",
+				"Watch: mazzy-vpn status / menu dashboard. If it loops for minutes, try another zone: sudo mazzy-vpn up --best")
+		}
+		if s.DaemonHeartbeatAge > 60 {
+			add(Warn, "Daemon heartbeat is stale",
+				"The daemon process exists but has not updated its status for over a minute — its loop may be wedged in a long network operation.",
+				"If it stays stale: sudo mazzy-vpn stop (then reconnect); as a last resort: sudo mazzy-vpn recover.")
+		}
 	}
 
 	// --- Root cause 1: no physical uplink ---

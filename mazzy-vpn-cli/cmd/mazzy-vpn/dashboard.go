@@ -72,6 +72,11 @@ func drawLiveDashboard() bool {
 	if snap.Egress != "" {
 		line += "   egress " + safeDisplay(snap.Egress)
 	}
+	// A daemon exists (PID alive) but its status is old: say so instead of
+	// silently rendering stale numbers as if they were current.
+	if age := snap.HeartbeatAge(); age > 15*time.Second {
+		line += fmt.Sprintf("   ⚠ status %s old", shortDur(age))
+	}
 	fmt.Println(line)
 	fmt.Printf("│ zone %s · %s %s · %s\n",
 		trunc(safeDisplay(snap.Zone), 24), t.T("cli.dash.uptime"), up, mode)
@@ -111,6 +116,8 @@ func dashBadge(s runstatus.State) (string, string) {
 		return "⟳", "RECONNECTING"
 	case runstatus.StateLinkUp:
 		return "⚠", "LINK UP"
+	case runstatus.StatePaused:
+		return "⏸", "PAUSED"
 	default:
 		return "✖", "DISCONNECTED"
 	}

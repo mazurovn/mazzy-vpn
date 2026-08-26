@@ -94,6 +94,15 @@ func Up(proto core.Protocol, cfg *profile.Config, mark uint32, level LogLevel) (
 	}, nil
 }
 
+// IpcGet returns the device's UAPI state dump (peers, handshake times, transfer
+// counters). Empty when the device is already down.
+func (e *Engine) IpcGet() (string, error) {
+	if e.dev == nil {
+		return "", fmt.Errorf("wireguard engine: device is down")
+	}
+	return e.dev.IpcGet()
+}
+
 // Wait blocks until the device stops (e.g. via Down or a fatal error).
 func (e *Engine) Wait() {
 	if e.dev != nil {

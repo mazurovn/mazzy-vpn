@@ -67,6 +67,22 @@ func TestDesiredFileIsRootReadable(t *testing.T) {
 	}
 }
 
+// TestRecordDownIntentWritesDaemonControl is the regression guard for direct
+// CLI disconnect/recover/stop. These commands must tell the self-healing daemon
+// to pause before they remove an interface; writing only persistent state makes
+// the daemon recreate the tunnel on its next health tick.
+func TestRecordDownIntentWritesDaemonControl(t *testing.T) {
+	t.Setenv("MAZZY_RUN_DIR", t.TempDir())
+	t.Setenv("MAZZY_STATE_DIR", t.TempDir())
+	if err := recordDownIntent(); err != nil {
+		t.Fatalf("recordDownIntent: %v", err)
+	}
+	di, ok := readDesired()
+	if !ok || di.Desired != "down" || di.Zone != "" {
+		t.Fatalf("daemon control intent = %+v ok=%v, want fresh down", di, ok)
+	}
+}
+
 // TestIntentStalenessEnforced is the regression guard for audit P0-B: a stale
 // "down" intent must not be honored (it would wedge a freshly-started daemon).
 func TestIntentStalenessEnforced(t *testing.T) {

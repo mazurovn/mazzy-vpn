@@ -32,8 +32,14 @@ func (s Snapshot) Protected() bool { return s.LinkUp && s.EgressOK }
 
 // Checker performs live checks. Fields are injectable for tests.
 type Checker struct {
-	// ProbeURL returns the caller's public IP as text via the tunnel.
+	// ProbeURL returns the caller's public IP as text via the tunnel. When set it
+	// is tried FIRST; the ProbeURLs fallbacks follow. Kept for compatibility.
 	ProbeURL string
+	// ProbeURLs are independent plain-text IP echo endpoints tried in order until
+	// one answers. A single provider being blocked/slow (common under censorship)
+	// must not read as "egress lost" — that false negative previously sent the
+	// daemon into an endless reconnect storm against a healthy tunnel.
+	ProbeURLs []string
 	// Timeout bounds each network probe (default 5s).
 	Timeout time.Duration
 	// httpGet is overridable in tests; nil uses a bound HTTP client.
@@ -45,9 +51,18 @@ type Checker struct {
 // DefaultProbeURL is a plain-text IP echo endpoint.
 const DefaultProbeURL = "https://api.ipify.org"
 
+// DefaultProbeURLs are the fallback egress probes, ordered by preference. They
+// are operated by unrelated parties so a single block/outage cannot blind the
+// health check. Each must return the caller's IP as plain text.
+var DefaultProbeURLs = []string{
+	DefaultProbeURL,
+	"https://checkip.amazonaws.com",
+	"https://icanhazip.com",
+}
+
 // New returns a Checker with sensible defaults.
 func New() *Checker {
-	return &Checker{ProbeURL: DefaultProbeURL, Timeout: 5 * time.Second}
+	return &Checker{ProbeURLs: DefaultProbeURLs, Timeout: 5 * time.Second}
 }
 
 func (c *Checker) timeout() time.Duration {
@@ -71,7 +86,13 @@ func (c *Checker) Check(ctx context.Context, iface string) Snapshot {
 
 	ip, err := c.egress(ctx, iface)
 	if err != nil || ip == "" {
+		// Surface the REAL probe failure (DNS error, timeout, reset) instead of a
+		// generic phrase: the daemon log and dashboard show this string, and "no
+		// traffic yet" hid every actionable detail from the user.
 		s.Reason = "no traffic through tunnel yet"
+		if err != nil {
+			s.Reason = "egress probe failed: " + err.Error()
+		}
 		return s
 	}
 	s.EgressIP = ip
@@ -112,10 +133,59 @@ func (c *Checker) linkPresent(iface string) bool {
 	return err == nil
 }
 
-// egress fetches the public IP through the given interface.
+// probeURLs returns the ordered probe list: explicit ProbeURL first (test/dev
+// override), then the configured or default fallbacks, deduplicated.
+func (c *Checker) probeURLs() []string {
+	urls := c.ProbeURLs
+	if len(urls) == 0 {
+		urls = DefaultProbeURLs
+	}
+	if c.ProbeURL == "" {
+		return urls
+	}
+	out := []string{c.ProbeURL}
+	for _, u := range urls {
+		if u != c.ProbeURL {
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
+// egress fetches the public IP through the given interface, trying each probe
+// endpoint in order until one returns a valid IP. Only when ALL endpoints fail
+// is the egress considered lost; the last error is returned for the Reason.
+//
+// The WHOLE chain shares one bounded budget (2× the per-probe timeout): a
+// fast-fail first endpoint (RST/DNS error) leaves time for fallbacks, while a
+// hanging first endpoint cannot stretch a health tick to len(urls)×timeout and
+// wreck the caller's cadence.
 func (c *Checker) egress(ctx context.Context, iface string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*c.timeout())
+	defer cancel()
+	var lastErr error
+	for _, u := range c.probeURLs() {
+		ip, err := c.egressVia(ctx, iface, u)
+		if err == nil && ip != "" {
+			return ip, nil
+		}
+		if err != nil {
+			lastErr = err
+		}
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	if lastErr == nil {
+		lastErr = errBadIP
+	}
+	return "", lastErr
+}
+
+// egressVia performs one probe against a single endpoint.
+func (c *Checker) egressVia(ctx context.Context, iface, probeURL string) (string, error) {
 	if c.httpGet != nil {
-		return c.httpGet(ctx, iface, c.ProbeURL)
+		return c.httpGet(ctx, iface, probeURL)
 	}
 	dialer := &net.Dialer{Timeout: c.timeout()}
 	if ips, err := ifaceIPv4(iface); err == nil && len(ips) > 0 {
@@ -129,7 +199,7 @@ func (c *Checker) egress(ctx context.Context, iface string) (string, error) {
 	client := &http.Client{Timeout: c.timeout(), Transport: tr}
 	cctx, cancel := context.WithTimeout(ctx, c.timeout())
 	defer cancel()
-	req, err := http.NewRequestWithContext(cctx, http.MethodGet, c.ProbeURL, nil)
+	req, err := http.NewRequestWithContext(cctx, http.MethodGet, probeURL, nil)
 	if err != nil {
 		return "", err
 	}

@@ -2,6 +2,44 @@
 
 All notable changes to Mazzy VPN are documented here.
 
+## CLI 2.4.1 - 2026-08-26
+
+Reliability release: the self-healing daemon no longer wedges, lies, or leaks.
+Full analysis in `docs/AUDIT_2026-08-26_DAEMON_SELFHEAL.ru.md`.
+
+### Fixed
+- **Daemon deadlock**: a busy daemon (long connect/failover phase) looked dead
+  to every reader — `stop` said "nothing to stop", the dashboard vanished, and a
+  new `daemon` request crashed into the mutation lock. Existence is now
+  PID-based (with /proc identity check); heartbeat freshness is a health signal
+  only, kept alive by a dedicated 5s pulse goroutine.
+- **Reconnect storm on probe outage**: egress health relied on a single probe
+  URL (api.ipify.org); when the ISP blocked it, the daemon endlessly tore down a
+  working tunnel. Now: three independent probe endpoints with one bounded time
+  budget, plus WireGuard **handshake-age** (via UAPI) to distinguish "tunnel
+  dead" from "probe endpoints unreachable".
+- **Failover loop**: zones that repeatedly fail egress (ICMP-alive but not
+  routing) are quarantined for 10 minutes; `--best` requests to a running
+  daemon are re-ranked by the daemon itself so its quarantine map is honored.
+- **Kill-switch leak**: the fail-closed guard was lifted on an UNVERIFIED
+  reconnect; it now stays armed until egress is confirmed. Ctrl+C during
+  connect no longer skips teardown (signal-aware root context), so guards can
+  never be left behind.
+- Daemon loop no longer sleeps inside the tick handler: SIGTERM, menu intents
+  and zone switches apply within one tick even mid-backoff.
+- Reconnect counter no longer increments for unconfirmed reconnects.
+
+### Added
+- Heartbeat state **paused** (⏸ in TUI/menu): a daemon holding the tunnel down
+  after Disconnect is now distinguishable from a dead one.
+- Dashboard: protocol name, "status Ns old" staleness warning, and the newest
+  error inline in the TUI header.
+- Daemon log: full date stamps, real failure reasons (probe error text), and
+  5 MiB rotation to `daemon.log.1`.
+- `diagnose` now reads the daemon heartbeat (paused / reconnect-looping /
+  stale) and detects any foreign VPN interface (wg*, tailscale*, proton*, ...),
+  not just tun0/tun1.
+
 ## Unreleased
 
 ### Changed

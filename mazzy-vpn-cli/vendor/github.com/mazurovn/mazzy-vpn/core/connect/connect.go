@@ -19,6 +19,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/mazurovn/mazzy-vpn/core"
 	"github.com/mazurovn/mazzy-vpn/core/bootrecovery"
@@ -198,6 +201,40 @@ func (c *Conn) teardown(ctx context.Context) error {
 // every layer and returns the first error.
 func (c *Conn) Down(ctx context.Context) error {
 	return c.teardown(ctx)
+}
+
+// HandshakeAge returns how long ago the most recent peer handshake completed.
+// ok is false when the device is down or no handshake has happened yet.
+//
+// This is the cheapest truthful health signal WireGuard has: a fresh handshake
+// (rekey happens roughly every 2 minutes under traffic) proves the server is
+// alive and answering crypto, even when the HTTP egress probes are blocked or
+// degraded. The daemon uses it to tell "tunnel is dead" apart from "probe
+// endpoints are unreachable" and avoid tearing down a working tunnel.
+func (c *Conn) HandshakeAge() (time.Duration, bool) {
+	if c.engine == nil {
+		return 0, false
+	}
+	dump, err := c.engine.IpcGet()
+	if err != nil {
+		return 0, false
+	}
+	var latest int64
+	for _, line := range strings.Split(dump, "\n") {
+		if v, ok := strings.CutPrefix(line, "last_handshake_time_sec="); ok {
+			if sec, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64); err == nil && sec > latest {
+				latest = sec
+			}
+		}
+	}
+	if latest == 0 {
+		return 0, false
+	}
+	age := time.Since(time.Unix(latest, 0))
+	if age < 0 {
+		age = 0
+	}
+	return age, true
 }
 
 // ArmKillSwitch installs the fwmark-aware fail-closed guard so that, while the

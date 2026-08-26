@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -16,6 +17,19 @@ import (
 	"github.com/mazurovn/mazzy-vpn/core/routes"
 )
 
+// recordDownIntent stops a live daemon from recreating an interface that a
+// lifecycle operation has just removed. desired.json is the daemon's control
+// plane; persistent state is retained as a best-effort legacy/status mirror.
+func recordDownIntent() error {
+	if err := writeDesired("", "down"); err != nil {
+		return fmt.Errorf("record disconnect intent: %w", err)
+	}
+	if err := newStore().SetDesired(core.DesiredDown); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("persist disconnect intent: %w", err)
+	}
+	return nil
+}
+
 // cmdRecover forcibly tears down ANY Mazzy VPN tunnel and guards, returning the
 // host to a clean state (no tunnels, no leftover nftables/ip rules). This is
 // the "panic button" to get back to plain Wi‑Fi. It is safe to run even when
@@ -24,6 +38,13 @@ func cmdRecover(ctx context.Context, args []string) int {
 	if !requireRoot("recover") {
 		return 1
 	}
+	// This must happen before touching the interface: otherwise a live daemon
+	// sees a failure and recreates the tunnel while recovery is in progress.
+	if err := recordDownIntent(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+
 	r := netexec.ExecRunner{}
 	steps := 0
 	run := func(desc, bin string, a ...string) {
@@ -76,9 +97,6 @@ func cmdRecover(ctx context.Context, args []string) int {
 	// 4. Flush our routing table.
 	run("flushed table "+mark, "ip", "route", "flush", "table", mark)
 
-	// 5. Clear the persisted intent so nothing tries to resume.
-	_ = newStore().SetDesired("down")
-
 	if hasFlag(args, "--reset-catalog") {
 		fmt.Println("  ⚠ --reset-catalog: removing managed profiles")
 		_ = os.RemoveAll(newCatalog().Dir)
@@ -95,6 +113,13 @@ func cmdDisconnect(ctx context.Context, _ []string) int {
 	if !requireRoot("disconnect") {
 		return 1
 	}
+	// Record the daemon-visible intent first. Removing the interface first lets
+	// the self-healing daemon race this command and immediately recreate it.
+	if err := recordDownIntent(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+
 	t := translator()
 	iface := detectLiveInterface()
 	if iface == "" {
@@ -109,7 +134,6 @@ func cmdDisconnect(ctx context.Context, _ []string) int {
 	for _, tbl := range []string{guard.IPv6GuardTable, guard.TransitionGuardTable, guard.ConnmarkTable} {
 		_, _ = r.Run(ctx, "nft", "delete", "table", "inet", tbl)
 	}
-	_ = newStore().SetDesired("down")
 	fmt.Println(t.Tf("cli.disconnect.ok", iface))
 	return 0
 }

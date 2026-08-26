@@ -146,3 +146,41 @@ func TestDerivedDashboardMetrics(t *testing.T) {
 		t.Errorf("heartbeat age = %v, want about 2s", age)
 	}
 }
+
+// TestTouchRefreshesHeartbeat: the daemon's pulse goroutine must be able to
+// keep the file fresh without changing any payload fields.
+func TestTouchRefreshesHeartbeat(t *testing.T) {
+	t.Setenv("MAZZY_RUN_DIR", t.TempDir())
+	w := NewWriter("Berlin", "vpnaw0", "AmneziaWG", true)
+	w.Touch()
+	s, ok := Read()
+	if !ok || !s.Fresh(5*time.Second) {
+		t.Fatalf("touched heartbeat must be fresh, got %+v ok=%v", s, ok)
+	}
+	if s.Zone != "Berlin" {
+		t.Errorf("Touch must not alter payload, zone = %q", s.Zone)
+	}
+}
+
+// TestTouchAfterCloseDoesNotResurrect: a racing pulse tick right after a clean
+// shutdown must not recreate the heartbeat file (readers would see a ghost
+// daemon forever).
+func TestTouchAfterCloseDoesNotResurrect(t *testing.T) {
+	t.Setenv("MAZZY_RUN_DIR", t.TempDir())
+	w := NewWriter("Berlin", "vpnaw0", "AmneziaWG", true)
+	w.Close()
+	w.Touch()
+	if _, ok := Read(); ok {
+		t.Fatal("Touch after Close must not resurrect the heartbeat file")
+	}
+}
+
+// TestSetProtocolRecordsProtocol: the dashboard previously always saw "".
+func TestSetProtocolRecordsProtocol(t *testing.T) {
+	t.Setenv("MAZZY_RUN_DIR", t.TempDir())
+	w := NewWriter("Berlin", "", "", false)
+	w.SetProtocol("AmneziaWG")
+	if s, ok := Read(); !ok || s.Protocol != "AmneziaWG" {
+		t.Fatalf("protocol not recorded: %+v ok=%v", s, ok)
+	}
+}

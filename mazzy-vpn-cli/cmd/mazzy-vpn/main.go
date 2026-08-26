@@ -15,20 +15,30 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
+	"syscall"
 )
 
 // version is the CLI version. It is a var (not const) so release builds can
 // stamp the exact tag with the linker, keeping ONE source of truth (audit
 // P1-F): `go build -ldflags "-X main.version=$(git describe --tags)"`. The
 // baseline default matches the current git tag for un-stamped/dev builds.
-var version = "2.4.0"
+var version = "2.4.1"
 
 func main() {
 	os.Exit(run(os.Args[1:]))
 }
 
 func run(args []string) int {
-	ctx := context.Background()
+	// A signal-aware root context: SIGINT/SIGTERM cancel every in-flight network
+	// operation (connect, egress probes, zone ranking) so commands can unwind
+	// cleanly. Previously ctx was context.Background(): an interrupt during
+	// connect.Up killed the process mid-mutation with no teardown, leaving
+	// interfaces, nft guards and — worst — an armed fail-closed kill-switch
+	// behind ("no internet until recover"). Teardown paths that must still run
+	// after cancellation use context.WithoutCancel(ctx).
+	ctx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
 	// No args: launch the full-screen TUI when attached to a terminal, else the
 	// line-based menu (scripts/pipes). ADR-0006.
 	if len(args) == 0 {

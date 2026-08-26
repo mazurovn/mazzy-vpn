@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -85,6 +86,29 @@ func itoa(n int) string {
 		n /= 10
 	}
 	return string(b)
+}
+
+// TestForwardToActiveDaemon ensures a second connect request does not start a
+// competing daemon: it is delivered through the owner's shared intent file.
+func TestForwardToActiveDaemon(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("MAZZY_RUN_DIR", dir)
+
+	w := runstatus.NewWriter("Berlin", "vpnaw0", "AmneziaWG", false)
+	defer w.Close()
+	w.SetState(runstatus.StateProtected, "vpnaw0", "9.9.9.9")
+
+	snap, running, err := forwardToActiveDaemon("Amsterdam")
+	if err != nil || !running {
+		t.Fatalf("forwardToActiveDaemon = (%+v, %v, %v), want live owner", snap, running, err)
+	}
+	if snap.Zone != "Berlin" {
+		t.Fatalf("owner zone = %q, want Berlin", snap.Zone)
+	}
+	di, ok := readDesired()
+	if !ok || di.Desired != "up" || di.Zone != "Amsterdam" {
+		t.Fatalf("forwarded intent = %+v ok=%v, want Amsterdam/up", di, ok)
+	}
 }
 
 // TestTailLog returns the trailing lines of the daemon log and tolerates a
@@ -263,5 +287,49 @@ func TestTruncDisplayWidth(t *testing.T) {
 	}
 	if got := trunc("anything", 1); got != "…" {
 		t.Errorf("trunc n=1 = %q, want …", got)
+	}
+}
+
+// TestDaemonRunningSurvivesStaleHeartbeat is the regression guard for the
+// "busy daemon looks dead" deadlock: existence is PID-based, so a daemon whose
+// loop spent >30s in a connect/failover phase (stale UpdatedAt) must STILL be
+// reported as running — otherwise `stop` says "nothing to stop" and a second
+// `daemon` request crashes into the mutation lock held by the live daemon.
+func TestDaemonRunningSurvivesStaleHeartbeat(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("MAZZY_RUN_DIR", dir)
+
+	w := runstatus.NewWriter("Berlin", "vpnaw0", "AmneziaWG", true)
+	w.SetState(runstatus.StateReconnect, "vpnaw0", "")
+	// Backdate UpdatedAt far beyond any freshness window; PID stays ours (alive).
+	backdateHeartbeat(t, dir, time.Now().Add(-10*time.Minute).Unix())
+
+	if snap, ok := daemonRunning(); !ok {
+		t.Fatal("stale heartbeat with a live PID must still be a running daemon")
+	} else if snap.State != runstatus.StateReconnect {
+		t.Errorf("snapshot state = %q, want reconnecting", snap.State)
+	}
+}
+
+// backdateHeartbeat rewrites updated_at in the raw heartbeat file.
+func backdateHeartbeat(t *testing.T, dir string, ts int64) {
+	t.Helper()
+	p := filepath.Join(dir, "status.json")
+	data, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatalf("read status: %v", err)
+	}
+	s := string(data)
+	start := strings.Index(s, `"updated_at":`)
+	if start < 0 {
+		t.Fatal("no updated_at field")
+	}
+	end := strings.IndexByte(s[start:], ',')
+	if end < 0 {
+		t.Fatal("unterminated updated_at")
+	}
+	s = s[:start] + `"updated_at": ` + strconv.FormatInt(ts, 10) + s[start+end:]
+	if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+		t.Fatalf("write status: %v", err)
 	}
 }

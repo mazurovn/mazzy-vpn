@@ -11,8 +11,10 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
+	"github.com/mazurovn/mazzy-vpn/core"
 	"github.com/mazurovn/mazzy-vpn/core/diagnose"
 	"github.com/mazurovn/mazzy-vpn/core/livecheck"
 	"github.com/mazurovn/mazzy-vpn/core/measure"
@@ -25,14 +27,33 @@ import (
 func gatherSignal(ctx context.Context) diagnose.Signal {
 	s := diagnose.Signal{}
 
+	// Daemon heartbeat: paused / reconnect-looping / wedged states explain the
+	// user-visible "VPN does nothing" better than any network probe, and were
+	// previously invisible to diagnose.
+	if snap, ok := daemonRunning(); ok {
+		s.DaemonAlive = true
+		s.DaemonState = string(snap.State)
+		s.DaemonHeartbeatAge = int64(snap.HeartbeatAge().Seconds())
+		s.DaemonReconnects = snap.Reconnects
+		if recent := snap.RecentErrors(1); len(recent) > 0 {
+			s.DaemonLastError = recent[0].Reason
+		}
+	}
+
 	// Uplink.
 	if adapters, err := netadapter.List(); err == nil {
 		if rec, _, ok := netadapter.Recommend(adapters); ok && rec.HasRoutableIPv4() {
 			s.HasUplink = true
 			s.UplinkName = rec.Name
 		}
+		managed := map[string]bool{}
+		for _, m := range core.ManagedInterfaces() {
+			managed[m] = true
+		}
 		for _, a := range adapters {
-			if a.Virtual && a.Up && (a.Name == "tun0" || a.Name == "tun1") {
+			// Any foreign VPN-looking virtual interface conflicts — the old check
+			// only knew tun0/tun1 and was blind to wg0, tailscale0, proton0, ...
+			if a.Virtual && a.Up && !managed[a.Name] && looksLikeForeignVPN(a.Name) {
 				s.ConflictVPN = a.Name
 			}
 		}
@@ -70,6 +91,17 @@ func gatherSignal(ctx context.Context) diagnose.Signal {
 		}
 	}
 	return s
+}
+
+// looksLikeForeignVPN reports whether an interface name matches a known VPN
+// naming scheme (another client's tunnel that can steal the default route).
+func looksLikeForeignVPN(name string) bool {
+	for _, p := range []string{"tun", "wg", "tailscale", "proton", "nordlynx", "ipsec", "ppp", "outline"} {
+		if strings.HasPrefix(name, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func plainInternetOK(ctx context.Context) bool {

@@ -263,6 +263,10 @@ dashLoop:
 	}
 
 	fmt.Println(t.T("cli.connect.disconnecting"))
+	// The root context is signal-aware: after Ctrl+C it is already cancelled, so
+	// teardown must run on an uncancellable derivative or every ip/nft command
+	// would abort instantly and leave guards behind.
+	ctx = context.WithoutCancel(ctx)
 	// Always clear any still-armed session kill-switch on final teardown so the
 	// host is not left fail-closed after a graceful disconnect. Disarm through the
 	// live conn first; if the guard was armed during a failed-reconnect gap where

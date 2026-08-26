@@ -91,3 +91,73 @@ func TestWaitProtectedTimesOut(t *testing.T) {
 		t.Fatal("should not be protected on timeout")
 	}
 }
+
+// TestEgressFallsBackAcrossProbes is the regression guard for the single-probe
+// false negative: one blocked/slow endpoint (e.g. ipify censored by the ISP)
+// must NOT read as "egress lost" — the checker tries the fallbacks first.
+func TestEgressFallsBackAcrossProbes(t *testing.T) {
+	calls := []string{}
+	c := &Checker{
+		linkUp: func(string) bool { return true },
+		httpGet: func(_ context.Context, _ string, url string) (string, error) {
+			calls = append(calls, url)
+			if len(calls) == 1 {
+				return "", errors.New("blocked by ISP")
+			}
+			return "203.0.113.9", nil
+		},
+	}
+	s := c.Check(context.Background(), "vpnaw0")
+	if !s.Protected() {
+		t.Fatalf("fallback probe succeeded, must be protected: %+v", s)
+	}
+	if len(calls) < 2 {
+		t.Fatalf("expected a fallback attempt, got calls=%v", calls)
+	}
+}
+
+// TestReasonCarriesRealProbeError ensures the last probe error surfaces in
+// Reason instead of the old generic "no traffic through tunnel yet".
+func TestReasonCarriesRealProbeError(t *testing.T) {
+	c := &Checker{
+		linkUp:  func(string) bool { return true },
+		httpGet: func(context.Context, string, string) (string, error) { return "", errors.New("dial tcp: i/o timeout") },
+	}
+	s := c.Check(context.Background(), "vpnaw0")
+	if s.Protected() {
+		t.Fatal("all probes failed; must not be protected")
+	}
+	if want := "i/o timeout"; !contains(s.Reason, want) {
+		t.Errorf("Reason = %q, want it to contain %q", s.Reason, want)
+	}
+}
+
+// TestProbeURLsOrderAndDedup: an explicit ProbeURL is tried first and not
+// duplicated when it also appears in the fallback list.
+func TestProbeURLsOrderAndDedup(t *testing.T) {
+	c := &Checker{ProbeURL: DefaultProbeURL}
+	urls := c.probeURLs()
+	if urls[0] != DefaultProbeURL {
+		t.Fatalf("explicit ProbeURL must be first, got %v", urls)
+	}
+	seen := map[string]bool{}
+	for _, u := range urls {
+		if seen[u] {
+			t.Fatalf("duplicate probe URL %q in %v", u, urls)
+		}
+		seen[u] = true
+	}
+}
+
+func contains(s, sub string) bool {
+	return len(s) >= len(sub) && (s == sub || len(sub) == 0 || indexOf(s, sub) >= 0)
+}
+
+func indexOf(s, sub string) int {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return i
+		}
+	}
+	return -1
+}

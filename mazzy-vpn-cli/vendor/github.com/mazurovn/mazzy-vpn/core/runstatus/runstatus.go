@@ -11,8 +11,11 @@ package runstatus
 
 import (
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
+	"sort"
+	"sync"
 	"time"
 )
 
@@ -25,6 +28,11 @@ const (
 	StateLinkUp     State = "link-up" // interface up but no confirmed egress
 	StateDown       State = "down"
 	StateReconnect  State = "reconnecting"
+	// StatePaused marks a daemon that is alive but deliberately holding the
+	// tunnel down after a Disconnect intent. Without this the dashboard showed
+	// "down/no daemon" and the user could not tell a paused daemon from a dead
+	// one (the "zombie pause" confusion).
+	StatePaused State = "paused"
 )
 
 // maxSamples bounds the latency graph ring; maxErrors bounds the error ring.
@@ -115,6 +123,74 @@ func (s Snapshot) RecentErrors(n int) []ErrEvent {
 	return out
 }
 
+// LossPercent returns the failed health-check percentage over the session.
+func (s Snapshot) LossPercent() float64 {
+	if s.Checks <= 0 {
+		return 0
+	}
+	return 100 * float64(s.Fails) / float64(s.Checks)
+}
+
+// LatencyPercentile returns a nearest-rank percentile over successful samples.
+// Samples with no confirmed egress (<=0) are excluded.
+func (s Snapshot) LatencyPercentile(p float64) int {
+	values := make([]int, 0, len(s.Samples))
+	for _, sample := range s.Samples {
+		if sample.OK && sample.LatencyMS > 0 {
+			values = append(values, sample.LatencyMS)
+		}
+	}
+	if len(values) == 0 {
+		return 0
+	}
+	sort.Ints(values)
+	if p <= 0 {
+		return values[0]
+	}
+	if p >= 100 {
+		return values[len(values)-1]
+	}
+	rank := int(math.Ceil(p/100*float64(len(values)))) - 1
+	if rank < 0 {
+		rank = 0
+	}
+	return values[rank]
+}
+
+// JitterMS returns the mean absolute difference between consecutive successful
+// egress-check durations. It is an application-probe stability metric, not
+// WireGuard peer jitter.
+func (s Snapshot) JitterMS() int {
+	total, pairs := 0, 0
+	previous := 0
+	for _, sample := range s.Samples {
+		if !sample.OK || sample.LatencyMS <= 0 {
+			continue
+		}
+		if previous > 0 {
+			delta := sample.LatencyMS - previous
+			if delta < 0 {
+				delta = -delta
+			}
+			total += delta
+			pairs++
+		}
+		previous = sample.LatencyMS
+	}
+	if pairs == 0 {
+		return 0
+	}
+	return total / pairs
+}
+
+// HeartbeatAge reports how long ago the daemon updated this snapshot.
+func (s Snapshot) HeartbeatAge() time.Duration {
+	if s.UpdatedAt <= 0 {
+		return 0
+	}
+	return time.Since(time.Unix(s.UpdatedAt, 0))
+}
+
 // Path returns the heartbeat file path. It honors MAZZY_RUN_DIR (tests/dev) and
 // otherwise lives under /run/mazzy-vpn where any user can read it.
 func Path() string {
@@ -127,8 +203,10 @@ func Path() string {
 // Writer records heartbeats. It is created by the privileged daemon/connect
 // path and owns the rolling rings, so callers only push events.
 type Writer struct {
-	path string
-	snap Snapshot
+	mu     sync.Mutex // the daemon flushes from its loop AND a heartbeat goroutine
+	path   string
+	snap   Snapshot
+	closed bool // Close() wins over a racing Touch(): never resurrect the file
 }
 
 // NewWriter starts a heartbeat for a session and immediately flushes it, so the
@@ -147,11 +225,27 @@ func NewWriter(zone, iface, proto string, background bool) *Writer {
 	return w
 }
 
+// Touch re-flushes the current snapshot with a fresh UpdatedAt without changing
+// anything else. The daemon's heartbeat goroutine calls this on a short fixed
+// cadence so the file stays fresh even while the main loop is inside a long
+// connect/backoff/failover phase — previously those phases starved the
+// heartbeat and every reader concluded the daemon was dead.
+func (w *Writer) Touch() {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.flush()
+}
+
 // SetState updates the coarse state and egress details, then flushes.
 func (w *Writer) SetState(st State, iface, egress string) {
 	if w == nil {
 		return
 	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.snap.State = st
 	if iface != "" {
 		w.snap.Interface = iface
@@ -167,6 +261,8 @@ func (w *Writer) SetZone(zone string) {
 	if w == nil {
 		return
 	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.snap.Zone = zone
 	w.flush()
 }
@@ -177,6 +273,8 @@ func (w *Writer) Tick(latencyMS int, ok bool) {
 	if w == nil {
 		return
 	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.snap.Checks++
 	if !ok {
 		w.snap.Fails++
@@ -193,6 +291,8 @@ func (w *Writer) Error(reason string) {
 	if w == nil {
 		return
 	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.snap.Errors = append(w.snap.Errors, ErrEvent{TS: time.Now().Unix(), Reason: reason})
 	if len(w.snap.Errors) > maxErrors {
 		w.snap.Errors = w.snap.Errors[len(w.snap.Errors)-maxErrors:]
@@ -205,6 +305,8 @@ func (w *Writer) Reconnected() {
 	if w == nil {
 		return
 	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.snap.Reconnects++
 	w.flush()
 }
@@ -215,7 +317,22 @@ func (w *Writer) Close() {
 	if w == nil {
 		return
 	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.closed = true
 	_ = os.Remove(w.path)
+}
+
+// SetProtocol records the connected protocol title (e.g. "AmneziaWG") so the
+// dashboard can display it; it was previously always empty in the heartbeat.
+func (w *Writer) SetProtocol(proto string) {
+	if w == nil || proto == "" {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.snap.Protocol = proto
+	w.flush()
 }
 
 // flush writes the snapshot atomically with world-readable perms so the
@@ -224,6 +341,9 @@ func (w *Writer) Close() {
 // restrictive umask that would otherwise strip the read/traverse bits and hide
 // the dashboard from the unprivileged reader.
 func (w *Writer) flush() {
+	if w.closed {
+		return
+	}
 	w.snap.UpdatedAt = time.Now().Unix()
 	dir := filepath.Dir(w.path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {

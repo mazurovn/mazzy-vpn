@@ -66,6 +66,7 @@ func maybeDaemonize(background bool) (detached bool, err error) {
 	if e := os.MkdirAll(filepath.Dir(lf), 0o755); e != nil {
 		return false, fmt.Errorf("prepare log dir: %w", e)
 	}
+	rotateLog(lf)
 	out, e := os.OpenFile(lf, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if e != nil {
 		return false, fmt.Errorf("open log: %w", e)
@@ -91,17 +92,58 @@ func maybeDaemonize(background bool) (detached bool, err error) {
 	return true, nil
 }
 
-// daemonRunning reports whether a background daemon is alive by reading the
-// heartbeat: fresh (updated recently) AND its PID is still a live process.
+// maxLogBytes bounds daemon.log growth. The log was previously O_APPEND forever
+// with no rotation — a 24/7 daemon grew it without limit.
+const maxLogBytes = 5 << 20 // 5 MiB
+
+// rotateLog moves an oversized daemon.log to daemon.log.1 (replacing any
+// previous rotation) so a fresh session starts with a bounded file while the
+// previous history stays inspectable.
+func rotateLog(path string) {
+	fi, err := os.Stat(path)
+	if err != nil || fi.Size() < maxLogBytes {
+		return
+	}
+	_ = os.Rename(path, path+".1")
+}
+
+// daemonRunning reports whether a background daemon EXISTS: the heartbeat file
+// is readable and its PID is a live mazzy-vpn process.
+//
+// Existence is deliberately PID-based, NOT freshness-based. The old rule
+// (Fresh(30s) && pidAlive) declared a busy daemon dead whenever its loop spent
+// longer than 30s in a connect/failover phase — then `stop` reported "nothing
+// to stop", the dashboard vanished mid-reconnect, and a new `daemon` request
+// skipped intent-forwarding, fell through to the mutation lock (held by the
+// very-much-alive daemon) and failed with "another operation is in progress".
+// Freshness is a HEALTH signal for the dashboard (HeartbeatAge), not an
+// existence test. PID-reuse after a crash is guarded by checking the process
+// actually is mazzy-vpn via /proc.
 func daemonRunning() (runstatus.Snapshot, bool) {
 	snap, ok := runstatus.Read()
-	if !ok || !snap.Fresh(30*time.Second) {
+	if !ok {
 		return runstatus.Snapshot{}, false
 	}
-	if snap.PID > 0 && !pidAlive(snap.PID) {
+	if snap.PID <= 0 || !pidAlive(snap.PID) {
+		return runstatus.Snapshot{}, false
+	}
+	if !procLooksLikeMazzy(snap.PID) {
 		return runstatus.Snapshot{}, false
 	}
 	return snap, true
+}
+
+// procLooksLikeMazzy guards against PID reuse: a crashed daemon leaves its
+// heartbeat behind, and the recorded PID may later belong to an unrelated
+// process. /proc/<pid>/cmdline is world-readable even for root processes; when
+// it cannot be read at all we err on the side of "it is the daemon" (the old
+// EPERM-tolerant behavior).
+func procLooksLikeMazzy(pid int) bool {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
+	if err != nil {
+		return true // cannot verify (non-Linux, hidepid, ...): assume alive
+	}
+	return strings.Contains(strings.ReplaceAll(string(data), "\x00", " "), "mazzy-vpn")
 }
 
 // pidAlive reports whether a process with the given PID exists (signal 0).
@@ -127,24 +169,36 @@ func pidAlive(pid int) bool {
 	return errors.Is(err, syscall.EPERM)
 }
 
-// signalDaemon sends SIGTERM to the daemon PID recorded in the heartbeat. It is
-// only effective when the caller owns the process (i.e. root, invoked by the
-// privileged `stop` subcommand). Returns false when no live daemon was found.
-//
-// Unprivileged callers must NOT rely on this — they route through the elevated
-// `stop` subcommand (see cmdStop) so a root-owned daemon is actually signaled
-// instead of failing silently with EPERM. This split is what makes "stop" work
-// from the unprivileged menu.
-func signalDaemon() bool {
+// signalDaemonPID sends SIGTERM to the daemon PID recorded in the heartbeat.
+// It is only effective when the caller owns the process (i.e. root, invoked by
+// the privileged `stop` subcommand). The PID is returned so the caller can wait
+// for actual termination instead of falsely reporting a successful stop.
+func signalDaemonPID() (int, bool) {
 	snap, ok := daemonRunning()
 	if !ok || snap.PID <= 0 {
-		return false
+		return 0, false
 	}
 	p, err := os.FindProcess(snap.PID)
-	if err != nil {
-		return false
+	if err != nil || p.Signal(syscall.SIGTERM) != nil {
+		return 0, false
 	}
-	return p.Signal(syscall.SIGTERM) == nil
+	return snap.PID, true
+}
+
+// signalDaemon is retained as the small boolean helper used by dashboard tests.
+func signalDaemon() bool {
+	_, ok := signalDaemonPID()
+	return ok
+}
+
+// waitDaemonExit waits for a signalled daemon to disappear. A bounded wait is
+// necessary because a daemon can be inside an egress probe when SIGTERM arrives.
+func waitDaemonExit(pid int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for pidAlive(pid) && time.Now().Before(deadline) {
+		time.Sleep(100 * time.Millisecond)
+	}
+	return !pidAlive(pid)
 }
 
 // cmdStop terminates a running background/session daemon. It requires root so
@@ -154,12 +208,23 @@ func cmdStop(_ context.Context, _ []string) int {
 	if !requireRoot("stop") {
 		return 1
 	}
-	if signalDaemon() {
-		return 0
+	// First prevent a still-running daemon from treating interface teardown as a
+	// fault and reconnecting. This is also safe when no daemon is present.
+	if err := recordDownIntent(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
 	}
-	// No live daemon: not an error for the caller's UX, but signal "nothing
-	// stopped" with a distinct code so the menu can report accurately.
-	return 3
+	pid, ok := signalDaemonPID()
+	if !ok {
+		// No live daemon: not an error for the caller's UX, but signal "nothing
+		// stopped" with a distinct code so the menu can report accurately.
+		return 3
+	}
+	if !waitDaemonExit(pid, 35*time.Second) {
+		fmt.Fprintf(os.Stderr, "daemon pid %d did not stop within 35s\n", pid)
+		return 1
+	}
+	return 0
 }
 
 // tailLog returns up to the last n lines of the daemon log (newest at the end),
