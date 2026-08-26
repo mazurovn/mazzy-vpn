@@ -9,8 +9,47 @@ package settings
 import (
 	"encoding/json"
 	"os"
+	"os/user"
 	"path/filepath"
+	"regexp"
+	"strconv"
+	"syscall"
 )
+
+// sudoUserNameRe accepts conventional Unix user names only, so a crafted
+// SUDO_USER (e.g. "../etc") can never traverse outside the user's home.
+var sudoUserNameRe = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}\$?$`)
+
+// sudoUserSettingsPath resolves the INVOKING user's settings file when running
+// as root under sudo. Hardened: the name is validated against a strict
+// pattern, the home directory comes from the real user database (never a
+// blind /home/<name> join), and the file must be owned by that user and not
+// group/world-writable — a symlink-planted or attacker-writable settings.json
+// must not be able to steer root's kill-switch policy.
+func sudoUserSettingsPath() (string, bool) {
+	su := os.Getenv("SUDO_USER")
+	if su == "" || su == "root" || !sudoUserNameRe.MatchString(su) {
+		return "", false
+	}
+	u, err := user.Lookup(su)
+	if err != nil || u.HomeDir == "" {
+		return "", false
+	}
+	p := filepath.Join(u.HomeDir, ".config", "mazzy-vpn", "settings.json")
+	fi, err := os.Stat(p)
+	if err != nil || !fi.Mode().IsRegular() {
+		return "", false
+	}
+	if fi.Mode().Perm()&0o022 != 0 {
+		return "", false // group/world-writable: untrusted
+	}
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+		if uid, err := strconv.ParseUint(u.Uid, 10, 32); err != nil || st.Uid != uint32(uid) {
+			return "", false // not owned by the invoking user
+		}
+	}
+	return p, true
+}
 
 // Settings holds user preferences. Zero value is a sensible default.
 type Settings struct {
@@ -65,11 +104,8 @@ func DefaultPath() string {
 		return filepath.Join(d, "settings.json")
 	}
 	if os.Geteuid() == 0 {
-		if su := os.Getenv("SUDO_USER"); su != "" && su != "root" {
-			p := filepath.Join("/home", su, ".config", "mazzy-vpn", "settings.json")
-			if _, err := os.Stat(p); err == nil {
-				return p
-			}
+		if p, ok := sudoUserSettingsPath(); ok {
+			return p
 		}
 	}
 	if h, err := os.UserConfigDir(); err == nil {
