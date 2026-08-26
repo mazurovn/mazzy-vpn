@@ -11,11 +11,16 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/mazurovn/mazzy-vpn/core"
 	"github.com/mazurovn/mazzy-vpn/core/diagnose"
+	"github.com/mazurovn/mazzy-vpn/core/guard"
+	"github.com/mazurovn/mazzy-vpn/core/netexec"
+	"github.com/mazurovn/mazzy-vpn/core/routes"
+	"github.com/mazurovn/mazzy-vpn/core/settings"
 	"github.com/mazurovn/mazzy-vpn/core/livecheck"
 	"github.com/mazurovn/mazzy-vpn/core/measure"
 	"github.com/mazurovn/mazzy-vpn/core/netadapter"
@@ -63,6 +68,9 @@ func gatherSignal(ctx context.Context) diagnose.Signal {
 	s.InternetOK = plainInternetOK(ctx)
 	s.DNSOK = dnsOK(ctx)
 
+	// Firewall/routing residue: our own leftover state that can seal the host.
+	gatherGuardResidue(ctx, &s)
+
 	// Tunnel + egress.
 	s.TunnelIface = detectLiveInterface()
 	if s.TunnelIface != "" {
@@ -91,6 +99,55 @@ func gatherSignal(ctx context.Context) diagnose.Signal {
 		}
 	}
 	return s
+}
+
+// gatherGuardResidue inspects OUR nftables tables (root only), policy-routing
+// rules and resolv.conf for leftover state that blocks the internet without a
+// tunnel — the "kill-switch sealed the host" incident class.
+func gatherGuardResidue(ctx context.Context, s *diagnose.Signal) {
+	s.KillSwitchByCfg = settings.NewStore().Load().KillSwitch
+	r := netexec.ExecRunner{}
+
+	// nft needs root; without it we honestly report "not checked".
+	if os.Geteuid() == 0 {
+		s.GuardChecked = true
+		if out, err := r.Run(ctx, "nft", "list", "tables"); err == nil {
+			for _, tbl := range []string{guard.IPv6GuardTable, guard.TransitionGuardTable, guard.ConnmarkTable} {
+				if strings.Contains(out, tbl) {
+					s.GuardTables = append(s.GuardTables, tbl)
+					if tbl == guard.TransitionGuardTable {
+						s.KillSwitchOn = true
+					}
+				}
+			}
+		}
+	}
+
+	// Policy rules are visible without root.
+	mark := strconv.Itoa(routes.DefaultMark)
+	count := 0
+	for _, fam := range []string{"-4", "-6"} {
+		if out, err := r.Run(ctx, "ip", fam, "rule", "show"); err == nil {
+			for _, line := range strings.Split(out, "\n") {
+				if strings.Contains(line, "fwmark") && strings.Contains(line, mark) ||
+					strings.Contains(line, "suppress_prefixlength 0") {
+					count++
+				}
+			}
+		}
+	}
+	s.PolicyRules = count
+
+	// DNS pointing at the tunnel resolver while no tunnel exists = dead lookups.
+	if detectLiveInterface() == "" {
+		if data, err := os.ReadFile("/etc/resolv.conf"); err == nil {
+			for _, iface := range core.ManagedInterfaces() {
+				if strings.Contains(string(data), iface) {
+					s.StaleTunnelDNS = true
+				}
+			}
+		}
+	}
 }
 
 // looksLikeForeignVPN reports whether an interface name matches a known VPN

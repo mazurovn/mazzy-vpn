@@ -56,6 +56,8 @@ func cmdMenu(ctx context.Context, _ []string) int {
 			menuDisconnect(ctx)
 		case "5": // recover / clean
 			menuRecover(ctx, in)
+		case "!", "disarm": // HARD reset (kill everything, plain internet)
+			menuDisarm(ctx, in)
 		case "6": // run in background (detached daemon)
 			menuBackground(ctx, set)
 		case "l", "L", "log": // view the activity log
@@ -174,6 +176,7 @@ func drawMenu(profileCount int, set settings.Settings) {
 	fmt.Println("   3. 🔄 Reconnect with diagnostics")
 	fmt.Println("   4. ⏹  Disconnect")
 	fmt.Println("   5. 🧹 Recover / clean (panic → plain Wi‑Fi)")
+	fmt.Println("   !. ⛔ HARD RESET (disarm): kill daemon + ALL rules/kill-switch, restore DNS")
 	fmt.Println("   6. 🛰  Run in background (survives closing terminal)")
 	fmt.Println("   l. 📜 View activity log     k. ⏹  Stop background daemon")
 	fmt.Println("  Diagnostics")
@@ -241,6 +244,19 @@ func menuRecover(ctx context.Context, in *bufio.Reader) {
 		return
 	}
 	reportResult("recover", runPrivileged(ctx, "recover"))
+}
+
+// menuDisarm confirms then performs the HARD reset: kill the daemon, drop all
+// our firewall/routing state including the kill-switch, restore DNS, and
+// verify plain internet. The escape hatch when "everything is blocked".
+func menuDisarm(ctx context.Context, in *bufio.Reader) {
+	fmt.Print("⛔ HARD RESET: stop the VPN daemon and remove ALL rules/kill-switch? [y/N] ")
+	line, _ := in.ReadString('\n')
+	if strings.ToLower(strings.TrimSpace(line)) != "y" {
+		fmt.Println(translator().T("cli.menu.cancelled"))
+		return
+	}
+	reportResult("disarm", runPrivileged(ctx, "disarm"))
 }
 
 // menuProviders lets the user filter AI provider checks by type.

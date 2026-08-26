@@ -28,7 +28,7 @@ const sudoersDropin = "/etc/sudoers.d/mazzy-vpn"
 // `doctor` is included for its --heal mode so unattended automation (agents,
 // cron) can rescue the connection without a password; plain doctor is
 // read-only anyway, and --heal wields only the already-trusted verbs' powers.
-var trustedSubcommands = []string{"daemon", "stop", "disconnect", "recover", "up", "auto", "mimic", "doctor"}
+var trustedSubcommands = []string{"daemon", "stop", "disconnect", "recover", "disarm", "up", "auto", "mimic", "doctor"}
 
 // cmdTrust installs (or removes, with --revoke) a sudoers drop-in that lets ONE
 // user run the privileged mazzy-vpn subcommands without a password prompt, so

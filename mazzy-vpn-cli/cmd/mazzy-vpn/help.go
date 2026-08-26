@@ -52,6 +52,7 @@ var commandHelpRegistry = map[string]commandHelp{
 	"disconnect": {"sudo mazzy-vpn disconnect", "Bring down the active tunnel.", []string{"down"}, nil},
 	"recover":    {"sudo mazzy-vpn recover [--reset-catalog] [--purge-legacy]", "Force-clean tunnels, guards and legacy leftovers.", []string{"clean", "panic"}, []string{"--reset-catalog", "--purge-legacy"}},
 	"trust":      {"sudo mazzy-vpn trust [--revoke] [--user NAME]", "Allow passwordless daemon control via a sudoers drop-in.", nil, []string{"--revoke", "--user"}},
+	"disarm":     {"sudo mazzy-vpn disarm [--purge-legacy]", "HARD reset: kill daemon, drop all rules/kill-switch, restore DNS, verify internet.", []string{"hard-reset"}, []string{"--purge-legacy"}},
 	"providers":  {"mazzy-vpn providers [--type TYPE] [--json]", "Check configured AI providers.", []string{"ai"}, []string{"--type", "--json"}},
 	"update":     {"mazzy-vpn update [--apply]", "Check or install a GitHub release.", []string{"self-update"}, []string{"--apply"}},
 	"status":     {"mazzy-vpn status [--json]", "Show live connection state.", nil, []string{"--json"}},

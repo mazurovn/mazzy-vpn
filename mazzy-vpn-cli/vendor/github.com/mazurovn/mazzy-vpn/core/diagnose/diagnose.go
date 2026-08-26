@@ -33,6 +33,17 @@ type Signal struct {
 	DaemonHeartbeatAge int64  // seconds since the heartbeat was last written
 	DaemonReconnects   int    // reconnects this session
 	DaemonLastError    string // most recent recorded error reason
+
+	// Firewall/routing residue facts — the class of failure where OUR OWN
+	// leftover state (an armed kill-switch, stale policy rules, tunnel DNS)
+	// blocks the internet with no tunnel to justify it. Previously invisible
+	// to diagnose, which made it useless for exactly the worst incidents.
+	GuardChecked    bool     // false when nft could not be inspected (not root)
+	KillSwitchOn    bool     // fail-closed transition guard table present
+	GuardTables     []string // our nft tables currently present
+	PolicyRules     int      // our policy-routing rules currently present
+	StaleTunnelDNS  bool     // resolv.conf points at the tunnel DNS with no tunnel up
+	KillSwitchByCfg bool     // the user's settings enable the kill-switch
 }
 
 // Severity of a problem.
@@ -90,6 +101,38 @@ func Analyze(s Signal) *Report {
 	r := &Report{}
 	add := func(sev Severity, title, cause, fix string) {
 		r.Problems = append(r.Problems, Problem{Severity: sev, Level: sev.String(), Title: title, Cause: cause, Fix: fix})
+	}
+
+	// --- Self-inflicted blocks: our own leftover firewall/routing state ---
+	// These outrank everything else: when the kill-switch or stale rules seal
+	// the host, every downstream check fails and the ONLY correct advice is
+	// the hard reset.
+	if s.KillSwitchOn && (s.TunnelIface == "" || !s.EgressOK) {
+		add(Critical, "Kill-switch is sealing the host",
+			"The fail-closed kill-switch table is installed but no working tunnel exists — all traffic is being rejected by our own guard.",
+			"HARD reset: sudo mazzy-vpn disarm (kills the daemon, removes all rules, restores DNS).")
+		r.Summary = "Internet is blocked by the kill-switch — run: sudo mazzy-vpn disarm"
+		return r
+	}
+	if s.TunnelIface == "" && len(s.GuardTables) > 0 {
+		add(Critical, "Leftover VPN firewall rules with no tunnel",
+			"Our nftables tables ("+joinStr(s.GuardTables)+") are still installed although no tunnel is up; they can break IPv6/DNS or all traffic.",
+			"Clean them: sudo mazzy-vpn disarm")
+	}
+	if s.TunnelIface == "" && s.PolicyRules > 0 {
+		add(Warn, "Leftover policy-routing rules",
+			"VPN policy-routing rules are still present without a tunnel; traffic may be routed into a void.",
+			"Clean them: sudo mazzy-vpn disarm")
+	}
+	if s.StaleTunnelDNS {
+		add(Critical, "DNS still points at the (dead) tunnel",
+			"resolv.conf references the VPN DNS but no tunnel is up — every name lookup times out, so \"the internet is down\" even though the uplink works.",
+			"Restore DNS: sudo mazzy-vpn disarm (reverts per-link DNS and flushes caches).")
+	}
+	if !s.GuardChecked && s.HasUplink && s.TunnelIface == "" && !s.InternetOK {
+		add(Info, "Firewall state not inspected",
+			"Run diagnose with sudo to check for an armed kill-switch or leftover nftables rules — the most likely cause when everything is blocked.",
+			"sudo mazzy-vpn diagnose")
 	}
 
 	// --- Daemon states the user cannot see from the outside ---
@@ -200,6 +243,17 @@ func Analyze(s Signal) *Report {
 		}
 	}
 	return r
+}
+
+func joinStr(items []string) string {
+	out := ""
+	for i, it := range items {
+		if i > 0 {
+			out += ", "
+		}
+		out += it
+	}
+	return out
 }
 
 func or(s, fallback string) string {

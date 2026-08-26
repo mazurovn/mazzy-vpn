@@ -23,6 +23,7 @@ var privilegedSubcommands = map[string]bool{
 	"mimic":      true,
 	"stop":       true,
 	"trust":      true,
+	"disarm":     true,
 }
 
 // elevatorLookup is indirected for tests. It resolves a privilege helper on

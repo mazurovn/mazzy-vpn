@@ -88,3 +88,41 @@ func TestConflictVPNWhenConnected(t *testing.T) {
 		t.Error("should warn about conflicting VPN even when healthy")
 	}
 }
+
+// TestKillSwitchSealIsTopRootCause: an armed kill-switch with no working
+// tunnel must dominate the diagnosis and prescribe the hard reset.
+func TestKillSwitchSealIsTopRootCause(t *testing.T) {
+	r := Analyze(Signal{HasUplink: true, GuardChecked: true, KillSwitchOn: true})
+	if len(r.Problems) == 0 || r.Problems[0].Title != "Kill-switch is sealing the host" {
+		t.Fatalf("expected kill-switch seal first, got %+v", r.Problems)
+	}
+	if !strContains(r.Problems[0].Fix, "disarm") {
+		t.Errorf("fix must prescribe disarm, got %q", r.Problems[0].Fix)
+	}
+}
+
+// TestLeftoverGuardsAndStaleDNS are flagged when no tunnel exists.
+func TestLeftoverGuardsAndStaleDNS(t *testing.T) {
+	r := Analyze(Signal{
+		HasUplink: true, InternetOK: true, ProfilesImported: 3, AnyServerAlive: true,
+		GuardChecked: true, GuardTables: []string{"mazzy_guard6"}, PolicyRules: 2, StaleTunnelDNS: true,
+	})
+	titles := map[string]bool{}
+	for _, p := range r.Problems {
+		titles[p.Title] = true
+	}
+	for _, want := range []string{"Leftover VPN firewall rules with no tunnel", "Leftover policy-routing rules", "DNS still points at the (dead) tunnel"} {
+		if !titles[want] {
+			t.Errorf("missing problem %q in %+v", want, r.Problems)
+		}
+	}
+}
+
+func strContains(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}

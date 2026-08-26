@@ -122,6 +122,8 @@ func run(args []string) int {
 		return cmdDisconnect(ctx, rest)
 	case "recover", "clean", "panic":
 		return cmdRecover(ctx, rest)
+	case "disarm", "hard-reset":
+		return cmdDisarm(ctx, rest)
 	case "trust":
 		return cmdTrust(ctx, rest)
 	case "providers", "ai":
@@ -222,6 +224,8 @@ Usage:
  %s
   sudo mazzy-vpn disconnect           bring the tunnel down gracefully
   sudo mazzy-vpn recover              force-clean ALL tunnels/guards (panic button)
+  sudo mazzy-vpn disarm               HARD reset: kill daemon, drop ALL rules/kill-switch,
+                                      restore DNS, verify plain internet works
   sudo mazzy-vpn recover --reset-catalog   also wipe imported profiles
 
  %s

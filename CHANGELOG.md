@@ -5,6 +5,16 @@ All notable changes to Mazzy VPN are documented here.
 ## CLI 2.4.2 - 2026-08-26
 
 ### Added
+- **`sudo mazzy-vpn disarm`** (menu: `!`) — the HARD reset: kills the daemon
+  (SIGTERM→SIGKILL), removes ALL our firewall/routing state including the
+  fail-closed kill-switch, reverts per-link DNS and flushes resolver caches,
+  clears runtime status files, then VERIFIES plain internet actually works and
+  reports honestly. The escape hatch for "everything is blocked".
+- **Diagnose sees self-inflicted blocks**: an armed kill-switch with no
+  working tunnel, leftover mazzy nftables tables, stale policy-routing rules,
+  and resolv.conf still pointing at a dead tunnel are now detected (nft
+  inspection under sudo) and diagnosed as the top root cause with the disarm
+  fix — previously diagnose was blind to exactly the worst incident class.
 - **`sudo mazzy-vpn doctor --heal`** — active connection rescuer with an
   escalation ladder: already protected → noop; daemon mid-reconnect → 90s
   grace; paused → resume and verify; unhealthy → SIGTERM (SIGKILL fallback) →
