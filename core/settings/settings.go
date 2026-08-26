@@ -20,6 +20,17 @@ import (
 // SUDO_USER (e.g. "../etc") can never traverse outside the user's home.
 var sudoUserNameRe = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}\$?$`)
 
+// dirSafeForRoot reports whether a directory is safe for root to trust as a
+// config source: it exists and is not group/world-writable (a writable dir
+// would let a non-root user swap the settings file underneath root).
+func dirSafeForRoot(dir string) bool {
+	fi, err := os.Stat(dir)
+	if err != nil || !fi.IsDir() {
+		return false
+	}
+	return fi.Mode().Perm()&0o022 == 0
+}
+
 // sudoUserSettingsPath resolves the INVOKING user's settings file when running
 // as root under sudo. Hardened: the name is validated against a strict
 // pattern, the home directory comes from the real user database (never a
@@ -101,7 +112,13 @@ type Store struct {
 // because root's defaults said true.
 func DefaultPath() string {
 	if d := os.Getenv("MAZZY_CONFIG_HOME"); d != "" {
-		return filepath.Join(d, "settings.json")
+		// As root, an inherited MAZZY_CONFIG_HOME could steer which settings file
+		// drives the kill-switch policy. sudo's env_reset strips it for the
+		// trusted verbs (so this is inert today), but as defense in depth we
+		// refuse a root-context override whose directory is group/world-writable.
+		if os.Geteuid() != 0 || dirSafeForRoot(d) {
+			return filepath.Join(d, "settings.json")
+		}
 	}
 	if os.Geteuid() == 0 {
 		if p, ok := sudoUserSettingsPath(); ok {

@@ -18,14 +18,14 @@ import (
 	"github.com/mazurovn/mazzy-vpn/core"
 	"github.com/mazurovn/mazzy-vpn/core/diagnose"
 	"github.com/mazurovn/mazzy-vpn/core/guard"
-	"github.com/mazurovn/mazzy-vpn/core/netexec"
-	"github.com/mazurovn/mazzy-vpn/core/routes"
-	"github.com/mazurovn/mazzy-vpn/core/settings"
 	"github.com/mazurovn/mazzy-vpn/core/livecheck"
 	"github.com/mazurovn/mazzy-vpn/core/measure"
 	"github.com/mazurovn/mazzy-vpn/core/netadapter"
+	"github.com/mazurovn/mazzy-vpn/core/netexec"
 	"github.com/mazurovn/mazzy-vpn/core/pathtrace"
 	"github.com/mazurovn/mazzy-vpn/core/profile"
+	"github.com/mazurovn/mazzy-vpn/core/routes"
+	"github.com/mazurovn/mazzy-vpn/core/settings"
 )
 
 // gatherSignal collects real observations for root-cause analysis.

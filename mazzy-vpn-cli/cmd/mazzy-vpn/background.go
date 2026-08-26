@@ -146,9 +146,27 @@ func daemonRunning() (runstatus.Snapshot, bool) {
 // it cannot be read at all we err on the side of "it is the daemon" (the old
 // EPERM-tolerant behavior).
 func procLooksLikeMazzy(pid int) bool {
+	// Strongest signal: the executable behind the PID really is a mazzy-vpn
+	// binary. This defeats the "argv contains mazzy-vpn" spoof a crafted
+	// process could otherwise use to get itself signalled (gate finding 2).
+	if exe, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid)); err == nil && exe != "" {
+		base := exe
+		if i := strings.LastIndexByte(base, '/'); i >= 0 {
+			base = base[i+1:]
+		}
+		// "(deleted)" suffix appears after an in-place upgrade — still ours.
+		base = strings.TrimSuffix(base, " (deleted)")
+		// Prefix match accepts the real binary ("mazzy-vpn") and the test binary
+		// ("mazzy-vpn.test") while still requiring the actual EXECUTABLE FILE to
+		// be a mazzy-vpn — a far higher bar than an argv substring, and combined
+		// with the root-owned /run/mazzy-vpn dir the PID cannot be spoofed.
+		return strings.HasPrefix(base, "mazzy-vpn")
+	}
+	// Fall back to cmdline only when /proc/<pid>/exe is unreadable (EPERM under
+	// hidepid, or non-Linux): a weaker but still useful check.
 	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
 	if err != nil {
-		return true // cannot verify (non-Linux, hidepid, ...): assume alive
+		return true // cannot verify at all: assume alive (old EPERM-tolerant behavior)
 	}
 	return strings.Contains(strings.ReplaceAll(string(data), "\x00", " "), "mazzy-vpn")
 }
@@ -228,8 +246,16 @@ func cmdStop(_ context.Context, _ []string) int {
 		return 3
 	}
 	if !waitDaemonExit(pid, 35*time.Second) {
-		fmt.Fprintf(os.Stderr, "daemon pid %d did not stop within 35s\n", pid)
-		return 1
+		// Escalate to SIGKILL rather than leaving a wedged daemon (and any armed
+		// kill-switch) alive — parity with disarm/heal, which never give up.
+		fmt.Fprintf(os.Stderr, "daemon pid %d ignored SIGTERM after 35s — sending SIGKILL\n", pid)
+		if p, err := os.FindProcess(pid); err == nil {
+			_ = p.Signal(syscall.SIGKILL)
+		}
+		if !waitDaemonExit(pid, 5*time.Second) {
+			fmt.Fprintf(os.Stderr, "daemon pid %d survived SIGKILL; run: sudo mazzy-vpn disarm\n", pid)
+			return 1
+		}
 	}
 	return 0
 }

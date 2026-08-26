@@ -169,12 +169,27 @@ func cmdDaemon(ctx context.Context, args []string) int {
 	defer close(hbDone)
 	sdNotify("READY=1")
 
-	// Clear any stale down-intent left by a previous session's Disconnect so this
-	// freshly-started daemon does not immediately pause itself on its first tick.
-	_ = st.SetDesired(core.DesiredUp)
-	_ = writeDesired(zone, "up")
+	// Respect a FRESH down-intent instead of blindly forcing "up". Under the
+	// systemd unit (Restart=always), stop/disarm/heal SIGKILL the daemon and
+	// systemd respawns it ~5s later; clobbering the just-written "down" here
+	// would make the daemon reconnect right after disarm told the user the host
+	// was on plain networking (gate finding 2). A STALE intent (older than the
+	// 2-min window) is ignored by readDesired, so a normal restart still comes
+	// up. Only clear/force "up" when there is no fresh "down".
+	startPaused := false
+	if di, ok := readDesired(); ok && di.Desired == "down" {
+		d.logf("fresh down-intent on startup; starting paused (not auto-connecting)")
+		rw.SetState(runstatus.StatePaused, "", "")
+		startPaused = true
+	} else {
+		_ = st.SetDesired(core.DesiredUp)
+		_ = writeDesired(zone, "up")
+	}
 
-	conn, _ := d.connectZone(ctx, zone)
+	var conn *connect.Conn
+	if !startPaused {
+		conn, _ = d.connectZone(ctx, zone)
+	}
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
@@ -188,7 +203,7 @@ func cmdDaemon(ctx context.Context, args []string) int {
 
 	fails := 0
 	softFails := 0           // egress probes failing while the handshake is fresh
-	paused := false          // true after a Disconnect intent; blocks auto-reconnect
+	paused := startPaused    // true after a Disconnect intent; blocks auto-reconnect
 	reconnecting := false    // an egress loss triggered a teardown; next success is a "reconnect"
 	const reconnectLimit = 2 // reconnect same zone this many times
 	const softFailLimit = 6  // ~1 min of probe failures with a FRESH handshake before reconnecting
@@ -270,9 +285,20 @@ func cmdDaemon(ctx context.Context, args []string) int {
 					// Disconnect ineffective while a daemon runs.
 					if conn != nil {
 						d.logf("disconnect requested; pausing auto-reconnect")
+						if set.KillSwitch {
+							_ = conn.DisarmKillSwitch(ctx)
+						}
 						_ = conn.Down(ctx)
 						conn = nil
 						nfy.Disconnected(zone)
+					}
+					// Critical: if the kill-switch was armed during a reconnect gap
+					// (conn may already be nil here), lift it now. Otherwise pausing
+					// leaves the host fail-closed forever — no tunnel AND no plain
+					// internet — with no automatic path back (gate finding 1).
+					if killSwitchArmed {
+						_ = guard.New(netexec.ExecRunner{}).RemoveFailClosed(ctx)
+						killSwitchArmed = false
 					}
 					// Publish PAUSED (not "down"): the daemon is alive and holding
 					// the tunnel down on purpose. Readers previously could not tell
@@ -564,26 +590,20 @@ func (d *daemonState) connectZone(ctx context.Context, name string) (*connect.Co
 
 // pickBestLive ranks all AmneziaWG zones through the physical uplink and returns
 // the best ICMP-alive one. avoid maps zone→cooldown-expiry for zones that
-// recently failed EGRESS (ICMP-alive but not routing); they are skipped unless
-// that would leave no candidates at all — a degraded pick still beats none.
+// recently failed EGRESS (ICMP-alive but not routing); quarantined zones are
+// NEVER re-picked while their cooldown holds. When every zone is quarantined it
+// returns ok=false (rather than silently ranking the full list and re-electing
+// a just-failed zone — the failover ping-pong of gate finding 3); the caller
+// then holds or defers to nextCatalogZone, which also respects the cooldown.
 func (d *daemonState) pickBestLive(ctx context.Context, avoid map[string]time.Time) (string, bool) {
 	cat := newCatalog()
 	targets, err := targetsFromCatalog(cat)
 	if err != nil || len(targets) == 0 {
 		return "", false
 	}
-	if len(avoid) > 0 {
-		now := time.Now()
-		kept := targets[:0:0]
-		for _, t := range targets {
-			if until, bad := avoid[t.Name]; bad && now.Before(until) {
-				continue
-			}
-			kept = append(kept, t)
-		}
-		if len(kept) > 0 {
-			targets = kept
-		}
+	targets = filterQuarantined(targets, avoid, time.Now())
+	if len(targets) == 0 {
+		return "", false // all zones quarantined → hold, never re-pick a bad one
 	}
 	ranked := newMeasurer().RankBest(ctx, targets)
 	best, ok := measure.BestAlive(ranked)
@@ -591,6 +611,24 @@ func (d *daemonState) pickBestLive(ctx context.Context, avoid map[string]time.Ti
 		return "", false
 	}
 	return best.Name, true
+}
+
+// filterQuarantined drops targets whose cooldown has not yet expired. It NEVER
+// falls back to the unfiltered list when everything is quarantined (that bypass
+// re-elected just-failed zones and caused failover ping-pong, gate finding 3):
+// an empty result tells the caller to hold instead.
+func filterQuarantined(targets []measure.Target, avoid map[string]time.Time, now time.Time) []measure.Target {
+	if len(avoid) == 0 {
+		return targets
+	}
+	kept := targets[:0:0]
+	for _, t := range targets {
+		if until, bad := avoid[t.Name]; bad && now.Before(until) {
+			continue
+		}
+		kept = append(kept, t)
+	}
+	return kept
 }
 
 // zoneCooldown is how long a zone that repeatedly failed EGRESS is quarantined

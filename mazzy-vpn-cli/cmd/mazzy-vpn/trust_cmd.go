@@ -173,7 +173,13 @@ func sudoersContent(user, bin string) string {
 		}
 		rules = append(rules, bin+" "+sc, bin+" "+sc+" *")
 	}
+	// SECURITY INVARIANT: this rule must NEVER carry SETENV or an env_keep for
+	// MAZZY_RUN_DIR / MAZZY_CONFIG_HOME / MAZZY_STATE_DIR. sudo's default
+	// env_reset strips them, which is what keeps the env-var-driven paths
+	// (heartbeat, settings, state) unspoofable under the trusted verbs. Adding
+	// env passthrough here would make those directories attacker-steerable.
 	return "# Managed by `mazzy-vpn trust` — passwordless daemon control for the menu/TUI.\n" +
+		"# Do NOT add SETENV/env_keep here (see sudoersContent security invariant).\n" +
 		"# Remove with: sudo mazzy-vpn trust --revoke\n" +
 		user + " ALL=(root) NOPASSWD: " + strings.Join(rules, ", ") + "\n"
 }
