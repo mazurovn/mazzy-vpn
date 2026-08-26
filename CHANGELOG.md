@@ -27,6 +27,12 @@ Full analysis in `docs/AUDIT_2026-08-26_DAEMON_SELFHEAL.ru.md`.
   never be left behind.
 - Daemon loop no longer sleeps inside the tick handler: SIGTERM, menu intents
   and zone switches apply within one tick even mid-backoff.
+- **TUI/menu could not actually control the daemon**: connect/resume wrote the
+  intent file directly from the unprivileged process, but /run/mazzy-vpn is
+  root-owned — the write failed silently (EACCES discarded) and the UI reported
+  "resumed" while the daemon saw nothing. All connect/resume/disconnect/recover
+  requests now go through the elevated command path, which records the intent
+  as root.
 - Reconnect counter no longer increments for unconfirmed reconnects.
 
 ### Added

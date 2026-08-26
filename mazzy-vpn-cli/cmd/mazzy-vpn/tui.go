@@ -406,15 +406,12 @@ func privilegedTUICmd(label, subcmd string, sargs ...string) tea.Cmd {
 }
 
 func requestConnectCmd(zone string) tea.Cmd {
-	// Resume/switch an existing daemon without spawning a competing process.
-	if _, ok := daemonRunning(); ok {
-		intentZone := zone
-		if intentZone == "--best" {
-			intentZone = ""
-		}
-		_ = writeDesired(intentZone, "up")
-		return func() tea.Msg { return tuiActionDoneMsg{label: "connect " + zone} }
-	}
+	// Resume/switch/start all go through the elevated daemon entry point. The
+	// unprivileged TUI cannot write the intent file (/run/mazzy-vpn is created
+	// root-owned 0755 by the daemon): the previous direct writeDesired failed
+	// silently with EACCES and reported "done" while the daemon saw nothing —
+	// the "CLI can't control the daemon" bug. The elevated cmdDaemon forwards
+	// the request as root to a live daemon, or starts a session daemon.
 	// Start a detached menu-scoped daemon so Bubble Tea immediately returns to
 	// the live dashboard. The old `up` path was foreground and blocked the TUI
 	// until disconnect.
@@ -422,7 +419,8 @@ func requestConnectCmd(zone string) tea.Cmd {
 }
 
 func requestDisconnectCmd() tea.Cmd {
-	_ = writeDesired("", "down")
+	// The elevated `disconnect` records the down-intent as root itself; an
+	// unprivileged write here could not reach the root-owned runtime dir.
 	return privilegedTUICmd("disconnect", "disconnect")
 }
 
@@ -440,7 +438,7 @@ func requestStopCmd() tea.Cmd {
 }
 
 func requestRecoverCmd() tea.Cmd {
-	_ = writeDesired("", "down")
+	// Same as disconnect: the elevated `recover` records the down-intent itself.
 	return privilegedTUICmd("recover", "recover")
 }
 

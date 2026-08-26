@@ -212,18 +212,14 @@ func menuQuickConnect(ctx context.Context, set settings.Settings) {
 	} else {
 		fmt.Println(translator().Tf("cli.menu.quick_connect", safeDisplay(zone)))
 	}
-	// If a daemon is already running (possibly paused by a prior Disconnect),
-	// resume it in place via the up-intent instead of spawning a second daemon
-	// (the lock would reject the duplicate anyway).
-	if _, ok := daemonRunning(); ok {
-		z := zone
-		if z == "--best" {
-			z = "" // let the daemon keep its current/best zone
-		}
-		_ = writeDesired(z, "up")
-		fmt.Println(translator().T("cli.menu.action_ok_resume"))
-		return
-	}
+	// Resume, zone switch and cold start ALL go through the elevated daemon
+	// entry point. The unprivileged menu cannot write the intent file itself —
+	// /run/mazzy-vpn is created root-owned 0755 by the daemon, so the previous
+	// direct writeDesired here failed silently (EACCES was discarded) and the
+	// "resumed" message lied while the daemon never saw the request. The
+	// elevated cmdDaemon forwards the intent as root to a live daemon (same
+	// zone → resume, --best → the OWNER re-ranks with its cooldown map) or
+	// starts a fresh session daemon when none is running.
 	reportResult("connect", runPrivileged(ctx, "daemon", zone, "--session"))
 }
 
@@ -378,9 +374,10 @@ func menuLanguage(ctx context.Context, in *bufio.Reader) {
 // auto-reconnect, then tear the tunnel down. A subsequent Quick connect clears
 // the intent and resumes.
 func menuDisconnect(ctx context.Context) {
-	if _, ok := daemonRunning(); ok {
-		_ = writeDesired("", "down")
-	}
+	// No direct intent write here: the unprivileged menu cannot write into the
+	// root-owned runtime dir. The elevated `disconnect` records the down-intent
+	// itself (recordDownIntent) BEFORE touching the interface, which is what
+	// actually pauses the daemon's auto-reconnect.
 	reportResult("disconnect", runPrivileged(ctx, "disconnect"))
 }
 
