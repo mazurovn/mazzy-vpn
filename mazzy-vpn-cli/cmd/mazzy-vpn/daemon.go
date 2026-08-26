@@ -169,16 +169,22 @@ func cmdDaemon(ctx context.Context, args []string) int {
 	defer close(hbDone)
 	sdNotify("READY=1")
 
-	// Respect a FRESH down-intent instead of blindly forcing "up". Under the
-	// systemd unit (Restart=always), stop/disarm/heal SIGKILL the daemon and
-	// systemd respawns it ~5s later; clobbering the just-written "down" here
-	// would make the daemon reconnect right after disarm told the user the host
-	// was on plain networking (gate finding 2). A STALE intent (older than the
-	// 2-min window) is ignored by readDesired, so a normal restart still comes
-	// up. Only clear/force "up" when there is no fresh "down".
+	// Respect a FRESH down-intent — but ONLY for a systemd-supervised respawn,
+	// never for an explicit `daemon <zone>` command.
+	//
+	// The distinction (gate finding 2 vs. its regression): under the unit
+	// (Restart=always), stop/disarm/heal SIGKILL the daemon and systemd respawns
+	// `daemon %i` ~5s later — that respawn must honor the just-written "down" or
+	// it reconnects right after disarm said the host was clean. But an EXPLICIT
+	// invocation (`sudo mazzy-vpn daemon Berlin`, the menu's connect, a restart
+	// right after `stop`) is a user command to connect NOW; honoring the stale
+	// "down" from the preceding stop there left the VPN paused and the user
+	// offline (observed incident). NOTIFY_SOCKET is set only under systemd, so
+	// it cleanly separates "respawn" from "explicit command".
+	underSystemd := os.Getenv("NOTIFY_SOCKET") != ""
 	startPaused := false
-	if di, ok := readDesired(); ok && di.Desired == "down" {
-		d.logf("fresh down-intent on startup; starting paused (not auto-connecting)")
+	if di, ok := readDesired(); ok && di.Desired == "down" && underSystemd {
+		d.logf("fresh down-intent on systemd respawn; starting paused (not auto-connecting)")
 		rw.SetState(runstatus.StatePaused, "", "")
 		startPaused = true
 	} else {
