@@ -1,5 +1,5 @@
 // Copyright (C) 2026 Nik m (@mazurovn)
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 const tauri = window.__TAURI__;
 const invoke = tauri?.core?.invoke;
@@ -225,7 +225,7 @@ Object.assign(translations.ru, {
   aboutRuleLocal: "Профили, ключи и журналы остаются на устройстве; телеметрии нет.",
   aboutRulePrivilege: "Системные изменения выполняются только после стандартного разрешения ОС.",
   aboutRuleTests: "Live-тесты временно меняют маршруты и обязаны завершаться rollback.",
-  aboutRuleLicense: "Изменённые сетевые версии должны соблюдать условия AGPL и предоставлять исходный код.",
+  aboutRuleLicense: "Source-available ПО; коммерческое использование требует отдельной лицензии (см. COMMERCIAL.md).",
   aboutRuleIdentity: "Нельзя выдавать изменённую сборку за оригинальный релиз или искажать авторство.",
   aboutRuleProvider: "Пользователь отвечает за законность VPN-провайдера и импортируемых конфигураций.",
   aboutDocuments: "Документы:"
@@ -324,7 +324,7 @@ Object.assign(translations.en, {
   aboutRuleLocal: "Profiles, keys and logs stay on the device; no telemetry is collected.",
   aboutRulePrivilege: "System changes run only after the operating system's standard authorization.",
   aboutRuleTests: "Live tests temporarily change routes and must finish with rollback.",
-  aboutRuleLicense: "Modified network versions must follow the AGPL and provide corresponding source code.",
+  aboutRuleLicense: "This is source-available software; commercial use requires a separate license (see COMMERCIAL.md).",
   aboutRuleIdentity: "A modified build must not be presented as an original release or misrepresent authorship.",
   aboutRuleProvider: "The user is responsible for the legality of their VPN provider and imported configurations.",
   aboutDocuments: "Documents:"
@@ -925,7 +925,7 @@ function documentationPreviewData() {
       os: "linux",
       desktop_version: "0.4.8",
       author: "Nik m (@mazurovn)",
-      license: "AGPL-3.0-or-later"
+      license: "PolyForm-Noncommercial-1.0.0"
     }
   };
 }
@@ -1706,7 +1706,7 @@ function renderAbout() {
   $("#about-engine-version").textContent = engineVersion;
   $("#about-platform").textContent = info?.os ? info.os.toUpperCase() : "—";
   $("#about-author").textContent = info?.author || "Nik m (@mazurovn)";
-  $("#about-license").textContent = info?.license || "AGPL-3.0-or-later";
+  $("#about-license").textContent = info?.license || "PolyForm-Noncommercial-1.0.0";
 }
 
 async function refreshInstallation(startEmbeddedEngine = false) {

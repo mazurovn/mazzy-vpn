@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright © 2026 Nik m (@mazurovn). All rights reserved.
 
 package guard
@@ -95,5 +95,29 @@ func TestConnmarkRuleset(t *testing.T) {
 		if !strings.Contains(rs, want) {
 			t.Errorf("connmark ruleset missing %q:\n%s", want, rs)
 		}
+	}
+}
+
+func TestKillSwitchRuleset(t *testing.T) {
+	cf := &captureFake{}
+	g := New(cf)
+	if err := g.InstallKillSwitch(context.Background(), 51820); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	rs := cf.lastRuleset
+	for _, want := range []string{
+		"table inet " + TransitionGuardTable,
+		"type filter hook output priority -150; policy accept;",
+		`oifname "lo" accept`,
+		"meta mark 51820 accept",
+		"reject with icmpx type admin-prohibited",
+	} {
+		if !strings.Contains(rs, want) {
+			t.Errorf("kill-switch ruleset missing %q:\n%s", want, rs)
+		}
+	}
+	// Idempotency: pre-delete the table before applying.
+	if !strings.Contains(strings.Join(cf.Calls, "\n"), "nft delete table inet "+TransitionGuardTable) {
+		t.Errorf("expected pre-delete for idempotency; calls=%v", cf.Calls)
 	}
 }

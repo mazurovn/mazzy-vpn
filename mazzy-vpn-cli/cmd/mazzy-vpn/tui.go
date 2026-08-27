@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright © 2026 Nik m (@mazurovn). All rights reserved.
 
 package main
@@ -15,6 +15,7 @@ import (
 	"github.com/mazurovn/mazzy-vpn/core/livecheck"
 	"github.com/mazurovn/mazzy-vpn/core/measure"
 	"github.com/mazurovn/mazzy-vpn/core/netadapter"
+	"github.com/mazurovn/mazzy-vpn/core/runstatus"
 	"github.com/mazurovn/mazzy-vpn/core/settings"
 )
 
@@ -37,6 +38,7 @@ const (
 	scrMain screen = iota
 	scrZones
 	scrSettings
+	scrLog
 )
 
 // tickMsg drives the live header refresh.
@@ -81,6 +83,9 @@ type tuiModel struct {
 	zonesErr string
 	cursor   int
 
+	// spin advances every tick so the "measuring…" overlay visibly animates
+	// instead of looking frozen while a large catalog is probed.
+	spin     int
 	quitting bool
 }
 
@@ -99,6 +104,12 @@ func (m tuiModel) Init() tea.Cmd {
 // tickCmd schedules the next header refresh.
 func tickCmd() tea.Cmd {
 	return tea.Tick(2*time.Second, func(t time.Time) tea.Msg { return tickMsg(t) })
+}
+
+// fastTickCmd is a quicker cadence used while a probe wave is in flight so the
+// "measuring…" spinner animates smoothly instead of updating every 2s.
+func fastTickCmd() tea.Cmd {
+	return tea.Tick(150*time.Millisecond, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
 // refreshStatusCmd samples the live status without blocking input.
@@ -121,7 +132,9 @@ func refreshStatusCmd() tea.Cmd {
 	}
 }
 
-// rankZonesCmd ranks zones asynchronously (D5: bounded by measure timeouts).
+// rankZonesCmd ranks zones asynchronously under a bounded deadline so the picker
+// can never hang on a large/dead catalog (D5). The bound scales with the number
+// of targets; progress is surfaced via the overlay's "Measuring…" state.
 func rankZonesCmd() tea.Cmd {
 	return func() tea.Msg {
 		cat := newCatalog()
@@ -129,7 +142,7 @@ func rankZonesCmd() tea.Cmd {
 		if err != nil || len(targets) == 0 {
 			return zonesMsg{err: "no profiles with endpoints; import first"}
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), rankBudget(len(targets)))
 		defer cancel()
 		return zonesMsg{results: newMeasurer().RankBest(ctx, targets)}
 	}
@@ -150,6 +163,12 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
+		m.spin++
+		// Animate faster while the zones overlay is probing so the spinner is
+		// smooth; otherwise the slower status cadence is enough.
+		if m.loading {
+			return m, tea.Batch(fastTickCmd(), refreshStatusCmd())
+		}
 		return m, tea.Batch(tickCmd(), refreshStatusCmd())
 
 	case statusMsg:
@@ -170,6 +189,15 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.appendLog(string(msg))
 		return m, nil
 
+	case tuiActionDoneMsg:
+		if msg.err != nil {
+			m.appendLog(msg.label + " failed: " + msg.err.Error())
+		} else {
+			m.appendLog(msg.label + ": done")
+		}
+		// Refresh status right away so the header reflects the new state.
+		return m, refreshStatusCmd()
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -184,6 +212,9 @@ func (m tuiModel) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case scrSettings:
 		return m.keySettings(k)
 	}
+	if m.scr == scrLog {
+		return m.keyLog(k)
+	}
 	// Main screen global hotkeys.
 	switch k.String() {
 	case "q", "ctrl+c":
@@ -192,6 +223,19 @@ func (m tuiModel) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "c":
 		m.appendLog("quick connect requested (best zone)")
 		return m, requestConnectCmd("--best")
+	case "b":
+		m.appendLog("background daemon requested")
+		return m, requestBackgroundCmd()
+	case "k":
+		if _, ok := daemonRunning(); !ok {
+			m.appendLog("no background daemon running")
+			return m, nil
+		}
+		m.appendLog("stop background daemon requested")
+		return m, requestStopCmd()
+	case "l":
+		m.scr = scrLog
+		return m, nil
 	case "z":
 		m.scr = scrZones
 		m.loading = true
@@ -208,8 +252,8 @@ func (m tuiModel) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.loading = true
 		return m, rankZonesCmd()
 	case "r":
-		m.appendLog("recover requested (needs: sudo mazzy-vpn recover)")
-		return m, nil
+		m.appendLog("recover requested")
+		return m, requestRecoverCmd()
 	}
 	return m, nil
 }
@@ -238,6 +282,14 @@ func (m tuiModel) keyZones(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m tuiModel) keyLog(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch k.String() {
+	case "esc", "q", "l":
+		m.scr = scrMain
+	}
+	return m, nil
+}
+
 func (m tuiModel) keySettings(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch k.String() {
 	case "esc", "q":
@@ -256,31 +308,68 @@ func (m tuiModel) keySettings(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "6":
 		m.set.AutoMimic = !m.set.AutoMimic
 	}
-	_ = m.setStore.Save(m.set)
+	if err := m.setStore.Save(m.set); err != nil {
+		m.appendLog("could not save settings: " + err.Error())
+	}
 	return m, nil
 }
 
-// requestConnectCmd/requestDisconnectCmd write desired intent for the daemon
-// (ADR-0006 D2: TUI is unprivileged; the daemon applies changes).
-func requestConnectCmd(zone string) tea.Cmd {
-	return func() tea.Msg {
-		if err := writeDesired(zone, "up"); err != nil {
-			return logMsg("could not write intent: " + err.Error())
-		}
-		if zone == "--best" {
-			return logMsg("intent saved: connect best zone (daemon will apply; or run: sudo mazzy-vpn up --best)")
-		}
-		return logMsg("intent saved: connect " + zone + " (or run: sudo mazzy-vpn up " + zone + ")")
+// tuiActionDoneMsg reports the outcome of a suspended privileged action.
+type tuiActionDoneMsg struct {
+	label string
+	err   error
+}
+
+// privilegedTUICmd suspends the alt-screen (tea.ExecProcess), runs the
+// privileged mazzy-vpn action so sudo/pkexec can prompt on the real terminal,
+// then resumes the UI and reports the outcome. This makes the TUI a real
+// control surface instead of a note-writer (fixes P0-1/P0-4).
+//
+// execProcess is indirected so tests can assert the built command without
+// spawning anything.
+var execProcess = tea.ExecProcess
+
+func privilegedTUICmd(label, subcmd string, sargs ...string) tea.Cmd {
+	c, err := buildPrivilegedCmd(subcmd, sargs...)
+	if err != nil {
+		return func() tea.Msg { return tuiActionDoneMsg{label: label, err: err} }
 	}
+	return execProcess(c, func(err error) tea.Msg {
+		return tuiActionDoneMsg{label: label, err: err}
+	})
+}
+
+func requestConnectCmd(zone string) tea.Cmd {
+	// Best-effort intent for any running daemon; never the "--best" sentinel the
+	// daemon cannot resolve (fixes P0-4).
+	if zone != "--best" {
+		_ = writeDesired(zone, "up")
+		return privilegedTUICmd("connect "+zone, "up", zone)
+	}
+	return privilegedTUICmd("connect best", "up", "--best")
 }
 
 func requestDisconnectCmd() tea.Cmd {
-	return func() tea.Msg {
-		if err := writeDesired("", "down"); err != nil {
-			return logMsg("could not write intent: " + err.Error())
-		}
-		return logMsg("intent saved: disconnect (or run: sudo mazzy-vpn disconnect)")
-	}
+	_ = writeDesired("", "down")
+	return privilegedTUICmd("disconnect", "disconnect")
+}
+
+// requestBackgroundCmd starts a detached background daemon (best zone) via the
+// elevation path, then returns to the dashboard. The daemon self-detaches so it
+// survives the TUI exiting or the terminal closing.
+func requestBackgroundCmd() tea.Cmd {
+	return privilegedTUICmd("background", "daemon", "--best", "--background")
+}
+
+// requestStopCmd stops a running daemon via the elevated `stop` subcommand, so a
+// root-owned daemon is actually terminated instead of failing with EPERM.
+func requestStopCmd() tea.Cmd {
+	return privilegedTUICmd("stop", "stop")
+}
+
+func requestRecoverCmd() tea.Cmd {
+	_ = writeDesired("", "down")
+	return privilegedTUICmd("recover", "recover")
 }
 
 func (m tuiModel) View() string {
@@ -292,19 +381,26 @@ func (m tuiModel) View() string {
 		return m.viewZones()
 	case scrSettings:
 		return m.viewSettings()
+	case scrLog:
+		return m.viewLog()
 	default:
 		return m.viewMain()
 	}
 }
 
 func (m tuiModel) header() string {
+	// If a background daemon is publishing a heartbeat, render the rich dashboard
+	// (latency graph, error-rate, recent errors) instead of the one-line status.
+	if h, ok := m.dashboardHeader(); ok {
+		return h
+	}
 	var status string
 	switch {
 	case m.snap.Protected():
 		status = stProtected.Render("● PROTECTED") +
-			fmt.Sprintf("  %s · %s", m.iface, m.snap.EgressIP)
+			fmt.Sprintf("  %s · %s", safeDisplay(m.iface), safeDisplay(m.snap.EgressIP))
 	case m.iface != "":
-		status = stWarn.Render("▲ LINK UP") + "  " + m.iface + " (no egress)"
+		status = stWarn.Render("▲ LINK UP") + "  " + safeDisplay(m.iface) + " (no egress)"
 	default:
 		status = stDown.Render("● DISCONNECTED") + "  plain uplink"
 	}
@@ -316,12 +412,83 @@ func (m tuiModel) header() string {
 	return stBox.Render(title + "\n" + status)
 }
 
+// dashboardHeader renders the rich header from a background daemon's heartbeat.
+// ok is false when no fresh heartbeat exists, so the caller falls back.
+func (m tuiModel) dashboardHeader() (string, bool) {
+	snap, ok := daemonRunning()
+	if !ok {
+		return "", false
+	}
+	t := translator()
+	var status string
+	switch snap.State {
+	case runstatus.StateProtected:
+		status = stProtected.Render("● PROTECTED") + "  " +
+			safeDisplay(snap.Interface) + " · " + safeDisplay(snap.Egress)
+	case runstatus.StateReconnect:
+		status = stWarn.Render("⟳ RECONNECTING") + "  " + safeDisplay(snap.Zone)
+	case runstatus.StateConnecting:
+		status = stWarn.Render("… CONNECTING") + "  " + safeDisplay(snap.Zone)
+	case runstatus.StateLinkUp:
+		status = stWarn.Render("▲ LINK UP") + "  " + safeDisplay(snap.Interface) + " (no egress)"
+	default:
+		status = stDown.Render("● DISCONNECTED")
+	}
+	mode := "fg"
+	if snap.Background {
+		mode = "bg"
+	}
+	up := ""
+	if snap.StartedAt > 0 {
+		up = shortDur(time.Since(time.Unix(snap.StartedAt, 0)))
+	}
+	title := "Mazzy VPN" + strings.Repeat(" ", 18) +
+		stDim.Render(fmt.Sprintf("zone %s · %s %s · %s", trunc(safeDisplay(snap.Zone), 16), t.T("cli.dash.uptime"), up, mode))
+
+	series := snap.LatencySeries()
+	spark := runstatus.Sparkline(series, 44)
+	mn, avg, mx := runstatus.LatencyStats(series)
+	graph := stDim.Render(t.T("cli.dash.graph")+" ") + spark +
+		stDim.Render(fmt.Sprintf("  %d/%d/%d ms", mn, avg, mx))
+
+	rate := snap.ErrorRatePerMin(10 * time.Minute)
+	errLine := stDim.Render(fmt.Sprintf("%s %d · %.1f %s · reconnects %d",
+		t.T("cli.dash.errors"), len(snap.Errors), rate, t.T("cli.dash.errrate"), snap.Reconnects))
+	if recent := snap.RecentErrors(1); len(recent) > 0 {
+		ts := time.Unix(recent[0].TS, 0).Format("15:04:05")
+		errLine += "\n" + stWarn.Render("  "+trunc(ts+" "+safeDisplay(recent[0].Reason), 50))
+	}
+
+	body := title + "\n" + status + "\n" + graph + "\n" + errLine
+	return stBox.Render(body), true
+}
+
 func (m tuiModel) actionBar() string {
-	line1 := fmt.Sprintf("%s Connect best   %s Zones   %s Disconnect   %s Recover",
-		stKey.Render("[c]"), stKey.Render("[z]"), stKey.Render("[d]"), stKey.Render("[r]"))
-	line2 := fmt.Sprintf("%s Test/rank   %s Settings   %s Quit",
-		stKey.Render("[t]"), stKey.Render("[s]"), stKey.Render("[q]"))
+	line1 := fmt.Sprintf("%s Connect best   %s Background   %s Zones   %s Disconnect   %s Recover",
+		stKey.Render("[c]"), stKey.Render("[b]"), stKey.Render("[z]"), stKey.Render("[d]"), stKey.Render("[r]"))
+	line2 := fmt.Sprintf("%s Test/rank   %s Log   %s Stop bg   %s Settings   %s Quit",
+		stKey.Render("[t]"), stKey.Render("[l]"), stKey.Render("[k]"), stKey.Render("[s]"), stKey.Render("[q]"))
 	return line1 + "\n" + line2
+}
+
+// viewLog shows the persisted daemon activity log (background runs) plus the
+// in-session ring, so the log is one keypress away and dismissible with esc.
+func (m tuiModel) viewLog() string {
+	var b strings.Builder
+	b.WriteString(m.header() + "\n\n")
+	b.WriteString(stLogTitle.Render("  Activity log (esc/l back)") + "\n")
+	lines := tailLog(60)
+	if len(lines) == 0 && len(m.logs) == 0 {
+		b.WriteString(stDim.Render("  (no activity yet)") + "\n")
+		return b.String()
+	}
+	for _, ln := range lines {
+		b.WriteString("  " + safeDisplay(ln) + "\n")
+	}
+	for _, ln := range m.logs {
+		b.WriteString("  " + ln + "\n")
+	}
+	return b.String()
 }
 
 func (m tuiModel) logPane() string {
@@ -342,9 +509,16 @@ func (m tuiModel) viewMain() string {
 	return m.header() + "\n" + m.actionBar() + "\n\n" + m.logPane() + "\n"
 }
 
+// spinFrames animates the "measuring" indicator so a long probe wave never
+// looks frozen.
+var spinFrames = []string{"⠹", "⠸", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
 func (m tuiModel) viewZones() string {
 	if m.loading {
-		return m.header() + "\n\n  Measuring servers (ping via uplink)...\n"
+		frame := spinFrames[m.spin%len(spinFrames)]
+		return m.header() + "\n\n  " + stKey.Render(frame) +
+			" Measuring servers via the physical uplink…\n" +
+			stDim.Render("  (ranking live servers; this is bounded — press esc to cancel)") + "\n"
 	}
 	if m.zonesErr != "" {
 		return m.header() + "\n\n  " + m.zonesErr + "\n\n  [esc] back\n"
@@ -352,6 +526,7 @@ func (m tuiModel) viewZones() string {
 	var b strings.Builder
 	b.WriteString(m.header() + "\n\n")
 	b.WriteString(stLogTitle.Render("  Zones (↑/↓ select, Enter connect, esc back)") + "\n")
+	alive := 0
 	for i, z := range m.zones {
 		cur := "  "
 		if i == m.cursor {
@@ -359,15 +534,38 @@ func (m tuiModel) viewZones() string {
 		}
 		st := stDown.Render("✖ down")
 		lat := "-"
+		bar := ""
 		if z.ICMPAlive {
 			st = stProtected.Render("● alive")
 			lat = fmt.Sprintf("%d ms", z.LatencyMS)
+			bar = latencyBar(z.LatencyMS)
+			alive++
 		} else if z.Reachable {
 			st = stWarn.Render("▲ no icmp")
 		}
-		b.WriteString(fmt.Sprintf("%s%-26s %-9s %s\n", cur, z.Name, lat, st))
+		b.WriteString(fmt.Sprintf("%s%-26s %-9s %-10s %s\n", cur, safeDisplay(z.Name), lat, st, bar))
 	}
+	b.WriteString(stDim.Render(fmt.Sprintf("\n  %d/%d alive", alive, len(m.zones))) + "\n")
 	return b.String()
+}
+
+// latencyBar renders a compact quality bar from a latency in ms: greener/fuller
+// is faster. Purely visual, so the user can eyeball the best server at a glance.
+func latencyBar(ms int64) string {
+	switch {
+	case ms <= 0:
+		return ""
+	case ms < 50:
+		return stProtected.Render("█████ excellent")
+	case ms < 100:
+		return stProtected.Render("████░ great")
+	case ms < 160:
+		return stWarn.Render("███░░ good")
+	case ms < 250:
+		return stWarn.Render("██░░░ fair")
+	default:
+		return stDown.Render("█░░░░ slow")
+	}
 }
 
 func (m tuiModel) viewSettings() string {

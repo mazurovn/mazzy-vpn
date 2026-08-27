@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright © 2026 Nik m (@mazurovn). All rights reserved.
 
 package main
@@ -65,7 +65,8 @@ func dash(s string) string {
 	if s == "" {
 		return "—"
 	}
-	return s
+	// Values come from resolvectl / remote probes; sanitize before display.
+	return safeDisplay(s)
 }
 
 // enableDoT turns on DNS-over-TLS for the tunnel interface via resolvectl,
@@ -128,7 +129,11 @@ func cmdDNSCheck(ctx context.Context, args []string) int {
 		return 0
 	}
 
-	fmt.Printf("DNS on %s: resolvers=%v encrypted=%v\n", dash(iface), a.Resolvers, a.Encrypted)
+	safeResolvers := make([]string, len(a.Resolvers))
+	for i, r := range a.Resolvers {
+		safeResolvers[i] = safeDisplay(r)
+	}
+	fmt.Printf("DNS on %s: resolvers=%v encrypted=%v\n", dash(iface), safeResolvers, a.Encrypted)
 	fmt.Printf("Egress: %s   DNS location: %s\n\n", dash(a.EgressCountry), dash(a.DNSCountry))
 	for _, f := range rep.Findings {
 		glyph := "●"
@@ -138,12 +143,12 @@ func cmdDNSCheck(ctx context.Context, args []string) int {
 		case dnscheck.Warn:
 			glyph = "▲"
 		}
-		fmt.Printf("%s [%s] %s\n", glyph, f.Level, f.Title)
+		fmt.Printf("%s [%s] %s\n", glyph, f.Level, safeDisplay(f.Title))
 		if f.Detail != "" {
-			fmt.Printf("    %s\n", f.Detail)
+			fmt.Printf("    %s\n", safeDisplay(f.Detail))
 		}
 		if f.Fix != "" {
-			fmt.Printf("    fix: %s\n", f.Fix)
+			fmt.Printf("    fix: %s\n", safeDisplay(f.Fix))
 		}
 	}
 	fmt.Printf("\n→ %s\n", rep.Verdict)

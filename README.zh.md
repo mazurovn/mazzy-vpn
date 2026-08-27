@@ -144,5 +144,6 @@ ShellCheck、公开内容审计和 Gitleaks。
 ## 作者与许可证
 
 Copyright © 2026 [Nik m (@mazurovn)](https://github.com/mazurovn)。
-项目采用 [GNU AGPL v3.0 或更高版本](LICENSE)。允许修改与分发，但必须遵守
-AGPL 并保留原作者声明。
+项目采用 [PolyForm Noncommercial 1.0.0](LICENSE)（source-available）。个人、
+科研、教育与慈善（非商业）用途免费。**商业用途需要单独的商业许可**
+——请见 [COMMERCIAL.md](COMMERCIAL.md)。**企业版**正在规划中。请保留原作者声明。

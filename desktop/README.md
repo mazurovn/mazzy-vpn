@@ -1,7 +1,7 @@
 # Mazzy VPN Desktop / Рабочий стол
 
 Copyright © 2026 Nik m ([@mazurovn](https://github.com/mazurovn)).
-Licensed under `AGPL-3.0-or-later`.
+Licensed under `PolyForm-Noncommercial-1.0.0` (source-available; commercial license available, see COMMERCIAL.md).
 
 ![Mazzy VPN Desktop Dashboard](../docs/images/dashboard-en.png)
 

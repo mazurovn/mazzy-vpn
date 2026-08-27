@@ -61,7 +61,7 @@ cargo clippy --all-targets -- -D warnings
 GitHub Actions закреплены полными commit SHA. Release-архивы должны иметь
 SHA-256. Security reports: см. `SECURITY.md`; не публикуйте секрет в issue.
 
-Лицензия AGPL позволяет изменять проект при сохранении условий лицензии и
+Лицензия PolyForm Noncommercial позволяет некоммерческое использование при сохранении условий лицензии и
 исходного кода. Авторство Nik m и copyright notices нельзя выдавать за чужие.
 
 ---

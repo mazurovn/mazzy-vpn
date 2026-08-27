@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright © 2026 Nik m (@mazurovn). All rights reserved.
 
 package main
@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/mazurovn/mazzy-vpn/core"
 	"github.com/mazurovn/mazzy-vpn/core/catalog"
@@ -15,6 +16,41 @@ import (
 	"github.com/mazurovn/mazzy-vpn/core/netadapter"
 	"github.com/mazurovn/mazzy-vpn/core/profile"
 )
+
+// rankBudget bounds a whole test/rank pass so a large catalog can never look
+// like a hang: even with every server dead, the probe wave is capped and the
+// caller returns with whatever completed. Sized for ~50 profiles at the pooled
+// concurrency (each probe ≤ the per-probe timeout).
+func rankBudget(n int) time.Duration {
+	switch {
+	case n <= 8:
+		return 12 * time.Second
+	case n <= 24:
+		return 20 * time.Second
+	default:
+		return 30 * time.Second
+	}
+}
+
+// rankWithProgress ranks targets under a bounded deadline while printing a live
+// single-line "probing k/N" indicator to stderr (interactive only), so the user
+// always sees forward motion instead of a frozen screen. It returns the ranked
+// results. Progress is suppressed in --json/non-TTY contexts by passing
+// quiet=true.
+func rankWithProgress(ctx context.Context, m *measure.Measurer, targets []measure.Target, quiet bool) []measure.Result {
+	cctx, cancel := context.WithTimeout(ctx, rankBudget(len(targets)))
+	defer cancel()
+	var cb func(done, total int)
+	if !quiet {
+		cb = func(done, total int) {
+			fmt.Fprintf(os.Stderr, "\r  probing servers %d/%d…", done, total)
+			if done == total {
+				fmt.Fprint(os.Stderr, "\r\033[K") // clear the line when finished
+			}
+		}
+	}
+	return m.RankBestProgress(cctx, targets, cb)
+}
 
 // newMeasurer builds a Measurer that pings through the physical uplink so an
 // active VPN (e.g. AdGuard) cannot mask true server liveness. Falls back to the
@@ -67,7 +103,7 @@ func measureCatalogPings(ctx context.Context, cat *catalog.Catalog) map[string]s
 	if err != nil || len(targets) == 0 {
 		return out
 	}
-	results := newMeasurer().RankBest(ctx, targets)
+	results := rankWithProgress(ctx, newMeasurer(), targets, false)
 	for _, r := range results {
 		if r.Reachable {
 			out[r.Name] = fmt.Sprintf("%d ms", r.LatencyMS)
@@ -92,9 +128,10 @@ func cmdTest(ctx context.Context, args []string) int {
 		return 1
 	}
 	m := newMeasurer()
-	results := m.RankBest(ctx, targets)
+	jsonOut := hasFlag(args, "--json")
+	results := rankWithProgress(ctx, m, targets, jsonOut)
 
-	if hasFlag(args, "--json") {
+	if jsonOut {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(results)
@@ -117,7 +154,7 @@ func cmdTest(ctx context.Context, args []string) int {
 			status = "✖ unreachable"
 			lat = "-"
 		}
-		fmt.Printf("%-24s %-10s %s\n", r.Name, lat, status)
+		fmt.Printf("%-24s %-10s %s\n", safeDisplay(r.Name), lat, status)
 	}
 	fmt.Printf("\n%d/%d servers answered ICMP (alive).\n", alive, len(results))
 	fmt.Println(measureNote)
@@ -136,7 +173,7 @@ func cmdBest(ctx context.Context, args []string) int {
 		return 1
 	}
 	m := newMeasurer()
-	results := m.RankBest(ctx, targets)
+	results := rankWithProgress(ctx, m, targets, hasFlag(args, "--json"))
 	best, ok := measure.BestAlive(results)
 	if !ok {
 		fmt.Println(translator().T("cli.up.no_reachable"))

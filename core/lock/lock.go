@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright © 2026 Nik m (@mazurovn). All rights reserved.
 
 // Package lock provides the single-flight mutation lock used to serialize
@@ -93,10 +93,16 @@ func (m *Mutation) Unlock() error {
 }
 
 func openLockFile(dir string) (*os.File, error) {
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	// The runtime dir is 0755 (traversable) so an unprivileged menu/TUI can read
+	// the root-written live status heartbeat and activity log that live beside
+	// the lock. This does NOT weaken mutation exclusivity: the security boundary
+	// is the lock file itself (0600 below), which only root can open and flock,
+	// and 0755 withholds the directory write bit so no other user can create,
+	// rename or delete entries here.
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	if err := os.Chmod(dir, 0o700); err != nil {
+	if err := os.Chmod(dir, 0o755); err != nil {
 		return nil, err
 	}
 	return os.OpenFile(lockPath(dir), os.O_CREATE|os.O_RDWR, 0o600)
