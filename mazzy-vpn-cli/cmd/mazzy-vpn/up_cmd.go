@@ -102,6 +102,21 @@ func cmdUp(ctx context.Context, args []string) int {
 		fmt.Fprintf(os.Stderr, "profile %q not found (see: mazzy-vpn profiles)\n", name)
 		return 1
 	}
+	// A running daemon owns the tunnel AND the mutation lock for its lifetime,
+	// so the direct connect path below could only fail with "another operation
+	// is in progress". Forward the zone as an intent instead — this also
+	// RESUMES a daemon paused by `disconnect` (previously `up` right after
+	// `disconnect` errored on the lock and the host stayed offline until
+	// doctor --heal; observed live 2026-08-29).
+	if os.Geteuid() == 0 {
+		if snap, running, ferr := forwardToActiveDaemon(name); ferr != nil {
+			fmt.Fprintf(os.Stderr, "request active daemon: %v\n", ferr)
+			return 1
+		} else if running {
+			fmt.Printf("active daemon pid %d: connecting %s\n", snap.PID, safeDisplay(name))
+			return waitDaemonProtected(60 * time.Second)
+		}
+	}
 	// Reuse the file-based connect path with the managed file, forwarding the
 	// connection flags the user passed (audit: --uplink / --no-reconnect were
 	// previously dropped here so pinning an uplink via `up` silently did nothing).

@@ -175,7 +175,7 @@ func drawMenu(profileCount int, set settings.Settings) {
 	fmt.Println("  Connect")
 	fmt.Println("   1. ⚡ Quick connect (best/preferred zone)")
 	fmt.Println("   2. 🌍 Choose a zone (with ping)")
-	fmt.Println("   3. 🔄 Reconnect with diagnostics")
+	fmt.Println("   3. 🔄 Reconnect now (drop + re-pick best proven zone)")
 	fmt.Println("   4. ⏹  Disconnect")
 	fmt.Println("   5. 🧹 Recover / clean (panic → plain Wi‑Fi)")
 	fmt.Println("   !. ⛔ HARD RESET (disarm): kill daemon + ALL rules/kill-switch, restore DNS")
@@ -233,9 +233,11 @@ func menuQuickConnect(ctx context.Context, set settings.Settings) {
 func menuReconnectDiagnostics(ctx context.Context) {
 	fmt.Println(translator().T("cli.netdiag.running"))
 	cmdNetdiag(ctx, nil)
-	fmt.Println("\nRe-testing servers and reconnecting to the best live zone...")
-	runPrivileged(ctx, "disconnect")
-	reportResult("connect", runPrivileged(ctx, "up", "--best"))
+	fmt.Println("\nReconnecting to the best PROVEN-WORKING zone (egress history + ping)...")
+	// One atomic elevated action: the daemon drops the tunnel and re-picks with
+	// its live cooldowns + shared egress history. The previous disconnect+up
+	// pair could strand the daemon paused when the second elevation failed.
+	reportResult("reconnect", runPrivileged(ctx, "reconnect"))
 }
 
 // menuRecover confirms then force-cleans all tunnels.
@@ -261,12 +263,10 @@ func menuProbe(ctx context.Context, in *bufio.Reader) {
 		fmt.Println(translator().T("cli.menu.cancelled"))
 		return
 	}
-	if _, ok := daemonRunning(); ok {
-		fmt.Println("stopping the daemon for exclusive tunnel access...")
-		runPrivileged(ctx, "stop")
-	}
+	// `probe` itself stops a running daemon for exclusive access and BRINGS THE
+	// VPN BACK when the sweep finishes (original zone if it proved usable, else
+	// the best proven-working one) — the machine is never left offline.
 	reportResult("probe", runPrivileged(ctx, "probe", "--all"))
-	fmt.Println("\nReconnect when done, e.g.: menu → 1 (Quick connect) or 6 (Background).")
 }
 
 // menuDisarm confirms then performs the HARD reset: kill the daemon, drop all
@@ -307,7 +307,7 @@ func menuChooseZone(ctx context.Context, in *bufio.Reader, cat interface {
 	fmt.Println(translator().T("cli.catalog.measuring"))
 	pings := measureCatalogPings(ctx, c)
 
-	fmt.Printf("  %2s  %-24s %-10s %-4s %s\n", "#", "NAME", "PROTOCOL", "CC", "PING")
+	fmt.Printf("  %2s  %-24s %-10s %-4s %-8s %s\n", "#", "NAME", "PROTOCOL", "CC", "PING", "EGRESS")
 	for i, e := range entries {
 		star := " "
 		if e.Favorite {
@@ -317,7 +317,7 @@ func menuChooseZone(ctx context.Context, in *bufio.Reader, cat interface {
 		if ping == "" {
 			ping = "—"
 		}
-		fmt.Printf("  %2d.%s %-24s %-10s %-4s %s\n", i+1, star, safeDisplay(e.Name), safeDisplay(string(e.Protocol)), safeDisplay(e.Country), safeDisplay(ping))
+		fmt.Printf("  %2d.%s %-24s %-10s %-4s %-8s %s\n", i+1, star, safeDisplay(e.Name), safeDisplay(string(e.Protocol)), safeDisplay(e.Country), safeDisplay(ping), livenessLabel(e.Name))
 	}
 	fmt.Print(translator().T("cli.menu.prompt.zone_num"))
 	line, _ := in.ReadString('\n')

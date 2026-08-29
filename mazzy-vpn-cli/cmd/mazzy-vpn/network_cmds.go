@@ -137,8 +137,9 @@ func cmdTest(ctx context.Context, args []string) int {
 		_ = enc.Encode(results)
 		return 0
 	}
+	results = reorderByEgressHistory(results)
 	fmt.Println(translator().Tf("cli.test.testing", len(targets)) + "\n")
-	fmt.Printf("%-24s %-10s %s\n", "NAME", "PING", "STATUS")
+	fmt.Printf("%-24s %-10s %-16s %s\n", "NAME", "PING", "STATUS", "EGRESS")
 	alive := 0
 	for _, r := range results {
 		var status, lat string
@@ -154,7 +155,7 @@ func cmdTest(ctx context.Context, args []string) int {
 			status = "✖ unreachable"
 			lat = "-"
 		}
-		fmt.Printf("%-24s %-10s %s\n", safeDisplay(r.Name), lat, status)
+		fmt.Printf("%-24s %-10s %-16s %s\n", safeDisplay(r.Name), lat, status, livenessLabel(r.Name))
 	}
 	fmt.Printf("\n%d/%d servers answered ICMP (alive).\n", alive, len(results))
 	fmt.Println(measureNote)
@@ -162,7 +163,7 @@ func cmdTest(ctx context.Context, args []string) int {
 }
 
 // measureNote explains the liveness signals.
-const measureNote = "note: '✔ alive' = server answered ICMP ping (best signal). '? no ICMP reply' = endpoint resolves and a UDP socket opens, but the host did not answer ping (may still work, or may be down). Prefer alive servers."
+const measureNote = "note: PING = server answered ICMP (weak signal — a dead server can still ping!). EGRESS = the tunnel recently carried REAL internet traffic ('✔ routes' proven working, '✖ no-route' proven broken, '· untested' unknown). For a hard verdict on every zone run: sudo mazzy-vpn probe"
 
 // cmdBest probes all servers and prints the single best zone to connect to.
 func cmdBest(ctx context.Context, args []string) int {
@@ -174,6 +175,10 @@ func cmdBest(ctx context.Context, args []string) int {
 	}
 	m := newMeasurer()
 	results := rankWithProgress(ctx, m, targets, hasFlag(args, "--json"))
+	// "Best" must mean "actually routes", not "fastest ping": bias by the
+	// shared egress history before picking, so a proven-working zone beats a
+	// fast-ping server that recently forwarded nothing.
+	results = reorderByEgressHistory(results)
 	best, ok := measure.BestAlive(results)
 	if !ok {
 		fmt.Println(translator().T("cli.up.no_reachable"))

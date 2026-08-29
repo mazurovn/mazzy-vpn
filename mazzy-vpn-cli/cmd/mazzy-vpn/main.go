@@ -112,6 +112,8 @@ func run(args []string) int {
 		return cmdLanguage(ctx, rest)
 	case "up":
 		return cmdUp(ctx, rest)
+	case "reconnect":
+		return cmdReconnect(ctx, rest)
 	case "auto":
 		return cmdAuto(ctx, rest)
 	case "daemon":
@@ -191,6 +193,7 @@ Usage:
 
  %s
   sudo mazzy-vpn up [NAME|--best]     connect by name, or auto-pick best zone
+  sudo mazzy-vpn reconnect [NAME]     drop the tunnel NOW + reconnect to best proven zone
   sudo mazzy-vpn auto                 rank zones + connect to the best (failover)
   sudo mazzy-vpn connect FILE [--uplink IF]  connect via a raw file path / pinned uplink
   mazzy-vpn status [--json]           show the connection intent

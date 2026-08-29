@@ -2,9 +2,43 @@
 
 All notable changes to Mazzy VPN are documented here.
 
-## CLI 2.4.2 - 2026-08-26
+## CLI 2.4.2 - 2026-08-29
 
 ### Added
+- **`sudo mazzy-vpn reconnect [NAME]`** (TUI: `R`, menu: `3`) — the missing
+  "reconnect NOW" button: always drops the current tunnel (even one the daemon
+  believes is healthy) and reconnects to the best PROVEN-working zone via a new
+  daemon `reconnect` intent, clearing every backoff. With no daemon it starts
+  one. `--best` re-ranks inside the daemon with live cooldowns + egress
+  history.
+- **EGRESS liveness column** in `test`, the TUI zone picker and the menu zone
+  chooser: `✔ routes` (recently carried real traffic) · `✖ no-route ×N`
+  (recently accepted ping/handshake but forwarded nothing) · `· untested`.
+  Ping alone kept promoting fast-but-dead servers; the honest signal is now
+  visible everywhere zones are listed, and ranking is biased by it.
+- **`probe` feeds selection and restores the VPN**: every deep-test verdict is
+  persisted to the shared egress history (WORKS → prefer, DEAD/NO-EGRESS →
+  sink), a running daemon is stopped automatically for exclusive access and
+  RESTARTED automatically after the sweep (original zone if it proved usable,
+  else the best proven zone) — a diagnostic can no longer leave the machine
+  offline.
+
+### Fixed
+- **Egress-history split-brain**: the reachability cache lived in per-user
+  config (`os.UserConfigDir`), so the root daemon wrote `/root/.config` while
+  the user's UI read `~/.config` — the picker never saw what the daemon had
+  learned. It now lives in ONE shared root-written, world-readable file
+  (`/var/lib/mazzy-vpn/reachcache.json`, labels + timestamps only), with the
+  legacy file read once as a seed.
+- **`up NAME` vs a running daemon**: the daemon holds the mutation lock for its
+  lifetime, so `up` after `disconnect` failed with "another operation is in
+  progress" and the host stayed offline (observed live). `up` now forwards the
+  zone as an intent to the running daemon — which also resumes a paused one —
+  and waits for confirmed egress before reporting success.
+- **TUI zone list overflow**: the picker now scrolls in a window that follows
+  the cursor (`↑/↓ N more` markers) instead of overflowing small terminals.
+
+### Earlier in 2.4.2 (2026-08-26)
 - **`sudo mazzy-vpn probe [NAME|--all]`** — HARD deep connectivity test: for
   each zone it validates the config, probes the endpoint + path MTU through the
   uplink, then ACTUALLY brings the tunnel up and measures real egress plus the

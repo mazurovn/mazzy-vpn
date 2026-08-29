@@ -34,16 +34,34 @@ type Cache struct {
 	recs map[string]Record
 }
 
-// DefaultPath honors MAZZY_STATE_DIR (tests/dev), else lives beside the other
-// per-user state.
+// DefaultPath honors MAZZY_STATE_DIR (tests/dev), else uses ONE shared
+// system location: /var/lib/mazzy-vpn/reachcache.json.
+//
+// Why shared and not per-user: every WRITER of this cache is root (the daemon
+// observing egress, `probe` recording deep-test verdicts) while the READERS
+// include the unprivileged UI (zone picker, `test`). The previous per-user
+// path (os.UserConfigDir) meant the root daemon wrote /root/.config while the
+// user's TUI read ~/.config — two divergent caches, so the picker showed
+// fast-ping-but-dead zones as attractive even though the daemon had already
+// learned they route nothing. One root-written, world-readable file removes
+// the split-brain; it contains only zone labels and timestamps (no secrets).
 func DefaultPath() string {
 	if d := os.Getenv("MAZZY_STATE_DIR"); d != "" {
 		return filepath.Join(d, "reachcache.json")
 	}
+	return sharedPath
+}
+
+// sharedPath is the canonical system-wide cache location.
+const sharedPath = "/var/lib/mazzy-vpn/reachcache.json"
+
+// legacyPath is the pre-shared-location per-user file, read once as a seed so
+// existing egress history is not lost when upgrading.
+func legacyPath() string {
 	if h, err := os.UserConfigDir(); err == nil {
 		return filepath.Join(h, "mazzy-vpn", "reachcache.json")
 	}
-	return filepath.Join(os.TempDir(), "mazzy-vpn", "reachcache.json")
+	return ""
 }
 
 // New returns a Cache at the default path.
@@ -59,7 +77,18 @@ func (c *Cache) load() {
 	c.recs = map[string]Record{}
 	data, err := os.ReadFile(c.Path)
 	if err != nil {
-		return
+		// Seed from the legacy per-user location so history written before the
+		// shared-path change still informs ranking (best-effort, read-only).
+		// Only for the canonical shared path — a test/dev cache (MAZZY_STATE_DIR
+		// or NewAt) must stay isolated from the invoking user's real files.
+		if c.Path == sharedPath {
+			if lp := legacyPath(); lp != "" {
+				data, err = os.ReadFile(lp)
+			}
+		}
+		if err != nil {
+			return
+		}
 	}
 	var list []Record
 	if json.Unmarshal(data, &list) == nil {
@@ -79,11 +108,30 @@ func (c *Cache) save() error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(c.Path), 0o700); err != nil {
+	// Dir 0755 / file 0644: root writes, the unprivileged UI must be able to
+	// read (the cache holds zone labels + timestamps only). A random temp name
+	// (never a predictable "<path>.tmp") plus rename keeps the write atomic and
+	// immune to a pre-planted symlink at the temp path.
+	if err := os.MkdirAll(filepath.Dir(c.Path), 0o755); err != nil {
 		return err
 	}
-	tmp := c.Path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	tf, err := os.CreateTemp(filepath.Dir(c.Path), ".reachcache-*")
+	if err != nil {
+		return err
+	}
+	tmp := tf.Name()
+	if _, err := tf.Write(data); err != nil {
+		_ = tf.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := tf.Chmod(0o644); err != nil {
+		_ = tf.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := tf.Close(); err != nil {
+		_ = os.Remove(tmp)
 		return err
 	}
 	return os.Rename(tmp, c.Path)
@@ -164,4 +212,24 @@ func (c *Cache) Reorder(names []string, ttl time.Duration) []string {
 		return idx[out[i]] < idx[out[j]] // stable: preserve upstream order
 	})
 	return out
+}
+
+// Verdict classifies a zone's recent egress history for display:
+//
+//	"ok"      — routed real egress within ttl
+//	"fail"    — failed egress within ttl (FailStreak deep = more certain)
+//	"unknown" — no record, or the record is older than ttl
+//
+// This is the honest liveness signal the ping columns lack: a server can
+// answer ICMP in 20 ms and still forward nothing.
+func (c *Cache) Verdict(zone string, ttl time.Duration) (verdict string, streak int) {
+	c.load()
+	r, ok := c.recs[zone]
+	if !ok || time.Since(time.Unix(r.At, 0)) > ttl {
+		return "unknown", 0
+	}
+	if r.EgressOK {
+		return "ok", 0
+	}
+	return "fail", r.FailStreak
 }

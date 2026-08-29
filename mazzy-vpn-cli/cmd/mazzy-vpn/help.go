@@ -47,6 +47,7 @@ var commandHelpRegistry = map[string]commandHelp{
 	"language":   {"mazzy-vpn language [CODE|--list]", "Show or change the UI language.", []string{"lang"}, []string{"--list"}},
 	"up":         {"sudo mazzy-vpn up [NAME|--best|--clean] [--uplink IF]", "Connect using a managed profile.", nil, []string{"--best", "--clean", "--uplink", "--no-diagnostics", "--no-reconnect"}},
 	"auto":       {"sudo mazzy-vpn auto", "Rank zones and start failover mode.", nil, nil},
+	"reconnect":  {"sudo mazzy-vpn reconnect [NAME]", "Drop the tunnel NOW and reconnect to the best proven-working zone.", nil, nil},
 	"daemon":     {"sudo mazzy-vpn daemon <NAME|--best> [--background|--session]", "Run self-healing connection mode.", nil, []string{"--best", "--background", "--session"}},
 	"stop":       {"sudo mazzy-vpn stop", "Stop a running Mazzy VPN daemon.", nil, nil},
 	"connect":    {"sudo mazzy-vpn connect FILE [--uplink IF] [--no-reconnect]", "Connect using a raw profile path.", nil, []string{"--uplink", "--no-reconnect"}},

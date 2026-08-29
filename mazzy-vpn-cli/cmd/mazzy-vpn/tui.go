@@ -158,7 +158,9 @@ func rankZonesCmd() tea.Cmd {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), rankBudget(len(targets)))
 		defer cancel()
-		return zonesMsg{results: newMeasurer().RankBest(ctx, targets)}
+		// Egress-history bias: proven-routing zones first, recent no-route
+		// zones last — ping alone kept promoting dead-but-fast servers.
+		return zonesMsg{results: reorderByEgressHistory(newMeasurer().RankBest(ctx, targets))}
 	}
 }
 
@@ -299,6 +301,12 @@ func (m tuiModel) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.scr = scrRemoveConfirm
 		m.pendingDelete = "__RECOVER__"
 		return m, nil
+	case "R":
+		// Force reconnect NOW: drop the tunnel and re-pick the best PROVEN
+		// zone (egress history), even if the daemon thinks the current one is
+		// fine — the human can see it is not.
+		m.appendLog("reconnect requested — re-picking best proven zone")
+		return m, privilegedTUICmd("reconnect", "reconnect")
 	case "!":
 		// HARD reset (disarm): confirm first — a stray keypress must not wipe all
 		// networking (gate finding F7: parity with the line menu's [y/N]).
@@ -577,8 +585,8 @@ func (m tuiModel) actionBar() string {
 		stKey.Render("[c]"), stKey.Render("[z]"), stKey.Render("[p]"), stKey.Render("[x]"), stKey.Render("[d]"), stKey.Render("[r]"))
 	line2 := fmt.Sprintf("%s Graph   %s Log   %s Stop bg   %s Settings   %s Help   %s Quit",
 		stKey.Render("[g]"), stKey.Render("[l]"), stKey.Render("[k]"), stKey.Render("[s]"), stKey.Render("[?]"), stKey.Render("[q]"))
-	line3 := fmt.Sprintf("%s HARD RESET (disarm)   %s Deep probe all zones",
-		stKey.Render("[!]"), stKey.Render("[P]"))
+	line3 := fmt.Sprintf("%s Reconnect now   %s HARD RESET (disarm)   %s Deep probe all zones",
+		stKey.Render("[R]"), stKey.Render("[!]"), stKey.Render("[P]"))
 	return line1 + "\n" + line2 + "\n" + line3
 }
 
@@ -644,47 +652,53 @@ func (m tuiModel) viewZones() string {
 	}
 	var b strings.Builder
 	b.WriteString(m.header() + "\n\n")
-	b.WriteString(stLogTitle.Render("  Zones (↑/↓ select, Enter connect, esc back)") + "\n")
+	b.WriteString(stLogTitle.Render("  Zones (↑/↓ select, Enter connect, esc back) — EGRESS = recently routed real traffic") + "\n")
 	alive := 0
-	for i, z := range m.zones {
+	for _, z := range m.zones {
+		if z.ICMPAlive {
+			alive++
+		}
+	}
+	// Window the list around the cursor so a large catalog scrolls inside the
+	// terminal instead of overflowing it (header ≈9 rows + footer 2).
+	visible := m.height - 11
+	if m.height == 0 {
+		visible = len(m.zones) // unknown size (tests): show all
+	}
+	start, end := listWindow(m.cursor, len(m.zones), visible)
+	if start > 0 {
+		b.WriteString(stDim.Render(fmt.Sprintf("  ↑ %d more", start)) + "\n")
+	}
+	for i := start; i < end; i++ {
+		z := m.zones[i]
 		cur := "  "
 		if i == m.cursor {
 			cur = stKey.Render("> ")
 		}
 		st := stDown.Render("✖ down")
 		lat := "-"
-		bar := ""
 		if z.ICMPAlive {
 			st = stProtected.Render("● alive")
 			lat = fmt.Sprintf("%d ms", z.LatencyMS)
-			bar = latencyBar(z.LatencyMS)
-			alive++
 		} else if z.Reachable {
 			st = stWarn.Render("▲ no icmp")
 		}
-		b.WriteString(fmt.Sprintf("%s%-26s %-9s %-10s %s\n", cur, safeDisplay(z.Name), lat, st, bar))
+		egress := livenessLabel(z.Name)
+		switch {
+		case strings.HasPrefix(egress, "✔"):
+			egress = stProtected.Render(egress)
+		case strings.HasPrefix(egress, "✖"):
+			egress = stDown.Render(egress)
+		default:
+			egress = stDim.Render(egress)
+		}
+		b.WriteString(fmt.Sprintf("%s%-26s %-9s %-10s %s\n", cur, safeDisplay(z.Name), lat, st, egress))
 	}
-	b.WriteString(stDim.Render(fmt.Sprintf("\n  %d/%d alive", alive, len(m.zones))) + "\n")
+	if end < len(m.zones) {
+		b.WriteString(stDim.Render(fmt.Sprintf("  ↓ %d more", len(m.zones)-end)) + "\n")
+	}
+	b.WriteString(stDim.Render(fmt.Sprintf("\n  %d/%d alive · ping ≠ works: trust the EGRESS column (deep-test all: [P])", alive, len(m.zones))) + "\n")
 	return b.String()
-}
-
-// latencyBar renders a compact quality bar from a latency in ms: greener/fuller
-// is faster. Purely visual, so the user can eyeball the best server at a glance.
-func latencyBar(ms int64) string {
-	switch {
-	case ms <= 0:
-		return ""
-	case ms < 50:
-		return stProtected.Render("█████ excellent")
-	case ms < 100:
-		return stProtected.Render("████░ great")
-	case ms < 160:
-		return stWarn.Render("███░░ good")
-	case ms < 250:
-		return stWarn.Render("██░░░ fair")
-	default:
-		return stDown.Render("█░░░░ slow")
-	}
 }
 
 func (m tuiModel) viewSettings() string {

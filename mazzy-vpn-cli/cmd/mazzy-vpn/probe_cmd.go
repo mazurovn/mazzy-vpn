@@ -19,6 +19,7 @@ import (
 	"github.com/mazurovn/mazzy-vpn/core/lock"
 	"github.com/mazurovn/mazzy-vpn/core/measure"
 	"github.com/mazurovn/mazzy-vpn/core/profile"
+	"github.com/mazurovn/mazzy-vpn/core/reachcache"
 )
 
 type catalogT = catalog.Catalog
@@ -83,32 +84,55 @@ type ProbeResult struct {
 // does not route internet egress" (tx≫rx, no egress), "dead" (no handshake)
 // and "bad config" apart. This is far stronger than `test` (ICMP only).
 //
-// It needs exclusive tunnel access, so it requires root and refuses to run
-// while a daemon owns the interface.
+// It needs exclusive tunnel access. When a daemon owns the tunnel it is
+// stopped automatically (announced), and after the sweep the VPN is brought
+// BACK automatically: the daemon restarts on the original zone if it proved
+// usable, else on the best proven-working zone — the machine is never left
+// offline because a diagnostic ran.
+//
+// Every verdict is persisted to the shared reachcache, so ranking/failover
+// immediately prefer the zones that actually routed and sink the dead ones.
 //
 // Usage: sudo mazzy-vpn probe [NAME|--all] [--json]
 func cmdProbe(ctx context.Context, args []string) int {
 	if !requireRoot("probe") {
 		return 1
 	}
+	jsonOut := hasFlag(args, "--json")
+	restoreZone := "" // non-empty: a daemon was stopped and must be brought back
 	if snap, running := daemonRunning(); running {
-		fmt.Fprintf(os.Stderr, "a daemon (pid %d, zone %s) owns the tunnel; stop it first: sudo mazzy-vpn stop\n",
-			snap.PID, safeDisplay(snap.Zone))
-		return 1
+		restoreZone = snap.Zone
+		if !jsonOut {
+			fmt.Printf("stopping the daemon (zone %s) for exclusive tunnel access — it will be restarted after the probe\n",
+				safeDisplay(snap.Zone))
+		}
+		if rc := cmdStop(ctx, nil); rc != 0 && rc != 3 {
+			fmt.Fprintln(os.Stderr, "could not stop the running daemon; aborting probe")
+			return 1
+		}
 	}
 	mu, err := lock.Acquire(lockDir())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "another mazzy-vpn operation is in progress")
 		return 1
 	}
-	defer mu.Unlock()
+	// The lock is released EXPLICITLY before the post-probe daemon restart —
+	// the restarted daemon must acquire it itself and would fail while this
+	// process still held it. locked guards against a double unlock.
+	locked := true
+	unlock := func() {
+		if locked {
+			locked = false
+			mu.Unlock()
+		}
+	}
+	defer unlock()
 
 	names := probeTargets(newCatalog(), args)
 	if len(names) == 0 {
 		fmt.Fprintln(os.Stderr, "no zones to probe (import profiles, or name one)")
 		return 2
 	}
-	jsonOut := hasFlag(args, "--json")
 	if !jsonOut {
 		fmt.Printf("Deep-probing %d zone(s) — each is connected for real and measured (tx/rx). This takes a while.\n\n", len(names))
 	}
@@ -118,6 +142,7 @@ func cmdProbe(ctx context.Context, args []string) int {
 	for _, name := range names {
 		res := probeOne(ctx, name, uplink)
 		results = append(results, res)
+		recordProbeVerdict(res)
 		if !jsonOut {
 			printProbeLine(res)
 		}
@@ -130,12 +155,55 @@ func cmdProbe(ctx context.Context, args []string) int {
 	} else {
 		printProbeSummary(results)
 	}
+	usable := false
 	for _, r := range results {
 		if r.Verdict == "WORKS" {
-			return 0 // at least one usable zone
+			usable = true
+			break
 		}
 	}
+	if restoreZone != "" {
+		unlock() // the restarted daemon takes the lock itself
+		restartDaemonAfterProbe(ctx, restoreZone, results, jsonOut)
+	}
+	if usable {
+		return 0 // at least one usable zone
+	}
 	return 1
+}
+
+// recordProbeVerdict persists one deep-test outcome into the shared egress
+// history, so selection stops trusting ping alone: WORKS ranks the zone first,
+// every dead/non-routing verdict sinks it. BAD_CONFIG says nothing about the
+// server, so it records nothing.
+func recordProbeVerdict(r ProbeResult) {
+	switch r.Verdict {
+	case "WORKS":
+		reachcache.New().RecordOK(r.Name)
+	case "DEAD", "SERVER_NOT_ROUTING", "NO_EGRESS":
+		reachcache.New().RecordFail(r.Name)
+	}
+}
+
+// restartDaemonAfterProbe brings the VPN back after a probe that had to stop a
+// running daemon (the caller must have released the mutation lock first — the
+// detached daemon acquires it itself). Zone choice: the original zone if the
+// sweep proved it WORKS, else --best, which now ranks with the fresh probe
+// verdicts and so lands on a proven-working server.
+func restartDaemonAfterProbe(ctx context.Context, original string, results []ProbeResult, jsonOut bool) {
+	zone := "--best"
+	for _, r := range results {
+		if r.Name == original && r.Verdict == "WORKS" {
+			zone = original
+			break
+		}
+	}
+	if !jsonOut {
+		fmt.Printf("\nrestarting the VPN daemon (%s)...\n", safeDisplay(zone))
+	}
+	if rc := cmdDaemon(ctx, []string{zone, "--background"}); rc != 0 {
+		fmt.Fprintf(os.Stderr, "could not restart the daemon automatically; reconnect with: sudo mazzy-vpn up %s\n", safeDisplay(zone))
+	}
 }
 
 // probeTargets resolves the zone list: an explicit NAME, or every managed

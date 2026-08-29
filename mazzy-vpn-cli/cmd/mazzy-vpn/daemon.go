@@ -325,6 +325,33 @@ func cmdDaemon(ctx context.Context, args []string) int {
 					paused = true
 					continue
 				}
+				if di.Desired == "reconnect" {
+					// Force a fresh connection NOW: tear down even a "healthy" tunnel
+					// (the user's menu Reconnect — they can see it is not actually
+					// working, e.g. egress probes pass but real traffic does not),
+					// clear every backoff, and re-pick/re-pin the zone below.
+					d.logf("reconnect requested; dropping current tunnel and reconnecting")
+					if conn != nil {
+						_ = conn.Down(ctx)
+						conn = nil
+					}
+					paused = false
+					fails = 0
+					softFails = 0
+					reconnecting = true
+					nextAttempt = time.Time{}
+					if di.Zone == "--best" {
+						if nz, okz := d.pickBestLive(ctx, cooldown); okz && nz != zone {
+							d.logf("reconnect: re-ranked best zone %s → %s", zone, nz)
+							zone = nz
+							rw.SetZone(zone)
+						}
+					} else if di.Zone != "" && di.Zone != zone {
+						zone = di.Zone
+						rw.SetZone(zone)
+					}
+					// Fall through to the conn==nil connect path this same tick.
+				}
 				if di.Desired == "up" {
 					if paused {
 						d.logf("reconnect requested; resuming")
