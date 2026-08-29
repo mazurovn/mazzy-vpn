@@ -75,6 +75,92 @@ type ProbeResult struct {
 	Verdict      string `json:"verdict"`
 	VerdictNote  string `json:"verdict_note,omitempty"`
 	DurationMsec int64  `json:"duration_ms"`
+	// Quality is filled only in --deep mode for zones whose egress works: link
+	// quality and stability measured THROUGH the live tunnel.
+	Quality *ProbeQuality `json:"quality,omitempty"`
+}
+
+// ProbeQuality is the --deep link-quality verdict for one working zone.
+type ProbeQuality struct {
+	PingsSent    int    `json:"pings_sent"`
+	PingsLost    int    `json:"pings_lost"`
+	AvgMS        int64  `json:"avg_ms"`
+	JitterMS     int64  `json:"jitter_ms"`
+	EgressChecks int    `json:"egress_checks"`
+	EgressOK     int    `json:"egress_ok"`
+	Grade        string `json:"grade"` // excellent | good | unstable | poor
+}
+
+// gradeQuality classifies a quality sample. Stability (egress re-checks)
+// dominates: a link that intermittently loses egress is worse than a slow one.
+func gradeQuality(q ProbeQuality) string {
+	lossPct := 0
+	if q.PingsSent > 0 {
+		lossPct = q.PingsLost * 100 / q.PingsSent
+	}
+	switch {
+	case q.EgressOK < q.EgressChecks || lossPct > 30:
+		return "unstable"
+	case lossPct == 0 && q.JitterMS <= 15:
+		return "excellent"
+	case lossPct <= 10 && q.JitterMS <= 40:
+		return "good"
+	default:
+		return "poor"
+	}
+}
+
+// measureQuality holds the tunnel open and measures REAL link quality through
+// it: N pings via the tunnel interface (loss + RTT + jitter) and repeated
+// egress re-checks (stability — does the internet stay reachable, or flap?).
+func measureQuality(ctx context.Context, iface string) ProbeQuality {
+	const pings = 10
+	q := ProbeQuality{PingsSent: pings, EgressChecks: 3}
+	png := measure.NewPinger()
+	png.Interface = iface // through the TUNNEL, not the uplink
+	png.Timeout = 2 * time.Second
+	var rtts []float64
+	for i := 0; i < pings; i++ {
+		if ctx.Err() != nil {
+			break
+		}
+		if ms, ok := png.Ping(ctx, "9.9.9.9"); ok {
+			rtts = append(rtts, ms)
+		} else {
+			q.PingsLost++
+		}
+	}
+	if len(rtts) > 0 {
+		var sum, jsum float64
+		for i, v := range rtts {
+			sum += v
+			if i > 0 {
+				d := v - rtts[i-1]
+				if d < 0 {
+					d = -d
+				}
+				jsum += d
+			}
+		}
+		q.AvgMS = int64(sum/float64(len(rtts)) + 0.5)
+		if len(rtts) > 1 {
+			q.JitterMS = int64(jsum/float64(len(rtts)-1) + 0.5)
+		}
+	}
+	lc := livecheck.New()
+	for i := 0; i < q.EgressChecks; i++ {
+		if ctx.Err() != nil {
+			break
+		}
+		if lc.Check(ctx, iface).Protected() {
+			q.EgressOK++
+		}
+		if i < q.EgressChecks-1 {
+			time.Sleep(4 * time.Second)
+		}
+	}
+	q.Grade = gradeQuality(q)
+	return q
 }
 
 // cmdProbe is the HARD, deep connectivity test: for each selected zone it
@@ -143,10 +229,11 @@ func cmdProbe(ctx context.Context, args []string) int {
 		fmt.Println()
 	}
 
+	deep := hasFlag(args, "--deep") || hasFlag(args, "--detailed")
 	results := make([]ProbeResult, 0, len(names))
 	uplink := settingsUplink()
 	for _, name := range names {
-		res := probeOne(ctx, name, uplink)
+		res := probeOne(ctx, name, uplink, deep)
 		results = append(results, res)
 		recordProbeVerdict(res)
 		if !jsonOut {
@@ -229,12 +316,12 @@ func openVPNZoneNames(cat *catalogT) []string {
 	return out
 }
 
-// probeTargets resolves the zone list: an explicit NAME, or every managed
-// profile (default / --all). OpenVPN entries are skipped (the embedded engine
-// cannot bring them up).
+// probeTargets resolves the zone list: one or more explicit NAMEs, or every
+// managed profile (default / --all). OpenVPN entries are skipped (the embedded
+// engine cannot bring them up).
 func probeTargets(cat *catalogT, args []string) []string {
-	if name := firstNonFlagValueAware(args); name != "" {
-		return []string{name}
+	if names := allNonFlagValuesAware(args); len(names) > 0 {
+		return names
 	}
 	entries, err := cat.List()
 	if err != nil {
@@ -250,8 +337,10 @@ func probeTargets(cat *catalogT, args []string) []string {
 	return out
 }
 
-// probeOne runs the full config→endpoint→connection ladder for one zone.
-func probeOne(ctx context.Context, name, uplink string) ProbeResult {
+// probeOne runs the full config→endpoint→connection ladder for one zone. With
+// deep=true it additionally holds the working tunnel open and measures link
+// quality/stability through it.
+func probeOne(ctx context.Context, name, uplink string, deep bool) ProbeResult {
 	start := time.Now()
 	res := ProbeResult{Name: name, Verdict: "DEAD"}
 
@@ -310,6 +399,11 @@ func probeOne(ctx context.Context, name, uplink string) ProbeResult {
 	res.EgressOK = snap.Protected()
 	res.EgressIP = snap.EgressIP
 
+	if deep && snap.Protected() {
+		q := measureQuality(ctx, conn.Interface)
+		res.Quality = &q
+	}
+
 	switch {
 	case res.EgressOK:
 		res.Verdict = "WORKS"
@@ -352,6 +446,10 @@ func printProbeLine(r ProbeResult) {
 		line += fmt.Sprintf(" ping %d ms · tx %s rx %s", r.RTTMs, fmtBytes(r.TxBytes), fmtBytes(r.RxBytes))
 	}
 	fmt.Println(line)
+	if q := r.Quality; q != nil {
+		fmt.Printf("    quality: %s — avg %d ms · jitter %d ms · loss %d/%d · egress stable %d/%d\n",
+			q.Grade, q.AvgMS, q.JitterMS, q.PingsLost, q.PingsSent, q.EgressOK, q.EgressChecks)
+	}
 	if r.VerdictNote != "" && r.Verdict != "WORKS" {
 		fmt.Println("    " + safeDisplay(r.VerdictNote))
 	}

@@ -103,6 +103,28 @@ func firstNonFlagValueAware(args []string) string {
 	return ""
 }
 
+// allNonFlagValuesAware returns EVERY positional argument, skipping flags and
+// the values of value-taking flags — the multi-zone twin of
+// firstNonFlagValueAware (probe accepts several zone names at once).
+func allNonFlagValuesAware(args []string) []string {
+	var out []string
+	skipNext := false
+	for _, a := range args {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+		if valueFlags[a] {
+			skipNext = true
+			continue
+		}
+		if a != "" && a[0] != '-' {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
 // cmdDoctor runs host diagnostics. With --heal it becomes the active rescuer:
 // diagnose, then climb the rescue ladder until the connection is PROTECTED.
 func cmdDoctor(ctx context.Context, args []string) int {

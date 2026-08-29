@@ -34,7 +34,7 @@ var commandHelpRegistry = map[string]commandHelp{
 	"favorite":   {"mazzy-vpn favorite NAME [--off]", "Add or remove a favorite zone.", []string{"fav"}, []string{"--off"}},
 	"remove":     {"mazzy-vpn remove NAME", "Remove a managed profile.", []string{"rm"}, nil},
 	"test":       {"mazzy-vpn test [--json]", "Probe and rank all servers.", nil, []string{"--json"}},
-	"probe":      {"sudo mazzy-vpn probe [NAME|--all] [--json]", "HARD deep test: real connect + egress + tx/rx verdict per zone.", []string{"deeptest"}, []string{"--all", "--json"}},
+	"probe":      {"sudo mazzy-vpn probe [NAME...|--all] [--deep] [--json]", "HARD deep test: real connect + egress + tx/rx per zone; --deep adds link quality/stability.", []string{"deeptest"}, []string{"--all", "--deep", "--json"}},
 	"best":       {"mazzy-vpn best [--json]", "Print the best reachable zone.", nil, []string{"--json"}},
 	"adapters":   {"mazzy-vpn adapters [--json]", "List network interfaces and recommendation.", []string{"interfaces"}, []string{"--json"}},
 	"netdiag":    {"mazzy-vpn netdiag [--json]", "Analyze the current network.", []string{"analyze"}, []string{"--json"}},

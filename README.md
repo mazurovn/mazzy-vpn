@@ -14,7 +14,7 @@
   <a href="COMMERCIAL.md"><img alt="Commercial license available" src="https://img.shields.io/badge/commercial-license%20available-ef70ff"></a>
   <a href="https://github.com/mazurovn/mazzy-vpn/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/mazurovn/mazzy-vpn/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Linux" src="https://img.shields.io/badge/platform-Linux-65e7ff">
-  <a href="https://github.com/mazurovn/mazzy-vpn/releases/tag/v2.4.3"><img alt="Release 2.4.3" src="https://img.shields.io/badge/release-2.4.3-ef70ff"></a>
+  <a href="https://github.com/mazurovn/mazzy-vpn/releases/tag/v2.4.4"><img alt="Release 2.4.4" src="https://img.shields.io/badge/release-2.4.4-ef70ff"></a>
 </p>
 
 Mazzy VPN is a source-available AI-ready VPN client for Linux with Desktop, tray,

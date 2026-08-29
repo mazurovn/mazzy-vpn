@@ -45,6 +45,7 @@ const (
 	scrLanguage
 	scrLog
 	scrHelp
+	scrProbePick
 )
 
 // tickMsg drives the live header refresh.
@@ -91,6 +92,10 @@ type tuiModel struct {
 	cursor        int
 	input         string
 	pendingDelete string
+
+	// probe picker (multiselect): candidate zone names + selection set
+	probeZones []string
+	probeSel   map[string]bool
 
 	// graphWindow selects 1m/5m/20m/session and graphCursor walks historical
 	// samples (0 = newest), making the dashboard graph genuinely interactive.
@@ -247,6 +252,8 @@ func (m tuiModel) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyLog(k)
 	case scrHelp:
 		return m.keyHelp(k)
+	case scrProbePick:
+		return m.keyProbePick(k)
 	}
 	// Main screen global hotkeys.
 	switch k.String() {
@@ -314,9 +321,17 @@ func (m tuiModel) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.pendingDelete = "__DISARM__"
 		return m, nil
 	case "P":
-		// Deep probe every zone (stops the daemon): confirm first.
-		m.scr = scrRemoveConfirm
-		m.pendingDelete = "__PROBE__"
+		// Deep probe: open the zone multiselect picker (space toggle, a all,
+		// f fast, d detailed). The run itself stops the daemon and restores
+		// the VPN afterwards.
+		m.probeZones = probeCandidateZones()
+		if len(m.probeZones) == 0 {
+			m.appendLog("probe: no connectable (WG/AWG) zones in the catalog")
+			return m, nil
+		}
+		m.probeSel = map[string]bool{}
+		m.cursor = 0
+		m.scr = scrProbePick
 		return m, nil
 	case "?":
 		m.scr = scrHelp
@@ -484,6 +499,8 @@ func (m tuiModel) View() string {
 		return m.viewLog()
 	case scrHelp:
 		return m.viewHelp()
+	case scrProbePick:
+		return m.viewProbePick()
 	default:
 		return m.viewMain()
 	}
@@ -585,7 +602,7 @@ func (m tuiModel) actionBar() string {
 		stKey.Render("[c]"), stKey.Render("[z]"), stKey.Render("[p]"), stKey.Render("[x]"), stKey.Render("[d]"), stKey.Render("[r]"))
 	line2 := fmt.Sprintf("%s Graph   %s Log   %s Stop bg   %s Settings   %s Help   %s Quit",
 		stKey.Render("[g]"), stKey.Render("[l]"), stKey.Render("[k]"), stKey.Render("[s]"), stKey.Render("[?]"), stKey.Render("[q]"))
-	line3 := fmt.Sprintf("%s Reconnect now   %s HARD RESET (disarm)   %s Deep probe all zones",
+	line3 := fmt.Sprintf("%s Reconnect now   %s HARD RESET (disarm)   %s Deep probe zones (pick/all · fast/detailed)",
 		stKey.Render("[R]"), stKey.Render("[!]"), stKey.Render("[P]"))
 	return line1 + "\n" + line2 + "\n" + line3
 }

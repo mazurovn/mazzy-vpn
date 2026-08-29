@@ -23,7 +23,7 @@ import (
 // stamp the exact tag with the linker, keeping ONE source of truth (audit
 // P1-F): `go build -ldflags "-X main.version=$(git describe --tags)"`. The
 // baseline default matches the current git tag for un-stamped/dev builds.
-var version = "2.4.3"
+var version = "2.4.4"
 
 func main() {
 	os.Exit(run(os.Args[1:]))
@@ -215,7 +215,7 @@ Usage:
 
  %s
   mazzy-vpn test [--json]             probe all servers (latency/reachability)
-  sudo mazzy-vpn probe [NAME|--all]   HARD deep test: real connect + egress + tx/rx verdict per zone
+  sudo mazzy-vpn probe [NAME...|--all] [--deep]  HARD deep test: real connect + egress + tx/rx per zone (--deep: + quality/stability)
   mazzy-vpn best [--json]             print the best zone to connect to
   mazzy-vpn adapters [--json]         list network interfaces + recommendation
   mazzy-vpn netdiag [--json]          analyze the network + suggest fixes

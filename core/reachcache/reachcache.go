@@ -35,7 +35,7 @@ type Cache struct {
 }
 
 // DefaultPath honors MAZZY_STATE_DIR (tests/dev), else uses ONE shared
-// system location: /var/lib/mazzy-vpn/reachcache.json.
+// system location: /var/cache/mazzy-vpn/reachcache.json.
 //
 // Why shared and not per-user: every WRITER of this cache is root (the daemon
 // observing egress, `probe` recording deep-test verdicts) while the READERS
@@ -45,6 +45,11 @@ type Cache struct {
 // fast-ping-but-dead zones as attractive even though the daemon had already
 // learned they route nothing. One root-written, world-readable file removes
 // the split-brain; it contains only zone labels and timestamps (no secrets).
+//
+// Why /var/cache and NOT /var/lib/mazzy-vpn: the state store deliberately
+// chmods /var/lib/mazzy-vpn back to 0700 on every write (private state), which
+// would lock the unprivileged UI out again. Regenerable, non-secret data gets
+// its own world-readable cache directory.
 func DefaultPath() string {
 	if d := os.Getenv("MAZZY_STATE_DIR"); d != "" {
 		return filepath.Join(d, "reachcache.json")
@@ -53,15 +58,17 @@ func DefaultPath() string {
 }
 
 // sharedPath is the canonical system-wide cache location.
-const sharedPath = "/var/lib/mazzy-vpn/reachcache.json"
+const sharedPath = "/var/cache/mazzy-vpn/reachcache.json"
 
-// legacyPath is the pre-shared-location per-user file, read once as a seed so
-// existing egress history is not lost when upgrading.
-func legacyPath() string {
+// legacyPaths are pre-shared-location files, read once as a seed so existing
+// egress history is not lost when upgrading (best-effort; the /var/lib one is
+// root-readable only and migrates when the root daemon first saves).
+func legacyPaths() []string {
+	out := []string{"/var/lib/mazzy-vpn/reachcache.json"}
 	if h, err := os.UserConfigDir(); err == nil {
-		return filepath.Join(h, "mazzy-vpn", "reachcache.json")
+		out = append(out, filepath.Join(h, "mazzy-vpn", "reachcache.json"))
 	}
-	return ""
+	return out
 }
 
 // New returns a Cache at the default path.
@@ -77,13 +84,15 @@ func (c *Cache) load() {
 	c.recs = map[string]Record{}
 	data, err := os.ReadFile(c.Path)
 	if err != nil {
-		// Seed from the legacy per-user location so history written before the
+		// Seed from a legacy location so history written before the
 		// shared-path change still informs ranking (best-effort, read-only).
 		// Only for the canonical shared path — a test/dev cache (MAZZY_STATE_DIR
 		// or NewAt) must stay isolated from the invoking user's real files.
 		if c.Path == sharedPath {
-			if lp := legacyPath(); lp != "" {
-				data, err = os.ReadFile(lp)
+			for _, lp := range legacyPaths() {
+				if data, err = os.ReadFile(lp); err == nil {
+					break
+				}
 			}
 		}
 		if err != nil {

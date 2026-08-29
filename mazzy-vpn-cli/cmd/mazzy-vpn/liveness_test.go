@@ -99,3 +99,37 @@ func TestRecordProbeVerdict(t *testing.T) {
 		t.Errorf("BAD_CONFIG must record nothing, got %s", v)
 	}
 }
+
+func TestAllNonFlagValuesAware(t *testing.T) {
+	got := allNonFlagValuesAware([]string{"ZoneA", "--uplink", "eth0", "ZoneB", "--deep", "ZoneC"})
+	want := []string{"ZoneA", "ZoneB", "ZoneC"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	}
+	if out := allNonFlagValuesAware([]string{"--all", "--deep"}); len(out) != 0 {
+		t.Errorf("flags only must yield no names, got %v", out)
+	}
+}
+
+func TestGradeQuality(t *testing.T) {
+	cases := []struct {
+		q    ProbeQuality
+		want string
+	}{
+		{ProbeQuality{PingsSent: 10, PingsLost: 0, JitterMS: 5, EgressChecks: 3, EgressOK: 3}, "excellent"},
+		{ProbeQuality{PingsSent: 10, PingsLost: 1, JitterMS: 30, EgressChecks: 3, EgressOK: 3}, "good"},
+		{ProbeQuality{PingsSent: 10, PingsLost: 0, JitterMS: 5, EgressChecks: 3, EgressOK: 2}, "unstable"},
+		{ProbeQuality{PingsSent: 10, PingsLost: 5, JitterMS: 5, EgressChecks: 3, EgressOK: 3}, "unstable"},
+		{ProbeQuality{PingsSent: 10, PingsLost: 2, JitterMS: 80, EgressChecks: 3, EgressOK: 3}, "poor"},
+	}
+	for i, c := range cases {
+		if got := gradeQuality(c.q); got != c.want {
+			t.Errorf("case %d: got %s, want %s", i, got, c.want)
+		}
+	}
+}

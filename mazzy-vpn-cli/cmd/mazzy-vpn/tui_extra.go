@@ -394,3 +394,119 @@ func dashValue(value string) string {
 	}
 	return value
 }
+
+// probeCandidateZones lists the zones the deep probe can actually test
+// (WG/AWG only — OpenVPN is not connectable by the embedded engine).
+func probeCandidateZones() []string {
+	entries, err := newCatalog().List()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		if strings.EqualFold(string(e.Protocol), "openvpn") {
+			continue
+		}
+		out = append(out, e.Name)
+	}
+	return out
+}
+
+// keyProbePick drives the probe multiselect: space toggles, a selects all,
+// n clears, f runs the FAST probe (connect + egress + tx/rx per zone),
+// d runs the DETAILED probe (adds link quality/stability through the tunnel).
+// No selection = all zones.
+func (m tuiModel) keyProbePick(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	runProbe := func(deep bool) (tea.Model, tea.Cmd) {
+		var names []string
+		for _, z := range m.probeZones {
+			if m.probeSel[z] {
+				names = append(names, z)
+			}
+		}
+		args := []string{}
+		if len(names) > 0 && len(names) < len(m.probeZones) {
+			args = append(args, names...)
+		} else {
+			args = append(args, "--all")
+		}
+		mode := "fast"
+		if deep {
+			args = append(args, "--deep")
+			mode = "detailed"
+		}
+		m.scr = scrMain
+		m.appendLog(fmt.Sprintf("probe (%s) requested — the VPN stops for the test and returns automatically", mode))
+		return m, privilegedTUICmd("probe", "probe", args...)
+	}
+	switch k.String() {
+	case "esc", "q":
+		m.scr = scrMain
+	case "up", "k":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "down", "j":
+		if m.cursor < len(m.probeZones)-1 {
+			m.cursor++
+		}
+	case " ", "space":
+		if m.cursor < len(m.probeZones) {
+			z := m.probeZones[m.cursor]
+			m.probeSel[z] = !m.probeSel[z]
+		}
+	case "a":
+		for _, z := range m.probeZones {
+			m.probeSel[z] = true
+		}
+	case "n":
+		m.probeSel = map[string]bool{}
+	case "f", "enter":
+		return runProbe(false)
+	case "d":
+		return runProbe(true)
+	}
+	return m, nil
+}
+
+func (m tuiModel) viewProbePick() string {
+	var b strings.Builder
+	b.WriteString(m.header() + "\n\n")
+	b.WriteString(stLogTitle.Render("  Deep probe — pick zones (REAL connect per zone; VPN stops and auto-returns)") + "\n")
+	b.WriteString(stDim.Render("  [space] mark  [a] all  [n] none  [f/enter] FAST: connect+egress+traffic  [d] DETAILED: +quality/stability  [esc] cancel") + "\n")
+	selected := 0
+	for _, z := range m.probeZones {
+		if m.probeSel[z] {
+			selected++
+		}
+	}
+	visible := m.height - 12
+	if m.height == 0 {
+		visible = len(m.probeZones)
+	}
+	start, end := listWindow(m.cursor, len(m.probeZones), visible)
+	if start > 0 {
+		b.WriteString(stDim.Render(fmt.Sprintf("  ↑ %d more", start)) + "\n")
+	}
+	for i := start; i < end; i++ {
+		z := m.probeZones[i]
+		cur := "  "
+		if i == m.cursor {
+			cur = stKey.Render("> ")
+		}
+		mark := "[ ]"
+		if m.probeSel[z] {
+			mark = stProtected.Render("[✔]")
+		}
+		b.WriteString(fmt.Sprintf("%s%s %-28s %s\n", cur, mark, safeDisplay(z), livenessLabel(z)))
+	}
+	if end < len(m.probeZones) {
+		b.WriteString(stDim.Render(fmt.Sprintf("  ↓ %d more", len(m.probeZones)-end)) + "\n")
+	}
+	if selected == 0 {
+		b.WriteString(stDim.Render(fmt.Sprintf("\n  no selection → ALL %d zones will be tested", len(m.probeZones))) + "\n")
+	} else {
+		b.WriteString(stDim.Render(fmt.Sprintf("\n  %d/%d zones selected", selected, len(m.probeZones))) + "\n")
+	}
+	return b.String()
+}

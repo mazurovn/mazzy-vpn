@@ -2,6 +2,26 @@
 
 All notable changes to Mazzy VPN are documented here.
 
+## CLI 2.4.4 - 2026-08-29
+
+### Added
+- **Probe zone multiselect** (user request): TUI `P` now opens a picker —
+  `space` marks zones, `a` all, `n` none, windowed scrolling — and the line
+  menu `P` accepts comma-separated numbers or `a` for all. CLI:
+  `sudo mazzy-vpn probe [NAME...]` takes several zone names at once.
+- **Two probe modes**: FAST (default) — real connect + egress + did traffic
+  flow (tx/rx); DETAILED (`--deep`, TUI `d`, menu mode 2) — additionally holds
+  the working tunnel and measures link QUALITY through it: 10 in-tunnel pings
+  (loss/avg/jitter) + 3 spaced egress re-checks (stability), graded
+  excellent/good/unstable/poor per zone.
+
+### Fixed
+- **Shared egress cache was unreadable for the UI**: the state store chmods
+  `/var/lib/mazzy-vpn` back to 0700 on every write, locking the unprivileged
+  zone views out of the just-introduced shared cache. It now lives in
+  `/var/cache/mazzy-vpn/reachcache.json` (0755/0644, regenerable non-secret
+  data), with one-time seeding from both legacy locations.
+
 ## CLI 2.4.3 - 2026-08-29
 
 ### Fixed

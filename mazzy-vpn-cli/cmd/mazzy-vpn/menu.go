@@ -256,17 +256,58 @@ func menuRecover(ctx context.Context, in *bufio.Reader) {
 // this briefly drops the VPN — then connects each zone for real and reports a
 // per-server verdict (works / server-not-routing / dead / bad-config).
 func menuProbe(ctx context.Context, in *bufio.Reader) {
-	fmt.Print("🧪 DEEP PROBE connects every zone for real to find which servers actually route.\n" +
-		"   This STOPS the VPN for a few minutes. Continue? [y/N] ")
+	entries, _ := newCatalog().List()
+	var zones []string
+	for _, e := range entries {
+		if e.Protocol == core.OpenVPN {
+			continue // the engine cannot connect these; probing is impossible
+		}
+		zones = append(zones, e.Name)
+	}
+	if len(zones) == 0 {
+		fmt.Println("no connectable (WG/AWG) zones in the catalog — import profiles first")
+		return
+	}
+	fmt.Println("🧪 DEEP PROBE connects zones FOR REAL. The VPN stops for the test and returns automatically.")
+	for i, z := range zones {
+		fmt.Printf("  %2d. %-28s %s\n", i+1, safeDisplay(z), livenessLabel(z))
+	}
+	fmt.Print("Zones to test — numbers comma-separated, 'a' = all, 0 = cancel: ")
 	line, _ := in.ReadString('\n')
-	if strings.ToLower(strings.TrimSpace(line)) != "y" {
+	choice := strings.ToLower(strings.TrimSpace(line))
+	var names []string
+	switch choice {
+	case "0", "":
 		fmt.Println(translator().T("cli.menu.cancelled"))
 		return
+	case "a", "all", "*":
+		// empty names → probe --all
+	default:
+		for _, tok := range strings.FieldsFunc(choice, func(r rune) bool { return r == ',' || r == ' ' }) {
+			n, err := strconv.Atoi(tok)
+			if err != nil || n < 1 || n > len(zones) {
+				fmt.Println(translator().T("cli.menu.invalid_selection"))
+				return
+			}
+			names = append(names, zones[n-1])
+		}
+	}
+	fmt.Print("Mode — 1: FAST (connect + egress + did traffic flow) · 2: DETAILED (+ quality: loss/jitter/stability): ")
+	line, _ = in.ReadString('\n')
+	mode := strings.TrimSpace(line)
+	var args []string
+	if len(names) > 0 {
+		args = append(args, names...)
+	} else {
+		args = append(args, "--all")
+	}
+	if mode == "2" {
+		args = append(args, "--deep")
 	}
 	// `probe` itself stops a running daemon for exclusive access and BRINGS THE
 	// VPN BACK when the sweep finishes (original zone if it proved usable, else
 	// the best proven-working one) — the machine is never left offline.
-	reportResult("probe", runPrivileged(ctx, "probe", "--all"))
+	reportResult("probe", runPrivileged(ctx, "probe", args...))
 }
 
 // menuDisarm confirms then performs the HARD reset: kill the daemon, drop all
