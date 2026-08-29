@@ -273,8 +273,10 @@ func recordProbeVerdict(r ProbeResult) {
 	switch r.Verdict {
 	case "WORKS":
 		reachcache.New().RecordOK(r.Name)
-	case "DEAD", "SERVER_NOT_ROUTING", "NO_EGRESS":
-		reachcache.New().RecordFail(r.Name)
+	case "DEAD":
+		reachcache.New().RecordFailKind(r.Name, "dead")
+	case "SERVER_NOT_ROUTING", "NO_EGRESS":
+		reachcache.New().RecordFailKind(r.Name, "no-route")
 	}
 }
 

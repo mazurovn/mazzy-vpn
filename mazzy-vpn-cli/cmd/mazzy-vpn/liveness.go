@@ -17,18 +17,24 @@ const egressHistoryTTL = 6 * time.Hour
 
 // livenessLabel renders a zone's recent REAL-egress history for list views.
 // This is the column that stops ping from lying: "✔ routes" means the tunnel
-// recently carried actual internet traffic; "✖ no-route" means it recently
-// accepted a ping/handshake but forwarded nothing.
+// recently carried actual internet traffic; "✖ dead" means the server gave no
+// handshake at all; "✖ no-route" means it accepted the tunnel but forwarded
+// nothing.
 func livenessLabel(zone string) string {
-	v, streak := reachcache.New().Verdict(zone, egressHistoryTTL)
+	c := reachcache.New()
+	v, streak := c.Verdict(zone, egressHistoryTTL)
 	switch v {
 	case "ok":
 		return "✔ routes"
 	case "fail":
-		if streak > 1 {
-			return fmt.Sprintf("✖ no-route ×%d", streak)
+		kind := "no-route"
+		if r, ok := c.Get(zone); ok && r.Reason == "dead" {
+			kind = "dead"
 		}
-		return "✖ no-route"
+		if streak > 1 {
+			return fmt.Sprintf("✖ %s ×%d", kind, streak)
+		}
+		return "✖ " + kind
 	}
 	return "· untested"
 }

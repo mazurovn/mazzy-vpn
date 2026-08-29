@@ -26,6 +26,10 @@ type Record struct {
 	EgressOK   bool   `json:"egress_ok"`   // last attempt actually routed
 	At         int64  `json:"at"`          // unix seconds of the last attempt
 	FailStreak int    `json:"fail_streak"` // consecutive egress failures
+	// Reason distinguishes HOW a zone failed: "dead" (no handshake — the
+	// server is down/blocked at the crypto layer) vs "no-route" (tunnel up,
+	// zero forwarded traffic). Empty on old records and successes.
+	Reason string `json:"reason,omitempty"`
 }
 
 // Cache is a small JSON file of per-zone egress outcomes.
@@ -156,15 +160,19 @@ func (c *Cache) RecordOK(zone string) {
 	_ = c.save()
 }
 
-// RecordFail marks that the zone failed to route egress (handshake-only / dead),
+// RecordFail marks that the zone failed to route egress (handshake-only),
 // incrementing its failure streak.
-func (c *Cache) RecordFail(zone string) {
+func (c *Cache) RecordFail(zone string) { c.RecordFailKind(zone, "no-route") }
+
+// RecordFailKind is RecordFail with an explicit failure kind ("dead" for
+// no-handshake servers, "no-route" for tunnel-up-but-nothing-forwarded).
+func (c *Cache) RecordFailKind(zone, reason string) {
 	if zone == "" {
 		return
 	}
 	c.load()
 	prev := c.recs[zone]
-	c.recs[zone] = Record{Zone: zone, EgressOK: false, At: time.Now().Unix(), FailStreak: prev.FailStreak + 1}
+	c.recs[zone] = Record{Zone: zone, EgressOK: false, At: time.Now().Unix(), FailStreak: prev.FailStreak + 1, Reason: reason}
 	_ = c.save()
 }
 

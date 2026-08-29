@@ -133,3 +133,19 @@ func TestGradeQuality(t *testing.T) {
 		}
 	}
 }
+
+func TestLivenessLabelDeadVsNoRoute(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("MAZZY_STATE_DIR", dir)
+	c := reachcache.New()
+	c.RecordFailKind("DeadZone", "dead")
+	c.RecordFailKind("NoRouteZone", "no-route")
+	c.RecordFailKind("DeadZone", "dead")
+
+	if got := livenessLabel("DeadZone"); got != "✖ dead ×2" {
+		t.Errorf("DeadZone: got %q", got)
+	}
+	if got := livenessLabel("NoRouteZone"); got != "✖ no-route" {
+		t.Errorf("NoRouteZone: got %q", got)
+	}
+}

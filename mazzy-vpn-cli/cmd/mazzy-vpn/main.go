@@ -23,7 +23,7 @@ import (
 // stamp the exact tag with the linker, keeping ONE source of truth (audit
 // P1-F): `go build -ldflags "-X main.version=$(git describe --tags)"`. The
 // baseline default matches the current git tag for un-stamped/dev builds.
-var version = "2.4.4"
+var version = "2.4.5"
 
 func main() {
 	os.Exit(run(os.Args[1:]))

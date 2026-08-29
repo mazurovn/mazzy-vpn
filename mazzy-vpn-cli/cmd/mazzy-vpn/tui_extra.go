@@ -83,6 +83,10 @@ func (m tuiModel) keyProfiles(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.scr, m.input = scrImport, ""
 	case "v":
 		return m, selfTUICmd("verify profiles", "verify")
+	case "P", "t":
+		// Deep probe from the profiles screen too — this is where users look
+		// for "test my zones".
+		return m.openProbePick()
 	case "d", "delete", "backspace":
 		if len(m.profiles) > 0 && m.cursor < len(m.profiles) {
 			m.pendingDelete = m.profiles[m.cursor].Name
@@ -232,12 +236,23 @@ func (m tuiModel) keyHelp(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m tuiModel) viewProfiles() string {
 	var b strings.Builder
 	b.WriteString(m.header() + "\n\n")
-	b.WriteString(stLogTitle.Render("  Profiles (↑/↓, Enter connect, i import file/folder, f favorite, d remove, v verify, esc back)") + "\n")
+	b.WriteString(stLogTitle.Render("  Profiles (↑/↓, Enter connect, t TEST PROBE zones, i import, f favorite, d remove, v verify, esc back)") + "\n")
 	if len(m.profiles) == 0 {
 		b.WriteString(stDim.Render("  No profiles. Press i to import a config or provider folder.") + "\n")
 		return b.String()
 	}
-	for i, row := range m.profiles {
+	// Window the list around the cursor — 60+ provider profiles must scroll,
+	// not overflow the terminal (header ≈9 rows + title/footer).
+	visible := m.height - 12
+	if m.height == 0 {
+		visible = len(m.profiles)
+	}
+	start, end := listWindow(m.cursor, len(m.profiles), visible)
+	if start > 0 {
+		b.WriteString(stDim.Render(fmt.Sprintf("  ↑ %d more", start)) + "\n")
+	}
+	for i := start; i < end; i++ {
+		row := m.profiles[i]
 		cur := "  "
 		if i == m.cursor {
 			cur = stKey.Render("> ")
@@ -246,7 +261,22 @@ func (m tuiModel) viewProfiles() string {
 		if row.Favorite {
 			fav = "★"
 		}
-		b.WriteString(fmt.Sprintf("%s%s %-28s %-11s %-4s\n", cur, fav, safeDisplay(row.Name), safeDisplay(row.Protocol), safeDisplay(row.Country)))
+		// Honest availability column: OpenVPN is not connectable by the
+		// embedded engine; connectable zones show their real egress history.
+		status := livenessLabel(row.Name)
+		if strings.EqualFold(row.Protocol, "openvpn") {
+			status = stDown.Render("✖ not connectable (OpenVPN)")
+		} else if strings.HasPrefix(status, "✔") {
+			status = stProtected.Render(status)
+		} else if strings.HasPrefix(status, "✖") {
+			status = stDown.Render(status)
+		} else {
+			status = stDim.Render(status)
+		}
+		b.WriteString(fmt.Sprintf("%s%s %-28s %-11s %-4s %s\n", cur, fav, safeDisplay(row.Name), safeDisplay(row.Protocol), safeDisplay(row.Country), status))
+	}
+	if end < len(m.profiles) {
+		b.WriteString(stDim.Render(fmt.Sprintf("  ↓ %d more", len(m.profiles)-end)) + "\n")
 	}
 	return b.String()
 }
@@ -302,6 +332,8 @@ func (m tuiModel) viewHelp() string {
 	return m.header() + "\n\n" + stLogTitle.Render("  Help / command equivalents (? or esc back)") + `
   c  connect best       mazzy-vpn daemon --best --session
   z  choose zone        mazzy-vpn test / up NAME
+  t  TEST PROBE zones   mazzy-vpn probe [NAME...|--all] [--deep] (multiselect)
+  R  reconnect now      mazzy-vpn reconnect
   p  profiles           mazzy-vpn profiles / import / remove / verify
   x  diagnostics        mazzy-vpn doctor / netdiag / diagnose / trace
   d  disconnect         mazzy-vpn disconnect
@@ -509,4 +541,19 @@ func (m tuiModel) viewProbePick() string {
 		b.WriteString(stDim.Render(fmt.Sprintf("\n  %d/%d zones selected", selected, len(m.probeZones))) + "\n")
 	}
 	return b.String()
+}
+
+// openProbePick switches to the probe multiselect picker (reachable from the
+// main screen AND the profiles screen — users land in either when they want
+// to test zones).
+func (m tuiModel) openProbePick() (tea.Model, tea.Cmd) {
+	m.probeZones = probeCandidateZones()
+	if len(m.probeZones) == 0 {
+		m.appendLog("probe: no connectable (WG/AWG) zones in the catalog")
+		return m, nil
+	}
+	m.probeSel = map[string]bool{}
+	m.cursor = 0
+	m.scr = scrProbePick
+	return m, nil
 }

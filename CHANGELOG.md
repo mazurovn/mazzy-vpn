@@ -2,6 +2,25 @@
 
 All notable changes to Mazzy VPN are documented here.
 
+## CLI 2.4.5 - 2026-08-29
+
+### Changed
+- **`t` = TEST PROBE everywhere** (user feedback: lowercase `p` Profiles vs
+  uppercase `P` probe were too easy to confuse). The deep-test multiselect
+  picker now opens with `t` from the TUI main screen, the Zones screen, the
+  Profiles screen and the line menu; `P` remains a hidden alias. (`z` keeps
+  opening the zone chooser.)
+
+### Fixed
+- **Profiles screen overflow**: the 60+ provider profiles now scroll in a
+  cursor-following window (`↑/↓ N more`) instead of running off the terminal,
+  and every row shows honest availability — `✖ not connectable (OpenVPN)` for
+  engine-unsupported profiles, real egress history for the rest.
+- **`✖ dead` vs `✖ no-route`**: the egress history now records HOW a zone
+  failed — `dead` (no WireGuard handshake: server down/blocked) vs `no-route`
+  (tunnel accepted, zero forwarded traffic) — and zone lists display the
+  difference. Both sink to the bottom of every ranking.
+
 ## CLI 2.4.4 - 2026-08-29
 
 ### Added

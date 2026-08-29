@@ -65,7 +65,7 @@ func cmdMenu(ctx context.Context, _ []string) int {
 		case "k", "K", "stop": // stop the background daemon
 			menuStopBackground(ctx)
 		// -- Diagnostics --
-		case "P", "probe": // HARD deep test: real connect + egress per zone
+		case "t", "T", "P", "probe": // TEST PROBE: real connect + egress per zone ("P" = legacy alias)
 			menuProbe(ctx, in)
 		case "7": // test servers
 			cmdTest(ctx, nil)
@@ -182,7 +182,7 @@ func drawMenu(profileCount int, set settings.Settings) {
 	fmt.Println("   6. 🛰  Run in background (survives closing terminal)")
 	fmt.Println("   l. 📜 View activity log     k. ⏹  Stop background daemon")
 	fmt.Println("  Diagnostics")
-	fmt.Println("   P. 🧪 DEEP PROBE all zones (real connect + egress + tx/rx verdict)")
+	fmt.Println("   t. 🧪 TEST PROBE zones — pick one/several/all · fast or detailed (real connect + egress)")
 	fmt.Println("   7. 📶 Test servers (live ping)")
 	fmt.Println("   8. 🏆 Best zone")
 	fmt.Println("   9. 🔌 Network adapters")

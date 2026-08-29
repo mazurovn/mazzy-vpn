@@ -300,10 +300,10 @@ func (m tuiModel) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.cursor = 0
 		return m, nil
 	case "t":
-		m.scr = scrZones
-		m.loading = true
-		m.cursor = 0
-		return m, rankZonesCmd()
+		// t = TEST PROBE: the deep zone test with multiselect (renamed from
+		// "P" — lowercase p/uppercase P were too easy to confuse with the
+		// profiles screen; "P" stays as a hidden alias).
+		return m.openProbePick()
 	case "r":
 		m.scr = scrRemoveConfirm
 		m.pendingDelete = "__RECOVER__"
@@ -321,18 +321,7 @@ func (m tuiModel) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.pendingDelete = "__DISARM__"
 		return m, nil
 	case "P":
-		// Deep probe: open the zone multiselect picker (space toggle, a all,
-		// f fast, d detailed). The run itself stops the daemon and restores
-		// the VPN afterwards.
-		m.probeZones = probeCandidateZones()
-		if len(m.probeZones) == 0 {
-			m.appendLog("probe: no connectable (WG/AWG) zones in the catalog")
-			return m, nil
-		}
-		m.probeSel = map[string]bool{}
-		m.cursor = 0
-		m.scr = scrProbePick
-		return m, nil
+		return m.openProbePick() // legacy alias for [t] TEST PROBE
 	case "?":
 		m.scr = scrHelp
 		return m, nil
@@ -357,6 +346,10 @@ func (m tuiModel) keyZones(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc", "q":
 		m.scr = scrMain
 		return m, nil
+	case "t", "P":
+		// TEST PROBE straight from the zone list — deep-verify what the ping
+		// column cannot prove.
+		return m.openProbePick()
 	case "up", "k":
 		if m.cursor > 0 {
 			m.cursor--
@@ -602,8 +595,8 @@ func (m tuiModel) actionBar() string {
 		stKey.Render("[c]"), stKey.Render("[z]"), stKey.Render("[p]"), stKey.Render("[x]"), stKey.Render("[d]"), stKey.Render("[r]"))
 	line2 := fmt.Sprintf("%s Graph   %s Log   %s Stop bg   %s Settings   %s Help   %s Quit",
 		stKey.Render("[g]"), stKey.Render("[l]"), stKey.Render("[k]"), stKey.Render("[s]"), stKey.Render("[?]"), stKey.Render("[q]"))
-	line3 := fmt.Sprintf("%s Reconnect now   %s HARD RESET (disarm)   %s Deep probe zones (pick/all · fast/detailed)",
-		stKey.Render("[R]"), stKey.Render("[!]"), stKey.Render("[P]"))
+	line3 := fmt.Sprintf("%s Reconnect now   %s HARD RESET (disarm)   %s TEST PROBE zones (pick/all · fast/detailed)",
+		stKey.Render("[R]"), stKey.Render("[!]"), stKey.Render("[t]"))
 	return line1 + "\n" + line2 + "\n" + line3
 }
 
@@ -669,7 +662,7 @@ func (m tuiModel) viewZones() string {
 	}
 	var b strings.Builder
 	b.WriteString(m.header() + "\n\n")
-	b.WriteString(stLogTitle.Render("  Zones (↑/↓ select, Enter connect, esc back) — EGRESS = recently routed real traffic") + "\n")
+	b.WriteString(stLogTitle.Render("  Zones (↑/↓ select, Enter connect, t TEST PROBE, esc back) — EGRESS = recently routed real traffic") + "\n")
 	alive := 0
 	for _, z := range m.zones {
 		if z.ICMPAlive {
@@ -714,7 +707,7 @@ func (m tuiModel) viewZones() string {
 	if end < len(m.zones) {
 		b.WriteString(stDim.Render(fmt.Sprintf("  ↓ %d more", len(m.zones)-end)) + "\n")
 	}
-	b.WriteString(stDim.Render(fmt.Sprintf("\n  %d/%d alive · ping ≠ works: trust the EGRESS column (deep-test all: [P])", alive, len(m.zones))) + "\n")
+	b.WriteString(stDim.Render(fmt.Sprintf("\n  %d/%d alive · ping ≠ works: trust the EGRESS column (deep-test: [t])", alive, len(m.zones))) + "\n")
 	return b.String()
 }
 
