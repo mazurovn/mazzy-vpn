@@ -99,7 +99,14 @@ func (m tuiModel) keyProfiles(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "enter":
 		if len(m.profiles) > 0 && m.cursor < len(m.profiles) {
-			return m, requestConnectCmd(m.profiles[m.cursor].Name)
+			row := m.profiles[m.cursor]
+			// The embedded engine cannot connect OpenVPN: forwarding the zone to
+			// the daemon would only spin it through connect-fail/backoff cycles.
+			if strings.EqualFold(row.Protocol, "openvpn") {
+				m.appendLog(row.Name + ": OpenVPN is not connectable by the embedded engine — pick a WireGuard/AmneziaWG zone")
+				return m, nil
+			}
+			return m, requestConnectCmd(row.Name)
 		}
 	}
 	return m, nil

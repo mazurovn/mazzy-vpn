@@ -134,7 +134,13 @@ func cmdProbe(ctx context.Context, args []string) int {
 		return 2
 	}
 	if !jsonOut {
-		fmt.Printf("Deep-probing %d zone(s) — each is connected for real and measured (tx/rx). This takes a while.\n\n", len(names))
+		fmt.Printf("Deep-probing %d zone(s) — each is connected for real and measured (tx/rx). This takes a while.\n", len(names))
+		// No silent coverage gaps: say WHICH zones the sweep cannot verify, so
+		// an OpenVPN zone is never mistaken for "tested and fine".
+		if skipped := openVPNZoneNames(newCatalog()); len(skipped) > 0 {
+			fmt.Printf("skipping %d OpenVPN zone(s) — not connectable by the embedded engine: %s\n", len(skipped), safeDisplay(joinStrs(skipped)))
+		}
+		fmt.Println()
 	}
 
 	results := make([]ProbeResult, 0, len(names))
@@ -204,6 +210,23 @@ func restartDaemonAfterProbe(ctx context.Context, original string, results []Pro
 	if rc := cmdDaemon(ctx, []string{zone, "--background"}); rc != 0 {
 		fmt.Fprintf(os.Stderr, "could not restart the daemon automatically; reconnect with: sudo mazzy-vpn up %s\n", safeDisplay(zone))
 	}
+}
+
+// openVPNZoneNames lists catalog zones the deep probe cannot verify (the
+// embedded engine cannot bring OpenVPN up), so the sweep can report its
+// coverage gap explicitly.
+func openVPNZoneNames(cat *catalogT) []string {
+	entries, err := cat.List()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		if e.Protocol == coreOpenVPN {
+			out = append(out, e.Name)
+		}
+	}
+	return out
 }
 
 // probeTargets resolves the zone list: an explicit NAME, or every managed

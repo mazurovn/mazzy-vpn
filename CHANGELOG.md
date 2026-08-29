@@ -2,6 +2,20 @@
 
 All notable changes to Mazzy VPN are documented here.
 
+## CLI 2.4.3 - 2026-08-29
+
+### Fixed
+- **OpenVPN zones no longer masquerade as available** (user report: "Finland
+  shows online but does not work"). The catalog carries OpenVPN profiles the
+  embedded engine cannot connect at all, yet the zone chooser listed them with
+  a live ping like normal zones. Now: the menu chooser labels every OpenVPN
+  zone `✖ not connectable (OpenVPN)`; the TUI profiles list refuses Enter on
+  them with an explanation (previously it forwarded the zone to the daemon,
+  which spun through connect-fail/backoff cycles); `up NAME` refuses them
+  before touching the daemon; and `probe --all` prints exactly which OpenVPN
+  zones the sweep cannot verify, so a skipped zone is never mistaken for a
+  tested-and-fine one.
+
 ## CLI 2.4.2 - 2026-08-29
 
 ### Added

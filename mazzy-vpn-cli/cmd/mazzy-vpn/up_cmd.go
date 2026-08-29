@@ -10,6 +10,7 @@ import (
 
 	"time"
 
+	"github.com/mazurovn/mazzy-vpn/core"
 	"github.com/mazurovn/mazzy-vpn/core/measure"
 	"github.com/mazurovn/mazzy-vpn/core/settings"
 	"github.com/mazurovn/mazzy-vpn/core/zonescore"
@@ -100,6 +101,12 @@ func cmdUp(ctx context.Context, args []string) int {
 	entry, err := cat.Get(name)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "profile %q not found (see: mazzy-vpn profiles)\n", name)
+		return 1
+	}
+	// Refuse OpenVPN BEFORE touching the daemon: forwarding an unconnectable
+	// zone would spin the daemon through connect-fail/backoff until failover.
+	if entry.Protocol == core.OpenVPN {
+		fmt.Fprintf(os.Stderr, "%s is an OpenVPN profile — not connectable by the embedded engine yet; pick a WireGuard/AmneziaWG zone (mazzy-vpn profiles)\n", safeDisplay(name))
 		return 1
 	}
 	// A running daemon owns the tunnel AND the mutation lock for its lifetime,

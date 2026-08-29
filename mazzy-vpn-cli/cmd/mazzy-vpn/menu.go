@@ -317,7 +317,13 @@ func menuChooseZone(ctx context.Context, in *bufio.Reader, cat interface {
 		if ping == "" {
 			ping = "—"
 		}
-		fmt.Printf("  %2d.%s %-24s %-10s %-4s %-8s %s\n", i+1, star, safeDisplay(e.Name), safeDisplay(string(e.Protocol)), safeDisplay(e.Country), safeDisplay(ping), livenessLabel(e.Name))
+		// An OpenVPN zone can answer ping all day and still be UNUSABLE: the
+		// embedded engine cannot connect it. Never present it as available.
+		egress := livenessLabel(e.Name)
+		if e.Protocol == core.OpenVPN {
+			egress = "✖ not connectable (OpenVPN)"
+		}
+		fmt.Printf("  %2d.%s %-24s %-10s %-4s %-8s %s\n", i+1, star, safeDisplay(e.Name), safeDisplay(string(e.Protocol)), safeDisplay(e.Country), safeDisplay(ping), egress)
 	}
 	fmt.Print(translator().T("cli.menu.prompt.zone_num"))
 	line, _ := in.ReadString('\n')
