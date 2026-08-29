@@ -14,7 +14,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/user"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -35,8 +37,11 @@ type ghRelease struct {
 
 // cmdUpdate checks GitHub for a newer release and, with --apply, downloads and
 // installs it. Without --apply it only reports what is available (dry run).
+// --menu adds the interactive middle ground used by the TUI/menu: check, then
+// offer to install right away (elevating itself when not root).
 func cmdUpdate(ctx context.Context, args []string) int {
 	apply := hasFlag(args, "--apply")
+	menu := hasFlag(args, "--menu")
 	t := translator()
 
 	fmt.Println(t.Tf("cli.update.current", version))
@@ -76,6 +81,21 @@ func cmdUpdate(ctx context.Context, args []string) int {
 		return 1
 	}
 
+	if !apply && menu {
+		// Interactive: offer the install right here. The privileged re-exec
+		// (sudo password prompt) happens on the caller's real terminal.
+		fmt.Printf("Install %s now? [y/N] ", rel.TagName)
+		var answer string
+		_, _ = fmt.Fscanln(os.Stdin, &answer)
+		if !strings.EqualFold(strings.TrimSpace(answer), "y") {
+			fmt.Println(t.T("cli.menu.cancelled"))
+			return 0
+		}
+		if os.Geteuid() != 0 {
+			return runPrivileged(ctx, "update", "--apply")
+		}
+		apply = true
+	}
 	if !apply {
 		fmt.Println(t.T("cli.update.hint_apply"))
 		return 0
@@ -119,9 +139,50 @@ func cmdUpdate(ctx context.Context, args []string) int {
 		fmt.Fprintln(os.Stderr, "install failed:", err)
 		return 1
 	}
+	// Keep the machine's OTHER canonical install in sync: this host convention
+	// is /usr/local/bin (sudo PATH, systemd) + the invoking user's ~/.local/bin.
+	// Updating only os.Executable() left the twin behind on every release.
+	syncCompanionInstalls(self, bin)
 	fmt.Println(t.Tf("cli.update.updated", rel.TagName))
 	return 0
 }
+
+// syncCompanionInstalls best-effort updates the standard install locations
+// other than the one just replaced. Targets must already EXIST as regular
+// files (Lstat: never through a symlink) — this refreshes known installs, it
+// does not create new ones.
+func syncCompanionInstalls(self, newBin string) {
+	targets := []string{"/usr/local/bin/mazzy-vpn"}
+	if su := os.Getenv("SUDO_USER"); su != "" && su != "root" && sudoUserNameOK(su) {
+		if u, err := user.Lookup(su); err == nil && u.HomeDir != "" {
+			targets = append(targets, filepath.Join(u.HomeDir, ".local", "bin", "mazzy-vpn"))
+		}
+	} else if home, err := os.UserHomeDir(); err == nil {
+		targets = append(targets, filepath.Join(home, ".local", "bin", "mazzy-vpn"))
+	}
+	selfReal, _ := filepath.EvalSymlinks(self)
+	for _, tgt := range targets {
+		tgtReal, err := filepath.EvalSymlinks(tgt)
+		if err == nil && tgtReal == selfReal {
+			continue // already replaced
+		}
+		fi, err := os.Lstat(tgt)
+		if err != nil || !fi.Mode().IsRegular() {
+			continue // absent or a symlink: do not touch
+		}
+		if err := replaceBinary(tgt, newBin); err != nil {
+			fmt.Fprintf(os.Stderr, "  ⚠ could not update %s: %v\n", tgt, err)
+		} else {
+			fmt.Printf("  ✔ also updated %s\n", tgt)
+		}
+	}
+}
+
+// sudoUserNameOK matches conventional Unix user names (no traversal via a
+// crafted SUDO_USER), mirroring the settings/catalog hardening.
+var sudoUserNameRePattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}\$?$`)
+
+func sudoUserNameOK(name string) bool { return sudoUserNameRePattern.MatchString(name) }
 
 // latestRelease fetches the newest GitHub release.
 func latestRelease(ctx context.Context) (*ghRelease, error) {

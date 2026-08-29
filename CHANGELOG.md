@@ -2,6 +2,20 @@
 
 All notable changes to Mazzy VPN are documented here.
 
+## CLI 2.4.6 - 2026-08-29
+
+### Added
+- **Update from inside the app** (user request): TUI Settings gained
+  `[8] Check for updates` and line-menu item 24 became an interactive flow —
+  check the latest GitHub release, show what is available, ask to install,
+  elevate itself, verify the tarball against the release's SHA256SUMS, and
+  install. New CLI form: `mazzy-vpn update --menu`.
+- **Both install locations stay in sync**: applying an update now also
+  refreshes the companion install (`/usr/local/bin/mazzy-vpn` and the invoking
+  user's `~/.local/bin/mazzy-vpn`) when it already exists as a regular file —
+  previously only the binary being executed was replaced and the twin lagged
+  behind on every release.
+
 ## CLI 2.4.5 - 2026-08-29
 
 ### Changed

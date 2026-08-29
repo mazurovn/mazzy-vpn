@@ -398,6 +398,10 @@ func (m tuiModel) keySettings(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.scr = scrLanguage
 		m.cursor = languageCursor()
 		return m, nil
+	case "8":
+		// Check GitHub for a newer release and offer to install it (elevates
+		// itself; checksum-verified against the release's SHA256SUMS).
+		return m, selfTUICmd("update", "update", "--menu")
 	default:
 		return m, nil
 	}
@@ -728,6 +732,7 @@ func (m tuiModel) viewSettings() string {
 	b.WriteString(fmt.Sprintf("  %s Kill-switch             %s\n", stKey.Render("[5]"), onoff(m.set.KillSwitch)))
 	b.WriteString(fmt.Sprintf("  %s Auto-mimic timezone     %s\n", stKey.Render("[6]"), onoff(m.set.AutoMimic)))
 	b.WriteString(fmt.Sprintf("  %s Language               %s\n", stKey.Render("[7]"), safeDisplay(string(resolveLang()))))
+	b.WriteString(fmt.Sprintf("  %s Check for updates      %s\n", stKey.Render("[8]"), stDim.Render("GitHub release → verify → install (current: "+version+")")))
 	return b.String()
 }
 

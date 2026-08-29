@@ -105,8 +105,8 @@ func cmdMenu(ctx context.Context, _ []string) int {
 		// -- System --
 		case "23": // doctor
 			cmdDoctor(ctx, nil)
-		case "24": // update from GitHub
-			cmdUpdate(ctx, nil)
+		case "24": // update from GitHub: check → confirm → install
+			cmdUpdate(ctx, []string{"--menu"})
 		case "0", "q", "quit", "exit":
 			// Stop a menu-scoped (--session) daemon on exit, but leave a persistent
 			// (--background) daemon running so it survives closing the terminal.
@@ -202,7 +202,7 @@ func drawMenu(profileCount int, set settings.Settings) {
 	fmt.Println("  22. 🌐 Language")
 	fmt.Println("  System")
 	fmt.Println("  23. 🔧 Doctor")
-	fmt.Println("  24. ⬆️  Update from GitHub")
+	fmt.Println("  24. ⬆️  Update: check GitHub release → verify checksum → install")
 	fmt.Println("   0. Quit")
 }
 
