@@ -2,6 +2,27 @@
 
 All notable changes to Mazzy VPN are documented here.
 
+## CLI 2.4.7 - 2026-09-21
+
+### Fixed
+- **Daemon no longer sits on a half-dead tunnel** (field incident 2026-09-21,
+  AmneziaWG zone, 18 minutes at `egress probe failed but handshake fresh
+  (1/6)`). Two bugs in the health-check loop of `mazzy-vpn daemon`:
+  - the soft-failure counter was reset to zero by every single successful
+    probe, so a data path dropping ~50% of packets (probes alternating
+    fail/pass) never reached the `6` limit and never failed over;
+  - a "fresh" WireGuard handshake was read as proof of a live tunnel, but a
+    peer that re-handshakes every ~30 s (instead of every 2–3 min) is doing so
+    precisely because its data packets go unanswered.
+  The daemon now keeps a rolling window of the last 12 probe outcomes
+  (≥ 5 failures = loss, consecutive or not), decays the soft counter by one on
+  success instead of clearing it, and counts early re-handshakes as "handshake
+  churn" (4 in a row = dead data path). Either signal — even on a tick whose
+  own probe succeeded — takes the existing reconnect/failover path, so a
+  flapping zone is left within ~1–2 minutes instead of never. Log lines now
+  carry `window loss x/12` and `hs churn n` for calibration. New
+  `linkquality.go` with unit tests covering the incident shape.
+
 ## CLI 2.4.6 - 2026-08-29
 
 ### Added

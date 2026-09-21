@@ -209,7 +209,10 @@ func cmdDaemon(ctx context.Context, args []string) int {
 	lastStealth := -1
 
 	fails := 0
-	softFails := 0        // egress probes failing while the handshake is fresh
+	softFails := 0 // egress probes failing while the handshake is fresh
+	// Degraded-tunnel detection: rolling probe window + handshake churn (see
+	// linkquality.go). Feeds the same escalation path as softFails.
+	var lq linkQuality
 	paused := startPaused // true after a Disconnect intent; blocks auto-reconnect
 	reconnecting := false // an egress loss triggered a teardown; next success is a "reconnect"
 	// lastIntentTS makes intents EDGE-triggered: each desired.json is acted on
@@ -455,6 +458,7 @@ func cmdDaemon(ctx context.Context, args []string) int {
 			}
 			tickStart := time.Now()
 			s := lc.Check(ctx, conn.Interface)
+			degraded := false // set when a *successful* probe still reveals a flapping tunnel
 			if s.Protected() {
 				if killSwitchArmed && set.KillSwitch {
 					_ = conn.DisarmKillSwitch(ctx)
@@ -465,38 +469,59 @@ func cmdDaemon(ctx context.Context, args []string) int {
 					reconnecting = false
 				}
 				fails = 0
-				softFails = 0
+				// Decay, don't reset: a single good probe between failures must not
+				// erase the evidence of a flapping data path.
+				if softFails > 0 {
+					softFails--
+				}
+				lost := lq.noteProbe(true)
 				delete(cooldown, zone)
 				reachcache.New().RecordOK(zone)
 				rw.SetState(runstatus.StateProtected, conn.Interface, s.EgressIP)
 				// Publish link facts the unprivileged dashboard cannot read itself.
 				hsAge := int64(0)
-				if age, hsOK := conn.HandshakeAge(); hsOK {
+				age, hsOK := conn.HandshakeAge()
+				lq.noteHandshake(age, hsOK)
+				if hsOK {
 					hsAge = int64(age.Seconds())
+				}
+				if lq.degraded() {
+					d.logf("tunnel degraded despite a good probe (window loss %d/%d, handshake churn %d); reconnecting %s...",
+						lost, len(lq.hist), lq.churn, zone)
+					rw.Error("tunnel degraded: flapping egress")
+					degraded = true
 				}
 				rx, tx, _ := conn.Transfer()
 				rw.SetLinkHealth(hsAge, rx, tx)
 				rw.TickPing(int(time.Since(tickStart).Milliseconds()), d.serverPingMS(ctx), true)
-				continue
-			}
-			rw.Tick(0, false)
-			// Handshake-aware distinction: if the WireGuard handshake is FRESH the
-			// server is alive and answering crypto — the probe endpoints themselves
-			// are likely blocked/degraded. Tolerate that far longer before tearing
-			// down a working tunnel (the old behavior reconnect-stormed a healthy
-			// tunnel whenever the single probe URL was blocked by the ISP).
-			if age, hsOK := conn.HandshakeAge(); hsOK && age < 3*time.Minute {
-				softFails++
-				d.logf("egress probe failed but handshake fresh (%ds ago): %s (%d/%d)",
-					int(age.Seconds()), s.Reason, softFails, softFailLimit)
-				rw.Error("probe degraded (handshake fresh): " + s.Reason)
-				if softFails < softFailLimit {
+				if !degraded {
 					continue
 				}
-				d.logf("all egress probes failing for %d ticks despite fresh handshake; treating as real loss", softFails)
-				// Escalate straight to the reconnect path — the soft window already
-				// consumed the patience the reconnectLimit gate would re-impose.
 				fails = reconnectLimit - 1
+				s.Reason = "flapping egress (window loss / handshake churn)"
+			} else {
+				rw.Tick(0, false)
+				// Handshake-aware distinction: if the WireGuard handshake is FRESH the
+				// server is alive and answering crypto — the probe endpoints themselves
+				// are likely blocked/degraded. Tolerate that far longer before tearing
+				// down a working tunnel (the old behavior reconnect-stormed a healthy
+				// tunnel whenever the single probe URL was blocked by the ISP).
+				lost := lq.noteProbe(false)
+				if age, hsOK := conn.HandshakeAge(); hsOK && age < 3*time.Minute {
+					lq.noteHandshake(age, hsOK)
+					softFails++
+					d.logf("egress probe failed but handshake fresh (%ds ago): %s (%d/%d, window loss %d/%d, hs churn %d)",
+						int(age.Seconds()), s.Reason, softFails, softFailLimit, lost, len(lq.hist), lq.churn)
+					rw.Error("probe degraded (handshake fresh): " + s.Reason)
+					if softFails < softFailLimit && !lq.degraded() {
+						continue
+					}
+					d.logf("egress loss confirmed despite fresh handshake (soft %d/%d, window loss %d/%d, hs churn %d); treating as real loss",
+						softFails, softFailLimit, lost, len(lq.hist), lq.churn)
+					// Escalate straight to the reconnect path — the soft window already
+					// consumed the patience the reconnectLimit gate would re-impose.
+					fails = reconnectLimit - 1
+				}
 			}
 			fails++
 			if fails < reconnectLimit {
@@ -522,6 +547,7 @@ func cmdDaemon(ctx context.Context, args []string) int {
 			conn = nil
 			reconnecting = true
 			softFails = 0
+			lq.reset()
 			nextAttempt = time.Now().Add(backoff(fails))
 			// After several failures, fail over to another live zone (excluding
 			// zones that recently failed egress, this one included).
