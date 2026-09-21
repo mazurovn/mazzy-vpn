@@ -19,6 +19,8 @@ import (
 type Manager struct {
 	Runner    netexec.Runner
 	Interface string
+	// Available overrides backend detection (tests); nil = netexec.Available.
+	Available func(bin string) bool
 	applied   bool
 	backend   string
 }
@@ -38,14 +40,32 @@ func (m *Manager) Up(ctx context.Context, servers []string) error {
 			return fmt.Errorf("invalid DNS server %q: %w", s, err)
 		}
 	}
+	avail := m.Available
+	if avail == nil {
+		avail = netexec.Available
+	}
 	switch {
-	case netexec.Available("resolvectl"):
+	case avail("resolvectl"):
 		m.backend = "resolvectl"
 		args := append([]string{"dns", m.Interface}, servers...)
 		if _, err := m.Runner.Run(ctx, "resolvectl", args...); err != nil {
 			return err
 		}
-	case netexec.Available("resolvconf"):
+		// Setting servers alone is NOT enough with systemd-resolved: the
+		// physical uplink keeps its own servers (the ISP/router) as an equal
+		// default-route scope and resolved fans queries out to BOTH links.
+		// Observed 2026-09-21: half of the egress-probe lookups were answered
+		// by the router with poisoned addresses (8.6.112.0 for api.ipify.org)
+		// — a DNS leak and a fake "egress lost". The catch-all routing domain
+		// "~." makes this link the preferred resolver for every name, which is
+		// exactly what wg-quick, NetworkManager VPN plugins and AdGuard do.
+		if _, err := m.Runner.Run(ctx, "resolvectl", "domain", m.Interface, "~."); err != nil {
+			return fmt.Errorf("set routing domain: %w", err)
+		}
+		if _, err := m.Runner.Run(ctx, "resolvectl", "default-route", m.Interface, "yes"); err != nil {
+			return fmt.Errorf("set default-route: %w", err)
+		}
+	case avail("resolvconf"):
 		m.backend = "resolvconf"
 		// resolvconf reads "nameserver <ip>" lines from stdin (C1-4b2).
 		ir, ok := m.Runner.(netexec.InputRunner)

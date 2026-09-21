@@ -2,6 +2,22 @@
 
 All notable changes to Mazzy VPN are documented here.
 
+## CLI 2.4.8 - 2026-09-21
+
+### Fixed
+- **DNS leak / poisoned lookups on systemd-resolved hosts.** `core/dns` only
+  ran `resolvectl dns <iface> <servers>`; without a routing domain the
+  physical uplink's resolver (the ISP router) stayed an equal default-route
+  scope and resolved fanned every query out to BOTH links. In the field
+  (2026-09-21) half of the egress-probe lookups came back from the router with
+  bogus addresses (`8.6.112.0` for `api.ipify.org`), producing the
+  alternating probe failures behind "VPN keeps dropping" — and leaking every
+  DNS query past the tunnel. The tunnel link now also gets
+  `resolvectl domain <iface> ~.` and `resolvectl default-route <iface> yes`
+  (what wg-quick / NetworkManager / AdGuard do), so it is the preferred
+  resolver for all names while up; `Down` still `revert`s the link. New test
+  pins the exact command sequence.
+
 ## CLI 2.4.7 - 2026-09-21
 
 ### Fixed

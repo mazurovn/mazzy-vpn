@@ -59,3 +59,30 @@ func TestUpEmptyIsNoop(t *testing.T) {
 		t.Errorf("empty servers should be a no-op, got %v", err)
 	}
 }
+
+// TestResolvectlSetsRoutingDomain guards the DNS-leak fix: with
+// systemd-resolved the tunnel link must own the catch-all routing domain
+// "~." (and be a default-route link), otherwise queries keep racing the
+// uplink's ISP resolver (observed 2026-09-21: poisoned answers for the
+// egress-probe hosts, half the probes "failing").
+func TestResolvectlSetsRoutingDomain(t *testing.T) {
+	f := &inputFake{}
+	m := &Manager{Runner: f, Interface: "vpnaw0", Available: func(bin string) bool { return bin == "resolvectl" }}
+	if err := m.Up(context.Background(), []string{"1.1.1.1"}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"resolvectl dns vpnaw0 1.1.1.1",
+		"resolvectl domain vpnaw0 ~.",
+		"resolvectl default-route vpnaw0 yes",
+	}
+	if strings.Join(f.calls, "|") != strings.Join(want, "|") {
+		t.Errorf("calls = %q, want %q", f.calls, want)
+	}
+	if err := m.Down(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if last := f.calls[len(f.calls)-1]; last != "resolvectl revert vpnaw0" {
+		t.Errorf("Down = %q, want revert", last)
+	}
+}
