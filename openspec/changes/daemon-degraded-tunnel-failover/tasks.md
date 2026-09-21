@@ -17,6 +17,6 @@
 
 ## 3. Выкладка
 
-- [ ] 3.1 Собрать `mazzy-vpn` и заменить `~/.local/bin/mazzy-vpn` (после остановки текущего демона)
+- [x] 3.1 Собрать `mazzy-vpn` и заменить `~/.local/bin/mazzy-vpn` (после остановки текущего демона)
 - [x] 3.2 Запись в CHANGELOG.md, bump версии (2.4.7)
-- [ ] 3.3 Коммит в ветку `fix/degraded-tunnel-failover`, PR в `feat/go-rewrite`
+- [x] 3.3 Коммит 0d8a254 в feat/go-rewrite, тег v2.4.7, GitHub release с tarball + SHA256SUMS
