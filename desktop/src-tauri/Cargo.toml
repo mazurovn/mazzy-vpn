@@ -21,7 +21,7 @@ tauri-plugin-opener = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2.10"
 rfd = "0.15"
-sha2 = "0.10"
+sha2 = "0.11"
 
 [dev-dependencies]
 base64 = "0.22"
