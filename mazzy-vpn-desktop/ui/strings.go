@@ -21,7 +21,7 @@ type Text struct {
 	Journal, Search, LogEmpty, PathHint           string
 	Ready, Busy, UpNote, Fail, InCatalog          string
 	PanelTab, LogHint, Refresh, Exit              string
-	DashDown, DashUp                              string
+	DashDown, DashUp, Summary                     string
 }
 
 var phrases = map[i18n.Lang]Text{
@@ -41,6 +41,7 @@ var phrases = map[i18n.Lang]Text{
 		InCatalog: "in the catalog",
 		PanelTab:  "Panel", LogHint: "The log fills in after a command.", Refresh: "Refresh", Exit: "Egress",
 		DashDown: "The tunnel is down. No measurements.", DashUp: "The tunnel is up. No measurements.",
+		Summary: "Summary",
 	},
 	i18n.RU: {
 		Connect: "Подключить", Disconnect: "Отключить", Status: "Статус", Server: "Сервер", Protocol: "Протокол",
@@ -58,6 +59,7 @@ var phrases = map[i18n.Lang]Text{
 		InCatalog: "в каталоге",
 		PanelTab:  "Панель", LogHint: "Журнал появится после команды.", Refresh: "Обновить", Exit: "Выход",
 		DashDown: "Туннель не поднят. Замеров нет.", DashUp: "Туннель поднят. Замеров нет.",
+		Summary: "Сводка",
 	},
 	i18n.DE: {
 		Connect: "Verbinden", Disconnect: "Trennen", Status: "Status", Server: "Server", Protocol: "Protokoll",
@@ -75,6 +77,7 @@ var phrases = map[i18n.Lang]Text{
 		InCatalog: "im Katalog",
 		PanelTab:  "Panel", LogHint: "Das Journal füllt sich nach einem Befehl.", Refresh: "Aktualisieren", Exit: "Ausgang",
 		DashDown: "Tunnel ist unten. Keine Messwerte.", DashUp: "Tunnel steht. Keine Messwerte.",
+		Summary: "Überblick",
 	},
 	i18n.ZH: {
 		Connect: "连接", Disconnect: "断开", Status: "状态", Server: "服务器", Protocol: "协议",
@@ -92,6 +95,7 @@ var phrases = map[i18n.Lang]Text{
 		InCatalog: "在目录中",
 		PanelTab:  "面板", LogHint: "日志会在命令之后出现。", Refresh: "刷新", Exit: "出口",
 		DashDown: "隧道未建立。没有测量。", DashUp: "隧道已建立。没有测量。",
+		Summary: "概览",
 	},
 	i18n.JA: {
 		Connect: "接続", Disconnect: "切断", Status: "状態", Server: "サーバー", Protocol: "プロトコル",
@@ -109,6 +113,7 @@ var phrases = map[i18n.Lang]Text{
 		InCatalog: "カタログ内",
 		PanelTab:  "パネル", LogHint: "ログはコマンドのあとに入ります。", Refresh: "更新", Exit: "出口",
 		DashDown: "トンネルは下がっています。計測はありません。", DashUp: "トンネルは上がっています。計測はありません。",
+		Summary: "概要",
 	},
 	i18n.KO: {
 		Connect: "연결", Disconnect: "연결 해제", Status: "상태", Server: "서버", Protocol: "프로토콜",
@@ -126,6 +131,7 @@ var phrases = map[i18n.Lang]Text{
 		InCatalog: "카탈로그",
 		PanelTab:  "패널", LogHint: "로그는 명령 뒤에 채워집니다.", Refresh: "새로고침", Exit: "출구",
 		DashDown: "터널이 내려가 있습니다. 측정값이 없습니다.", DashUp: "터널이 올라와 있습니다. 측정값이 없습니다.",
+		Summary: "요약",
 	},
 }
 

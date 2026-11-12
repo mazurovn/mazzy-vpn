@@ -26,18 +26,19 @@ import (
 )
 
 var (
-	colorBG     = color.NRGBA{R: 0x16, G: 0x13, B: 0x0f, A: 0xff}
-	colorPanel  = color.NRGBA{R: 0x22, G: 0x1e, B: 0x19, A: 0xff}
-	colorCard   = color.NRGBA{R: 0x2c, G: 0x26, B: 0x1f, A: 0xff}
-	colorMenu   = color.NRGBA{R: 0x3e, G: 0x34, B: 0x28, A: 0xff}
-	colorText   = color.NRGBA{R: 0xf7, G: 0xf1, B: 0xe7, A: 0xff}
-	colorMuted  = color.NRGBA{R: 0xb3, G: 0xa8, B: 0x9c, A: 0xff}
-	colorAccent = color.NRGBA{R: 0xe2, G: 0xa1, B: 0x5a, A: 0xff}
+	colorBG     = color.NRGBA{R: 0x14, G: 0x12, B: 0x0f, A: 0xff}
+	colorPanel  = color.NRGBA{R: 0x1e, G: 0x1a, B: 0x16, A: 0xff}
+	colorCard   = color.NRGBA{R: 0x26, G: 0x21, B: 0x1b, A: 0xff}
+	colorMenu   = color.NRGBA{R: 0x32, G: 0x2b, B: 0x23, A: 0xff}
+	colorText   = color.NRGBA{R: 0xf6, G: 0xf1, B: 0xe8, A: 0xff}
+	colorMuted  = color.NRGBA{R: 0x9c, G: 0x92, B: 0x86, A: 0xff}
+	colorAccent = color.NRGBA{R: 0xe4, G: 0xa0, B: 0x4a, A: 0xff}
 	colorGreen  = color.NRGBA{R: 0x8f, G: 0xbf, B: 0x7a, A: 0xff}
-	colorRed    = color.NRGBA{R: 0xe0, G: 0x7a, B: 0x6a, A: 0xff}
+	colorRed    = color.NRGBA{R: 0xd6, G: 0x72, B: 0x64, A: 0xff}
 	colorYellow = color.NRGBA{R: 0xe6, G: 0xc3, B: 0x6a, A: 0xff}
-	colorLine   = color.NRGBA{R: 0xe2, G: 0xa1, B: 0x5a, A: 0x55}
-	colorSelect = color.NRGBA{R: 0xe2, G: 0xa1, B: 0x5a, A: 0x33}
+	colorLine   = color.NRGBA{R: 0x3a, G: 0x32, B: 0x2a, A: 0xff}
+	colorEdge   = color.NRGBA{R: 0x6a, G: 0x5c, B: 0x4a, A: 0xff}
+	colorSelect = color.NRGBA{R: 0xe4, G: 0xa0, B: 0x4a, A: 0x14}
 )
 
 // App is the window state. Clickables live across frames.
@@ -232,13 +233,13 @@ func (a *App) top(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
 				layout.Rigid(layout.Spacer{Width: unit.Dp(16)}.Layout),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					return a.serverJump.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return a.meta(gtx, a.text.Server, server)
+						return a.meta(gtx, a.text.Server, server, colorText)
 					})
 				}),
-				layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(16)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					gtx.Constraints.Max.X = gtx.Dp(280)
-					return a.meta(gtx, a.text.Protocol, proto)
+					gtx.Constraints.Max.X = gtx.Dp(260)
+					return a.meta(gtx, a.text.Protocol, proto, colorMuted)
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -251,17 +252,27 @@ func (a *App) top(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
 
 func (a *App) statusLine(gtx layout.Context, phase panel.Phase) layout.Dimensions {
 	label, dot := a.phaseText(phase)
-	return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return a.dot(gtx, dot)
-		}),
-		layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Body2(a.theme, a.text.Status+"   "+label)
-			l.Color = colorText
-			return l.Layout(gtx)
-		}),
+	macro := op.Record(gtx.Ops)
+	dims := layout.Inset{Left: unit.Dp(10), Right: unit.Dp(12), Top: unit.Dp(6), Bottom: unit.Dp(6)}.Layout(gtx,
+		func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return a.dot(gtx, dot)
+				}),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					l := material.Body2(a.theme, label)
+					l.Color = dot
+					return l.Layout(gtx)
+				}),
+			)
+		},
 	)
+	call := macro.Stop()
+	defer clip.UniformRRect(image.Rectangle{Max: dims.Size}, gtx.Dp(14)).Push(gtx.Ops).Pop()
+	paint.Fill(gtx.Ops, colorCard)
+	call.Add(gtx.Ops)
+	return dims
 }
 
 func (a *App) phaseText(phase panel.Phase) (string, color.NRGBA) {
@@ -287,14 +298,25 @@ func (a *App) dot(gtx layout.Context, c color.NRGBA) layout.Dimensions {
 	return layout.Dimensions{Size: image.Pt(size, size)}
 }
 
-func (a *App) meta(gtx layout.Context, k, v string) layout.Dimensions {
+func (a *App) meta(gtx layout.Context, k, v string, value color.NRGBA) layout.Dimensions {
 	if v == "" {
 		v = "—"
 	}
-	l := material.Label(a.theme, unit.Sp(14), k+"   "+v)
-	l.Color = colorMuted
-	l.MaxLines = 1
-	return l.Layout(gtx)
+	return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			l := material.Caption(a.theme, k)
+			l.Color = colorMuted
+			l.MaxLines = 1
+			return l.Layout(gtx)
+		}),
+		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			l := material.Body2(a.theme, v)
+			l.Color = value
+			l.MaxLines = 1
+			return l.Layout(gtx)
+		}),
+	)
 }
 
 func (a *App) actions(gtx layout.Context) layout.Dimensions {
@@ -304,7 +326,10 @@ func (a *App) actions(gtx layout.Context) layout.Dimensions {
 		}),
 		layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return a.button(gtx, &a.disconnect, a.text.Disconnect, colorRed, a.model.CanDisconnect())
+			if a.model.CanDisconnect() {
+				return a.button(gtx, &a.disconnect, a.text.Disconnect, colorRed, true)
+			}
+			return a.quietButton(gtx, &a.disconnect, a.text.Disconnect)
 		}),
 	)
 }
@@ -320,6 +345,28 @@ func (a *App) button(gtx layout.Context, click *widget.Clickable, label string, 
 		b.Color = colorMuted
 	}
 	return b.Layout(gtx)
+}
+
+// quietButton is the secondary action: a hairline, not a second filled button.
+func (a *App) quietButton(gtx layout.Context, click *widget.Clickable, label string) layout.Dimensions {
+	return click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		macro := op.Record(gtx.Ops)
+		l := material.Body2(a.theme, label)
+		l.Color = colorMuted
+		dims := layout.Inset{Top: unit.Dp(8), Bottom: unit.Dp(8), Left: unit.Dp(14), Right: unit.Dp(14)}.Layout(gtx, l.Layout)
+		call := macro.Stop()
+		r := gtx.Dp(8)
+		defer clip.UniformRRect(image.Rectangle{Max: dims.Size}, r).Push(gtx.Ops).Pop()
+		paint.Fill(gtx.Ops, colorEdge)
+		inner := clip.UniformRRect(image.Rectangle{
+			Min: image.Pt(gtx.Dp(1), gtx.Dp(1)),
+			Max: image.Pt(dims.Size.X-gtx.Dp(1), dims.Size.Y-gtx.Dp(1)),
+		}, r-gtx.Dp(1)).Push(gtx.Ops)
+		paint.Fill(gtx.Ops, colorPanel)
+		inner.Pop()
+		call.Add(gtx.Ops)
+		return dims
+	})
 }
 
 func (a *App) rule(gtx layout.Context) layout.Dimensions {

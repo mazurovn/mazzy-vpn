@@ -11,6 +11,7 @@ import (
 	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
+	"gioui.org/text"
 	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
@@ -120,43 +121,55 @@ func (a *App) chrome(gtx layout.Context) layout.Dimensions {
 	for _, w := range menuW {
 		total += w
 	}
-	start := gtx.Constraints.Max.X - total
-	if start < 0 {
-		start = 0
-	}
+	pad := gtx.Dp(16)
 	if a.menuOpen >= 0 && a.menuOpen < len(menuW) {
-		px := start
+		px := gtx.Constraints.Max.X - pad - total
+		if px < pad {
+			px = pad
+		}
 		for i := 0; i < a.menuOpen; i++ {
 			px += menuW[i]
 		}
-		a.popupAt = image.Pt(px, gtx.Dp(36))
+		a.popupAt = image.Pt(px, 0)
 	}
-	dims := layout.Flex{Alignment: layout.End}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			gtx.Constraints.Min.X = 0
-			return a.tabTitle(gtx, 0, a.text.PanelTab)
-		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			gtx.Constraints.Min.X = 0
-			return a.tabTitle(gtx, 1, a.text.Journal)
-		}),
-		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, gtx.Dp(8))}
-		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			kids := make([]layout.FlexChild, len(groups))
-			for i, g := range groups {
-				i, title := i, g.Title
-				kids[i] = layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+	macro := op.Record(gtx.Ops)
+	dims := layout.Inset{Left: unit.Dp(16), Right: unit.Dp(16), Top: unit.Dp(8), Bottom: unit.Dp(6)}.Layout(gtx,
+		func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Alignment: layout.End}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					gtx.Constraints.Min.X = 0
-					gtx.Constraints.Max.X = menuW[i]
-					return a.menuTitle(gtx, i, title)
-				})
-			}
-			return layout.Flex{}.Layout(gtx, kids...)
-		}),
+					return a.tabTitle(gtx, 0, a.text.PanelTab)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					gtx.Constraints.Min.X = 0
+					return a.tabTitle(gtx, 1, a.text.Journal)
+				}),
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+					return layout.Dimensions{Size: image.Pt(gtx.Constraints.Max.X, gtx.Dp(8))}
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					kids := make([]layout.FlexChild, len(groups))
+					for i, g := range groups {
+						i, title := i, g.Title
+						kids[i] = layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							gtx.Constraints.Min.X = 0
+							gtx.Constraints.Max.X = menuW[i]
+							return a.menuTitle(gtx, i, title)
+						})
+					}
+					return layout.Flex{Alignment: layout.Middle}.Layout(gtx, kids...)
+				}),
+			)
+		},
 	)
+	call := macro.Stop()
 	a.barH = dims.Size.Y
+	if a.menuOpen >= 0 {
+		a.popupAt.Y = dims.Size.Y
+	}
+	defer clip.Rect{Max: dims.Size}.Push(gtx.Ops).Pop()
+	paint.Fill(gtx.Ops, colorPanel)
+	call.Add(gtx.Ops)
 	return dims
 }
 
@@ -270,8 +283,16 @@ func (a *App) paintMenu(gtx layout.Context, snap panel.Snapshot, width int) layo
 	call := macro.Stop()
 	r := gtx.Dp(10)
 	defer clip.RRect{Rect: image.Rectangle{Max: dims.Size}, NE: r, NW: r, SE: r, SW: r}.Push(gtx.Ops).Pop()
+	paint.ColorOp{Color: colorEdge}.Add(gtx.Ops)
+	paint.PaintOp{}.Add(gtx.Ops)
+	inset := gtx.Dp(1)
+	inner := clip.RRect{
+		Rect: image.Rectangle{Min: image.Pt(inset, inset), Max: image.Pt(dims.Size.X-inset, dims.Size.Y-inset)},
+		NE:   r, NW: r, SE: r, SW: r,
+	}.Push(gtx.Ops)
 	paint.ColorOp{Color: colorMenu}.Add(gtx.Ops)
 	paint.PaintOp{}.Add(gtx.Ops)
+	inner.Pop()
 	call.Add(gtx.Ops)
 	return dims
 }
@@ -282,14 +303,8 @@ func (a *App) menuBody(gtx layout.Context, snap panel.Snapshot, live bool) layou
 		return layout.Dimensions{}
 	}
 	open := groups[a.menuOpen]
-	return layout.UniformInset(unit.Dp(12)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		kids := make([]layout.FlexChild, 0, len(open.Index)+2)
-		title := open.Title
-		kids = append(kids, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.H6(a.theme, title)
-			l.Color = colorText
-			return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
-		}))
+	return layout.UniformInset(unit.Dp(8)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		kids := make([]layout.FlexChild, 0, len(open.Index)+1)
 		for _, idx := range open.Index {
 			idx := idx
 			kids = append(kids, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -356,13 +371,15 @@ func (a *App) menuRowVisual(gtx layout.Context, snap panel.Snapshot, i int) layo
 				c := material.Caption(a.theme, reason)
 				c.Color = colorMuted
 				c.MaxLines = 0
+				c.WrapPolicy = text.WrapWords
 				return c.Layout(gtx)
 			}),
 		)
 	})
 	callOp := macro.Stop()
 	if a.cmdFocus && i == a.cmdIndex {
-		defer clip.Rect{Max: dims.Size}.Push(gtx.Ops).Pop()
+		r := gtx.Dp(6)
+		defer clip.UniformRRect(image.Rectangle{Max: dims.Size}, r).Push(gtx.Ops).Pop()
 		paint.Fill(gtx.Ops, colorSelect)
 	}
 	callOp.Add(gtx.Ops)

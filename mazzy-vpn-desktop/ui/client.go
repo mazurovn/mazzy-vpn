@@ -11,6 +11,7 @@ import (
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
+	"gioui.org/op/paint"
 	"gioui.org/text"
 	"gioui.org/unit"
 	"gioui.org/widget/material"
@@ -24,39 +25,44 @@ func (a *App) client(gtx layout.Context, snap panel.Snapshot) layout.Dimensions 
 }
 
 func (a *App) page(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
-	return layout.Inset{Left: unit.Dp(14), Right: unit.Dp(14), Top: unit.Dp(8), Bottom: unit.Dp(10)}.Layout(gtx,
-		func(gtx layout.Context) layout.Dimensions {
-			dims := layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return a.chrome(gtx)
-				}),
-				layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
-				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+	dims := layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return a.chrome(gtx)
+		}),
+		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return a.rule(gtx)
+		}),
+		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Left: unit.Dp(16), Right: unit.Dp(16), Top: unit.Dp(16), Bottom: unit.Dp(16)}.Layout(gtx,
+				func(gtx layout.Context) layout.Dimensions {
 					if a.tab == 1 {
 						return a.journal(gtx, snap)
 					}
-					return layout.Flex{}.Layout(gtx,
+					return layout.Flex{Alignment: layout.Start}.Layout(gtx,
 						layout.Flexed(2, func(gtx layout.Context) layout.Dimensions {
 							gtx.Constraints.Min.X = gtx.Dp(420)
 							return a.serverCard(gtx, snap)
 						}),
-						layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
+						layout.Rigid(layout.Spacer{Width: unit.Dp(20)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							w := summaryWidth(gtx)
+							if w > gtx.Constraints.Max.X {
+								w = gtx.Constraints.Max.X
+							}
 							gtx.Constraints.Min.X = w
 							gtx.Constraints.Max.X = w
 							gtx.Constraints.Min.Y = 0
 							return a.dashboard(gtx, snap)
 						}),
 					)
-				}),
+				},
 			)
-			if a.menuOpen >= 0 {
-				a.overlay(gtx, snap, dims.Size)
-			}
-			return dims
-		},
+		}),
 	)
+	if a.menuOpen >= 0 {
+		a.overlay(gtx, snap, dims.Size)
+	}
+	return dims
 }
 
 // overlay draws the open submenu as a solid layer above the page.
@@ -74,19 +80,20 @@ func (a *App) overlay(gtx layout.Context, snap panel.Snapshot, size image.Point)
 	}
 	// The menu hangs over the profile list and stops before the summary,
 	// so the sentence stays whole while a menu is open.
-	room := size.X - summaryWidth(gtx) - gtx.Dp(16)
-	if room < gtx.Dp(280) {
-		room = gtx.Dp(280)
+	inset := gtx.Dp(16)
+	summaryLeft := size.X - inset - summaryWidth(gtx)
+	right := summaryLeft - gtx.Dp(16)
+	if right < gtx.Dp(280) {
+		right = gtx.Dp(280)
 	}
-	width := a.menuContentWidth(gtx, snap, room)
+	width := a.menuContentWidth(gtx, snap, right)
 	height := a.menuHeight(gtx, snap, width)
-	right := size.X - summaryWidth(gtx) - gtx.Dp(12)
 	x := a.popupAt.X
 	if x+width > right {
 		x = right - width
 	}
-	if x < 0 {
-		x = 0
+	if x < inset {
+		x = inset
 	}
 	y := a.popupAt.Y
 	if y+height > size.Y {
@@ -107,24 +114,12 @@ func (a *App) serverCard(gtx layout.Context, snap panel.Snapshot) layout.Dimensi
 	return card(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				title := a.text.Profiles
-				q := a.query
-				qColor := colorText
-				if q == "" {
-					q = a.text.Search
-					qColor = colorMuted
-				} else {
-					title += "  ·  " + q
-					q = a.text.Filter + "  ·  ↑↓  Enter"
-				}
-				l := material.H6(a.theme, title)
+				l := material.H6(a.theme, a.text.Profiles)
 				l.Color = colorText
-				hint := material.Caption(a.theme, q)
-				hint.Color = qColor
 				return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 					layout.Rigid(l.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return layout.Inset{Top: unit.Dp(2), Bottom: unit.Dp(6)}.Layout(gtx, hint.Layout)
+						return layout.Inset{Top: unit.Dp(10), Bottom: unit.Dp(10)}.Layout(gtx, a.searchBox)
 					}),
 				)
 			}),
@@ -145,10 +140,8 @@ func (a *App) serverCard(gtx layout.Context, snap panel.Snapshot) layout.Dimensi
 func (a *App) serverRow(gtx layout.Context, snap panel.Snapshot, i int) layout.Dimensions {
 	p := snap.Profiles[i]
 	return a.rows[i].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		if i == snap.Selected {
-			fill(gtx, colorSelect)
-		}
-		return layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx,
+		macro := op.Record(gtx.Ops)
+		dims := layout.Inset{Top: unit.Dp(9), Bottom: unit.Dp(9), Left: unit.Dp(12), Right: unit.Dp(10)}.Layout(gtx,
 			func(gtx layout.Context) layout.Dimensions {
 				port := ""
 				if n := endpointPort(p.Endpoint); n != "" {
@@ -162,18 +155,70 @@ func (a *App) serverRow(gtx layout.Context, snap panel.Snapshot, i int) layout.D
 						l.Truncator = "…"
 						return l.Layout(gtx)
 					}),
-					layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
+					layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						gtx.Constraints.Min.X = gtx.Dp(72)
 						l := material.Label(a.theme, unit.Sp(13), port)
-						l.Color = colorAccent
+						l.Color = colorMuted
 						l.MaxLines = 1
 						return l.Layout(gtx)
 					}),
 				)
 			},
 		)
+		call := macro.Stop()
+		if i == snap.Selected {
+			stack := clip.UniformRRect(image.Rectangle{Max: dims.Size}, gtx.Dp(6)).Push(gtx.Ops)
+			paint.Fill(gtx.Ops, colorSelect)
+			stack.Pop()
+			mark := clip.UniformRRect(image.Rectangle{
+				Min: image.Pt(0, gtx.Dp(8)),
+				Max: image.Pt(gtx.Dp(3), dims.Size.Y-gtx.Dp(8)),
+			}, gtx.Dp(2)).Push(gtx.Ops)
+			paint.Fill(gtx.Ops, colorAccent)
+			mark.Pop()
+		}
+		call.Add(gtx.Ops)
+		return dims
 	})
+}
+
+func (a *App) searchBox(gtx layout.Context) layout.Dimensions {
+	shown := a.query
+	col := colorText
+	tail := ""
+	if shown == "" {
+		shown = a.text.Search
+		col = colorMuted
+	} else {
+		tail = "↑↓  Enter"
+	}
+	macro := op.Record(gtx.Ops)
+	dims := layout.Inset{Left: unit.Dp(12), Right: unit.Dp(12), Top: unit.Dp(8), Bottom: unit.Dp(8)}.Layout(gtx,
+		func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+					l := material.Body2(a.theme, shown)
+					l.Color = col
+					l.MaxLines = 1
+					return l.Layout(gtx)
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					if tail == "" {
+						return layout.Dimensions{}
+					}
+					l := material.Caption(a.theme, tail)
+					l.Color = colorMuted
+					return l.Layout(gtx)
+				}),
+			)
+		},
+	)
+	call := macro.Stop()
+	defer clip.UniformRRect(image.Rectangle{Max: dims.Size}, gtx.Dp(8)).Push(gtx.Ops).Pop()
+	paint.Fill(gtx.Ops, colorBG)
+	call.Add(gtx.Ops)
+	return dims
 }
 
 type chip struct {
@@ -202,7 +247,7 @@ func visibleState(view monitor.View, link, handshake, route, egress, clean, serv
 }
 
 func summaryWidth(gtx layout.Context) int {
-	return gtx.Dp(560)
+	return gtx.Dp(420)
 }
 
 func (a *App) dashboard(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
@@ -210,10 +255,23 @@ func (a *App) dashboard(gtx layout.Context, snap panel.Snapshot) layout.Dimensio
 	strip := a.compact(view)
 	points := measuredPoints(view.Points)
 	gtx.Constraints.Min.Y = 0
+	head := layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		l := material.H6(a.theme, a.text.Summary)
+		l.Color = colorText
+		return l.Layout(gtx)
+	})
+	gap := layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout)
 	if len(strip) == 0 && len(points) == 0 {
-		return a.sentence(gtx, a.dashLine(snap))
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+			head,
+			gap,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return a.sentence(gtx, a.dashLine(snap))
+			}),
+		)
 	}
 	var kids []layout.FlexChild
+	kids = append(kids, head, gap)
 	if len(strip) > 0 {
 		kids = append(kids, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 			return a.strip(gtx, strip)
