@@ -53,10 +53,9 @@ func (a *App) onKey(snap panel.Snapshot, e key.Event) {
 		a.query = ""
 		a.keepSelection(snap)
 	case key.NameLeftArrow:
-		a.cmdFocus = false
+		a.moveCmd(snap, -1, true)
 	case key.NameRightArrow:
-		a.cmdFocus = true
-		a.revealCmd()
+		a.moveCmd(snap, 1, true)
 	case key.NameUpArrow:
 		a.move(snap, -1)
 	case key.NameDownArrow:
@@ -77,21 +76,42 @@ func (a *App) onKey(snap panel.Snapshot, e key.Event) {
 	}
 }
 
-func (a *App) revealCmd() {
-	first := a.cmdIndex - 3
-	if first < 0 {
-		first = 0
+func (a *App) moveCmd(snap panel.Snapshot, delta int, horizontal bool) {
+	if !a.cmdFocus {
+		if delta > 0 {
+			a.cmdFocus = true
+		}
+		return
 	}
-	a.actList.Position.First = first
+	if len(a.cmds) == 0 {
+		return
+	}
+	cols := a.cmdCols
+	if cols < 1 {
+		cols = 1
+	}
+	if horizontal && delta < 0 && a.cmdIndex%cols == 0 {
+		a.cmdFocus = false
+		return
+	}
+	step := delta
+	if !horizontal {
+		step = delta * cols
+	}
+	next := a.cmdIndex + step
+	if next < 0 {
+		next = 0
+	}
+	if next >= len(a.cmds) {
+		next = len(a.cmds) - 1
+	}
+	a.cmdIndex = next
+	_ = snap
 }
 
 func (a *App) move(snap panel.Snapshot, delta int) {
 	if a.cmdFocus {
-		if len(a.cmds) == 0 {
-			return
-		}
-		a.cmdIndex = (a.cmdIndex + delta + len(a.cmds)) % len(a.cmds)
-		a.revealCmd()
+		a.moveCmd(snap, delta, false)
 		return
 	}
 	ids := matching(snap.Profiles, a.query)

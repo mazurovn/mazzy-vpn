@@ -161,10 +161,11 @@ for the full command reference in all six languages.
 ## Linux desktop
 
 [`mazzy-vpn-desktop/`](mazzy-vpn-desktop/) is the gio window from ADR-0004. The
-top bar is the name, status, server, protocol, connect, and disconnect. Under
-it: a search, the server list, and the full CLI menu (arrows move the focused
-column, Enter runs it). A light is drawn only after a real check. The log
-scrolls. The window copy is Russian unless `MAZZY_LANG` names another catalog.
+top bar is the name, status, server, protocol, connect, and disconnect. The
+server list is the left rail. The dashboard names the selected server, its
+protocol and port, and the real connection state. The full CLI menu is a grid
+under that, not a second column. The log opens only after a command prints
+something. The window copy is Russian unless `MAZZY_LANG` names another catalog.
 `mazzy-vpn egress` is the check behind the egress, cleanliness, and
 Antigravity lights. Build the window with `CGO_ENABLED=1` (a C compiler plus
 X11/Wayland headers). The window itself stays unprivileged. Connect and the

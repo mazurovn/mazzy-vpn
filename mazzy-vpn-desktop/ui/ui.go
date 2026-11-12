@@ -58,6 +58,7 @@ type App struct {
 	query      string
 	cmdFocus   bool
 	cmdIndex   int
+	cmdCols    int
 	refocus    bool
 	logSeen    int
 }
@@ -79,6 +80,7 @@ func New(model *panel.Model) *App {
 		logList:  layout.List{Axis: layout.Vertical},
 		pathEdit: widget.Editor{SingleLine: true, Submit: true},
 		refocus:  true,
+		cmdCols:  5,
 	}
 }
 
