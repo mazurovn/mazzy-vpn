@@ -10,7 +10,6 @@ import (
 	"image"
 	"image/color"
 	"net"
-	"os"
 
 	"gioui.org/app"
 	"gioui.org/layout"
@@ -21,7 +20,9 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 
+	"github.com/mazurovn/mazzy-vpn/desktop/menu"
 	"github.com/mazurovn/mazzy-vpn/desktop/panel"
+	"github.com/mazurovn/mazzy-vpn/desktop/session"
 )
 
 var (
@@ -41,12 +42,19 @@ var (
 // App is the window state. Clickables live across frames.
 type App struct {
 	model      *panel.Model
+	sess       *session.Session
 	text       Text
 	theme      *material.Theme
 	connect    widget.Clickable
 	disconnect widget.Clickable
 	rows       []widget.Clickable
 	list       layout.List
+	cmds       []menu.Action
+	actBtn     []widget.Clickable
+	actList    layout.List
+	logList    layout.List
+	pathEdit   widget.Editor
+	armed      string
 }
 
 // New builds the window state for model.
@@ -57,16 +65,22 @@ func New(model *panel.Model) *App {
 	th.Palette.ContrastBg = colorCyan
 	th.Palette.ContrastFg = colorBG
 	return &App{
-		model: model,
-		text:  Phrases(),
-		theme: th,
-		list:  layout.List{Axis: layout.Vertical},
+		model:    model,
+		text:     Phrases(),
+		theme:    th,
+		list:     layout.List{Axis: layout.Vertical},
+		cmds:     menu.Actions(),
+		actList:  layout.List{Axis: layout.Vertical},
+		logList:  layout.List{Axis: layout.Vertical},
+		pathEdit: widget.Editor{SingleLine: true, Submit: true},
 	}
 }
 
-// Run draws until the window closes.
-func Run(w *app.Window, model *panel.Model) error {
+// Run draws until the window closes. sess supplies the CLI actions and the
+// live traffic lights. It may be nil in tests that only draw a snapshot.
+func Run(w *app.Window, model *panel.Model, sess *session.Session) error {
 	a := New(model)
+	a.sess = sess
 	var ops op.Ops
 	for {
 		switch e := w.Event().(type) {
@@ -97,6 +111,14 @@ func (a *App) frame(gtx layout.Context) {
 		a.model.Disconnect(context.Background())
 		snap = a.model.View()
 	}
+	a.ensureActs(len(a.cmds))
+	if a.sess != nil {
+		for i := range a.cmds {
+			if a.actBtn[i].Clicked(gtx) {
+				a.activate(snap, i)
+			}
+		}
+	}
 
 	paint.Fill(gtx.Ops, colorBG)
 	layout.Flex{Axis: layout.Vertical}.Layout(gtx,
@@ -113,8 +135,8 @@ func (a *App) frame(gtx layout.Context) {
 }
 
 func (a *App) top(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
-	gtx.Constraints.Min.Y = gtx.Dp(92)
-	gtx.Constraints.Max.Y = gtx.Dp(92)
+	gtx.Constraints.Min.Y = gtx.Dp(108)
+	gtx.Constraints.Max.Y = gtx.Dp(108)
 	fill(gtx, colorPanel)
 	return layout.Inset{Left: unit.Dp(18), Right: unit.Dp(18), Top: unit.Dp(12), Bottom: unit.Dp(12)}.Layout(gtx,
 		func(gtx layout.Context) layout.Dimensions {
@@ -125,6 +147,10 @@ func (a *App) top(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					return a.statusCluster(gtx, snap)
 				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return a.lightRow(gtx, a.board())
+				}),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(16)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return a.actions(gtx)
 				}),
@@ -253,25 +279,28 @@ func (a *App) rule(gtx layout.Context) layout.Dimensions {
 }
 
 func (a *App) body(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
-	return layout.Inset{Left: unit.Dp(18), Right: unit.Dp(18), Top: unit.Dp(16), Bottom: unit.Dp(16)}.Layout(gtx,
+	return layout.Inset{Left: unit.Dp(14), Right: unit.Dp(14), Top: unit.Dp(12), Bottom: unit.Dp(12)}.Layout(gtx,
 		func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					if os.Geteuid() == 0 {
-						return layout.Dimensions{}
-					}
-					l := material.Body2(a.theme, a.text.RootHint)
-					l.Color = colorYellow
-					return layout.Inset{Bottom: unit.Dp(12)}.Layout(gtx, l.Layout)
+					l := material.Caption(a.theme, a.text.RootHint)
+					l.Color = colorMuted
+					return layout.Inset{Bottom: unit.Dp(8)}.Layout(gtx, l.Layout)
 				}),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{}.Layout(gtx,
-						layout.Flexed(1.1, func(gtx layout.Context) layout.Dimensions {
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							gtx.Constraints.Min.X = gtx.Dp(250)
+							gtx.Constraints.Max.X = gtx.Dp(280)
+							return a.actionCard(gtx, snap)
+						}),
+						layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
+						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 							return a.profileCard(gtx, snap)
 						}),
-						layout.Rigid(layout.Spacer{Width: unit.Dp(14)}.Layout),
-						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-							return a.detailCard(gtx, snap)
+						layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
+						layout.Flexed(1.15, func(gtx layout.Context) layout.Dimensions {
+							return a.dashboard(gtx, snap)
 						}),
 					)
 				}),
@@ -318,43 +347,6 @@ func (a *App) profileRow(gtx layout.Context, snap panel.Snapshot, i int) layout.
 	})
 }
 
-func (a *App) detailCard(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
-	return card(gtx, func(gtx layout.Context) layout.Dimensions {
-		server, protocol, transport := display(snap)
-		detail := snap.Detail
-		if detail == "" {
-			detail = a.text.Corporate
-		}
-		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				l := material.H6(a.theme, a.text.Detail)
-				l.Color = colorText
-				return l.Layout(gtx)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.Inset{Top: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return a.meta(gtx, a.text.Server, server)
-				})
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				value := protocol
-				if transport != "" {
-					if value != "" {
-						value += "  ·  "
-					}
-					value += transport
-				}
-				return a.meta(gtx, a.text.Protocol, value)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				l := material.Body2(a.theme, detail)
-				l.Color = colorMuted
-				return layout.Inset{Top: unit.Dp(16)}.Layout(gtx, l.Layout)
-			}),
-		)
-	})
-}
-
 func display(snap panel.Snapshot) (server, protocol, transport string) {
 	server, protocol, transport = snap.Server, snap.Protocol, snap.Transport
 	if p, ok := snap.SelectedProfile(); ok {
@@ -379,6 +371,15 @@ func endpointPort(endpoint string) string {
 		return ""
 	}
 	return port
+}
+
+func (a *App) ensureActs(n int) {
+	if len(a.actBtn) >= n {
+		return
+	}
+	next := make([]widget.Clickable, n)
+	copy(next, a.actBtn)
+	a.actBtn = next
 }
 
 func (a *App) ensureRows(n int) {

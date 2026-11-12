@@ -161,15 +161,18 @@ for the full command reference in all six languages.
 ## Linux desktop
 
 [`mazzy-vpn-desktop/`](mazzy-vpn-desktop/) is the gio window from ADR-0004. The
-top panel connects, disconnects, and shows status, server, and protocol for the
-same embedded AmneziaWG/WireGuard engine. Build it with `CGO_ENABLED=1` (a C
-compiler plus X11/Wayland headers). Bringing the tunnel up still needs root,
-same as the CLI.
+top bar connects, disconnects, and shows status, server, and protocol. The
+rest of the window is the CLI menu: pick a server, run a command, and read
+the traffic lights for the live tunnel. Build it with `CGO_ENABLED=1` (a C
+compiler plus X11/Wayland headers). The window itself stays unprivileged.
+Connect and the other root commands run `mazzy-vpn` through pkexec, or through
+sudo when there is no PolicyKit agent — the same split the CLI menu and the
+existing desktop already use.
 
 ```bash
 cd mazzy-vpn-desktop
 CGO_ENABLED=1 go build -o mazzy-vpn-desktop ./cmd/mazzy-vpn-desktop
-sudo ./mazzy-vpn-desktop
+./mazzy-vpn-desktop
 ```
 
 On a network that drops WireGuard's UDP port, connect tries the configured

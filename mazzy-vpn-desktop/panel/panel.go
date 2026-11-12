@@ -91,7 +91,7 @@ func (m *Model) CanDisconnect() bool {
 	if m.busy {
 		return false
 	}
-	return m.snap.Phase == PhaseConnected || m.snap.Phase == PhaseError
+	return m.snap.Phase == PhaseConnected || m.snap.Phase == PhaseError || m.snap.Phase == PhaseConnecting
 }
 
 // Select highlights a profile. Out-of-range values are ignored.

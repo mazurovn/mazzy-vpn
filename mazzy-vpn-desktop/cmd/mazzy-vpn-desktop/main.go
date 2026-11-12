@@ -10,6 +10,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"time"
 
 	"gioui.org/app"
 	"gioui.org/unit"
@@ -26,14 +27,21 @@ func main() {
 		w := new(app.Window)
 		w.Option(
 			app.Title("Mazzy VPN"),
-			app.Size(unit.Dp(980), unit.Dp(680)),
-			app.MinSize(unit.Dp(760), unit.Dp(520)),
+			app.Size(unit.Dp(1180), unit.Dp(760)),
+			app.MinSize(unit.Dp(960), unit.Dp(640)),
 		)
 		model.OnChange = func() { w.Invalidate() }
+		sess.SetFire(func() { model.Reload(context.Background()) })
 		model.Reload(context.Background())
-		err := ui.Run(w, model)
-		// The userspace tunnel lives in this process. Closing the window
-		// drops only the connection this window started.
+		go func() {
+			tick := time.NewTicker(4 * time.Second)
+			defer tick.Stop()
+			for range tick.C {
+				model.Reload(context.Background())
+			}
+		}()
+		err := ui.Run(w, model, sess)
+		// Closing the window stops only a CLI process this window started.
 		sess.Close(context.Background())
 		if err != nil {
 			log.Fatal(err)
