@@ -44,8 +44,8 @@ jobs:
       - name: Set up Rust
         shell: bash
         run: |
-          rustup toolchain install 1.88.0 --profile minimal --component clippy
-          rustup default 1.88.0
+          rustup toolchain install 1.90.0 --profile minimal --component clippy
+          rustup default 1.90.0
 
       - name: Install locked frontend tooling
         working-directory: desktop
@@ -63,7 +63,7 @@ jobs:
       - name: Audit Rust advisories
         uses: EmbarkStudios/cargo-deny-action@b66acf5e9fe20f8aba065be86778a8a4c846f902 # v2
         with:
-          rust-version: "1.88.0"
+          rust-version: "1.90.0"
           manifest-path: ./desktop/src-tauri/Cargo.toml
           command: check advisories
           arguments: --all-features
@@ -122,8 +122,8 @@ jobs:
       - name: Set up Rust
         shell: bash
         run: |
-          rustup toolchain install 1.88.0 --profile minimal --component clippy
-          rustup default 1.88.0
+          rustup toolchain install 1.90.0 --profile minimal --component clippy
+          rustup default 1.90.0
 
       - name: Install locked frontend tooling
         working-directory: desktop
@@ -141,7 +141,7 @@ jobs:
       - name: Audit Rust advisories
         uses: EmbarkStudios/cargo-deny-action@b66acf5e9fe20f8aba065be86778a8a4c846f902 # v2
         with:
-          rust-version: "1.88.0"
+          rust-version: "1.90.0"
           manifest-path: ./desktop/src-tauri/Cargo.toml
           command: check advisories
           arguments: --all-features

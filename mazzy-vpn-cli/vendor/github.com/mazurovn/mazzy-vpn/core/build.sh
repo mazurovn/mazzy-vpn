@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Build mazzy-core with a pinned Go toolchain (backlog C1-1a).
 #
-# amneziawg-go/v3 requires Go >= 1.25. The default `go` on PATH may be older
-# (e.g. 1.22), which fails silently. This script selects a 1.25+ toolchain.
+# amneziawg-go/v3 requires Go >= 1.25. x/net v0.60 and the patched stdlib
+# require Go >= 1.26. The default `go` on PATH may be older (e.g. 1.22).
 set -euo pipefail
 
 need_major=1
-need_minor=25
+need_minor=26
 
 pick_go() {
-    # Prefer an explicit MAZZY_GO, then a known 1.25 install, then PATH.
+    # Prefer an explicit MAZZY_GO, then a known install, then PATH.
     local candidates=("${MAZZY_GO:-}" /usr/local/go/bin/go)
     candidates+=("$(command -v go 2>/dev/null || true)")
     for g in "${candidates[@]}"; do
