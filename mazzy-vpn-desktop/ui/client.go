@@ -13,35 +13,26 @@ import (
 )
 
 func (a *App) client(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
-	return layout.Inset{Left: unit.Dp(16), Right: unit.Dp(16), Top: unit.Dp(12), Bottom: unit.Dp(12)}.Layout(gtx,
+	return layout.Inset{Left: unit.Dp(14), Right: unit.Dp(14), Top: unit.Dp(10), Bottom: unit.Dp(10)}.Layout(gtx,
 		func(gtx layout.Context) layout.Dimensions {
 			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					l := material.Caption(a.theme, a.text.RootHint)
-					l.Color = colorMuted
-					return layout.Inset{Bottom: unit.Dp(8)}.Layout(gtx, l.Layout)
-				}),
-				layout.Flexed(1.15, func(gtx layout.Context) layout.Dimensions {
+				layout.Flexed(1.25, func(gtx layout.Context) layout.Dimensions {
 					return layout.Flex{}.Layout(gtx,
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							gtx.Constraints.Min.X = gtx.Dp(320)
-							gtx.Constraints.Max.X = gtx.Dp(360)
+						layout.Flexed(1.2, func(gtx layout.Context) layout.Dimensions {
 							return a.serverCard(gtx, snap)
 						}),
-						layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
-						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-							if a.palette {
-								return a.actionCard(gtx, snap)
-							}
-							return a.dashColumn(gtx, snap)
+						layout.Rigid(layout.Spacer{Width: unit.Dp(10)}.Layout),
+						layout.Flexed(0.8, func(gtx layout.Context) layout.Dimensions {
+							return a.actionCard(gtx, snap)
 						}),
 					)
 				}),
-				layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout),
-				layout.Flexed(0.85, func(gtx layout.Context) layout.Dimensions {
-					return a.logClick.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-						return a.logCard(gtx, snap)
-					})
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return a.stateStrip(gtx)
+				}),
+				layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
+				layout.Flexed(0.7, func(gtx layout.Context) layout.Dimensions {
+					return a.logCard(gtx, snap)
 				}),
 			)
 		},
@@ -54,17 +45,25 @@ func (a *App) serverCard(gtx layout.Context, snap panel.Snapshot) layout.Dimensi
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				title := a.text.Profiles
-				if a.query != "" {
-					title += "  ·  " + a.query
+				q := a.query
+				qColor := colorText
+				if q == "" {
+					q = a.text.Search
+					qColor = colorMuted
+				} else {
+					title += "  ·  " + q
+					q = a.text.Filter + "  ·  ↑↓  Enter"
 				}
 				l := material.H6(a.theme, title)
 				l.Color = colorText
-				return l.Layout(gtx)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				l := material.Caption(a.theme, a.text.Filter+"  ·  ↑↓  Enter  Esc")
-				l.Color = colorMuted
-				return layout.Inset{Top: unit.Dp(2), Bottom: unit.Dp(8)}.Layout(gtx, l.Layout)
+				hint := material.Caption(a.theme, q)
+				hint.Color = qColor
+				return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+					layout.Rigid(l.Layout),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						return layout.Inset{Top: unit.Dp(2), Bottom: unit.Dp(6)}.Layout(gtx, hint.Layout)
+					}),
+				)
 			}),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				if len(ids) == 0 {
@@ -74,11 +73,6 @@ func (a *App) serverCard(gtx layout.Context, snap panel.Snapshot) layout.Dimensi
 				}
 				return a.list.Layout(gtx, len(ids), func(gtx layout.Context, i int) layout.Dimensions {
 					return a.serverRow(gtx, snap, ids[i])
-				})
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.Inset{Top: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return a.button(gtx, &a.cmdToggle, a.text.Commands, colorCyan, true)
 				})
 			}),
 		)
@@ -91,53 +85,107 @@ func (a *App) serverRow(gtx layout.Context, snap panel.Snapshot, i int) layout.D
 		if i == snap.Selected {
 			fill(gtx, colorSelect)
 		}
-		label := p.Name + "    " + p.Protocol
-		if port := endpointPort(p.Endpoint); port != "" {
-			label += "    udp/" + port
-		}
-		l := material.Body1(a.theme, label)
-		l.Color = colorText
-		return layout.Inset{Top: unit.Dp(7), Bottom: unit.Dp(7), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, l.Layout)
+		return layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx,
+			func(gtx layout.Context) layout.Dimensions {
+				port := ""
+				if n := endpointPort(p.Endpoint); n != "" {
+					port = "udp/" + n
+				}
+				return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+						l := material.Label(a.theme, unit.Sp(14), p.Name)
+						l.Color = colorText
+						l.MaxLines = 1
+						return l.Layout(gtx)
+					}),
+					layout.Rigid(layout.Spacer{Width: unit.Dp(10)}.Layout),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						l := material.Label(a.theme, unit.Sp(13), p.Protocol)
+						l.Color = colorMuted
+						l.MaxLines = 1
+						return l.Layout(gtx)
+					}),
+					layout.Rigid(layout.Spacer{Width: unit.Dp(10)}.Layout),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						gtx.Constraints.Min.X = gtx.Dp(72)
+						l := material.Label(a.theme, unit.Sp(13), port)
+						l.Color = colorCyan
+						l.MaxLines = 1
+						return l.Layout(gtx)
+					}),
+				)
+			},
+		)
 	})
 }
 
-func (a *App) dashColumn(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
-	view := a.board()
-	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return a.lightCards(gtx, view)
-		}),
-		layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return a.proofCards(gtx, view)
-		}),
-		layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
-		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return a.chartCard(gtx, view)
-				}),
-				layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return a.button(gtx, &a.checkBtn, "egress", colorCyan, a.sess != nil)
-				}),
-			)
-		}),
-	)
+type chip struct {
+	Title string
+	Text  string
+	Light monitor.Light
 }
 
-func (a *App) proofCards(gtx layout.Context, view monitor.View) layout.Dimensions {
-	return layout.Flex{}.Layout(gtx,
-		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return a.lightCard(gtx, a.text.EgressIP, view.EgressLight, view.EgressText)
-		}),
-		layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
-		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return a.lightCard(gtx, a.text.Clean, view.Clean, view.CleanText)
-		}),
-		layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
-		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return a.lightCard(gtx, a.text.Service, view.Service, view.ServiceText)
-		}),
-	)
+// visibleState keeps a light only when it carries a real result.
+// Unknown placeholders are not drawn.
+func visibleState(view monitor.View, link, handshake, route, egress, clean, service string) []chip {
+	var out []chip
+	add := func(title, text string, light monitor.Light) {
+		if light == monitor.Unknown || light == "" {
+			return
+		}
+		out = append(out, chip{Title: title, Text: text, Light: light})
+	}
+	add(link, view.ConnectionText, view.Connection)
+	add(handshake, view.HandshakeText, view.Handshake)
+	add(route, view.PathText, view.Path)
+	add(egress, view.EgressText, view.EgressLight)
+	add(clean, view.CleanText, view.Clean)
+	add(service, view.ServiceText, view.Service)
+	return out
+}
+
+func (a *App) stateStrip(gtx layout.Context) layout.Dimensions {
+	view := a.board()
+	chips := visibleState(view, a.text.Link, a.text.Handshake, a.text.Route, a.text.EgressIP, a.text.Clean, a.text.Service)
+	if len(chips) == 0 && !hasMeasurement(view.Points) {
+		return layout.Dimensions{}
+	}
+	return layout.Inset{Top: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return card(gtx, func(gtx layout.Context) layout.Dimensions {
+			kids := make([]layout.FlexChild, 0, len(chips)+1)
+			for _, c := range chips {
+				c := c
+				kids = append(kids, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return a.chip(gtx, c)
+				}))
+			}
+			if hasMeasurement(view.Points) {
+				kids = append(kids, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+					return a.bars(gtx, view.Points)
+				}))
+			}
+			return layout.Flex{Alignment: layout.Middle}.Layout(gtx, kids...)
+		})
+	})
+}
+
+func (a *App) chip(gtx layout.Context, c chip) layout.Dimensions {
+	text := c.Text
+	if text == "" {
+		text = a.text.Unknown
+	}
+	return layout.Inset{Right: unit.Dp(16)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return a.dot(gtx, lightColor(c.Light))
+			}),
+			layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				l := material.Label(a.theme, unit.Sp(13), c.Title+"  "+text)
+				l.Color = colorText
+				l.MaxLines = 1
+				return l.Layout(gtx)
+			}),
+		)
+	})
 }

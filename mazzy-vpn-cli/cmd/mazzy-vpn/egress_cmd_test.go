@@ -3,7 +3,10 @@
 
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestClassifyAntigravity(t *testing.T) {
 	cases := []struct {
@@ -35,5 +38,15 @@ func TestEgressDocOmitsMissingIP(t *testing.T) {
 	}
 	if doc.Unknown[0].Reason == "" {
 		t.Fatal("missing reason")
+	}
+}
+
+func TestEgressReasonStaysOneLine(t *testing.T) {
+	reason := safeDisplay("no country for Europe/Moscow\r\nforged entry")
+	if strings.ContainsAny(reason, "\r\n") {
+		t.Fatalf("forged line: %q", reason)
+	}
+	if !strings.Contains(reason, "forged entry") {
+		t.Fatalf("dropped the text: %q", reason)
 	}
 }

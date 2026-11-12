@@ -78,22 +78,23 @@ func cmdEgress(ctx context.Context, args []string) int {
 		return 0
 	}
 	if doc.IPv4 != "" {
-		fmt.Printf("IPv4: %s", doc.IPv4)
+		fmt.Printf("IPv4: %s", safeDisplay(doc.IPv4))
 		if doc.Country != "" {
-			fmt.Printf(" (%s", doc.Country)
+			fmt.Printf(" (%s", safeDisplay(doc.Country))
 			if doc.City != "" {
-				fmt.Printf(", %s", doc.City)
+				fmt.Printf(", %s", safeDisplay(doc.City))
 			}
 			fmt.Print(")")
 		}
 		fmt.Println()
 	}
 	for _, g := range doc.Unknown {
-		fmt.Printf("unknown  %s  %s\n", g.Check, g.Reason)
+		// safeDisplay drops CR/LF so a timezone or probe string cannot start a second log line.
+		fmt.Printf("unknown  %s  %s\n", safeDisplay(g.Check), safeDisplay(g.Reason))
 	}
-	fmt.Printf("Antigravity: %s", doc.Antigravity.State)
+	fmt.Printf("Antigravity: %s", safeDisplay(doc.Antigravity.State))
 	if doc.Antigravity.Reason != "" {
-		fmt.Printf(" (%s)", doc.Antigravity.Reason)
+		fmt.Printf(" (%s)", safeDisplay(doc.Antigravity.Reason))
 	}
 	fmt.Println()
 	return 0
@@ -119,7 +120,7 @@ func collectEgress(ctx context.Context) egressDoc {
 		doc.IPv6 = ip
 	}
 
-	tz := systemTimezone()
+	tz := safeDisplay(systemTimezone())
 	if tz == "" {
 		doc.Unknown = append(doc.Unknown, gap{Check: "timezone", Reason: "system timezone was not read"})
 	} else {

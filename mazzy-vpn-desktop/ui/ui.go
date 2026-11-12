@@ -56,12 +56,10 @@ type App struct {
 	pathEdit   widget.Editor
 	armed      string
 	query      string
-	palette    bool
+	cmdFocus   bool
 	cmdIndex   int
-	logFocus   bool
-	checkBtn   widget.Clickable
-	cmdToggle  widget.Clickable
-	logClick   widget.Clickable
+	refocus    bool
+	logSeen    int
 }
 
 // New builds the window state for model.
@@ -80,6 +78,7 @@ func New(model *panel.Model) *App {
 		actList:  layout.List{Axis: layout.Vertical},
 		logList:  layout.List{Axis: layout.Vertical},
 		pathEdit: widget.Editor{SingleLine: true, Submit: true},
+		refocus:  true,
 	}
 }
 
@@ -106,7 +105,8 @@ func (a *App) frame(gtx layout.Context) {
 	a.ensureRows(len(snap.Profiles))
 	for i := range snap.Profiles {
 		if a.rows[i].Clicked(gtx) {
-			a.logFocus = false
+			a.cmdFocus = false
+			a.refocus = true
 			if snap.Selected == i {
 				a.model.Connect(context.Background())
 			} else {
@@ -127,20 +127,12 @@ func (a *App) frame(gtx layout.Context) {
 	if a.sess != nil {
 		for i := range a.cmds {
 			if a.actBtn[i].Clicked(gtx) {
+				a.cmdFocus = true
+				a.cmdIndex = i
+				a.refocus = true
 				a.activate(snap, i)
 			}
 		}
-	}
-	if a.checkBtn.Clicked(gtx) && a.sess != nil {
-		go a.sess.PollChecks(context.Background())
-	}
-	if a.cmdToggle.Clicked(gtx) {
-		a.palette = !a.palette
-		a.logFocus = false
-	}
-	if a.logClick.Clicked(gtx) {
-		a.logFocus = true
-		a.palette = false
 	}
 	a.keys(gtx, snap)
 
@@ -159,63 +151,45 @@ func (a *App) frame(gtx layout.Context) {
 }
 
 func (a *App) top(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
-	gtx.Constraints.Min.Y = gtx.Dp(108)
-	gtx.Constraints.Max.Y = gtx.Dp(108)
+	gtx.Constraints.Min.Y = gtx.Dp(56)
+	gtx.Constraints.Max.Y = gtx.Dp(56)
 	fill(gtx, colorPanel)
-	return layout.Inset{Left: unit.Dp(18), Right: unit.Dp(18), Top: unit.Dp(12), Bottom: unit.Dp(12)}.Layout(gtx,
+	return layout.Inset{Left: unit.Dp(16), Right: unit.Dp(16), Top: unit.Dp(8), Bottom: unit.Dp(8)}.Layout(gtx,
 		func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Alignment: layout.Middle, Spacing: layout.SpaceBetween}.Layout(gtx,
+			server, protocol, transport := display(snap)
+			proto := protocol
+			if transport != "" {
+				if proto != "" {
+					proto += "  ·  "
+				}
+				proto += transport
+			}
+			return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return a.brand(gtx)
+					l := material.H6(a.theme, "Mazzy VPN")
+					l.Color = colorText
+					return l.Layout(gtx)
 				}),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(18)}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return a.statusLine(gtx, snap.Phase)
+				}),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(16)}.Layout),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-					return a.statusCluster(gtx, snap)
+					return a.meta(gtx, a.text.Server, server)
 				}),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					gtx.Constraints.Max.X = gtx.Dp(280)
+					return a.meta(gtx, a.text.Protocol, proto)
+				}),
+				layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return a.actions(gtx)
 				}),
 			)
 		},
 	)
-}
-
-func (a *App) brand(gtx layout.Context) layout.Dimensions {
-	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.H6(a.theme, "Mazzy VPN")
-			l.Color = colorText
-			return l.Layout(gtx)
-		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.Caption(a.theme, "AmneziaWG · WireGuard")
-			l.Color = colorCyan
-			return l.Layout(gtx)
-		}),
-	)
-}
-
-func (a *App) statusCluster(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
-	server, protocol, transport := display(snap)
-	return layout.Inset{Left: unit.Dp(28)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return a.statusLine(gtx, snap.Phase)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return a.meta(gtx, a.text.Server, server)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				value := protocol
-				if transport != "" {
-					if value != "" {
-						value += "  ·  "
-					}
-					value += transport
-				}
-				return a.meta(gtx, a.text.Protocol, value)
-			}),
-		)
-	})
 }
 
 func (a *App) statusLine(gtx layout.Context, phase panel.Phase) layout.Dimensions {
@@ -260,8 +234,9 @@ func (a *App) meta(gtx layout.Context, k, v string) layout.Dimensions {
 	if v == "" {
 		v = "—"
 	}
-	l := material.Body2(a.theme, k+"   "+v)
+	l := material.Label(a.theme, unit.Sp(14), k+"   "+v)
 	l.Color = colorMuted
+	l.MaxLines = 1
 	return l.Layout(gtx)
 }
 
@@ -282,7 +257,7 @@ func (a *App) button(gtx layout.Context, click *widget.Clickable, label string, 
 	b.Background = bg
 	b.Color = colorBG
 	b.CornerRadius = unit.Dp(8)
-	b.Inset = layout.Inset{Top: unit.Dp(10), Bottom: unit.Dp(10), Left: unit.Dp(16), Right: unit.Dp(16)}
+	b.Inset = layout.Inset{Top: unit.Dp(8), Bottom: unit.Dp(8), Left: unit.Dp(14), Right: unit.Dp(14)}
 	if !enabled {
 		b.Background = color.NRGBA{R: 0x2a, G: 0x2e, B: 0x48, A: 0xff}
 		b.Color = colorMuted

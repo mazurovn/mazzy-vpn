@@ -17,8 +17,9 @@ import (
 
 func (a *App) keys(gtx layout.Context, snap panel.Snapshot) {
 	event.Op(gtx.Ops, a)
-	if !a.logFocus {
+	if a.refocus {
 		gtx.Execute(key.FocusCmd{Tag: a})
+		a.refocus = false
 	}
 	for {
 		ev, ok := gtx.Event(key.Filter{Focus: a}, key.FocusFilter{Target: a})
@@ -32,7 +33,7 @@ func (a *App) keys(gtx layout.Context, snap panel.Snapshot) {
 			}
 			a.onKey(snap, e)
 		case key.EditEvent:
-			if a.palette || a.logFocus {
+			if a.cmdFocus {
 				continue
 			}
 			a.query += e.Text
@@ -44,25 +45,30 @@ func (a *App) keys(gtx layout.Context, snap panel.Snapshot) {
 func (a *App) onKey(snap panel.Snapshot, e key.Event) {
 	switch e.Name {
 	case key.NameEscape:
-		if a.palette || a.logFocus {
-			a.palette = false
-			a.logFocus = false
+		if a.cmdFocus {
+			a.cmdFocus = false
+			a.refocus = true
 			return
 		}
 		a.query = ""
 		a.keepSelection(snap)
+	case key.NameLeftArrow:
+		a.cmdFocus = false
+	case key.NameRightArrow:
+		a.cmdFocus = true
+		a.revealCmd()
 	case key.NameUpArrow:
 		a.move(snap, -1)
 	case key.NameDownArrow:
 		a.move(snap, 1)
 	case key.NameReturn, key.NameEnter:
-		if a.palette {
+		if a.cmdFocus {
 			a.activate(snap, a.cmdIndex)
 			return
 		}
 		a.model.Connect(context.Background())
 	case key.NameDeleteBackward:
-		if a.palette || a.logFocus || a.query == "" {
+		if a.cmdFocus || a.query == "" {
 			return
 		}
 		_, size := utf8.DecodeLastRuneInString(a.query)
@@ -71,13 +77,21 @@ func (a *App) onKey(snap panel.Snapshot, e key.Event) {
 	}
 }
 
+func (a *App) revealCmd() {
+	first := a.cmdIndex - 3
+	if first < 0 {
+		first = 0
+	}
+	a.actList.Position.First = first
+}
+
 func (a *App) move(snap panel.Snapshot, delta int) {
-	if a.palette {
+	if a.cmdFocus {
 		if len(a.cmds) == 0 {
 			return
 		}
 		a.cmdIndex = (a.cmdIndex + delta + len(a.cmds)) % len(a.cmds)
-		a.actList.Position.First = a.cmdIndex
+		a.revealCmd()
 		return
 	}
 	ids := matching(snap.Profiles, a.query)

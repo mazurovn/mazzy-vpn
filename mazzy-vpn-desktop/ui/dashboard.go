@@ -9,6 +9,7 @@ import (
 	"image/color"
 
 	"gioui.org/layout"
+	"gioui.org/op"
 	"gioui.org/op/clip"
 	"gioui.org/op/paint"
 	"gioui.org/unit"
@@ -58,13 +59,33 @@ func (a *App) actionCard(gtx layout.Context, snap panel.Snapshot) layout.Dimensi
 	return card(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				l := material.H6(a.theme, "Команды")
+				l := material.H6(a.theme, a.text.Commands)
 				l.Color = colorText
-				return layout.Inset{Bottom: unit.Dp(8)}.Layout(gtx, l.Layout)
+				return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
 			}),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+				defer clip.Rect{Max: image.Pt(gtx.Constraints.Max.X, gtx.Constraints.Max.Y)}.Push(gtx.Ops).Pop()
 				return a.actList.Layout(gtx, len(a.cmds), func(gtx layout.Context, i int) layout.Dimensions {
 					return a.actionRow(gtx, snap, i)
+				})
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Inset{Top: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					gtx.Constraints.Min.X = gtx.Constraints.Max.X
+					// Paint the field so the scrolling list cannot show through it.
+					macro := op.Record(gtx.Ops)
+					ed := material.Editor(a.theme, &a.pathEdit, a.text.PathHint)
+					ed.Color = colorText
+					ed.HintColor = colorMuted
+					ed.TextSize = unit.Sp(13)
+					dims := layout.Inset{Top: unit.Dp(4), Bottom: unit.Dp(2), Left: unit.Dp(4)}.Layout(gtx, ed.Layout)
+					call := macro.Stop()
+					sz := image.Pt(gtx.Constraints.Max.X, dims.Size.Y)
+					defer clip.Rect{Max: sz}.Push(gtx.Ops).Pop()
+					paint.ColorOp{Color: colorPanel}.Add(gtx.Ops)
+					paint.PaintOp{}.Add(gtx.Ops)
+					call.Add(gtx.Ops)
+					return layout.Dimensions{Size: sz}
 				})
 			}),
 		)
@@ -98,7 +119,7 @@ func (a *App) actionRow(gtx layout.Context, snap panel.Snapshot, i int) layout.D
 	}
 	btn := &a.actBtn[i]
 	return btn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		if a.armed == label || (a.palette && i == a.cmdIndex) {
+		if a.armed == label || (a.cmdFocus && i == a.cmdIndex) {
 			fill(gtx, colorSelect)
 		}
 		return layout.Inset{Top: unit.Dp(5), Bottom: unit.Dp(5), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx,
@@ -214,7 +235,7 @@ func (a *App) chartCard(gtx layout.Context, view monitor.View) layout.Dimensions
 }
 
 func (a *App) bars(gtx layout.Context, points []monitor.Point) layout.Dimensions {
-	height := gtx.Dp(64)
+	height := gtx.Dp(36)
 	gtx.Constraints.Min.Y = height
 	gtx.Constraints.Max.Y = height
 	if !hasMeasurement(points) {
@@ -262,40 +283,32 @@ func (a *App) bar(gtx layout.Context, p monitor.Point, max int64, height int) la
 	return layout.Dimensions{Size: image.Pt(w+gtx.Dp(3), height)}
 }
 
-func (a *App) logCard(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
+func (a *App) logCard(gtx layout.Context, _ panel.Snapshot) layout.Dimensions {
+	lines := a.logLines()
+	if n := len(lines); n > a.logSeen {
+		if a.logList.Position.First >= a.logSeen-8 {
+			a.logList.Position.First = n - 1
+		}
+		a.logSeen = n
+	}
 	return card(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				ed := material.Editor(a.theme, &a.pathEdit, a.text.ImportHint)
-				ed.Color = colorText
-				ed.HintColor = colorMuted
-				ed.TextSize = unit.Sp(14)
-				return layout.Inset{Bottom: unit.Dp(8)}.Layout(gtx, ed.Layout)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				l := material.Body2(a.theme, a.text.Output)
+				l := material.Body2(a.theme, a.text.Journal)
 				l.Color = colorText
 				return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
 			}),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				lines := a.logLines()
 				if len(lines) == 0 {
-					server, protocol, transport := display(snap)
-					line := server
-					if protocol != "" {
-						line += "   " + protocol
-					}
-					if transport != "" {
-						line += "   " + transport
-					}
-					l := material.Body2(a.theme, line)
-					l.Color = colorText
+					l := material.Body2(a.theme, a.text.LogEmpty)
+					l.Color = colorMuted
 					return l.Layout(gtx)
 				}
 				return a.logList.Layout(gtx, len(lines), func(gtx layout.Context, i int) layout.Dimensions {
-					l := material.Caption(a.theme, lines[i])
+					l := material.Label(a.theme, unit.Sp(13), lines[i])
 					l.Color = colorMuted
-					return l.Layout(gtx)
+					l.MaxLines = 1
+					return layout.Inset{Bottom: unit.Dp(2)}.Layout(gtx, l.Layout)
 				})
 			}),
 		)

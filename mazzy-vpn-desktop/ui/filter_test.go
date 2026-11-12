@@ -6,6 +6,7 @@ package ui
 import (
 	"testing"
 
+	"github.com/mazurovn/mazzy-vpn/desktop/monitor"
 	"github.com/mazurovn/mazzy-vpn/desktop/panel"
 )
 
@@ -21,5 +22,19 @@ func TestMatchingFiltersByName(t *testing.T) {
 	}
 	if len(matching(ps, "")) != 3 {
 		t.Fatal("empty query")
+	}
+}
+
+func TestVisibleStateSkipsUnknown(t *testing.T) {
+	view := monitor.FromLive(monitor.Live{})
+	got := visibleState(view, "Связь", "Рукопожатие", "Путь", "Внешний IP", "Чистота", "Antigravity")
+	if len(got) != 0 {
+		t.Fatalf("placeholders shown: %+v", got)
+	}
+	view.Connection = monitor.Red
+	view.ConnectionText = "туннель не поднят"
+	got = visibleState(view, "Связь", "Рукопожатие", "Путь", "Внешний IP", "Чистота", "Antigravity")
+	if len(got) != 1 || got[0].Title != "Связь" || got[0].Light != monitor.Red {
+		t.Fatalf("%+v", got)
 	}
 }

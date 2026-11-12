@@ -18,6 +18,7 @@ type Text struct {
 	Link, Handshake, Route, Unknown               string
 	Chart, Output, NoData, ImportHint             string
 	Filter, Commands, EgressIP, Clean, Service    string
+	Journal, Search, LogEmpty, PathHint           string
 }
 
 var phrases = map[i18n.Lang]Text{
@@ -31,6 +32,7 @@ var phrases = map[i18n.Lang]Text{
 		Link:      "Connection", Handshake: "Handshake", Route: "Path", Unknown: "unknown",
 		Chart: "Probe", Output: "Output", NoData: "no measurements yet", ImportHint: "path for import or list",
 		Filter: "Filter servers", Commands: "Commands", EgressIP: "Egress IP", Clean: "Cleanliness", Service: "Antigravity",
+		Journal: "Log", Search: "search", LogEmpty: "log is empty", PathHint: "path",
 	},
 	i18n.RU: {
 		Connect: "Подключить", Disconnect: "Отключить", Status: "Статус", Server: "Сервер", Protocol: "Протокол",
@@ -42,6 +44,7 @@ var phrases = map[i18n.Lang]Text{
 		Link:      "Связь", Handshake: "Рукопожатие", Route: "Путь", Unknown: "неизвестно",
 		Chart: "Проверка", Output: "Вывод", NoData: "измерений ещё нет", ImportHint: "путь для импорта или списка",
 		Filter: "Фильтр серверов", Commands: "Команды", EgressIP: "Внешний IP", Clean: "Чистота", Service: "Antigravity",
+		Journal: "Журнал", Search: "поиск", LogEmpty: "журнал пуст", PathHint: "путь",
 	},
 	i18n.DE: {
 		Connect: "Verbinden", Disconnect: "Trennen", Status: "Status", Server: "Server", Protocol: "Protokoll",
@@ -53,6 +56,7 @@ var phrases = map[i18n.Lang]Text{
 		Link:      "Verbindung", Handshake: "Handshake", Route: "Pfad", Unknown: "unbekannt",
 		Chart: "Messung", Output: "Ausgabe", NoData: "noch keine Messwerte", ImportHint: "Pfad für Import oder Liste",
 		Filter: "Server filtern", Commands: "Befehle", EgressIP: "Ausgangs-IP", Clean: "Sauberkeit", Service: "Antigravity",
+		Journal: "Journal", Search: "suchen", LogEmpty: "Journal ist leer", PathHint: "Pfad",
 	},
 	i18n.ZH: {
 		Connect: "连接", Disconnect: "断开", Status: "状态", Server: "服务器", Protocol: "协议",
@@ -64,6 +68,7 @@ var phrases = map[i18n.Lang]Text{
 		Link:      "连接", Handshake: "握手", Route: "路径", Unknown: "未知",
 		Chart: "探测", Output: "输出", NoData: "还没有测量", ImportHint: "导入或列出的路径",
 		Filter: "筛选服务器", Commands: "命令", EgressIP: "出口 IP", Clean: "纯净度", Service: "Antigravity",
+		Journal: "日志", Search: "搜索", LogEmpty: "日志为空", PathHint: "路径",
 	},
 	i18n.JA: {
 		Connect: "接続", Disconnect: "切断", Status: "状態", Server: "サーバー", Protocol: "プロトコル",
@@ -75,6 +80,7 @@ var phrases = map[i18n.Lang]Text{
 		Link:      "接続", Handshake: "ハンドシェイク", Route: "経路", Unknown: "不明",
 		Chart: "計測", Output: "出力", NoData: "計測はまだありません", ImportHint: "インポートまたは一覧のパス",
 		Filter: "サーバーを絞る", Commands: "コマンド", EgressIP: "出口 IP", Clean: "清潔さ", Service: "Antigravity",
+		Journal: "ログ", Search: "検索", LogEmpty: "ログは空です", PathHint: "パス",
 	},
 	i18n.KO: {
 		Connect: "연결", Disconnect: "연결 해제", Status: "상태", Server: "서버", Protocol: "프로토콜",
@@ -86,14 +92,17 @@ var phrases = map[i18n.Lang]Text{
 		Link:      "연결", Handshake: "핸드셰이크", Route: "경로", Unknown: "알 수 없음",
 		Chart: "측정", Output: "출력", NoData: "측정값이 없습니다", ImportHint: "가져오기 또는 목록 경로",
 		Filter: "서버 필터", Commands: "명령", EgressIP: "외부 IP", Clean: "청정", Service: "Antigravity",
+		Journal: "로그", Search: "검색", LogEmpty: "로그가 비어 있습니다", PathHint: "경로",
 	},
 }
 
-// Phrases resolves the desktop copy from MAZZY_LANG and the process locale.
+// Phrases is the window copy. The command list is Russian, so the chrome is
+// Russian too unless MAZZY_LANG names another catalog.
 func Phrases() Text {
-	lang := i18n.Resolve(os.Getenv("MAZZY_LANG"), os.Getenv("LC_ALL"), os.Getenv("LC_MESSAGES"), os.Getenv("LANG"))
-	if t, ok := phrases[lang]; ok {
-		return t
+	if override := os.Getenv("MAZZY_LANG"); override != "" {
+		if t, ok := phrases[i18n.Resolve(override)]; ok {
+			return t
+		}
 	}
-	return phrases[i18n.EN]
+	return phrases[i18n.RU]
 }
