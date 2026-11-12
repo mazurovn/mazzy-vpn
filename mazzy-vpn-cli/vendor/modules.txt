@@ -75,6 +75,7 @@ github.com/mazurovn/mazzy-vpn/core/routes
 github.com/mazurovn/mazzy-vpn/core/settings
 github.com/mazurovn/mazzy-vpn/core/state
 github.com/mazurovn/mazzy-vpn/core/stealth
+github.com/mazurovn/mazzy-vpn/core/transport
 github.com/mazurovn/mazzy-vpn/core/zonescore
 # github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
 ## explicit; go 1.17

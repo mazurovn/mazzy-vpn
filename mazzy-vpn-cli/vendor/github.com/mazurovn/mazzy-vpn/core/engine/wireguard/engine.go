@@ -13,6 +13,9 @@ package wireguard
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/amnezia-vpn/amneziawg-go/v3/conn"
 	"github.com/amnezia-vpn/amneziawg-go/v3/device"
@@ -99,6 +102,76 @@ func (e *Engine) Wait() {
 	if e.dev != nil {
 		e.dev.Wait()
 	}
+}
+
+// SetPeerEndpoint retargets an existing peer and elicits a handshake.
+// endpoint must be a numeric IP:port; amneziawg-go rejects hostnames.
+func (e *Engine) SetPeerEndpoint(publicKeyB64, endpoint string, keepalive int) error {
+	if e == nil || e.dev == nil {
+		return fmt.Errorf("wireguard engine: not running")
+	}
+	hexKey, err := profile.KeyHex(publicKeyB64)
+	if err != nil {
+		return fmt.Errorf("wireguard engine: peer key: %w", err)
+	}
+	return e.dev.IpcSet(profile.RetargetUAPI(hexKey, endpoint, keepalive))
+}
+
+// LastHandshake reads the peer's latest handshake time. The zero time means
+// the peer has never completed one.
+func (e *Engine) LastHandshake(publicKeyB64 string) (time.Time, error) {
+	if e == nil || e.dev == nil {
+		return time.Time{}, fmt.Errorf("wireguard engine: not running")
+	}
+	hexKey, err := profile.KeyHex(publicKeyB64)
+	if err != nil {
+		return time.Time{}, err
+	}
+	text, err := e.dev.IpcGet()
+	if err != nil {
+		return time.Time{}, err
+	}
+	return ParseHandshake(text, hexKey), nil
+}
+
+// ParseHandshake finds last_handshake_time_* for pubHex in a UAPI get blob.
+// A missing peer or a 0/0 timestamp is the zero time.
+func ParseHandshake(uapi, pubHex string) time.Time {
+	want := strings.ToLower(strings.TrimSpace(pubHex))
+	var current string
+	var sec, nsec int64
+	var seen bool
+	flush := func() time.Time {
+		if !seen || current != want || (sec == 0 && nsec == 0) {
+			return time.Time{}
+		}
+		return time.Unix(sec, nsec)
+	}
+	for _, line := range strings.Split(uapi, "\n") {
+		key, val, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		switch key {
+		case "public_key":
+			if current == want && seen {
+				return flush()
+			}
+			current = strings.ToLower(val)
+			sec, nsec, seen = 0, 0, false
+		case "last_handshake_time_sec":
+			if current == want {
+				sec, _ = strconv.ParseInt(val, 10, 64)
+				seen = true
+			}
+		case "last_handshake_time_nsec":
+			if current == want {
+				nsec, _ = strconv.ParseInt(val, 10, 64)
+				seen = true
+			}
+		}
+	}
+	return flush()
 }
 
 // Down tears down the crypto engine and TUN interface.

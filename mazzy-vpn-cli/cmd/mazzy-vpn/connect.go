@@ -25,6 +25,14 @@ import (
 	"github.com/mazurovn/mazzy-vpn/core/state"
 )
 
+// pathLabel joins the protocol title with the UDP port the handshake used.
+func pathLabel(proto core.Protocol, conn *connect.Conn) string {
+	if conn == nil || conn.Path.Label() == "" {
+		return proto.Title()
+	}
+	return proto.Title() + " " + conn.Path.Label()
+}
+
 // requireRoot returns an error string when not privileged. Creating a TUN and
 // applying routes/nft needs CAP_NET_ADMIN.
 func requireRoot(action string) bool {
@@ -146,14 +154,25 @@ func cmdConnect(ctx context.Context, args []string) int {
 		fmt.Println(t.T("cli.connect.ok"))
 		fmt.Println(t.Tf("cli.connect.interface", conn.Interface))
 		fmt.Println(t.Tf("cli.connect.egress", snap.EgressIP))
-		fmt.Println(t.Tf("cli.connect.protocol", proto.Title()))
+		fmt.Println(t.Tf("cli.connect.protocol", pathLabel(proto, conn)))
+		if note := conn.Path.FallbackNote(); note != "" {
+			fmt.Println("  " + note)
+		}
 		nfy.Connected(zoneName, snap.EgressIP)
 		maybeAutoMimic(ctx)
 		go recordZoneScore(ctx, strings.TrimSuffix(zoneName, filepath.Ext(zoneName)))
 	} else {
 		fmt.Println(t.Tf("cli.connect.not_confirmed", conn.Interface, snap.Reason))
-		fmt.Println("  The tunnel may still be establishing, or this server is not routing traffic.")
-		fmt.Println("  Try another zone (mazzy-vpn test) if this persists.")
+		fmt.Println(t.Tf("cli.connect.protocol", pathLabel(proto, conn)))
+		if note := conn.Path.FallbackNote(); note != "" {
+			fmt.Println("  " + note)
+		}
+		if note := conn.Path.FailureNote(); note != "" {
+			fmt.Println("  " + note)
+		} else {
+			fmt.Println("  The tunnel may still be establishing, or this server is not routing traffic.")
+			fmt.Println("  Try another zone (mazzy-vpn test) if this persists.")
+		}
 		nfy.Failed(zoneName, snap.Reason)
 	}
 
@@ -170,7 +189,7 @@ func cmdConnect(ctx context.Context, args []string) int {
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-	printDashboard(ctx, lc, conn.Interface, proto.Title(), snap)
+	printDashboard(ctx, lc, conn.Interface, pathLabel(proto, conn), snap)
 
 	consecutiveFail := 0
 	const failLimit = 3 // ~15s of no egress before reconnect
@@ -181,7 +200,7 @@ dashLoop:
 			break dashLoop
 		case <-ticker.C:
 			s := lc.Check(ctx, conn.Interface)
-			printDashboard(ctx, lc, conn.Interface, proto.Title(), s)
+			printDashboard(ctx, lc, conn.Interface, pathLabel(proto, conn), s)
 			if s.Protected() {
 				consecutiveFail = 0
 				continue

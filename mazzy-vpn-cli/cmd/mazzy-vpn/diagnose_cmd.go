@@ -18,6 +18,7 @@ import (
 	"github.com/mazurovn/mazzy-vpn/core/netadapter"
 	"github.com/mazurovn/mazzy-vpn/core/pathtrace"
 	"github.com/mazurovn/mazzy-vpn/core/profile"
+	"github.com/mazurovn/mazzy-vpn/core/transport"
 )
 
 // gatherSignal collects real observations for root-cause analysis.
@@ -59,13 +60,23 @@ func gatherSignal(ctx context.Context) diagnose.Signal {
 			s.AnyServerAlive = best.ICMPAlive
 		}
 		// If connected, check whether the current server is alive.
+		host := transport.Host(targets[0].Endpoint)
 		if cur, err := newStore().Read(); err == nil {
 			for _, r := range ranked {
 				if r.Name == cur.Profile {
 					s.ServerName = r.Name
 					s.ServerAlive = r.ICMPAlive
+					if h := transport.Host(r.Endpoint); h != "" {
+						host = h
+					}
 				}
 			}
+		}
+		if host != "" {
+			tcp := transport.ProbeTCP(ctx, host, 443, 2*time.Second)
+			udpSilent := !s.AnyServerAlive || (s.TunnelIface != "" && !s.EgressOK)
+			s.TransportClass = string(transport.Classify(tcp, udpSilent))
+			s.TCPReachesHost = s.TransportClass == string(transport.ClassCorporateUDPBlocked)
 		}
 	}
 	return s

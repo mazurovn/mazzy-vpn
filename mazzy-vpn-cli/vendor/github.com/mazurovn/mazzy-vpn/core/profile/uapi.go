@@ -109,6 +109,23 @@ func writeAmnezia(b *strings.Builder, a AmneziaParams) error {
 	return nil
 }
 
+// KeyHex converts a wg-quick base64 X25519 key to the lowercase hex form
+// expected by UAPI.
+func KeyHex(b64 string) (string, error) { return keyBase64ToHex(b64) }
+
+// RetargetUAPI builds an update-only peer set that moves the endpoint and
+// forces a keepalive transition through zero, which is what makes a running
+// device send a fresh handshake. keepalive <= 0 uses 25 for that probe.
+func RetargetUAPI(publicKeyHex, endpoint string, keepalive int) string {
+	if keepalive <= 0 {
+		keepalive = 25
+	}
+	return fmt.Sprintf(
+		"public_key=%s\nupdate_only=true\nendpoint=%s\npersistent_keepalive_interval=0\npersistent_keepalive_interval=%d\n",
+		publicKeyHex, endpoint, keepalive,
+	)
+}
+
 // keyBase64ToHex converts a wg-quick base64 X25519 key to the lowercase hex
 // form expected by UAPI.
 func keyBase64ToHex(b64 string) (string, error) {

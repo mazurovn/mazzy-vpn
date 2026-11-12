@@ -158,6 +158,25 @@ mazzy-vpn control id                 # this node's control-plane identity
 See the [Go CLI wiki page](https://github.com/mazurovn/mazzy-vpn/wiki/Go-CLI)
 for the full command reference in all six languages.
 
+## Linux desktop
+
+[`mazzy-vpn-desktop/`](mazzy-vpn-desktop/) is the gio window from ADR-0004. The
+top panel connects, disconnects, and shows status, server, and protocol for the
+same embedded AmneziaWG/WireGuard engine. Build it with `CGO_ENABLED=1` (a C
+compiler plus X11/Wayland headers). Bringing the tunnel up still needs root,
+same as the CLI.
+
+```bash
+cd mazzy-vpn-desktop
+CGO_ENABLED=1 go build -o mazzy-vpn-desktop ./cmd/mazzy-vpn-desktop
+sudo ./mazzy-vpn-desktop
+```
+
+On a network that drops WireGuard's UDP port, connect tries the configured
+port and then UDP 443, 51820, 123, 53, and 1194. A port counts only after a
+handshake, and only if the server listens there. This client does not speak
+the HTTP/2 path AdGuard VPN CLI uses.
+
 ## Author and license
 
 Mazzy VPN was created by [Nik m (@mazurovn)](https://github.com/mazurovn).
