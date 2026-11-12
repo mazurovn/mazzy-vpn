@@ -12,6 +12,7 @@ import (
 	"gioui.org/io/key"
 	"gioui.org/layout"
 
+	"github.com/mazurovn/mazzy-vpn/desktop/menu"
 	"github.com/mazurovn/mazzy-vpn/desktop/panel"
 )
 
@@ -33,7 +34,7 @@ func (a *App) keys(gtx layout.Context, snap panel.Snapshot) {
 			}
 			a.onKey(snap, e)
 		case key.EditEvent:
-			if a.cmdFocus {
+			if a.menuOpen >= 0 {
 				continue
 			}
 			a.query += e.Text
@@ -43,32 +44,49 @@ func (a *App) keys(gtx layout.Context, snap panel.Snapshot) {
 }
 
 func (a *App) onKey(snap panel.Snapshot, e key.Event) {
+	if e.Modifiers.Contain(key.ModCtrl) && e.Name == "R" {
+		a.reconnect()
+		return
+	}
+	if e.Modifiers.Contain(key.ModCtrl) && e.Name == "D" {
+		a.model.Disconnect(context.Background())
+		return
+	}
+	if e.Name == key.NameF5 {
+		a.refreshNow()
+		return
+	}
 	switch e.Name {
 	case key.NameEscape:
-		if a.cmdFocus || a.tab != 0 {
+		if a.menuOpen >= 0 {
+			a.armed = ""
+			a.menuOpen = -1
 			a.cmdFocus = false
-			a.tab = 0
 			a.refocus = true
 			return
 		}
 		a.query = ""
 		a.keepSelection(snap)
 	case key.NameLeftArrow:
-		a.moveCmd(snap, -1, true)
+		if a.menuOpen >= 0 {
+			a.moveCmd(snap, -1, true)
+		}
 	case key.NameRightArrow:
-		a.moveCmd(snap, 1, true)
+		if a.menuOpen >= 0 {
+			a.moveCmd(snap, 1, true)
+		}
 	case key.NameUpArrow:
 		a.move(snap, -1)
 	case key.NameDownArrow:
 		a.move(snap, 1)
 	case key.NameReturn, key.NameEnter:
-		if a.cmdFocus {
+		if a.menuOpen >= 0 && a.cmdFocus {
 			a.runCommand(snap, a.cmdIndex)
 			return
 		}
 		a.model.Connect(context.Background())
 	case key.NameDeleteBackward:
-		if a.cmdFocus || a.query == "" {
+		if a.menuOpen >= 0 || a.query == "" {
 			return
 		}
 		_, size := utf8.DecodeLastRuneInString(a.query)
@@ -77,13 +95,22 @@ func (a *App) onKey(snap panel.Snapshot, e key.Event) {
 	}
 }
 
+func (a *App) reconnect() {
+	if a.sess == nil {
+		return
+	}
+	go a.sess.Do(context.Background(), menu.Call{Label: "Переподключить", Lifecycle: "reconnect"})
+}
+
+func (a *App) refreshNow() {
+	a.model.Reload(context.Background())
+	if a.sess != nil {
+		go a.sess.PollChecks(context.Background())
+	}
+}
+
 func (a *App) moveCmd(snap panel.Snapshot, delta int, horizontal bool) {
-	if !a.cmdFocus {
-		if delta > 0 {
-			a.tab = 1
-			a.cmdFocus = true
-			a.placeInMenu()
-		}
+	if a.menuOpen < 0 {
 		return
 	}
 	groups := a.menus()
@@ -94,11 +121,6 @@ func (a *App) moveCmd(snap panel.Snapshot, delta int, horizontal bool) {
 		a.menuAt = 0
 	}
 	if horizontal {
-		if delta < 0 && a.menuAt == 0 {
-			a.cmdFocus = false
-			a.tab = 0
-			return
-		}
 		a.menuAt += delta
 		if a.menuAt < 0 {
 			a.menuAt = 0
@@ -106,10 +128,10 @@ func (a *App) moveCmd(snap panel.Snapshot, delta int, horizontal bool) {
 		if a.menuAt >= len(groups) {
 			a.menuAt = len(groups) - 1
 		}
+		a.menuOpen = a.menuAt
 		if idxs := groups[a.menuAt].Index; len(idxs) > 0 {
 			a.cmdIndex = idxs[0]
 		}
-		a.tab = 1
 		return
 	}
 	idxs := groups[a.menuAt].Index
@@ -133,7 +155,7 @@ func (a *App) moveCmd(snap panel.Snapshot, delta int, horizontal bool) {
 }
 
 func (a *App) move(snap panel.Snapshot, delta int) {
-	if a.cmdFocus {
+	if a.menuOpen >= 0 {
 		a.moveCmd(snap, delta, false)
 		return
 	}

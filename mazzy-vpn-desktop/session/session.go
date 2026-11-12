@@ -3,11 +3,9 @@
 
 // Package session binds the desktop window to mazzy-core and to the CLI.
 //
-// Connect and disconnect do not require this process to be root. They run
-// the same privileged CLI commands the line menu prints (`sudo mazzy-vpn up`
-// and the rest). In a graphical session those commands go through pkexec,
-// which is how the existing Linux desktop elevates them. The window only
-// stops a tunnel process it started.
+// Connect, reconnect and disconnect talk to /run/mazzy-vpn/api-v1.sock as the
+// current user. The window never starts pkexec or sudo. Other commands run
+// the CLI directly, and only when they do not need root.
 package session
 
 import (
@@ -16,6 +14,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -28,6 +27,7 @@ import (
 	"github.com/mazurovn/mazzy-vpn/core/profile"
 	"github.com/mazurovn/mazzy-vpn/core/settings"
 	"github.com/mazurovn/mazzy-vpn/core/state"
+	"github.com/mazurovn/mazzy-vpn/desktop/api"
 	"github.com/mazurovn/mazzy-vpn/desktop/checks"
 	"github.com/mazurovn/mazzy-vpn/desktop/elevate"
 	"github.com/mazurovn/mazzy-vpn/desktop/menu"
@@ -68,6 +68,7 @@ type Session struct {
 	path       string
 	detail     string
 	phase      panel.Phase
+	notice     string
 	expectDown bool
 	hold       *elevate.Proc
 	logText    string
@@ -130,6 +131,15 @@ func (s *Session) Note(text string) {
 func (s *Session) Load(ctx context.Context) (panel.Snapshot, error) {
 	s.followHold()
 	s.observe(ctx)
+	line := ""
+	if liveInterface() == "" {
+		line = s.gate()
+	}
+	s.mu.Lock()
+	if s.phase != panel.PhaseError {
+		s.notice = line
+	}
+	s.mu.Unlock()
 	return s.snapshot(), nil
 }
 
@@ -217,84 +227,88 @@ func (s *Session) followHold() {
 	s.mu.Unlock()
 }
 
-// Connect starts `mazzy-vpn up NAME` and returns while that process stays
-// up. The CLI holds the tunnel until SIGINT; the window does not become root.
+// Connect sends lifecycle.connect for name. A missing socket or group leaves
+// the phase disconnected and sets one Russian notice. It does not return an
+// error for that, because the panel would show that error as «Ошибка».
 func (s *Session) Connect(ctx context.Context, name string) (panel.Snapshot, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return s.snapshot(), fmt.Errorf("select a server")
+		s.failClosed("выберите сервер в списке")
+		return s.snapshot(), nil
 	}
-	if _, err := s.cat.Get(name); err != nil {
-		return s.snapshot(), err
+	id, err := s.profileID(name)
+	if err != nil {
+		s.failClosed("выберите сервер в списке")
+		return s.snapshot(), nil
 	}
-	if err := s.startHold(ctx, []string{"up", name}); err != nil {
-		return s.snapshot(), err
+	if line := s.gate(); line != "" {
+		s.failClosed(line)
+		s.appendLog(line)
+		s.fire()
+		return s.snapshot(), nil
 	}
 	s.mu.Lock()
 	s.server = name
 	s.phase = panel.PhaseConnecting
+	s.notice = ""
 	s.expectDown = false
-	s.detail = "mazzy-vpn up " + name
 	s.mu.Unlock()
+	s.applyLifecycle(s.socket().Connect(ctx, id), true)
 	return s.snapshot(), nil
 }
 
-// Close stops a tunnel process this window started. A tunnel owned by
-// another CLI process is left running.
-func (s *Session) Close(ctx context.Context) {
+// Reconnect sends lifecycle.reconnect and does not tear the tunnel down first.
+func (s *Session) Reconnect(ctx context.Context) (panel.Snapshot, error) {
+	if line := s.gate(); line != "" {
+		s.mu.Lock()
+		s.notice = line
+		s.mu.Unlock()
+		s.appendLog(line)
+		s.fire()
+		return s.snapshot(), nil
+	}
 	s.mu.Lock()
-	hold := s.hold
-	s.hold = nil
-	conn := s.conn
-	s.conn = nil
-	s.phase = panel.PhaseDisconnected
-	s.path = ""
-	s.detail = ""
+	s.phase = panel.PhaseConnecting
+	s.notice = ""
+	s.expectDown = false
 	s.mu.Unlock()
-	if hold != nil {
-		_ = hold.Stop()
-	}
-	if conn == nil {
-		return
-	}
-	_ = conn.Down(ctx)
-	if st, err := s.store.Read(); err == nil {
-		st.Desired = core.DesiredDown
-		_ = s.store.Write(*st)
-	}
+	s.applyLifecycle(s.socket().Reconnect(ctx), true)
+	return s.snapshot(), nil
 }
 
-// Disconnect signals the CLI process this window started. A tunnel started
-// outside the window is stopped with `mazzy-vpn disconnect`.
-func (s *Session) Disconnect(ctx context.Context) (panel.Snapshot, error) {
-	s.mu.Lock()
-	hold := s.hold
-	s.hold = nil
-	conn := s.conn
-	s.conn = nil
-	s.expectDown = true
-	s.phase = panel.PhaseDisconnected
-	s.detail = "отключение"
-	s.mu.Unlock()
+// Close leaves a tunnel owned by the service running. The window does not
+// send disconnect and does not signal a root process.
+func (s *Session) Close(context.Context) {}
 
-	if hold != nil {
-		err := hold.Stop()
-		s.appendLog(hold.Output())
-		return s.snapshot(), err
+// Disconnect sends lifecycle.disconnect. Without a socket the phase stays
+// whatever the interface says, plus one Russian notice.
+func (s *Session) Disconnect(ctx context.Context) (panel.Snapshot, error) {
+	if line := s.gate(); line != "" {
+		s.mu.Lock()
+		s.notice = line
+		s.mu.Unlock()
+		s.appendLog(line)
+		s.fire()
+		return s.snapshot(), nil
 	}
-	if conn != nil {
-		return s.snapshot(), conn.Down(ctx)
-	}
-	out, err := s.runWait(ctx, []string{"disconnect"})
-	s.appendLog(out)
-	return s.snapshot(), err
+	s.applyLifecycle(s.socket().Disconnect(ctx), false)
+	return s.snapshot(), nil
 }
 
 // Do runs one menu action. Disabled calls are recorded and not executed.
+// Lifecycle actions use the socket. Nothing in this method elevates.
 func (s *Session) Do(ctx context.Context, call menu.Call) {
 	if call.Disabled != "" {
 		s.appendLog(call.Label + " — " + call.Disabled)
 		s.fire()
+		return
+	}
+	if call.Lifecycle != "" {
+		s.doLifecycle(ctx, call)
+		return
+	}
+	if call.Update {
+		s.doUpdate(ctx)
 		return
 	}
 	if call.Settings {
@@ -310,40 +324,90 @@ func (s *Session) Do(ctx context.Context, call menu.Call) {
 		if len(args) == 0 {
 			continue
 		}
+		if elevate.Privileged(args) {
+			fmt.Fprintf(&b, "%s — окно не повышает права\n", call.Label)
+			continue
+		}
 		fmt.Fprintf(&b, "$ mazzy-vpn %s\n", strings.Join(args, " "))
-		switch args[0] {
-		case "up", "connect", "auto":
-			if err := s.startHold(ctx, args); err != nil {
-				fmt.Fprintf(&b, "%s\n", err)
-				continue
-			}
-			s.mu.Lock()
-			s.phase = panel.PhaseConnecting
-			s.expectDown = false
-			s.detail = "mazzy-vpn " + strings.Join(args, " ")
-			if args[0] == "up" && len(args) > 1 && !strings.HasPrefix(args[1], "-") {
-				s.server = args[1]
-			}
-			s.mu.Unlock()
-			b.WriteString("запущено\n")
-		case "disconnect":
-			if _, err := s.Disconnect(ctx); err != nil {
-				fmt.Fprintf(&b, "%s\n", err)
-			}
-		default:
-			out, err := s.runWait(ctx, args)
-			b.WriteString(out)
-			if out == "" || !strings.HasSuffix(out, "\n") {
-				b.WriteByte('\n')
-			}
-			if err != nil {
-				fmt.Fprintf(&b, "%s\n", err)
-			}
+		out, err := s.runWait(ctx, args)
+		b.WriteString(out)
+		if out == "" || !strings.HasSuffix(out, "\n") {
+			b.WriteByte('\n')
+		}
+		if err != nil {
+			fmt.Fprintf(&b, "%s\n", err)
 		}
 	}
 	if text := b.String(); text != "" {
 		s.appendLog(text)
 	}
+	s.fire()
+}
+
+func (s *Session) doLifecycle(ctx context.Context, call menu.Call) {
+	switch call.Lifecycle {
+	case "connect":
+		name := ""
+		if len(call.Argv) > 0 && len(call.Argv[0]) > 0 {
+			name = call.Argv[0][0]
+		}
+		if _, err := s.Connect(ctx, name); err != nil {
+			s.appendLog(err.Error())
+		}
+	case "best":
+		s.connectBest(ctx)
+	case "reconnect":
+		if _, err := s.Reconnect(ctx); err != nil {
+			s.appendLog(err.Error())
+		}
+	case "disconnect":
+		if _, err := s.Disconnect(ctx); err != nil {
+			s.appendLog(err.Error())
+		}
+	}
+	s.fire()
+}
+
+func (s *Session) connectBest(ctx context.Context) {
+	out, err := s.runWait(ctx, []string{"best", "--json"})
+	if err != nil && strings.TrimSpace(out) == "" {
+		s.failClosed("не удалось выбрать сервер")
+		s.appendLog("не удалось выбрать сервер")
+		s.fire()
+		return
+	}
+	var best struct {
+		Name string `json:"name"`
+	}
+	if json.Unmarshal([]byte(out), &best) != nil || strings.TrimSpace(best.Name) == "" {
+		s.failClosed("нет доступного сервера")
+		s.appendLog("нет доступного сервера")
+		s.fire()
+		return
+	}
+	_, _ = s.Connect(ctx, best.Name)
+}
+
+func (s *Session) doUpdate(ctx context.Context) {
+	ver, _ := s.runWait(ctx, []string{"version"})
+	out, err := s.runWait(ctx, []string{"update"})
+	line := oneLine(ver)
+	if rest := oneLine(out); rest != "" {
+		if line != "" {
+			line += " — "
+		}
+		line += rest
+	}
+	if err != nil && !strings.Contains(line, err.Error()) {
+		if line != "" {
+			line += " — "
+		}
+		line += oneLine(err.Error())
+	}
+	if line == "" {
+		line = "проверка обновления не дала ответа"
+	}
+	s.appendLog(line)
 	s.fire()
 }
 
@@ -374,14 +438,102 @@ func (s *Session) snapshot() panel.Snapshot {
 	if proto == "" && phase == panel.PhaseDisconnected {
 		proto = ""
 	}
+	notice := s.notice
+	errText := ""
+	if phase == panel.PhaseError {
+		errText = detail
+		if errText == "" {
+			errText = "Служба приняла команду, туннель не поднялся."
+		}
+	}
 	return panel.Snapshot{
 		Phase:     phase,
 		Server:    server,
 		Protocol:  proto,
 		Transport: path,
 		Detail:    detail,
+		Err:       errText,
+		Notice:    notice,
 		Profiles:  profiles,
 	}
+}
+
+func (s *Session) socket() api.Client {
+	return api.Client{Path: filepath.Join(s.run, "api-v1.sock")}
+}
+
+func (s *Session) gate() string {
+	path := s.socket().Path
+	conn, err := net.DialTimeout("unix", path, 300*time.Millisecond)
+	if err == nil {
+		_ = conn.Close()
+		return ""
+	}
+	msg := err.Error()
+	if os.IsNotExist(err) || strings.Contains(msg, "no such file") || strings.Contains(msg, "connection refused") {
+		return "Служба не запущена. Нужен сокет /run/mazzy-vpn/api-v1.sock."
+	}
+	if os.IsPermission(err) || strings.Contains(msg, "permission denied") {
+		return "Нет группы mazzy-vpn. Подключение без пароля только у этой группы. После добавления нужен новый вход в сеанс."
+	}
+	return "Нет ответа службы. Повтор через пароль не делается."
+}
+
+func (s *Session) failClosed(line string) {
+	s.mu.Lock()
+	s.phase = panel.PhaseDisconnected
+	s.notice = line
+	s.expectDown = false
+	s.mu.Unlock()
+}
+
+func (s *Session) applyLifecycle(out api.Outcome, wantUp bool) {
+	line := api.Scrub(out.Line)
+	switch out.Kind {
+	case api.KindAccepted:
+		s.mu.Lock()
+		s.notice = ""
+		s.expectDown = !wantUp
+		if wantUp && liveInterface() == "" {
+			s.phase = panel.PhaseError
+			s.detail = "Служба приняла команду, туннель не поднялся."
+		} else if wantUp {
+			s.phase = panel.PhaseConnected
+			s.detail = ""
+		} else {
+			s.phase = panel.PhaseDisconnected
+			s.detail = ""
+		}
+		s.mu.Unlock()
+	case api.KindFailed:
+		s.mu.Lock()
+		s.phase = panel.PhaseError
+		s.notice = ""
+		s.detail = line
+		s.mu.Unlock()
+		s.appendLog(line)
+	default:
+		s.mu.Lock()
+		if liveInterface() == "" {
+			s.phase = panel.PhaseDisconnected
+		}
+		s.notice = line
+		s.mu.Unlock()
+		s.appendLog(line)
+	}
+	s.fire()
+}
+
+func (s *Session) profileID(name string) (string, error) {
+	entry, err := s.cat.Get(name)
+	if err != nil {
+		return "", err
+	}
+	s.mu.Lock()
+	s.server = entry.Name
+	s.proto = entry.Protocol
+	s.mu.Unlock()
+	return api.ProfileID(string(entry.Protocol), filepath.Base(entry.File)), nil
 }
 
 func (s *Session) profiles() ([]panel.Profile, error) {
@@ -403,16 +555,14 @@ func (s *Session) profiles() ([]panel.Profile, error) {
 }
 
 func (s *Session) launchCLI(ctx context.Context, args []string) (*elevate.Proc, error) {
-	plan, err := elevate.Command(os.Geteuid(), elevate.Graphical(), elevate.Look, args)
-	if err != nil {
-		return nil, err
+	if elevate.Privileged(args) {
+		return nil, fmt.Errorf("окно не повышает права")
 	}
-	plan = elevate.ForwardEnv(plan, []string{
-		"MAZZY_CONFIG_DIR=" + s.cat.Dir,
-		"MAZZY_STATE_DIR=" + s.store.Dir,
-		"MAZZY_RUN_DIR=" + s.run,
-	}, elevate.Look)
-	return elevate.Start(ctx, plan)
+	cli := elevate.Look("mazzy-vpn")
+	if cli == "" {
+		return nil, fmt.Errorf("mazzy-vpn CLI is not installed")
+	}
+	return elevate.Start(ctx, elevate.Plan{Argv: append([]string{cli}, args...), Via: "direct"})
 }
 
 func (s *Session) start(ctx context.Context, args []string) (*elevate.Proc, error) {
@@ -594,8 +744,19 @@ func (s *Session) settingsText() string {
 	return "settings.json\n" + string(data)
 }
 
-func (s *Session) appendLog(text string) {
+func oneLine(text string) string {
 	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	if i := strings.IndexAny(text, "\r\n"); i >= 0 {
+		text = strings.TrimSpace(text[:i])
+	}
+	return text
+}
+
+func (s *Session) appendLog(text string) {
+	text = api.Scrub(strings.TrimSpace(text))
 	if text == "" {
 		return
 	}

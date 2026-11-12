@@ -55,17 +55,32 @@ func (a *App) activate(snap panel.Snapshot, i int) {
 	go a.sess.Do(context.Background(), call)
 }
 
-// runCommand starts a menu action and opens the journal when there is
-// something to read. A confirm stays on the command tab for the second press.
+// runCommand starts a menu action. Lifecycle stays on the panel. A text
+// command opens the journal. A confirm keeps the submenu open.
 func (a *App) runCommand(snap panel.Snapshot, i int) {
+	label := ""
+	if i >= 0 && i < len(a.cmds) {
+		label = a.cmds[i].Label
+	}
 	a.activate(snap, i)
 	if a.armed != "" {
-		a.tab = 1
 		a.cmdFocus = true
+		a.menuOpen = a.menuAt
 		return
 	}
-	a.tab = 2
-	a.cmdFocus = false
+	switch label {
+	case "Восстановить", "Сброс", "В фоне", "Зонд", "Аудит":
+		a.cmdFocus = true
+		a.menuOpen = a.menuAt
+	case "Связь", "Быстро", "Переподключить", "Отключить":
+		a.menuOpen = -1
+		a.cmdFocus = false
+		a.tab = 0
+	default:
+		a.menuOpen = -1
+		a.cmdFocus = false
+		a.tab = 1
+	}
 }
 
 func (a *App) actionCard(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
@@ -304,6 +319,7 @@ func (a *App) logCard(gtx layout.Context, _ panel.Snapshot) layout.Dimensions {
 		}
 		a.logSeen = n
 	}
+	gtx.Constraints.Min.Y = 0
 	return card(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -311,7 +327,8 @@ func (a *App) logCard(gtx layout.Context, _ panel.Snapshot) layout.Dimensions {
 				l.Color = colorText
 				return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
 			}),
-			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				gtx.Constraints.Min.Y = 0
 				if len(lines) == 0 {
 					l := material.Body2(a.theme, a.text.LogHint)
 					l.Color = colorMuted

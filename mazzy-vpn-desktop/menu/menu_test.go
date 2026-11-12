@@ -49,7 +49,7 @@ func TestConnectUsesSelectedProfile(t *testing.T) {
 		t.Fatal("expected a reason without a profile")
 	}
 	on := link.Run(Context{Profile: "helsinki"})
-	if len(on.Argv) != 1 || on.Argv[0][0] != "up" || on.Argv[0][1] != "helsinki" {
+	if on.Lifecycle != "connect" || len(on.Argv) != 1 || on.Argv[0][0] != "helsinki" {
 		t.Fatalf("%+v", on)
 	}
 }

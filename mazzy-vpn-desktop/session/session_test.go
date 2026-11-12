@@ -5,7 +5,6 @@ package session
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,33 +43,32 @@ func TestLoadShowsImportedProfile(t *testing.T) {
 	}
 }
 
-func TestConnectElevatesTheCLI(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("running as root")
-	}
+func TestConnectDoesNotElevate(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "helsinki.conf")
 	if err := os.WriteFile(src, []byte(sampleConf), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s := New(Config{CatalogDir: filepath.Join(dir, "catalog"), StateDir: filepath.Join(dir, "state"), RunDir: filepath.Join(dir, "run")})
+	s := New(Config{CatalogDir: filepath.Join(dir, "catalog"), StateDir: filepath.Join(dir, "state"), RunDir: dir})
 	if _, err := s.cat.Import(src); err != nil {
 		t.Fatal(err)
 	}
-	var got []string
-	s.launch = func(_ context.Context, args []string) (*elevate.Proc, error) {
-		got = append([]string(nil), args...)
-		return nil, fmt.Errorf("stopped before exec")
+	s.launch = func(context.Context, []string) (*elevate.Proc, error) {
+		t.Fatal("connect launched a process")
+		return nil, nil
 	}
-	_, err := s.Connect(context.Background(), "helsinki")
-	if err == nil || !strings.Contains(err.Error(), "stopped before exec") {
-		t.Fatalf("err = %v", err)
+	snap, err := s.Connect(context.Background(), "helsinki")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if strings.Contains(err.Error(), "start Mazzy VPN Desktop") {
-		t.Fatalf("window was told to become root: %v", err)
+	if snap.Phase != "disconnected" {
+		t.Fatalf("phase %s", snap.Phase)
 	}
-	if len(got) != 2 || got[0] != "up" || got[1] != "helsinki" {
-		t.Fatalf("args = %q", got)
+	if !strings.Contains(snap.Notice, "сокет") {
+		t.Fatalf("notice %q", snap.Notice)
+	}
+	if strings.Contains(s.Log(), "Not authorized") || strings.Contains(s.Log(), "pkexec") {
+		t.Fatalf("log %q", s.Log())
 	}
 }
 

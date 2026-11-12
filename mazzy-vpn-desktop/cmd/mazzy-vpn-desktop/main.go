@@ -49,7 +49,7 @@ func main() {
 			}
 		}()
 		err := ui.Run(w, model, sess)
-		// Closing the window stops only a CLI process this window started.
+		// Closing the window leaves a service-owned tunnel up.
 		sess.Close(context.Background())
 		if err != nil {
 			log.Fatal(err)

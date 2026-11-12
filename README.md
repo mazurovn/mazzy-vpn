@@ -162,17 +162,17 @@ for the full command reference in all six languages.
 
 [`mazzy-vpn-desktop/`](mazzy-vpn-desktop/) is the gio window from ADR-0004. The
 top bar is the name, status, server, protocol, connect, and disconnect. Under
-it, three tabs: the panel, the command menu, and the log. The server list stays
-on the left of every tab. The panel names the selected server, its protocol and
-port, and the real connection state. Commands sit in a menu with submenus
-(connection, recovery, network, protection, catalog, system), not in one long
-page. The window copy is Russian unless `MAZZY_LANG` names another catalog.
+it, one row holds the Panel and Log tabs and a menu bar: connection, recovery,
+network, protection, catalog, and system. Each title opens a submenu. The
+server list is the wide column on the panel. The summary is only as tall as
+its text. Connect, reconnect, and disconnect talk to
+`/run/mazzy-vpn/api-v1.sock` as the current user and do not call pkexec or
+sudo. The window copy is Russian unless `MAZZY_LANG` names another catalog.
 `mazzy-vpn egress` is the check behind the egress, cleanliness, and
-Antigravity lights. Build the window with `CGO_ENABLED=1` (a C compiler plus
-X11/Wayland headers). The window itself stays unprivileged. Connect and the
-other root commands run `mazzy-vpn` through pkexec, or through sudo when there
-is no PolicyKit agent — the same split the CLI menu and the existing desktop
-already use.
+Antigravity lights, and only after a tunnel is actually up. Build the window
+with `CGO_ENABLED=1` (a C compiler plus X11/Wayland headers). The window
+stays unprivileged: a missing socket or a missing `mazzy-vpn` group stays
+disconnected with one reason, and the window does not ask for a password.
 
 The same top-bar actions are in [`desktop/panels/`](desktop/panels/).
 `mazzy-panel` prints status and elevates connect and disconnect. Copy

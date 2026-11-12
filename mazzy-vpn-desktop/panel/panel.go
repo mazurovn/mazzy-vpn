@@ -35,6 +35,7 @@ type Snapshot struct {
 	Transport string
 	Detail    string
 	Err       string
+	Notice    string
 	Profiles  []Profile
 	Selected  int
 }
@@ -137,7 +138,7 @@ func (m *Model) Connect(ctx context.Context) {
 // Disconnect tears the tunnel down.
 func (m *Model) Disconnect(ctx context.Context) {
 	m.mu.Lock()
-	if m.busy || (m.snap.Phase != PhaseConnected && m.snap.Phase != PhaseError) {
+	if m.busy || (m.snap.Phase != PhaseConnected && m.snap.Phase != PhaseError && m.snap.Phase != PhaseConnecting) {
 		m.mu.Unlock()
 		return
 	}

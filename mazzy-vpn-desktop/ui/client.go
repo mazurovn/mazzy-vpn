@@ -5,8 +5,12 @@ package ui
 
 import (
 	"fmt"
+	"image"
+	"unicode/utf8"
 
 	"gioui.org/layout"
+	"gioui.org/op"
+	"gioui.org/op/clip"
 	"gioui.org/unit"
 	"gioui.org/widget/material"
 
@@ -15,29 +19,79 @@ import (
 )
 
 func (a *App) client(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
+	return a.page(gtx, snap)
+}
+
+func (a *App) page(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
 	return layout.Inset{Left: unit.Dp(14), Right: unit.Dp(14), Top: unit.Dp(8), Bottom: unit.Dp(10)}.Layout(gtx,
 		func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+			dims := layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return a.tabBar(gtx)
+					return a.chrome(gtx)
 				}),
 				layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+					if a.tab == 1 {
+						return a.journal(gtx, snap)
+					}
 					return layout.Flex{}.Layout(gtx,
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							gtx.Constraints.Min.X = gtx.Dp(280)
-							gtx.Constraints.Max.X = gtx.Dp(300)
+						layout.Flexed(2, func(gtx layout.Context) layout.Dimensions {
+							gtx.Constraints.Min.X = gtx.Dp(420)
 							return a.serverCard(gtx, snap)
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
-						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-							return a.workspace(gtx, snap)
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							gtx.Constraints.Min.X = gtx.Dp(280)
+							gtx.Constraints.Max.X = gtx.Dp(360)
+							return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+									return a.hero(gtx, snap)
+								}),
+							)
 						}),
 					)
 				}),
 			)
+			if a.menuOpen >= 0 {
+				a.overlay(gtx, snap, dims.Size)
+			}
+			return dims
 		},
 	)
+}
+
+// overlay draws the open submenu above the page. Its size is not part of
+// the page, so a dropdown cannot stretch the menu titles.
+func (a *App) overlay(gtx layout.Context, snap panel.Snapshot, size image.Point) {
+	if a.barH < size.Y {
+		off := op.Offset(image.Pt(0, a.barH)).Push(gtx.Ops)
+		cover := image.Point{X: size.X, Y: size.Y - a.barH}
+		st := clip.Rect{Max: cover}.Push(gtx.Ops)
+		_ = a.dismiss.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Dimensions{Size: cover}
+		})
+		st.Pop()
+		off.Pop()
+	}
+	width := gtx.Dp(520)
+	x := a.popupAt.X
+	if x+width > size.X {
+		x = size.X - width
+	}
+	if x < 0 {
+		x = 0
+		width = size.X
+	}
+	y := a.popupAt.Y
+	off := op.Offset(image.Pt(x, y)).Push(gtx.Ops)
+	pgtx := gtx
+	pgtx.Constraints.Min = image.Point{X: width}
+	pgtx.Constraints.Max.X = width
+	if y < size.Y {
+		pgtx.Constraints.Max.Y = size.Y - y
+	}
+	a.popup(pgtx, snap)
+	off.Pop()
 }
 
 func (a *App) serverCard(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
@@ -94,9 +148,10 @@ func (a *App) serverRow(gtx layout.Context, snap panel.Snapshot, i int) layout.D
 				}
 				return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
 					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-						l := material.Label(a.theme, unit.Sp(14), p.Name)
+						l := material.Label(a.theme, unit.Sp(14), endEllipsis(p.Name, gtx.Constraints.Max.X, gtx.Sp(14)))
 						l.Color = colorText
 						l.MaxLines = 1
+						l.Truncator = "…"
 						return l.Layout(gtx)
 					}),
 					layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
@@ -138,24 +193,6 @@ func visibleState(view monitor.View, link, handshake, route, egress, clean, serv
 	return out
 }
 
-func (a *App) workspace(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
-	switch a.tab {
-	case 1:
-		return a.menuPane(gtx, snap)
-	case 2:
-		return a.logCard(gtx, snap)
-	default:
-		// Rigid so the status card stays as tall as its content. The
-		// parent flex already fills the pane, and an empty stretch
-		// would paint a hollow card.
-		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return a.hero(gtx, snap)
-			}),
-		)
-	}
-}
-
 func (a *App) hero(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
 	server, protocol, transport := display(snap)
 	if server == "" {
@@ -175,7 +212,7 @@ func (a *App) hero(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
 		dot = lightColor(view.Connection)
 		statusText = view.ConnectionText
 	}
-	extra := extraLights(visibleState(view, a.text.Link, a.text.Handshake, a.text.Route, a.text.EgressIP, a.text.Clean, a.text.Service), a.text.Link)
+	strip := a.compact(view, snap.Phase)
 	return card(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -212,12 +249,12 @@ func (a *App) hero(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
 				return layout.Inset{Top: unit.Dp(6)}.Layout(gtx, l.Layout)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				if len(extra) == 0 && !hasMeasurement(view.Points) {
+				if len(strip) == 0 && !hasMeasurement(view.Points) {
 					return layout.Dimensions{}
 				}
 				return layout.Inset{Top: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					kids := make([]layout.FlexChild, 0, len(extra)+1)
-					for _, c := range extra {
+					kids := make([]layout.FlexChild, 0, len(strip)+1)
+					for _, c := range strip {
 						c := c
 						kids = append(kids, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 							return a.chip(gtx, c)
@@ -231,6 +268,19 @@ func (a *App) hero(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
 					return layout.Flex{Alignment: layout.Middle}.Layout(gtx, kids...)
 				})
 			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Inset{Top: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+					return layout.Flex{}.Layout(gtx,
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							return a.button(gtx, &a.connect2, a.text.Connect, colorAccent, a.model.CanConnect())
+						}),
+						layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							return a.button(gtx, &a.refresh, a.text.Refresh+"  F5", colorCard, true)
+						}),
+					)
+				})
+			}),
 		)
 	})
 }
@@ -238,6 +288,9 @@ func (a *App) hero(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
 func (a *App) stepLine(snap panel.Snapshot) string {
 	if snap.Phase == panel.PhaseError && snap.Err != "" {
 		return snap.Err
+	}
+	if snap.Notice != "" && snap.Phase != panel.PhaseConnected {
+		return snap.Notice
 	}
 	switch snap.Phase {
 	case panel.PhaseConnecting:
@@ -249,6 +302,50 @@ func (a *App) stepLine(snap panel.Snapshot) string {
 	default:
 		return a.text.Ready
 	}
+}
+
+func (a *App) compact(view monitor.View, phase panel.Phase) []chip {
+	if phase != panel.PhaseConnected {
+		return nil
+	}
+	var out []chip
+	if view.Connection != monitor.Unknown && view.Connection != "" {
+		out = append(out, chip{Title: a.text.Link, Text: view.ConnectionText, Light: view.Connection})
+	}
+	if view.EgressLight != monitor.Unknown && view.EgressLight != "" {
+		out = append(out, chip{Title: a.text.Exit, Text: view.EgressText, Light: view.EgressLight})
+	}
+	if view.Egress != "" {
+		out = append(out, chip{Title: a.text.EgressIP, Text: view.Egress, Light: monitor.Green})
+	}
+	if view.Clean != monitor.Unknown && view.Clean != "" {
+		out = append(out, chip{Title: a.text.Clean, Text: view.CleanText, Light: view.Clean})
+	}
+	return out
+}
+
+func (a *App) journal(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
+	if len(a.logLines()) == 0 {
+		l := material.Body1(a.theme, a.text.LogHint)
+		l.Color = colorMuted
+		return l.Layout(gtx)
+	}
+	return a.logCard(gtx, snap)
+}
+
+func endEllipsis(s string, width, em int) string {
+	if s == "" || width <= 0 || em <= 0 {
+		return s
+	}
+	max := width * 10 / (em * 6)
+	if max < 4 {
+		max = 4
+	}
+	if utf8.RuneCountInString(s) <= max {
+		return s
+	}
+	r := []rune(s)
+	return string(r[:max-1]) + "…"
 }
 
 func extraLights(chips []chip, linkTitle string) []chip {

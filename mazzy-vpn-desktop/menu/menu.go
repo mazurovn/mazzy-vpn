@@ -19,6 +19,11 @@ type Call struct {
 	Settings bool
 	// TraceZone asks the caller to run core/pathtrace for this profile name.
 	TraceZone string
+	// Lifecycle is connect, best, reconnect, or disconnect. Those go to the
+	// local API socket and are never wrapped in pkexec or sudo.
+	Lifecycle string
+	// Update checks for a release and must not change the tunnel.
+	Update bool
 }
 
 // Context is what the menu knows about the current selection.
@@ -40,17 +45,19 @@ func Actions() []Action {
 	return []Action{
 		{Label: "Связь", Run: connectSelected},
 		{Label: "Быстро", Run: func(Context) Call {
-			return live("Быстро", []string{"up", "--best"})
+			return Call{Label: "Быстро", Lifecycle: "best"}
 		}},
 		{Label: "Выбрать зону", Run: func(Context) Call {
 			return live("Выбрать зону", []string{"test"})
 		}},
-		{Label: "Переподключить", Run: reconnect},
-		{Label: "Отключить", Run: func(Context) Call {
-			return live("Отключить", []string{"disconnect"})
+		{Label: "Переподключить", Run: func(Context) Call {
+			return Call{Label: "Переподключить", Lifecycle: "reconnect"}
 		}},
-		{Label: "Восстановить", Run: confirmCmd("Восстановить", "recover")},
-		{Label: "Сброс", Run: confirmArgs("Сброс", "recover", "--reset-catalog")},
+		{Label: "Отключить", Run: func(Context) Call {
+			return Call{Label: "Отключить", Lifecycle: "disconnect"}
+		}},
+		{Label: "Восстановить", Run: disabled("Восстановить", "из окна не запускается. В терминале: sudo mazzy-vpn recover")},
+		{Label: "Сброс", Run: disabled("Сброс", "из окна не запускается. В терминале: sudo mazzy-vpn recover --reset-catalog")},
 		{Label: "В фоне", Run: disabled("В фоне", "daemon не возвращает управление — окно его не запускает")},
 		{Label: "Диагностика", Run: func(Context) Call { return live("Диагностика", []string{"doctor"}) }},
 		{Label: "Зонд", Run: disabled("Зонд", "команды probe нет — список серверов открывает «Серверы»")},
@@ -73,7 +80,9 @@ func Actions() []Action {
 		{Label: "Языки", Run: func(Context) Call { return live("Языки", []string{"language", "--list"}) }},
 		{Label: "Система", Run: func(Context) Call { return Call{Label: "Система", Settings: true} }},
 		{Label: "Врач", Run: func(Context) Call { return live("Врач", []string{"doctor"}) }},
-		{Label: "Обновление", Run: func(Context) Call { return live("Обновление", []string{"update"}) }},
+		{Label: "Обновление", Run: func(Context) Call {
+			return Call{Label: "Обновление", Update: true, Argv: [][]string{{"update"}}}
+		}},
 		{Label: "Состояние", Run: func(Context) Call { return live("Состояние", []string{"status"}) }},
 	}
 }
@@ -90,28 +99,7 @@ func connectSelected(ctx Context) Call {
 	if ctx.Profile == "" {
 		return Call{Label: "Связь", Disabled: "выберите сервер в списке"}
 	}
-	return live("Связь", []string{"up", ctx.Profile})
-}
-
-func reconnect(Context) Call {
-	return Call{Label: "Переподключить", Argv: [][]string{
-		{"netdiag"},
-		{"disconnect"},
-		{"up", "--best"},
-	}}
-}
-
-func confirmCmd(label, cmd string) func(Context) Call {
-	return confirmArgs(label, cmd)
-}
-
-func confirmArgs(label string, args ...string) func(Context) Call {
-	return func(ctx Context) Call {
-		if !ctx.Confirmed {
-			return Call{Label: label, Confirm: true, Disabled: "нажмите ещё раз, чтобы подтвердить"}
-		}
-		return live(label, args)
-	}
+	return Call{Label: "Связь", Lifecycle: "connect", Argv: [][]string{{ctx.Profile}}}
 }
 
 func trace(ctx Context) Call {

@@ -61,9 +61,16 @@ type App struct {
 	refocus    bool
 	logSeen    int
 	tab        int
-	tabBtn     [3]widget.Clickable
+	tabBtn     [2]widget.Clickable
 	menuAt     int
+	menuOpen   int
 	menuBtn    []widget.Clickable
+	dismiss    widget.Clickable
+	refresh    widget.Clickable
+	serverJump widget.Clickable
+	connect2   widget.Clickable
+	popupAt    image.Point
+	barH       int
 }
 
 // New builds the window state for model.
@@ -83,6 +90,7 @@ func New(model *panel.Model) *App {
 		logList:  layout.List{Axis: layout.Vertical},
 		pathEdit: widget.Editor{SingleLine: true, Submit: true},
 		refocus:  true,
+		menuOpen: -1,
 	}
 }
 
@@ -142,23 +150,42 @@ func (a *App) frame(gtx layout.Context) {
 	for i := range a.tabBtn {
 		if a.tabBtn[i].Clicked(gtx) {
 			a.tab = i
-			a.cmdFocus = i == 1
-			if i == 1 {
-				a.placeInMenu()
-			}
+			a.menuOpen = -1
+			a.cmdFocus = false
 			a.refocus = true
 		}
+	}
+	if a.serverJump.Clicked(gtx) {
+		a.tab = 0
+		a.menuOpen = -1
+		a.refocus = true
+	}
+	if a.refresh.Clicked(gtx) {
+		a.refreshNow()
+	}
+	if a.connect2.Clicked(gtx) {
+		a.model.Connect(context.Background())
+	}
+	if a.dismiss.Clicked(gtx) {
+		a.menuOpen = -1
+		a.cmdFocus = false
+		a.refocus = true
 	}
 	a.ensureMenu(len(menuGroups))
 	for i := range a.menuBtn {
 		if a.menuBtn[i].Clicked(gtx) {
-			a.tab = 1
-			a.menuAt = i
-			a.cmdFocus = true
-			a.refocus = true
-			if idxs := a.menus()[i].Index; len(idxs) > 0 {
-				a.cmdIndex = idxs[0]
+			if a.menuOpen == i {
+				a.menuOpen = -1
+				a.cmdFocus = false
+			} else {
+				a.menuOpen = i
+				a.menuAt = i
+				a.cmdFocus = true
+				if idxs := a.menus()[i].Index; len(idxs) > 0 {
+					a.cmdIndex = idxs[0]
+				}
 			}
+			a.refocus = true
 		}
 	}
 	a.keys(gtx, snap)
@@ -203,7 +230,9 @@ func (a *App) top(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(16)}.Layout),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-					return a.meta(gtx, a.text.Server, server)
+					return a.serverJump.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						return a.meta(gtx, a.text.Server, server)
+					})
 				}),
 				layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -286,7 +315,7 @@ func (a *App) button(gtx layout.Context, click *widget.Clickable, label string, 
 	b.CornerRadius = unit.Dp(8)
 	b.Inset = layout.Inset{Top: unit.Dp(8), Bottom: unit.Dp(8), Left: unit.Dp(14), Right: unit.Dp(14)}
 	if !enabled {
-		b.Background = color.NRGBA{R: 0x2a, G: 0x2e, B: 0x48, A: 0xff}
+		b.Background = color.NRGBA{R: 0x3a, G: 0x34, B: 0x2c, A: 0xff}
 		b.Color = colorMuted
 	}
 	return b.Layout(gtx)
