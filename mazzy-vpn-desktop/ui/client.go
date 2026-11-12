@@ -5,11 +5,13 @@ package ui
 
 import (
 	"image"
+	"strings"
 	"unicode/utf8"
 
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
+	"gioui.org/text"
 	"gioui.org/unit"
 	"gioui.org/widget/material"
 
@@ -40,8 +42,9 @@ func (a *App) page(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							gtx.Constraints.Min.X = gtx.Dp(240)
-							gtx.Constraints.Max.X = gtx.Dp(340)
+							w := summaryWidth(gtx)
+							gtx.Constraints.Min.X = w
+							gtx.Constraints.Max.X = w
 							gtx.Constraints.Min.Y = 0
 							return a.dashboard(gtx, snap)
 						}),
@@ -69,11 +72,18 @@ func (a *App) overlay(gtx layout.Context, snap panel.Snapshot, size image.Point)
 		st.Pop()
 		off.Pop()
 	}
-	width := a.menuContentWidth(gtx, snap, size.X)
+	// The menu hangs over the profile list and stops before the summary,
+	// so the sentence stays whole while a menu is open.
+	room := size.X - summaryWidth(gtx) - gtx.Dp(16)
+	if room < gtx.Dp(280) {
+		room = gtx.Dp(280)
+	}
+	width := a.menuContentWidth(gtx, snap, room)
 	height := a.menuHeight(gtx, snap, width)
+	right := size.X - summaryWidth(gtx) - gtx.Dp(12)
 	x := a.popupAt.X
-	if x+width > size.X {
-		x = size.X - width
+	if x+width > right {
+		x = right - width
 	}
 	if x < 0 {
 		x = 0
@@ -191,15 +201,17 @@ func visibleState(view monitor.View, link, handshake, route, egress, clean, serv
 	return out
 }
 
+func summaryWidth(gtx layout.Context) int {
+	return gtx.Dp(560)
+}
+
 func (a *App) dashboard(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
 	view := a.board()
 	strip := a.compact(view)
 	points := measuredPoints(view.Points)
 	gtx.Constraints.Min.Y = 0
 	if len(strip) == 0 && len(points) == 0 {
-		l := material.Body1(a.theme, a.dashLine(snap))
-		l.Color = colorText
-		return l.Layout(gtx)
+		return a.sentence(gtx, a.dashLine(snap))
 	}
 	var kids []layout.FlexChild
 	if len(strip) > 0 {
@@ -215,6 +227,53 @@ func (a *App) dashboard(gtx layout.Context, snap panel.Snapshot) layout.Dimensio
 		}))
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, kids...)
+}
+
+// sentence wraps on spaces and keeps a path on one line.
+func (a *App) sentence(gtx layout.Context, s string) layout.Dimensions {
+	width := gtx.Constraints.Max.X
+	if width <= 0 {
+		width = summaryWidth(gtx)
+	}
+	lines := wrapOnSpaces(s, func(part string) int {
+		return a.measureText(gtx, unit.Sp(16), part)
+	}, width)
+	kids := make([]layout.FlexChild, len(lines))
+	for i, line := range lines {
+		line := line
+		kids[i] = layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			l := material.Body1(a.theme, line)
+			l.Color = colorText
+			l.MaxLines = 1
+			l.WrapPolicy = text.WrapWords
+			return l.Layout(gtx)
+		})
+	}
+	dims := layout.Flex{Axis: layout.Vertical}.Layout(gtx, kids...)
+	if dims.Size.X < width {
+		dims.Size.X = width
+	}
+	return dims
+}
+
+func wrapOnSpaces(s string, widthOf func(string) int, width int) []string {
+	words := strings.Fields(s)
+	if len(words) == 0 {
+		return []string{s}
+	}
+	var lines []string
+	cur := words[0]
+	for _, w := range words[1:] {
+		next := cur + " " + w
+		if widthOf(next) <= width {
+			cur = next
+			continue
+		}
+		lines = append(lines, cur)
+		cur = w
+	}
+	lines = append(lines, cur)
+	return lines
 }
 
 func (a *App) dashLine(snap panel.Snapshot) string {
