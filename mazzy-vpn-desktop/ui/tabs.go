@@ -204,34 +204,116 @@ func (a *App) menuTitle(gtx layout.Context, i int, title string) layout.Dimensio
 	})
 }
 
-func (a *App) popup(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
+func (a *App) menuContentWidth(gtx layout.Context, snap panel.Snapshot, avail int) int {
+	groups := a.menus()
+	width := gtx.Dp(280)
+	limit := avail - gtx.Dp(12)
+	if a.menuOpen < 0 || a.menuOpen >= len(groups) {
+		return width
+	}
+	for _, i := range groups[a.menuOpen].Index {
+		label := a.cmds[i].Label
+		w := a.measureText(gtx, unit.Sp(14), label) + gtx.Dp(32)
+		if sc := itemShortcut[label]; sc != "" {
+			w += gtx.Dp(16) + a.measureText(gtx, unit.Sp(12), sc)
+		}
+		if w > width {
+			width = w
+		}
+	}
+	floor := gtx.Dp(380)
+	if limit > 0 && floor > limit {
+		floor = limit
+	}
+	if width < floor {
+		width = floor
+	}
+	if limit > 0 && width > limit {
+		width = limit
+	}
+	return width
+}
+
+func (a *App) measureText(gtx layout.Context, size unit.Sp, s string) int {
+	if s == "" {
+		return 0
+	}
+	gtx.Constraints.Min = image.Point{}
+	gtx.Constraints.Max.X = 1 << 20
+	gtx.Constraints.Max.Y = 1 << 20
+	macro := op.Record(gtx.Ops)
+	w := material.Label(a.theme, size, s).Layout(gtx).Size.X
+	macro.Stop()
+	return w
+}
+
+func (a *App) menuHeight(gtx layout.Context, snap panel.Snapshot, width int) int {
+	mg := gtx
+	mg.Constraints.Min = image.Point{X: width}
+	mg.Constraints.Max = image.Point{X: width, Y: 1 << 20}
+	macro := op.Record(gtx.Ops)
+	h := a.menuBody(mg, snap, false).Size.Y
+	macro.Stop()
+	groups := a.menus()
+	if a.menuOpen >= 0 && a.menuOpen < len(groups) && groups[a.menuOpen].Title == "Каталог" {
+		h += gtx.Dp(48)
+	}
+	return h
+}
+
+func (a *App) paintMenu(gtx layout.Context, snap panel.Snapshot, width int) layout.Dimensions {
+	mg := gtx
+	mg.Constraints.Min = image.Point{X: width}
+	mg.Constraints.Max = image.Point{X: width, Y: 1 << 20}
+	macro := op.Record(gtx.Ops)
+	dims := a.menuBody(mg, snap, true)
+	call := macro.Stop()
+	r := gtx.Dp(10)
+	defer clip.RRect{Rect: image.Rectangle{Max: dims.Size}, NE: r, NW: r, SE: r, SW: r}.Push(gtx.Ops).Pop()
+	paint.ColorOp{Color: colorMenu}.Add(gtx.Ops)
+	paint.PaintOp{}.Add(gtx.Ops)
+	call.Add(gtx.Ops)
+	return dims
+}
+
+func (a *App) menuBody(gtx layout.Context, snap panel.Snapshot, live bool) layout.Dimensions {
 	groups := a.menus()
 	if a.menuOpen < 0 || a.menuOpen >= len(groups) {
 		return layout.Dimensions{}
 	}
 	open := groups[a.menuOpen]
-	gtx.Constraints.Min.Y = 0
-	return card(gtx, func(gtx layout.Context) layout.Dimensions {
+	return layout.UniformInset(unit.Dp(12)).Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		kids := make([]layout.FlexChild, 0, len(open.Index)+2)
+		title := open.Title
 		kids = append(kids, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			l := material.H6(a.theme, open.Title)
+			l := material.H6(a.theme, title)
 			l.Color = colorText
-			return layout.Inset{Bottom: unit.Dp(4)}.Layout(gtx, l.Layout)
+			return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, l.Layout)
 		}))
 		for _, idx := range open.Index {
 			idx := idx
 			kids = append(kids, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return a.popupItem(gtx, snap, idx)
+				return a.menuRow(gtx, snap, idx, live)
 			}))
 		}
-		if open.Title == "Каталог" {
+		if live && open.Title == "Каталог" {
 			kids = append(kids, layout.Rigid(a.pathField))
 		}
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, kids...)
 	})
 }
 
-func (a *App) popupItem(gtx layout.Context, snap panel.Snapshot, i int) layout.Dimensions {
+func (a *App) menuRow(gtx layout.Context, snap panel.Snapshot, i int, live bool) layout.Dimensions {
+	draw := func(gtx layout.Context) layout.Dimensions {
+		return a.menuRowVisual(gtx, snap, i)
+	}
+	if !live {
+		return draw(gtx)
+	}
+	return a.actBtn[i].Layout(gtx, draw)
+}
+
+func (a *App) menuRowVisual(gtx layout.Context, snap panel.Snapshot, i int) layout.Dimensions {
 	label := a.cmds[i].Label
 	call := a.menuCall(snap, i)
 	reason := ""
@@ -242,47 +324,49 @@ func (a *App) popupItem(gtx layout.Context, snap panel.Snapshot, i int) layout.D
 		reason = call.Disabled
 	}
 	shortcut := itemShortcut[label]
-	return a.actBtn[i].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		macro := op.Record(gtx.Ops)
-		dims := layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			name := material.Body2(a.theme, label)
-			name.Color = colorText
-			if reason != "" && a.armed != label {
-				name.Color = colorMuted
-			}
-			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
-						layout.Flexed(1, name.Layout),
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							if shortcut == "" {
-								return layout.Dimensions{}
-							}
-							l := material.Caption(a.theme, shortcut)
-							l.Color = colorMuted
-							return l.Layout(gtx)
-						}),
-					)
-				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					if reason == "" {
-						return layout.Dimensions{}
-					}
-					c := material.Caption(a.theme, reason)
-					c.Color = colorMuted
-					c.MaxLines = 0
-					return c.Layout(gtx)
-				}),
-			)
-		})
-		call := macro.Stop()
-		if a.cmdFocus && i == a.cmdIndex {
-			defer clip.Rect{Max: dims.Size}.Push(gtx.Ops).Pop()
-			paint.Fill(gtx.Ops, colorSelect)
+	macro := op.Record(gtx.Ops)
+	dims := layout.Inset{Top: unit.Dp(6), Bottom: unit.Dp(6), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		gtx.Constraints.Min.X = 0
+		name := material.Body2(a.theme, label)
+		name.Color = colorText
+		name.MaxLines = 1
+		if reason != "" && a.armed != label {
+			name.Color = colorMuted
 		}
-		call.Add(gtx.Ops)
-		return dims
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+					layout.Rigid(name.Layout),
+					layout.Flexed(1, layout.Spacer{Width: unit.Dp(16)}.Layout),
+					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						if shortcut == "" {
+							return layout.Dimensions{}
+						}
+						l := material.Caption(a.theme, shortcut)
+						l.Color = colorMuted
+						l.MaxLines = 1
+						return l.Layout(gtx)
+					}),
+				)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				if reason == "" {
+					return layout.Dimensions{}
+				}
+				c := material.Caption(a.theme, reason)
+				c.Color = colorMuted
+				c.MaxLines = 0
+				return c.Layout(gtx)
+			}),
+		)
 	})
+	callOp := macro.Stop()
+	if a.cmdFocus && i == a.cmdIndex {
+		defer clip.Rect{Max: dims.Size}.Push(gtx.Ops).Pop()
+		paint.Fill(gtx.Ops, colorSelect)
+	}
+	callOp.Add(gtx.Ops)
+	return dims
 }
 
 var itemShortcut = map[string]string{

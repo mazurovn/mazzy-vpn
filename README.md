@@ -164,8 +164,10 @@ for the full command reference in all six languages.
 top bar is the name, status, server, protocol, connect, and disconnect. Under
 it, one row holds the Panel and Log tabs and a menu bar: connection, recovery,
 network, protection, catalog, and system. Each title opens a submenu. The
-server list is the wide column on the panel. The summary is only as tall as
-its text. Connect, reconnect, and disconnect talk to
+server list is the wide column on the panel. The right side is the dashboard:
+one sentence while nothing has been measured, then a strip and a chart only
+after a real measurement. Menus are solid dropdowns. Connect, reconnect, and
+disconnect talk to
 `/run/mazzy-vpn/api-v1.sock` as the current user and do not call pkexec or
 sudo. The window copy is Russian unless `MAZZY_LANG` names another catalog.
 `mazzy-vpn egress` is the check behind the egress, cleanliness, and

@@ -4,7 +4,6 @@
 package ui
 
 import (
-	"fmt"
 	"image"
 	"unicode/utf8"
 
@@ -41,13 +40,10 @@ func (a *App) page(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
 						}),
 						layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
 						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							gtx.Constraints.Min.X = gtx.Dp(280)
-							gtx.Constraints.Max.X = gtx.Dp(360)
-							return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-									return a.hero(gtx, snap)
-								}),
-							)
+							gtx.Constraints.Min.X = gtx.Dp(240)
+							gtx.Constraints.Max.X = gtx.Dp(340)
+							gtx.Constraints.Min.Y = 0
+							return a.dashboard(gtx, snap)
 						}),
 					)
 				}),
@@ -60,8 +56,8 @@ func (a *App) page(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
 	)
 }
 
-// overlay draws the open submenu above the page. Its size is not part of
-// the page, so a dropdown cannot stretch the menu titles.
+// overlay draws the open submenu as a solid layer above the page.
+// op.Defer paints it after the server list, so rows cannot show through.
 func (a *App) overlay(gtx layout.Context, snap panel.Snapshot, size image.Point) {
 	if a.barH < size.Y {
 		off := op.Offset(image.Pt(0, a.barH)).Push(gtx.Ops)
@@ -73,25 +69,27 @@ func (a *App) overlay(gtx layout.Context, snap panel.Snapshot, size image.Point)
 		st.Pop()
 		off.Pop()
 	}
-	width := gtx.Dp(520)
+	width := a.menuContentWidth(gtx, snap, size.X)
+	height := a.menuHeight(gtx, snap, width)
 	x := a.popupAt.X
 	if x+width > size.X {
 		x = size.X - width
 	}
 	if x < 0 {
 		x = 0
-		width = size.X
 	}
 	y := a.popupAt.Y
-	off := op.Offset(image.Pt(x, y)).Push(gtx.Ops)
-	pgtx := gtx
-	pgtx.Constraints.Min = image.Point{X: width}
-	pgtx.Constraints.Max.X = width
-	if y < size.Y {
-		pgtx.Constraints.Max.Y = size.Y - y
+	if y+height > size.Y {
+		y = size.Y - height
 	}
-	a.popup(pgtx, snap)
+	if y < 0 {
+		y = 0
+	}
+	macro := op.Record(gtx.Ops)
+	off := op.Offset(image.Pt(x, y)).Push(gtx.Ops)
+	a.paintMenu(gtx, snap, width)
 	off.Pop()
+	op.Defer(gtx.Ops, macro.Stop())
 }
 
 func (a *App) serverCard(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
@@ -193,96 +191,56 @@ func visibleState(view monitor.View, link, handshake, route, egress, clean, serv
 	return out
 }
 
-func (a *App) hero(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
-	server, protocol, transport := display(snap)
-	if server == "" {
-		server = a.text.Empty
-	}
-	sub := protocol
-	if transport != "" {
-		if sub != "" {
-			sub += "   ·   "
-		}
-		sub += transport
-	}
+func (a *App) dashboard(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
 	view := a.board()
-	status, dot := a.phaseText(snap.Phase)
-	statusText := status
-	if view.Connection != monitor.Unknown && view.ConnectionText != "" {
-		dot = lightColor(view.Connection)
-		statusText = view.ConnectionText
+	strip := a.compact(view)
+	points := measuredPoints(view.Points)
+	gtx.Constraints.Min.Y = 0
+	if len(strip) == 0 && len(points) == 0 {
+		l := material.Body1(a.theme, a.dashLine(snap))
+		l.Color = colorText
+		return l.Layout(gtx)
 	}
-	strip := a.compact(view, snap.Phase)
-	return card(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				l := material.H5(a.theme, server)
-				l.Color = colorText
-				return l.Layout(gtx)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				if sub == "" {
-					return layout.Dimensions{}
-				}
-				l := material.Body1(a.theme, sub)
-				l.Color = colorAccent
-				return layout.Inset{Top: unit.Dp(2)}.Layout(gtx, l.Layout)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.Inset{Top: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return a.dot(gtx, dot)
-						}),
-						layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							l := material.Body1(a.theme, statusText)
-							l.Color = colorText
-							return l.Layout(gtx)
-						}),
-					)
-				})
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				l := material.Body2(a.theme, fmt.Sprintf("%d %s. %s", len(snap.Profiles), a.text.InCatalog, a.stepLine(snap)))
-				l.Color = colorMuted
-				return layout.Inset{Top: unit.Dp(6)}.Layout(gtx, l.Layout)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				if len(strip) == 0 && !hasMeasurement(view.Points) {
-					return layout.Dimensions{}
-				}
-				return layout.Inset{Top: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					kids := make([]layout.FlexChild, 0, len(strip)+1)
-					for _, c := range strip {
-						c := c
-						kids = append(kids, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return a.chip(gtx, c)
-						}))
-					}
-					if hasMeasurement(view.Points) {
-						kids = append(kids, layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-							return a.bars(gtx, view.Points)
-						}))
-					}
-					return layout.Flex{Alignment: layout.Middle}.Layout(gtx, kids...)
-				})
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.Inset{Top: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					return layout.Flex{}.Layout(gtx,
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return a.button(gtx, &a.connect2, a.text.Connect, colorAccent, a.model.CanConnect())
-						}),
-						layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							return a.button(gtx, &a.refresh, a.text.Refresh+"  F5", colorCard, true)
-						}),
-					)
-				})
-			}),
-		)
-	})
+	var kids []layout.FlexChild
+	if len(strip) > 0 {
+		kids = append(kids, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return a.strip(gtx, strip)
+		}))
+	}
+	if len(points) > 0 {
+		kids = append(kids, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Top: unit.Dp(12)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return a.bars(gtx, points)
+			})
+		}))
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, kids...)
+}
+
+func (a *App) dashLine(snap panel.Snapshot) string {
+	if snap.Phase == panel.PhaseError && snap.Err != "" {
+		return snap.Err
+	}
+	if snap.Notice != "" && snap.Phase != panel.PhaseConnected {
+		return snap.Notice
+	}
+	if snap.Phase == panel.PhaseConnected {
+		return a.text.DashUp
+	}
+	return a.text.DashDown
+}
+
+func (a *App) strip(gtx layout.Context, chips []chip) layout.Dimensions {
+	kids := make([]layout.FlexChild, 0, len(chips))
+	for _, c := range chips {
+		c := c
+		kids = append(kids, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			return layout.Inset{Bottom: unit.Dp(6)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+				return a.chip(gtx, c)
+			})
+		}))
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, kids...)
 }
 
 func (a *App) stepLine(snap panel.Snapshot) string {
@@ -304,12 +262,9 @@ func (a *App) stepLine(snap panel.Snapshot) string {
 	}
 }
 
-func (a *App) compact(view monitor.View, phase panel.Phase) []chip {
-	if phase != panel.PhaseConnected {
-		return nil
-	}
+func (a *App) compact(view monitor.View) []chip {
 	var out []chip
-	if view.Connection != monitor.Unknown && view.Connection != "" {
+	if view.Connection == monitor.Green || (view.Connection == monitor.Yellow && view.ConnectionText != "запрошено включение, интерфейса нет") {
 		out = append(out, chip{Title: a.text.Link, Text: view.ConnectionText, Light: view.Connection})
 	}
 	if view.EgressLight != monitor.Unknown && view.EgressLight != "" {

@@ -173,67 +173,6 @@ func (a *App) actionRow(gtx layout.Context, snap panel.Snapshot, i int) layout.D
 	})
 }
 
-func (a *App) dashboard(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
-	view := a.board()
-	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return a.lightCards(gtx, view)
-		}),
-		layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return a.chartCard(gtx, view)
-		}),
-		layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout),
-		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return a.logCard(gtx, snap)
-		}),
-	)
-}
-
-func (a *App) lightCards(gtx layout.Context, view monitor.View) layout.Dimensions {
-	return layout.Flex{}.Layout(gtx,
-		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return a.lightCard(gtx, a.text.Link, view.Connection, view.ConnectionText)
-		}),
-		layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
-		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return a.lightCard(gtx, a.text.Handshake, view.Handshake, view.HandshakeText)
-		}),
-		layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
-		layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-			return a.lightCard(gtx, a.text.Route, view.Path, view.PathText)
-		}),
-	)
-}
-
-func (a *App) lightCard(gtx layout.Context, title string, light monitor.Light, text string) layout.Dimensions {
-	if text == "" {
-		text = a.text.Unknown
-	}
-	return card(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						return a.dot(gtx, lightColor(light))
-					}),
-					layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-						l := material.Body2(a.theme, title)
-						l.Color = colorText
-						return l.Layout(gtx)
-					}),
-				)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				l := material.Caption(a.theme, text)
-				l.Color = colorMuted
-				return layout.Inset{Top: unit.Dp(6)}.Layout(gtx, l.Layout)
-			}),
-		)
-	})
-}
-
 func lightColor(light monitor.Light) color.NRGBA {
 	switch light {
 	case monitor.Green:
@@ -247,33 +186,17 @@ func lightColor(light monitor.Light) color.NRGBA {
 	}
 }
 
-func (a *App) chartCard(gtx layout.Context, view monitor.View) layout.Dimensions {
-	return card(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				l := material.Body2(a.theme, a.text.Chart)
-				l.Color = colorText
-				return layout.Inset{Bottom: unit.Dp(8)}.Layout(gtx, l.Layout)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return a.bars(gtx, view.Points)
-			}),
-		)
-	})
-}
-
 func (a *App) bars(gtx layout.Context, points []monitor.Point) layout.Dimensions {
-	height := gtx.Dp(36)
+	points = measuredPoints(points)
+	if len(points) == 0 {
+		return layout.Dimensions{}
+	}
+	height := gtx.Dp(72)
 	gtx.Constraints.Min.Y = height
 	gtx.Constraints.Max.Y = height
-	if !hasMeasurement(points) {
-		l := material.Caption(a.theme, a.text.NoData)
-		l.Color = colorMuted
-		return l.Layout(gtx)
-	}
 	max := int64(1)
 	for _, p := range points {
-		if p.HasMS && p.MS > max {
+		if p.MS > max {
 			max = p.MS
 		}
 	}
@@ -287,21 +210,28 @@ func (a *App) bars(gtx layout.Context, points []monitor.Point) layout.Dimensions
 	return layout.Flex{Alignment: layout.End}.Layout(gtx, kids...)
 }
 
+func measuredPoints(points []monitor.Point) []monitor.Point {
+	out := make([]monitor.Point, 0, len(points))
+	for _, p := range points {
+		if p.HasMS {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func hasMeasurement(points []monitor.Point) bool {
-	return len(points) > 0
+	return len(measuredPoints(points)) > 0
 }
 
 func (a *App) bar(gtx layout.Context, p monitor.Point, max int64, height int) layout.Dimensions {
 	h := gtx.Dp(4)
-	c := colorRed
-	if p.HasMS {
-		c = colorAccent
-		scaled := int(int64(height) * p.MS / max)
-		if scaled < h {
-			scaled = h
-		}
-		h = scaled
+	c := colorAccent
+	scaled := int(int64(height) * p.MS / max)
+	if scaled < h {
+		scaled = h
 	}
+	h = scaled
 	w := gtx.Dp(8)
 	gtx.Constraints.Min = image.Pt(w+gtx.Dp(3), height)
 	gtx.Constraints.Max = gtx.Constraints.Min
