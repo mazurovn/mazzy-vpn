@@ -5,32 +5,35 @@ package ui
 
 import (
 	"fmt"
-	"image"
 
 	"gioui.org/layout"
-	"gioui.org/op"
-	"gioui.org/op/clip"
-	"gioui.org/op/paint"
 	"gioui.org/unit"
 	"gioui.org/widget/material"
 
-	"github.com/mazurovn/mazzy-vpn/desktop/menu"
 	"github.com/mazurovn/mazzy-vpn/desktop/monitor"
 	"github.com/mazurovn/mazzy-vpn/desktop/panel"
 )
 
 func (a *App) client(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
-	return layout.Inset{Left: unit.Dp(14), Right: unit.Dp(14), Top: unit.Dp(10), Bottom: unit.Dp(10)}.Layout(gtx,
+	return layout.Inset{Left: unit.Dp(14), Right: unit.Dp(14), Top: unit.Dp(8), Bottom: unit.Dp(10)}.Layout(gtx,
 		func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{}.Layout(gtx,
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					gtx.Constraints.Min.X = gtx.Dp(280)
-					gtx.Constraints.Max.X = gtx.Dp(300)
-					return a.serverCard(gtx, snap)
+					return a.tabBar(gtx)
 				}),
-				layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
+				layout.Rigid(layout.Spacer{Height: unit.Dp(8)}.Layout),
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-					return a.workspace(gtx, snap)
+					return layout.Flex{}.Layout(gtx,
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							gtx.Constraints.Min.X = gtx.Dp(280)
+							gtx.Constraints.Max.X = gtx.Dp(300)
+							return a.serverCard(gtx, snap)
+						}),
+						layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
+						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+							return a.workspace(gtx, snap)
+						}),
+					)
 				}),
 			)
 		},
@@ -100,7 +103,7 @@ func (a *App) serverRow(gtx layout.Context, snap panel.Snapshot, i int) layout.D
 					layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 						gtx.Constraints.Min.X = gtx.Dp(72)
 						l := material.Label(a.theme, unit.Sp(13), port)
-						l.Color = colorCyan
+						l.Color = colorAccent
 						l.MaxLines = 1
 						return l.Layout(gtx)
 					}),
@@ -136,25 +139,21 @@ func visibleState(view monitor.View, link, handshake, route, egress, clean, serv
 }
 
 func (a *App) workspace(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
-	lines := a.logLines()
-	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return a.hero(gtx, snap)
-		}),
-		layout.Rigid(layout.Spacer{Height: unit.Dp(10)}.Layout),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return a.commandShelf(gtx, snap)
-		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			if len(lines) == 0 {
-				return layout.Dimensions{}
-			}
-			gtx.Constraints.Max.Y = gtx.Dp(168)
-			return layout.Inset{Top: unit.Dp(10)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-				return a.logCard(gtx, snap)
-			})
-		}),
-	)
+	switch a.tab {
+	case 1:
+		return a.menuPane(gtx, snap)
+	case 2:
+		return a.logCard(gtx, snap)
+	default:
+		// Rigid so the status card stays as tall as its content. The
+		// parent flex already fills the pane, and an empty stretch
+		// would paint a hollow card.
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				return a.hero(gtx, snap)
+			}),
+		)
+	}
 }
 
 func (a *App) hero(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
@@ -189,7 +188,7 @@ func (a *App) hero(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
 					return layout.Dimensions{}
 				}
 				l := material.Body1(a.theme, sub)
-				l.Color = colorCyan
+				l.Color = colorAccent
 				return layout.Inset{Top: unit.Dp(2)}.Layout(gtx, l.Layout)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
@@ -259,153 +258,6 @@ func extraLights(chips []chip, linkTitle string) []chip {
 			continue
 		}
 		out = append(out, c)
-	}
-	return out
-}
-
-func (a *App) commandShelf(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
-	return card(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				l := material.H6(a.theme, a.text.Commands)
-				l.Color = colorText
-				return layout.Inset{Bottom: unit.Dp(8)}.Layout(gtx, l.Layout)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return a.commandGrid(gtx, snap)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				text := a.disabledLine(snap)
-				if text == "" {
-					return layout.Dimensions{}
-				}
-				l := material.Caption(a.theme, text)
-				l.Color = colorMuted
-				return layout.Inset{Top: unit.Dp(8)}.Layout(gtx, l.Layout)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return a.pathField(gtx)
-			}),
-		)
-	})
-}
-
-func (a *App) commandGrid(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
-	n := len(a.cmds)
-	if n == 0 {
-		return layout.Dimensions{}
-	}
-	cols := gtx.Constraints.Max.X / gtx.Dp(168)
-	if cols < 3 {
-		cols = 3
-	}
-	if cols > 5 {
-		cols = 5
-	}
-	a.cmdCols = cols
-	rows := (n + cols - 1) / cols
-	colW := gtx.Constraints.Max.X / cols
-	kids := make([]layout.FlexChild, 0, rows)
-	for r := 0; r < rows; r++ {
-		r := r
-		kids = append(kids, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			cells := make([]layout.FlexChild, 0, cols)
-			for c := 0; c < cols; c++ {
-				i := r*cols + c
-				w := colW
-				if c == cols-1 {
-					w = gtx.Constraints.Max.X - colW*(cols-1)
-				}
-				cells = append(cells, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					gtx.Constraints.Min.X = w
-					gtx.Constraints.Max.X = w
-					if i >= n {
-						return layout.Dimensions{Size: image.Pt(w, 0)}
-					}
-					return a.commandChip(gtx, snap, i)
-				}))
-			}
-			return layout.Flex{}.Layout(gtx, cells...)
-		}))
-	}
-	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, kids...)
-}
-
-func (a *App) commandChip(gtx layout.Context, _ panel.Snapshot, i int) layout.Dimensions {
-	label := a.cmds[i].Label
-	_, off := a.standingDisable(i)
-	return layout.Inset{Right: unit.Dp(4), Bottom: unit.Dp(4)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return a.actBtn[i].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-			bg := colorPanel
-			if a.armed == label || (a.cmdFocus && i == a.cmdIndex) {
-				bg = colorSelect
-			}
-			macro := op.Record(gtx.Ops)
-			l := material.Label(a.theme, unit.Sp(13), label)
-			l.MaxLines = 1
-			l.Color = colorText
-			if off {
-				l.Color = colorMuted
-			}
-			dims := layout.Inset{Top: unit.Dp(7), Bottom: unit.Dp(7), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx, l.Layout)
-			callOp := macro.Stop()
-			rr := clip.UniformRRect(image.Rectangle{Max: dims.Size}, gtx.Dp(8))
-			defer rr.Push(gtx.Ops).Pop()
-			paint.ColorOp{Color: bg}.Add(gtx.Ops)
-			paint.PaintOp{}.Add(gtx.Ops)
-			callOp.Add(gtx.Ops)
-			return dims
-		})
-	})
-}
-
-func (a *App) menuCall(snap panel.Snapshot, i int) menu.Call {
-	profile := ""
-	if p, ok := snap.SelectedProfile(); ok {
-		profile = p.Name
-	}
-	catalog := ""
-	if a.sess != nil {
-		catalog = a.sess.CatalogDir()
-	}
-	return a.cmds[i].Run(menu.Context{
-		Profile: profile,
-		Catalog: catalog,
-		Path:    a.pathEdit.Text(),
-	})
-}
-
-func (a *App) standingDisable(i int) (string, bool) {
-	call := a.cmds[i].Run(menu.Context{Profile: "server", Catalog: "/tmp", Path: "/tmp"})
-	if call.Disabled != "" && !call.Confirm {
-		return call.Disabled, true
-	}
-	return "", false
-}
-
-func (a *App) disabledLine(snap panel.Snapshot) string {
-	var parts []string
-	for i := range a.cmds {
-		if reason, off := a.standingDisable(i); off {
-			parts = append(parts, a.cmds[i].Label+" — "+reason)
-		}
-	}
-	if a.cmdFocus && a.cmdIndex >= 0 && a.cmdIndex < len(a.cmds) && a.armed == a.cmds[a.cmdIndex].Label {
-		call := a.menuCall(snap, a.cmdIndex)
-		if call.Disabled != "" {
-			return call.Label + " — " + call.Disabled
-		}
-	}
-	return joinParts(parts)
-}
-
-func joinParts(parts []string) string {
-	out := ""
-	for i, p := range parts {
-		if i > 0 {
-			out += "\n"
-		}
-		out += p
 	}
 	return out
 }

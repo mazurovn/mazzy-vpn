@@ -55,6 +55,19 @@ func (a *App) activate(snap panel.Snapshot, i int) {
 	go a.sess.Do(context.Background(), call)
 }
 
+// runCommand starts a menu action and opens the journal when there is
+// something to read. A confirm stays on the command tab for the second press.
+func (a *App) runCommand(snap panel.Snapshot, i int) {
+	a.activate(snap, i)
+	if a.armed != "" {
+		a.tab = 1
+		a.cmdFocus = true
+		return
+	}
+	a.tab = 2
+	a.cmdFocus = false
+}
+
 func (a *App) actionCard(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
 	return card(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
@@ -267,7 +280,7 @@ func (a *App) bar(gtx layout.Context, p monitor.Point, max int64, height int) la
 	h := gtx.Dp(4)
 	c := colorRed
 	if p.HasMS {
-		c = colorCyan
+		c = colorAccent
 		scaled := int(int64(height) * p.MS / max)
 		if scaled < h {
 			scaled = h
@@ -300,7 +313,7 @@ func (a *App) logCard(gtx layout.Context, _ panel.Snapshot) layout.Dimensions {
 			}),
 			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 				if len(lines) == 0 {
-					l := material.Body2(a.theme, a.text.LogEmpty)
+					l := material.Body2(a.theme, a.text.LogHint)
 					l.Color = colorMuted
 					return l.Layout(gtx)
 				}

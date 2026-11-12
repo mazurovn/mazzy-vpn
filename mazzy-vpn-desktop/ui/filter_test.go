@@ -6,6 +6,7 @@ package ui
 import (
 	"testing"
 
+	"github.com/mazurovn/mazzy-vpn/desktop/menu"
 	"github.com/mazurovn/mazzy-vpn/desktop/monitor"
 	"github.com/mazurovn/mazzy-vpn/desktop/panel"
 )
@@ -36,5 +37,30 @@ func TestVisibleStateSkipsUnknown(t *testing.T) {
 	got = visibleState(view, "Связь", "Рукопожатие", "Путь", "Внешний IP", "Чистота", "Antigravity")
 	if len(got) != 1 || got[0].Title != "Связь" || got[0].Light != monitor.Red {
 		t.Fatalf("%+v", got)
+	}
+}
+
+func TestMenuGroupsCoverEveryCommand(t *testing.T) {
+	seen := map[string]int{}
+	for _, g := range menuGroups {
+		if g.title == "" || len(g.labels) == 0 {
+			t.Fatalf("empty group %+v", g)
+		}
+		for _, label := range g.labels {
+			seen[label]++
+		}
+	}
+	actions := menu.Actions()
+	if len(seen) != len(actions) {
+		t.Fatalf("groups %d actions %d", len(seen), len(actions))
+	}
+	for _, action := range actions {
+		if seen[action.Label] != 1 {
+			t.Fatalf("%s covered %d times", action.Label, seen[action.Label])
+		}
+	}
+	ru := Phrases()
+	if ru.PanelTab != "Панель" || ru.Commands != "Команды" || ru.Journal != "Журнал" {
+		t.Fatalf("%+v", ru)
 	}
 }

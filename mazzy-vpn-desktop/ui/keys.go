@@ -45,8 +45,9 @@ func (a *App) keys(gtx layout.Context, snap panel.Snapshot) {
 func (a *App) onKey(snap panel.Snapshot, e key.Event) {
 	switch e.Name {
 	case key.NameEscape:
-		if a.cmdFocus {
+		if a.cmdFocus || a.tab != 0 {
 			a.cmdFocus = false
+			a.tab = 0
 			a.refocus = true
 			return
 		}
@@ -62,7 +63,7 @@ func (a *App) onKey(snap panel.Snapshot, e key.Event) {
 		a.move(snap, 1)
 	case key.NameReturn, key.NameEnter:
 		if a.cmdFocus {
-			a.activate(snap, a.cmdIndex)
+			a.runCommand(snap, a.cmdIndex)
 			return
 		}
 		a.model.Connect(context.Background())
@@ -79,33 +80,55 @@ func (a *App) onKey(snap panel.Snapshot, e key.Event) {
 func (a *App) moveCmd(snap panel.Snapshot, delta int, horizontal bool) {
 	if !a.cmdFocus {
 		if delta > 0 {
+			a.tab = 1
 			a.cmdFocus = true
+			a.placeInMenu()
 		}
 		return
 	}
-	if len(a.cmds) == 0 {
+	groups := a.menus()
+	if len(groups) == 0 {
 		return
 	}
-	cols := a.cmdCols
-	if cols < 1 {
-		cols = 1
+	if a.menuAt < 0 || a.menuAt >= len(groups) {
+		a.menuAt = 0
 	}
-	if horizontal && delta < 0 && a.cmdIndex%cols == 0 {
-		a.cmdFocus = false
+	if horizontal {
+		if delta < 0 && a.menuAt == 0 {
+			a.cmdFocus = false
+			a.tab = 0
+			return
+		}
+		a.menuAt += delta
+		if a.menuAt < 0 {
+			a.menuAt = 0
+		}
+		if a.menuAt >= len(groups) {
+			a.menuAt = len(groups) - 1
+		}
+		if idxs := groups[a.menuAt].Index; len(idxs) > 0 {
+			a.cmdIndex = idxs[0]
+		}
+		a.tab = 1
 		return
 	}
-	step := delta
-	if !horizontal {
-		step = delta * cols
+	idxs := groups[a.menuAt].Index
+	pos := 0
+	for i, id := range idxs {
+		if id == a.cmdIndex {
+			pos = i
+		}
 	}
-	next := a.cmdIndex + step
-	if next < 0 {
-		next = 0
+	pos += delta
+	if pos < 0 {
+		pos = 0
 	}
-	if next >= len(a.cmds) {
-		next = len(a.cmds) - 1
+	if pos >= len(idxs) {
+		pos = len(idxs) - 1
 	}
-	a.cmdIndex = next
+	if len(idxs) > 0 {
+		a.cmdIndex = idxs[pos]
+	}
 	_ = snap
 }
 

@@ -26,17 +26,17 @@ import (
 )
 
 var (
-	colorBG     = color.NRGBA{R: 0x08, G: 0x0a, B: 0x16, A: 0xff}
-	colorPanel  = color.NRGBA{R: 0x16, G: 0x19, B: 0x31, A: 0xff}
-	colorCard   = color.NRGBA{R: 0x12, G: 0x14, B: 0x28, A: 0xff}
-	colorText   = color.NRGBA{R: 0xf6, G: 0xf7, B: 0xff, A: 0xff}
-	colorMuted  = color.NRGBA{R: 0x92, G: 0x99, B: 0xb9, A: 0xff}
-	colorCyan   = color.NRGBA{R: 0x68, G: 0xe9, B: 0xff, A: 0xff}
-	colorGreen  = color.NRGBA{R: 0x58, G: 0xeb, B: 0xb4, A: 0xff}
-	colorRed    = color.NRGBA{R: 0xff, G: 0x71, B: 0x8d, A: 0xff}
-	colorYellow = color.NRGBA{R: 0xff, G: 0xd4, B: 0x79, A: 0xff}
-	colorLine   = color.NRGBA{R: 0x68, G: 0xe9, B: 0xff, A: 0x55}
-	colorSelect = color.NRGBA{R: 0x68, G: 0x92, B: 0xff, A: 0x28}
+	colorBG     = color.NRGBA{R: 0x16, G: 0x13, B: 0x0f, A: 0xff}
+	colorPanel  = color.NRGBA{R: 0x22, G: 0x1e, B: 0x19, A: 0xff}
+	colorCard   = color.NRGBA{R: 0x2c, G: 0x26, B: 0x1f, A: 0xff}
+	colorText   = color.NRGBA{R: 0xf7, G: 0xf1, B: 0xe7, A: 0xff}
+	colorMuted  = color.NRGBA{R: 0xb3, G: 0xa8, B: 0x9c, A: 0xff}
+	colorAccent = color.NRGBA{R: 0xe2, G: 0xa1, B: 0x5a, A: 0xff}
+	colorGreen  = color.NRGBA{R: 0x8f, G: 0xbf, B: 0x7a, A: 0xff}
+	colorRed    = color.NRGBA{R: 0xe0, G: 0x7a, B: 0x6a, A: 0xff}
+	colorYellow = color.NRGBA{R: 0xe6, G: 0xc3, B: 0x6a, A: 0xff}
+	colorLine   = color.NRGBA{R: 0xe2, G: 0xa1, B: 0x5a, A: 0x55}
+	colorSelect = color.NRGBA{R: 0xe2, G: 0xa1, B: 0x5a, A: 0x33}
 )
 
 // App is the window state. Clickables live across frames.
@@ -58,9 +58,12 @@ type App struct {
 	query      string
 	cmdFocus   bool
 	cmdIndex   int
-	cmdCols    int
 	refocus    bool
 	logSeen    int
+	tab        int
+	tabBtn     [3]widget.Clickable
+	menuAt     int
+	menuBtn    []widget.Clickable
 }
 
 // New builds the window state for model.
@@ -68,7 +71,7 @@ func New(model *panel.Model) *App {
 	th := material.NewTheme()
 	th.Palette.Bg = colorBG
 	th.Palette.Fg = colorText
-	th.Palette.ContrastBg = colorCyan
+	th.Palette.ContrastBg = colorAccent
 	th.Palette.ContrastFg = colorBG
 	return &App{
 		model:    model,
@@ -80,7 +83,6 @@ func New(model *panel.Model) *App {
 		logList:  layout.List{Axis: layout.Vertical},
 		pathEdit: widget.Editor{SingleLine: true, Submit: true},
 		refocus:  true,
-		cmdCols:  5,
 	}
 }
 
@@ -131,8 +133,31 @@ func (a *App) frame(gtx layout.Context) {
 			if a.actBtn[i].Clicked(gtx) {
 				a.cmdFocus = true
 				a.cmdIndex = i
+				a.menuAt = a.groupFor(i)
 				a.refocus = true
-				a.activate(snap, i)
+				a.runCommand(snap, i)
+			}
+		}
+	}
+	for i := range a.tabBtn {
+		if a.tabBtn[i].Clicked(gtx) {
+			a.tab = i
+			a.cmdFocus = i == 1
+			if i == 1 {
+				a.placeInMenu()
+			}
+			a.refocus = true
+		}
+	}
+	a.ensureMenu(len(menuGroups))
+	for i := range a.menuBtn {
+		if a.menuBtn[i].Clicked(gtx) {
+			a.tab = 1
+			a.menuAt = i
+			a.cmdFocus = true
+			a.refocus = true
+			if idxs := a.menus()[i].Index; len(idxs) > 0 {
+				a.cmdIndex = idxs[0]
 			}
 		}
 	}
@@ -245,7 +270,7 @@ func (a *App) meta(gtx layout.Context, k, v string) layout.Dimensions {
 func (a *App) actions(gtx layout.Context) layout.Dimensions {
 	return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return a.button(gtx, &a.connect, a.text.Connect, colorCyan, a.model.CanConnect())
+			return a.button(gtx, &a.connect, a.text.Connect, colorAccent, a.model.CanConnect())
 		}),
 		layout.Rigid(layout.Spacer{Width: unit.Dp(8)}.Layout),
 		layout.Rigid(func(gtx layout.Context) layout.Dimensions {

@@ -20,6 +20,7 @@ type Text struct {
 	Filter, Commands, EgressIP, Clean, Service    string
 	Journal, Search, LogEmpty, PathHint           string
 	Ready, Busy, UpNote, Fail, InCatalog          string
+	PanelTab, LogHint                             string
 }
 
 var phrases = map[i18n.Lang]Text{
@@ -37,6 +38,7 @@ var phrases = map[i18n.Lang]Text{
 		Ready: "Pick a server, then Connect.", Busy: "Connecting. The CLI answer opens the log.",
 		UpNote: "Tunnel is up. Checks refresh on their own.", Fail: "Connect failed. The log has the CLI answer.",
 		InCatalog: "in the catalog",
+		PanelTab:  "Panel", LogHint: "The log fills in after a command or a connection.",
 	},
 	i18n.RU: {
 		Connect: "Подключить", Disconnect: "Отключить", Status: "Статус", Server: "Сервер", Protocol: "Протокол",
@@ -52,6 +54,7 @@ var phrases = map[i18n.Lang]Text{
 		Ready: "Выберите сервер слева и нажмите Подключить.", Busy: "Подключение. Ответ CLI откроет журнал.",
 		UpNote: "Туннель поднят. Проверки обновляются сами.", Fail: "Подключение не удалось. Ответ CLI в журнале.",
 		InCatalog: "в каталоге",
+		PanelTab:  "Панель", LogHint: "Журнал появится после команды или подключения.",
 	},
 	i18n.DE: {
 		Connect: "Verbinden", Disconnect: "Trennen", Status: "Status", Server: "Server", Protocol: "Protokoll",
@@ -67,6 +70,7 @@ var phrases = map[i18n.Lang]Text{
 		Ready: "Server wählen, dann Verbinden.", Busy: "Verbindung. Die CLI-Antwort öffnet das Journal.",
 		UpNote: "Tunnel steht. Prüfungen laufen von selbst.", Fail: "Verbindung fehlgeschlagen. Die CLI-Antwort steht im Journal.",
 		InCatalog: "im Katalog",
+		PanelTab:  "Panel", LogHint: "Das Journal füllt sich nach einem Befehl oder einer Verbindung.",
 	},
 	i18n.ZH: {
 		Connect: "连接", Disconnect: "断开", Status: "状态", Server: "服务器", Protocol: "协议",
@@ -82,6 +86,7 @@ var phrases = map[i18n.Lang]Text{
 		Ready: "先选服务器，再点连接。", Busy: "正在连接。CLI 的回复会打开日志。",
 		UpNote: "隧道已建立。检查会自己更新。", Fail: "连接失败。CLI 的回复在日志里。",
 		InCatalog: "在目录中",
+		PanelTab:  "面板", LogHint: "日志会在命令或连接之后出现。",
 	},
 	i18n.JA: {
 		Connect: "接続", Disconnect: "切断", Status: "状態", Server: "サーバー", Protocol: "プロトコル",
@@ -97,6 +102,7 @@ var phrases = map[i18n.Lang]Text{
 		Ready: "サーバーを選び、接続を押します。", Busy: "接続中。CLI の応答でログが開きます。",
 		UpNote: "トンネルは上がっています。検査は自分で更新します。", Fail: "接続に失敗しました。CLI の応答はログにあります。",
 		InCatalog: "カタログ内",
+		PanelTab:  "パネル", LogHint: "ログはコマンドか接続のあとに入ります。",
 	},
 	i18n.KO: {
 		Connect: "연결", Disconnect: "연결 해제", Status: "상태", Server: "서버", Protocol: "프로토콜",
@@ -112,6 +118,7 @@ var phrases = map[i18n.Lang]Text{
 		Ready: "서버를 고른 다음 연결을 누르세요.", Busy: "연결 중. CLI 응답이 로그를 엽니다.",
 		UpNote: "터널이 올라왔습니다. 검사는 스스로 갱신됩니다.", Fail: "연결에 실패했습니다. CLI 응답은 로그에 있습니다.",
 		InCatalog: "카탈로그",
+		PanelTab:  "패널", LogHint: "로그는 명령이나 연결 뒤에 채워집니다.",
 	},
 }
 
