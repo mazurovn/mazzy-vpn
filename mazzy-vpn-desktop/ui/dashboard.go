@@ -98,7 +98,7 @@ func (a *App) actionRow(gtx layout.Context, snap panel.Snapshot, i int) layout.D
 	}
 	btn := &a.actBtn[i]
 	return btn.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		if a.armed == label {
+		if a.armed == label || (a.palette && i == a.cmdIndex) {
 			fill(gtx, colorSelect)
 		}
 		return layout.Inset{Top: unit.Dp(5), Bottom: unit.Dp(5), Left: unit.Dp(8), Right: unit.Dp(8)}.Layout(gtx,
@@ -183,32 +183,6 @@ func (a *App) lightCard(gtx layout.Context, title string, light monitor.Light, t
 			}),
 		)
 	})
-}
-
-func (a *App) lightRow(gtx layout.Context, view monitor.View) layout.Dimensions {
-	return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return a.miniLight(gtx, a.text.Link, view.Connection)
-		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return a.miniLight(gtx, a.text.Handshake, view.Handshake)
-		}),
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return a.miniLight(gtx, a.text.Route, view.Path)
-		}),
-	)
-}
-
-func (a *App) miniLight(gtx layout.Context, title string, light monitor.Light) layout.Dimensions {
-	l := material.Caption(a.theme, title)
-	l.Color = colorMuted
-	return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
-		layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-			return a.dot(gtx, lightColor(light))
-		}),
-		layout.Rigid(layout.Spacer{Width: unit.Dp(6)}.Layout),
-		layout.Rigid(l.Layout),
-	)
 }
 
 func lightColor(light monitor.Light) color.NRGBA {

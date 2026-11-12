@@ -28,6 +28,7 @@ import (
 	"github.com/mazurovn/mazzy-vpn/core/profile"
 	"github.com/mazurovn/mazzy-vpn/core/settings"
 	"github.com/mazurovn/mazzy-vpn/core/state"
+	"github.com/mazurovn/mazzy-vpn/desktop/checks"
 	"github.com/mazurovn/mazzy-vpn/desktop/elevate"
 	"github.com/mazurovn/mazzy-vpn/desktop/menu"
 	"github.com/mazurovn/mazzy-vpn/desktop/monitor"
@@ -70,6 +71,8 @@ type Session struct {
 	expectDown bool
 	hold       *elevate.Proc
 	logText    string
+	holdLog    int
+	checking   bool
 	board      monitor.View
 	samples    []monitor.Point
 	launch     func(context.Context, []string) (*elevate.Proc, error)
@@ -125,8 +128,93 @@ func (s *Session) Note(text string) {
 // Load lists profiles and reports a tunnel this process owns, or one left up
 // by another Mazzy process.
 func (s *Session) Load(ctx context.Context) (panel.Snapshot, error) {
+	s.followHold()
 	s.observe(ctx)
 	return s.snapshot(), nil
+}
+
+// PollChecks runs `mazzy-vpn egress --json` when a tunnel interface exists.
+// Without one, the egress lights stay unknown and no address is invented.
+func (s *Session) PollChecks(ctx context.Context) {
+	s.mu.Lock()
+	if s.checking {
+		s.mu.Unlock()
+		return
+	}
+	s.checking = true
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		s.checking = false
+		s.mu.Unlock()
+	}()
+
+	if liveInterface() == "" {
+		s.mu.Lock()
+		s.board.EgressLight = monitor.Unknown
+		s.board.EgressText = "no tunnel interface"
+		s.board.Clean = monitor.Unknown
+		s.board.CleanText = "no tunnel interface"
+		s.board.Service = monitor.Unknown
+		s.board.ServiceText = "no tunnel interface"
+		s.board.Egress = ""
+		s.mu.Unlock()
+		s.fire()
+		return
+	}
+	out, err := s.runWait(ctx, []string{"egress", "--json"})
+	if err != nil && out == "" {
+		s.noteChecks(err.Error())
+		return
+	}
+	doc, perr := checks.Parse(out)
+	if perr != nil {
+		s.noteChecks(perr.Error())
+		return
+	}
+	s.mu.Lock()
+	before := len(s.board.Points)
+	s.board = checks.Apply(s.board, doc)
+	if extra := len(s.board.Points) - before; extra > 0 {
+		s.samples = append(s.samples, s.board.Points[before:]...)
+		if len(s.samples) > 32 {
+			s.samples = s.samples[len(s.samples)-32:]
+		}
+		s.board.Points = append([]monitor.Point(nil), s.samples...)
+	}
+	s.mu.Unlock()
+	s.appendLog(out)
+	s.fire()
+}
+
+func (s *Session) noteChecks(reason string) {
+	s.mu.Lock()
+	s.board.EgressLight = monitor.Unknown
+	s.board.EgressText = reason
+	s.board.Clean = monitor.Unknown
+	s.board.CleanText = reason
+	s.board.Service = monitor.Unknown
+	s.board.ServiceText = reason
+	s.mu.Unlock()
+	s.fire()
+}
+
+func (s *Session) followHold() {
+	s.mu.Lock()
+	hold := s.hold
+	seen := s.holdLog
+	s.mu.Unlock()
+	if hold == nil {
+		return
+	}
+	out := hold.Output()
+	if len(out) <= seen {
+		return
+	}
+	s.appendLog(out[seen:])
+	s.mu.Lock()
+	s.holdLog = len(out)
+	s.mu.Unlock()
 }
 
 // Connect starts `mazzy-vpn up NAME` and returns while that process stays
@@ -343,6 +431,7 @@ func (s *Session) startHold(ctx context.Context, args []string) error {
 	s.mu.Lock()
 	old := s.hold
 	s.hold = proc
+	s.holdLog = 0
 	s.mu.Unlock()
 	if old != nil {
 		_ = old.Stop()
@@ -420,6 +509,21 @@ func (s *Session) observe(ctx context.Context) {
 	if s.board.Path != "" {
 		view.Path = s.board.Path
 		view.PathText = s.board.PathText
+	}
+	if s.board.EgressLight != "" {
+		view.EgressLight = s.board.EgressLight
+		view.EgressText = s.board.EgressText
+		if s.board.Egress != "" {
+			view.Egress = s.board.Egress
+		}
+	}
+	if s.board.Clean != "" {
+		view.Clean = s.board.Clean
+		view.CleanText = s.board.CleanText
+	}
+	if s.board.Service != "" {
+		view.Service = s.board.Service
+		view.ServiceText = s.board.ServiceText
 	}
 	if point != nil {
 		s.samples = append(s.samples, *point)

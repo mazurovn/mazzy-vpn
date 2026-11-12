@@ -17,6 +17,7 @@ type Text struct {
 	Detail                                        string
 	Link, Handshake, Route, Unknown               string
 	Chart, Output, NoData, ImportHint             string
+	Filter, Commands, EgressIP, Clean, Service    string
 }
 
 var phrases = map[i18n.Lang]Text{
@@ -29,6 +30,7 @@ var phrases = map[i18n.Lang]Text{
 		Detail:    "Path",
 		Link:      "Connection", Handshake: "Handshake", Route: "Path", Unknown: "unknown",
 		Chart: "Probe", Output: "Output", NoData: "no measurements yet", ImportHint: "path for import or list",
+		Filter: "Filter servers", Commands: "Commands", EgressIP: "Egress IP", Clean: "Cleanliness", Service: "Antigravity",
 	},
 	i18n.RU: {
 		Connect: "Подключить", Disconnect: "Отключить", Status: "Статус", Server: "Сервер", Protocol: "Протокол",
@@ -39,6 +41,7 @@ var phrases = map[i18n.Lang]Text{
 		Detail:    "Путь",
 		Link:      "Связь", Handshake: "Рукопожатие", Route: "Путь", Unknown: "неизвестно",
 		Chart: "Проверка", Output: "Вывод", NoData: "измерений ещё нет", ImportHint: "путь для импорта или списка",
+		Filter: "Фильтр серверов", Commands: "Команды", EgressIP: "Внешний IP", Clean: "Чистота", Service: "Antigravity",
 	},
 	i18n.DE: {
 		Connect: "Verbinden", Disconnect: "Trennen", Status: "Status", Server: "Server", Protocol: "Protokoll",
@@ -49,6 +52,7 @@ var phrases = map[i18n.Lang]Text{
 		Detail:    "Pfad",
 		Link:      "Verbindung", Handshake: "Handshake", Route: "Pfad", Unknown: "unbekannt",
 		Chart: "Messung", Output: "Ausgabe", NoData: "noch keine Messwerte", ImportHint: "Pfad für Import oder Liste",
+		Filter: "Server filtern", Commands: "Befehle", EgressIP: "Ausgangs-IP", Clean: "Sauberkeit", Service: "Antigravity",
 	},
 	i18n.ZH: {
 		Connect: "连接", Disconnect: "断开", Status: "状态", Server: "服务器", Protocol: "协议",
@@ -59,6 +63,7 @@ var phrases = map[i18n.Lang]Text{
 		Detail:    "路径",
 		Link:      "连接", Handshake: "握手", Route: "路径", Unknown: "未知",
 		Chart: "探测", Output: "输出", NoData: "还没有测量", ImportHint: "导入或列出的路径",
+		Filter: "筛选服务器", Commands: "命令", EgressIP: "出口 IP", Clean: "纯净度", Service: "Antigravity",
 	},
 	i18n.JA: {
 		Connect: "接続", Disconnect: "切断", Status: "状態", Server: "サーバー", Protocol: "プロトコル",
@@ -69,6 +74,7 @@ var phrases = map[i18n.Lang]Text{
 		Detail:    "経路",
 		Link:      "接続", Handshake: "ハンドシェイク", Route: "経路", Unknown: "不明",
 		Chart: "計測", Output: "出力", NoData: "計測はまだありません", ImportHint: "インポートまたは一覧のパス",
+		Filter: "サーバーを絞る", Commands: "コマンド", EgressIP: "出口 IP", Clean: "清潔さ", Service: "Antigravity",
 	},
 	i18n.KO: {
 		Connect: "연결", Disconnect: "연결 해제", Status: "상태", Server: "서버", Protocol: "프로토콜",
@@ -79,6 +85,7 @@ var phrases = map[i18n.Lang]Text{
 		Detail:    "경로",
 		Link:      "연결", Handshake: "핸드셰이크", Route: "경로", Unknown: "알 수 없음",
 		Chart: "측정", Output: "출력", NoData: "측정값이 없습니다", ImportHint: "가져오기 또는 목록 경로",
+		Filter: "서버 필터", Commands: "명령", EgressIP: "외부 IP", Clean: "청정", Service: "Antigravity",
 	},
 }
 

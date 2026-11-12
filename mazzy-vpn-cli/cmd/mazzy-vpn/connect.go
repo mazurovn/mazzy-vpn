@@ -274,8 +274,8 @@ func cmdStatus(ctx context.Context, args []string) int {
 		} else if snap.LinkUp {
 			state = "link-up"
 		}
-		fmt.Printf(`{"state":%q,"interface":%q,"egress":%q,"profile":%q}`+"\n",
-			state, liveIface, snap.EgressIP, profileName)
+		fmt.Printf(`{"state":%q,"interface":%q,"egress":%q,"profile":%q,"protocol":%q}`+"\n",
+			state, liveIface, snap.EgressIP, profileName, protoName)
 		return 0
 	}
 

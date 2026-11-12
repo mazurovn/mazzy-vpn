@@ -34,10 +34,18 @@ func main() {
 		sess.SetFire(func() { model.Reload(context.Background()) })
 		model.Reload(context.Background())
 		go func() {
+			sess.PollChecks(context.Background())
 			tick := time.NewTicker(4 * time.Second)
 			defer tick.Stop()
-			for range tick.C {
-				model.Reload(context.Background())
+			checks := time.NewTicker(20 * time.Second)
+			defer checks.Stop()
+			for {
+				select {
+				case <-tick.C:
+					model.Reload(context.Background())
+				case <-checks.C:
+					sess.PollChecks(context.Background())
+				}
 			}
 		}()
 		err := ui.Run(w, model, sess)

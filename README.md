@@ -161,13 +161,25 @@ for the full command reference in all six languages.
 ## Linux desktop
 
 [`mazzy-vpn-desktop/`](mazzy-vpn-desktop/) is the gio window from ADR-0004. The
-top bar connects, disconnects, and shows status, server, and protocol. The
-rest of the window is the CLI menu: pick a server, run a command, and read
-the traffic lights for the live tunnel. Build it with `CGO_ENABLED=1` (a C
-compiler plus X11/Wayland headers). The window itself stays unprivileged.
-Connect and the other root commands run `mazzy-vpn` through pkexec, or through
-sudo when there is no PolicyKit agent — the same split the CLI menu and the
-existing desktop already use.
+top bar connects, disconnects, and shows status, server, and protocol. Under
+it: the server list (type to filter, arrows, Enter), the traffic lights, the
+egress check, and a scrollable log. `mazzy-vpn egress` is the check behind
+the egress, cleanliness, and Antigravity lights. A light stays unknown when
+the probe did not run. Build the window with `CGO_ENABLED=1` (a C compiler
+plus X11/Wayland headers). The window itself stays unprivileged. Connect and
+the other root commands run `mazzy-vpn` through pkexec, or through sudo when
+there is no PolicyKit agent — the same split the CLI menu and the existing
+desktop already use.
+
+The same top-bar actions are in [`desktop/panels/`](desktop/panels/).
+`mazzy-panel` prints status and elevates connect and disconnect. Copy
+`desktop/panels/gnome/mazzy-vpn@mazurovn.github.com/` to
+`~/.local/share/gnome-shell/extensions/` for GNOME Shell. Copy `custom/mazzy`
+from `desktop/panels/mango/mazzy.jsonc` into `~/.config/mangobar/config.jsonc`
+and list it in a modules row; that file is also a complete bar config. Mazy OS
+has no panel format in this repo, so `desktop/panels/mazy/mazzy-indicator.py`
+registers a StatusNotifier/AppIndicator item, which is how the existing Linux
+desktop already puts status in the bar.
 
 ```bash
 cd mazzy-vpn-desktop

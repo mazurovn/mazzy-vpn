@@ -55,6 +55,13 @@ type App struct {
 	logList    layout.List
 	pathEdit   widget.Editor
 	armed      string
+	query      string
+	palette    bool
+	cmdIndex   int
+	logFocus   bool
+	checkBtn   widget.Clickable
+	cmdToggle  widget.Clickable
+	logClick   widget.Clickable
 }
 
 // New builds the window state for model.
@@ -99,7 +106,12 @@ func (a *App) frame(gtx layout.Context) {
 	a.ensureRows(len(snap.Profiles))
 	for i := range snap.Profiles {
 		if a.rows[i].Clicked(gtx) {
-			a.model.Select(i)
+			a.logFocus = false
+			if snap.Selected == i {
+				a.model.Connect(context.Background())
+			} else {
+				a.model.Select(i)
+			}
 			snap = a.model.View()
 		}
 	}
@@ -119,6 +131,18 @@ func (a *App) frame(gtx layout.Context) {
 			}
 		}
 	}
+	if a.checkBtn.Clicked(gtx) && a.sess != nil {
+		go a.sess.PollChecks(context.Background())
+	}
+	if a.cmdToggle.Clicked(gtx) {
+		a.palette = !a.palette
+		a.logFocus = false
+	}
+	if a.logClick.Clicked(gtx) {
+		a.logFocus = true
+		a.palette = false
+	}
+	a.keys(gtx, snap)
 
 	paint.Fill(gtx.Ops, colorBG)
 	layout.Flex{Axis: layout.Vertical}.Layout(gtx,
@@ -147,10 +171,6 @@ func (a *App) top(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
 				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
 					return a.statusCluster(gtx, snap)
 				}),
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					return a.lightRow(gtx, a.board())
-				}),
-				layout.Rigid(layout.Spacer{Width: unit.Dp(16)}.Layout),
 				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					return a.actions(gtx)
 				}),
@@ -279,72 +299,7 @@ func (a *App) rule(gtx layout.Context) layout.Dimensions {
 }
 
 func (a *App) body(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
-	return layout.Inset{Left: unit.Dp(14), Right: unit.Dp(14), Top: unit.Dp(12), Bottom: unit.Dp(12)}.Layout(gtx,
-		func(gtx layout.Context) layout.Dimensions {
-			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-					l := material.Caption(a.theme, a.text.RootHint)
-					l.Color = colorMuted
-					return layout.Inset{Bottom: unit.Dp(8)}.Layout(gtx, l.Layout)
-				}),
-				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-					return layout.Flex{}.Layout(gtx,
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-							gtx.Constraints.Min.X = gtx.Dp(250)
-							gtx.Constraints.Max.X = gtx.Dp(280)
-							return a.actionCard(gtx, snap)
-						}),
-						layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
-						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-							return a.profileCard(gtx, snap)
-						}),
-						layout.Rigid(layout.Spacer{Width: unit.Dp(12)}.Layout),
-						layout.Flexed(1.15, func(gtx layout.Context) layout.Dimensions {
-							return a.dashboard(gtx, snap)
-						}),
-					)
-				}),
-			)
-		},
-	)
-}
-
-func (a *App) profileCard(gtx layout.Context, snap panel.Snapshot) layout.Dimensions {
-	return card(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				l := material.H6(a.theme, a.text.Profiles)
-				l.Color = colorText
-				return layout.Inset{Bottom: unit.Dp(8)}.Layout(gtx, l.Layout)
-			}),
-			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				if len(snap.Profiles) == 0 {
-					l := material.Body2(a.theme, a.text.Empty)
-					l.Color = colorMuted
-					return l.Layout(gtx)
-				}
-				return a.list.Layout(gtx, len(snap.Profiles), func(gtx layout.Context, i int) layout.Dimensions {
-					return a.profileRow(gtx, snap, i)
-				})
-			}),
-		)
-	})
-}
-
-func (a *App) profileRow(gtx layout.Context, snap panel.Snapshot, i int) layout.Dimensions {
-	p := snap.Profiles[i]
-	return a.rows[i].Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		if i == snap.Selected {
-			fill(gtx, colorSelect)
-		}
-		label := p.Name + "    " + p.Protocol
-		if port := endpointPort(p.Endpoint); port != "" {
-			label += "    udp/" + port
-		}
-		l := material.Body1(a.theme, label)
-		l.Color = colorText
-		return layout.Inset{Top: unit.Dp(8), Bottom: unit.Dp(8), Left: unit.Dp(10), Right: unit.Dp(10)}.Layout(gtx, l.Layout)
-	})
+	return a.client(gtx, snap)
 }
 
 func display(snap panel.Snapshot) (server, protocol, transport string) {

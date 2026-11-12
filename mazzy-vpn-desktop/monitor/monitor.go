@@ -34,6 +34,12 @@ type View struct {
 	Path           Light
 	PathText       string
 	Egress         string
+	EgressLight    Light
+	EgressText     string
+	Clean          Light
+	CleanText      string
+	Service        Light
+	ServiceText    string
 	Points         []Point
 }
 
@@ -62,6 +68,12 @@ func FromLive(s Live) View {
 		HandshakeText: "возраст рукопожатия не сообщается",
 		PathText:      "трассировка ещё не запускалась",
 		Egress:        s.IP,
+		EgressLight:   Unknown,
+		EgressText:    "ещё не проверяли",
+		Clean:         Unknown,
+		CleanText:     "ещё не проверяли",
+		Service:       Unknown,
+		ServiceText:   "Antigravity ещё не проверяли",
 	}
 	if !s.Checked {
 		v.ConnectionText = "ещё не проверяли"

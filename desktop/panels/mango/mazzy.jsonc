@@ -1,0 +1,17 @@
+// mangobar strips comments. Copy custom/mazzy into ~/.config/mangobar/config.jsonc
+// and add "custom/mazzy" to modules-left, modules-center, or modules-right.
+// This file is also a complete bar config.
+{
+  "layer": "top",
+  "height": 30,
+  "modules-left": [],
+  "modules-center": ["custom/mazzy"],
+  "modules-right": [],
+  "custom/mazzy": {
+    "exec": "mazzy-panel status",
+    "interval": 3,
+    "format": "{}",
+    "on-click": "mazzy-panel connect",
+    "on-click-right": "mazzy-panel disconnect"
+  }
+}

@@ -35,6 +35,7 @@ var aiProviders = []aiProvider{
 	{"Groq API", "https://api.groq.com/", "llm"},
 	{"OpenRouter", "https://openrouter.ai/api/v1/models", "llm"},
 	{"HuggingFace", "https://huggingface.co/", "llm"},
+	{"Google Antigravity", "https://daily-cloudcode-pa.googleapis.com/", "agent"},
 }
 
 // providerResult is one reachability check.
@@ -54,20 +55,36 @@ func checkProvider(ctx context.Context, p aiProvider, timeout time.Duration) pro
 	defer cancel()
 	client := &http.Client{Timeout: timeout}
 	start := time.Now()
-	req, err := http.NewRequestWithContext(cctx, http.MethodGet, p.URL, nil)
+	method := http.MethodGet
+	if p.URL == antigravityProbeURL {
+		method = http.MethodHead
+		client.Transport = &http.Transport{Proxy: nil}
+		client.CheckRedirect = func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+	}
+	req, err := http.NewRequestWithContext(cctx, method, p.URL, nil)
 	if err != nil {
 		res.Err = err.Error()
 		return res
 	}
 	req.Header.Set("User-Agent", "mazzy-vpn/diagnostics")
 	resp, err := client.Do(req)
-	res.LatencyMS = time.Since(start).Milliseconds()
 	if err != nil {
 		res.Err = shortErr(err.Error())
 		return res
 	}
 	defer resp.Body.Close()
 	res.Status = resp.StatusCode
+	res.LatencyMS = time.Since(start).Milliseconds()
+	if p.URL == antigravityProbeURL {
+		state, reason := classifyService(resp.StatusCode, false)
+		res.Reachable = state == "eligible"
+		if !res.Reachable {
+			res.Err = reason
+		}
+		return res
+	}
 	// Any HTTP response (even 401/403) proves the endpoint is REACHABLE; only a
 	// transport error means blocked/unreachable.
 	res.Reachable = true

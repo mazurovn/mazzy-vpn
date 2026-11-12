@@ -1,0 +1,78 @@
+#!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright © 2026 Nik m (@mazurovn). All rights reserved.
+#
+# Shared top-bar helper for GNOME Shell, mangobar and the Mazy OS indicator.
+# status prints "state  server  protocol". connect and disconnect elevate
+# only the mazzy-vpn CLI, the same way the desktop window does.
+
+set -eu
+
+cli() {
+    if command -v mazzy-vpn >/dev/null 2>&1; then
+        command -v mazzy-vpn
+        return
+    fi
+    for c in /usr/bin/mazzy-vpn /usr/local/bin/mazzy-vpn; do
+        if [ -x "$c" ]; then
+            printf '%s\n' "$c"
+            return
+        fi
+    done
+    echo "mazzy-vpn CLI is not installed" >&2
+    exit 1
+}
+
+field() {
+    # $1 json, $2 key
+    printf '%s' "$1" | sed -n "s/.*\"$2\":\"\\([^\"]*\\)\".*/\\1/p" | head -n 1
+}
+
+elevate() {
+    if [ "$(id -u)" -eq 0 ]; then
+        "$@"
+        return
+    fi
+    if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && [ -x /usr/bin/pkexec ]; then
+        exec /usr/bin/pkexec "$@"
+    fi
+    if command -v sudo >/dev/null 2>&1; then
+        exec sudo -- "$@"
+    fi
+    echo "needs root; run: sudo $*" >&2
+    exit 1
+}
+
+cmd=${1:-status}
+bin=$(cli)
+case "$cmd" in
+    status)
+        json=$("$bin" status --json 2>/dev/null || printf '%s' '{"state":"down","profile":"","protocol":""}')
+        state=$(field "$json" state)
+        server=$(field "$json" profile)
+        proto=$(field "$json" protocol)
+        [ -n "$state" ] || state=down
+        [ -n "$server" ] || server="—"
+        [ -n "$proto" ] || proto="—"
+        printf '%s  %s  %s\n' "$state" "$server" "$proto"
+        ;;
+    connect)
+        name=${2:-}
+        if [ -z "$name" ]; then
+            json=$("$bin" status --json 2>/dev/null || true)
+            name=$(field "$json" profile)
+        fi
+        if [ -z "$name" ]; then
+            echo "no server recorded; pick one in the Mazzy VPN window" >&2
+            exit 1
+        fi
+        elevate "$bin" up "$name"
+        ;;
+    disconnect)
+        elevate "$bin" disconnect
+        ;;
+    *)
+        echo "usage: mazzy-panel status|connect [SERVER]|disconnect" >&2
+        exit 2
+        ;;
+esac
