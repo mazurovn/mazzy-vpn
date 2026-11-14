@@ -4,6 +4,10 @@ All notable changes to Mazzy VPN are documented here.
 
 ## Unreleased
 
+- Raise the Go CI toolchain to 1.26.x (pinned go1.26.11) and `golang.org/x/net`
+  to v0.62.0 so govulncheck is clean, and move Desktop onto Rust 1.90 with
+  `tauri-plugin-updater` 2.14.1 (`zip` 9.5.1) and a non-yanked `async-executor`.
+
 ## 1.4.7 / Desktop 0.4.8 - 2026-08-12
 
 - Make the DEB Desktop autonomous: the package-owned engine, agent daemon,

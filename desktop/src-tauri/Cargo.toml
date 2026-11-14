@@ -6,7 +6,7 @@ authors = ["Nik m (@mazurovn)"]
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/mazurovn/mazzy-vpn"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.90"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -19,7 +19,7 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-log = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-single-instance = "2"
-tauri-plugin-updater = "2.10"
+tauri-plugin-updater = "2.14.1"
 rfd = "0.15"
 sha2 = "0.10"
 

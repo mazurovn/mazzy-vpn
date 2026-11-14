@@ -103,11 +103,10 @@ fn read_status() -> Value {
             // The socket-activated engine is the Desktop's primary backend.
             // A successful query also recreates the volatile /run cache after
             // reboot, without requiring any separately invoked CLI process.
-            if backend::refresh_status_cache_from_api() {
-                if let Ok(contents) = fs::read_to_string(STATUS_FILE) {
-                    return backend::sanitize_status_cache(&contents)
-                        .unwrap_or_else(fallback_status);
-                }
+            if backend::refresh_status_cache_from_api()
+                && let Ok(contents) = fs::read_to_string(STATUS_FILE)
+            {
+                return backend::sanitize_status_cache(&contents).unwrap_or_else(fallback_status);
             }
             let Some(cli_path) = backend::installed_cli_path() else {
                 return fallback_status(format!(
