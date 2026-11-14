@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright © 2026 Nik m (@mazurovn). All rights reserved.
+#
+# Nested HTTPS hop. mazzy-core owns MCP and the byte relay.
+# The unit does not contain a credential, a hostname, or an endpoint.
+# Do not set MAZZY_HOP_TEST_ROOT. The program is /etc/mazzy-vpn/hop.toeac,
+# mode 0600, owner root, not a symlink. This file does not enable itself.
+
+[Unit]
+Description=Mazzy hop core
+Documentation=https://github.com/mazurovn/mazzy-vpn
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/mazzy-core serve --config /etc/mazzy-vpn/hop.toeac --toeac /usr/local/bin/mazzy-toeac --protect /usr/local/bin/mazzy-hop-protect
+Restart=on-failure
+RestartSec=5
+RestartPreventExitStatus=78
+User=root
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+RuntimeDirectory=mazzy-vpn
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,65 @@
+# Placeholder program for the nested HTTPS hop.
+# Copy to /etc/mazzy-vpn/hop.toeac, replace every REPLACE_ token, mode 0600,
+# owner root, not a symlink. Do not commit that copy.
+# The process does not claim the egress is clean.
+# AmneziaWG and WireGuard are refused transports.
+
+transport nested-https
+
+server {
+  bind "REPLACE_BIND"
+  cert "REPLACE_CERT_PATH"
+  key "REPLACE_KEY_PATH"
+}
+
+session {
+  idle 120s
+  max 32
+}
+
+doctor {
+  every 30s
+  claim-clean no
+}
+
+protect {
+  credential "REPLACE_HOP_CREDENTIAL"
+  allow "REPLACE_HOST:REPLACE_PORT"
+  require-auth yes
+}
+
+artifact {
+  process "mazzy-core"
+  owns mcp
+}
+
+artifact {
+  process "mazzy-backend"
+  owns admin
+}
+
+artifact {
+  process "mazzy-front"
+  owns a2a
+}
+
+logic {
+  relay copy
+  protect mojo
+  doctor nim
+}
+
+mcp {
+  socket "REPLACE_MCP_SOCKET"
+}
+
+admin {
+  bind "REPLACE_ADMIN_BIND"
+  credential "REPLACE_ADMIN_CREDENTIAL"
+  status "REPLACE_STATUS_SOCKET"
+}
+
+a2a {
+  bind "REPLACE_A2A_BIND"
+  admin "REPLACE_ADMIN_URL"
+}

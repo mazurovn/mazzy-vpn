@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright © 2026 Nik m (@mazurovn). All rights reserved.
+#
+# mazzy-backend owns the admin API. It reads the same toeac program and
+# does not relay tunnel bytes. No credential is stored in this unit.
+# Do not set MAZZY_HOP_TEST_ROOT.
+
+[Unit]
+Description=Mazzy hop admin API
+Documentation=https://github.com/mazurovn/mazzy-vpn
+After=mazzy-core.service
+Wants=mazzy-core.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/mazzy-backend --config /etc/mazzy-vpn/hop.toeac --trust /usr/local/bin/mazzy-core --toeac /usr/local/bin/mazzy-toeac
+Restart=on-failure
+RestartSec=5
+RestartPreventExitStatus=78
+User=root
+NoNewPrivileges=true
+ProtectSystem=strict
+PrivateTmp=true
+RuntimeDirectory=mazzy-vpn
+
+[Install]
+WantedBy=multi-user.target

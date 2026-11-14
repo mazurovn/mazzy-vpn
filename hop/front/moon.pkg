@@ -1,0 +1,8 @@
+import {
+  "moonbitlang/core/string",
+  "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/async/socket",
+}
+
+supported_targets = "-all+native"
+options("allow-experimental-packages": true)

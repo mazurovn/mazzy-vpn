@@ -46,3 +46,12 @@ tools/mazzy-control-panel/
 # Go workspace (local module linking; not published).
 go.work
 go.work.sum
+
+# Hop programs that carry a credential, allowlist, or bind address live in
+# /etc/mazzy-vpn/ with mode 0600. Only the placeholder example is tracked.
+*.toeac
+!hop/example.toeac
+hop/toeac/target/
+hop/toeac/_build/
+hop/front/target/
+hop/front/_build/
