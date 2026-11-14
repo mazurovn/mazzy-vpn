@@ -1,0 +1,12 @@
+import {
+  "mazzy/front",
+  "moonbitlang/core/env",
+  "moonbitlang/core/async",
+  "moonbitlang/core/async/process",
+  "moonbitlang/core/async/stdio",
+  "moonbitlang/core/encoding/utf8",
+}
+
+supported_targets = "-all+native"
+pkgtype(kind: "executable")
+options("allow-experimental-packages": true)

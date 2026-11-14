@@ -1,0 +1,5 @@
+name = "mazzy/front"
+version = "0.1.0"
+preferred_target = "native"
+license = "AGPL-3.0-or-later"
+description = "MoonBit frontend for the Mazzy hop. This process owns A2A."

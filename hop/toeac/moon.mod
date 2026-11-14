@@ -1,0 +1,5 @@
+name = "mazzy/toeac"
+version = "0.1.0"
+preferred_target = "native"
+license = "AGPL-3.0-or-later"
+description = "toeac, the configuration language for the Mazzy hop"
