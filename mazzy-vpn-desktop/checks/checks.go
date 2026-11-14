@@ -24,6 +24,7 @@ type Doc struct {
 	TimezoneCountry string  `json:"timezone_country,omitempty"`
 	DNSBound        *bool   `json:"dns_bound,omitempty"`
 	DNSCountry      string  `json:"dns_country,omitempty"`
+	VirtualHop      bool    `json:"virtual_hop,omitempty"`
 	Antigravity     Service `json:"antigravity"`
 	Unknown         []Gap   `json:"unknown,omitempty"`
 }
@@ -91,8 +92,15 @@ func Apply(v monitor.View, doc Doc) monitor.View {
 
 	switch doc.Antigravity.State {
 	case "eligible":
-		v.Service = monitor.Green
-		v.ServiceText = "Antigravity auth boundary"
+		// HEAD 401/403/404 is reachability. A hosting or proxy tunnel
+		// egress is the address Google scores unless a virtual hop is set.
+		if egressFlagged(doc) && !doc.VirtualHop {
+			v.Service = monitor.Yellow
+			v.ServiceText = "virtual hop unset on a hosting or proxy egress"
+		} else {
+			v.Service = monitor.Green
+			v.ServiceText = "Antigravity auth boundary"
+		}
 	case "rate-limited":
 		v.Service = monitor.Yellow
 		v.ServiceText = "Antigravity rate-limited"
@@ -113,6 +121,13 @@ func Apply(v monitor.View, doc Doc) monitor.View {
 		v.Points = append(v.Points, monitor.Point{MS: *doc.Antigravity.LatencyMS, HasMS: true})
 	}
 	return v
+}
+
+func egressFlagged(doc Doc) bool {
+	if doc.Proxy != nil && *doc.Proxy {
+		return true
+	}
+	return doc.Hosting != nil && *doc.Hosting
 }
 
 func reason(doc Doc, check, fallback string) string {

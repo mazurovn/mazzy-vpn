@@ -65,6 +65,7 @@ type egressDoc struct {
 	TimezoneCountry string       `json:"timezone_country,omitempty"`
 	DNSBound        *bool        `json:"dns_bound,omitempty"`
 	DNSCountry      string       `json:"dns_country,omitempty"`
+	VirtualHop      bool         `json:"virtual_hop,omitempty"`
 	Antigravity     serviceCheck `json:"antigravity"`
 	Unknown         []gap        `json:"unknown,omitempty"`
 }
@@ -97,11 +98,16 @@ func cmdEgress(ctx context.Context, args []string) int {
 		fmt.Printf(" (%s)", safeDisplay(doc.Antigravity.Reason))
 	}
 	fmt.Println()
+	if doc.VirtualHop {
+		fmt.Println("virtual hop: configured")
+	} else {
+		fmt.Println("virtual hop: unset")
+	}
 	return 0
 }
 
 func collectEgress(ctx context.Context) egressDoc {
-	doc := egressDoc{}
+	doc := egressDoc{VirtualHop: virtualHopConfigured()}
 	sig := gatherStealthSignal(ctx)
 	if sig.EgressIPv4 == "" {
 		doc.Unknown = append(doc.Unknown, gap{Check: "ipv4", Reason: "ip-api did not return an address"})

@@ -42,3 +42,38 @@ func TestEligibleProbeRecordsLatency(t *testing.T) {
 		t.Fatalf("points %+v", v.Points)
 	}
 }
+
+func TestHostingEgressDoesNotLightAntigravity(t *testing.T) {
+	flagged := true
+	ms := int64(12)
+	doc := Doc{
+		IPv4: "203.0.113.9", Country: "NL", Proxy: &flagged, Hosting: &flagged,
+		Antigravity: Service{State: "eligible", HTTP: 401, Reason: "auth boundary reached", LatencyMS: &ms},
+	}
+	v := Apply(monitor.View{}, doc)
+	if v.Service == monitor.Green {
+		t.Fatal("lit Antigravity green on a hosting egress")
+	}
+	if v.Service != monitor.Yellow {
+		t.Fatalf("light %s (%s)", v.Service, v.ServiceText)
+	}
+	if v.Clean != monitor.Yellow {
+		t.Fatalf("cleanliness %s", v.Clean)
+	}
+	if len(v.Points) != 1 || v.Points[0].MS != 12 {
+		t.Fatalf("HEAD sample dropped: %+v", v.Points)
+	}
+}
+
+func TestConfiguredHopKeepsReachabilityLight(t *testing.T) {
+	flagged := true
+	doc := Doc{
+		IPv4: "203.0.113.9", Country: "NL", Proxy: &flagged, Hosting: &flagged,
+		VirtualHop:  true,
+		Antigravity: Service{State: "eligible", HTTP: 401, Reason: "auth boundary reached"},
+	}
+	v := Apply(monitor.View{}, doc)
+	if v.Service != monitor.Green {
+		t.Fatalf("light %s (%s)", v.Service, v.ServiceText)
+	}
+}
