@@ -1591,10 +1591,10 @@ pub(crate) fn verify_connection_sync(
         command.arg("--speed");
     }
     let output = bounded_output(&mut command).map_err(|error| error.to_string())?;
-    if let Ok(result) = serde_json::from_slice::<Value>(&output.stdout) {
-        if let Ok(sanitized) = sanitize_egress_verification(result) {
-            return Ok(sanitized);
-        }
+    if let Ok(result) = serde_json::from_slice::<Value>(&output.stdout)
+        && let Ok(sanitized) = sanitize_egress_verification(result)
+    {
+        return Ok(sanitized);
     }
     Err(clean_output(&output))
 }
@@ -1665,10 +1665,10 @@ pub(crate) fn probe_profiles_sync(
         .arg(concurrency.to_string())
         .arg("--json");
     let output = bounded_output(&mut command).map_err(|error| error.to_string())?;
-    if let Ok(result) = serde_json::from_slice::<Value>(&output.stdout) {
-        if let Ok(sanitized) = sanitize_probe_collection(result) {
-            return Ok(sanitized);
-        }
+    if let Ok(result) = serde_json::from_slice::<Value>(&output.stdout)
+        && let Ok(sanitized) = sanitize_probe_collection(result)
+    {
+        return Ok(sanitized);
     }
     Err(clean_output(&output))
 }

@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/mazurovn/mazzy-vpn/core"
 	"github.com/mazurovn/mazzy-vpn/core/bootrecovery"
@@ -28,6 +29,7 @@ import (
 	"github.com/mazurovn/mazzy-vpn/core/netexec"
 	"github.com/mazurovn/mazzy-vpn/core/profile"
 	"github.com/mazurovn/mazzy-vpn/core/routes"
+	"github.com/mazurovn/mazzy-vpn/core/transport"
 )
 
 // ErrBootRecoveryPending is returned by Up when the boot-recovery gate has not
@@ -46,6 +48,9 @@ type Conn struct {
 	guard  *guard.Guard
 	runner netexec.Runner
 
+	// Path is the UDP endpoint the handshake settled on. Transport is "udp".
+	Path transport.Result
+
 	ipv6GuardOn bool
 	routesOn    bool
 	dnsOn       bool
@@ -63,6 +68,12 @@ type Options struct {
 	// Uplink, when set, pins the encrypted-traffic egress to this physical
 	// interface (U7). Empty uses the default route.
 	Uplink string
+	// DisablePortFallback keeps only the configured UDP port. The default
+	// tries the corporate UDP ports in core/transport when the handshake
+	// does not complete.
+	DisablePortFallback bool
+	// HandshakeWait bounds each UDP port. Zero uses transport.DefaultHandshakeWait.
+	HandshakeWait time.Duration
 }
 
 // Up brings a wireguard/amneziawg connection fully online from a parsed config.
@@ -101,14 +112,34 @@ func Up(ctx context.Context, proto core.Protocol, cfg *profile.Config, opts Opti
 	}
 	c.ipv6GuardOn = true
 
+	// Resolve before the engine: amneziawg-go accepts only numeric endpoints.
+	// This stays after the guard so a boot-gate or guard failure never waits
+	// on DNS.
+	resolved, err := transport.ResolveEndpoint(ctx, cfg.Endpoint(), nil)
+	if err != nil {
+		c.unwind(ctx)
+		return nil, fmt.Errorf("resolve endpoint: %w", err)
+	}
+	engCfg := withEndpoint(cfg, resolved)
+
 	// 2. Bring up the crypto engine + TUN.
-	eng, err := wireguard.Up(proto, cfg, mark, opts.LogLevel)
+	eng, err := wireguard.Up(proto, engCfg, mark, opts.LogLevel)
 	if err != nil {
 		c.unwind(ctx)
 		return nil, fmt.Errorf("engine up: %w", err)
 	}
 	c.engine = eng
 	c.Interface = eng.Interface
+	c.Path = transport.Result{Configured: cfg.Endpoint(), Endpoint: resolved, Transport: "udp"}
+	if cands, cerr := transport.Candidates(resolved); cerr == nil && len(cands) > 0 {
+		c.Path.Port = cands[0].Port
+		c.Path.Endpoint = cands[0].Endpoint
+	}
+	if !opts.DisablePortFallback {
+		if pub, ka, ok := endpointPeer(engCfg); ok {
+			c.Path = transport.Seek(ctx, peerLink{eng: eng, pub: pub, ka: ka}, cfg.Endpoint(), resolved, opts.HandshakeWait)
+		}
+	}
 
 	// 2b. If the kernel assigned a different real interface name than the
 	//     deterministic one we pre-armed the guard with (audit C4), re-affirm
@@ -124,9 +155,10 @@ func Up(ctx context.Context, proto core.Protocol, cfg *profile.Config, opts Opti
 	}
 
 	// 3. Addresses + policy routing on the real interface name.
-	c.routes = routes.New(runner, eng.Interface, cfg)
+	// engCfg carries the resolved IP so the endpoint host route can be pinned.
+	c.routes = routes.New(runner, eng.Interface, engCfg)
 	c.routes.Uplink = opts.Uplink
-	if err := c.routes.Up(ctx, cfg); err != nil {
+	if err := c.routes.Up(ctx, engCfg); err != nil {
 		c.unwind(ctx)
 		return nil, fmt.Errorf("routes up: %w", err)
 	}

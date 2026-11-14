@@ -72,6 +72,37 @@ func TestNoLiveServer(t *testing.T) {
 	}
 }
 
+func TestCorporateUDPBlockedWhenTCPReaches(t *testing.T) {
+	r := Analyze(Signal{
+		HasUplink: true, InternetOK: true, ProfilesImported: 4, AnyServerAlive: false,
+		TCPReachesHost: true,
+	})
+	if r.Healthy() {
+		t.Fatal("filtered UDP should be critical")
+	}
+	p := r.Problems[0]
+	if !strings.Contains(p.Title, "TCP/443") {
+		t.Fatalf("title = %q", p.Title)
+	}
+	if !strings.Contains(p.Cause, "http2") || !strings.Contains(p.Cause, "quic") {
+		t.Fatalf("cause should name AdGuard's protocols: %s", p.Cause)
+	}
+	if !strings.Contains(p.Cause, "443") {
+		t.Fatalf("cause should name the UDP fallback port: %s", p.Cause)
+	}
+}
+
+func TestWorkingTunnelBeatsSilentICMP(t *testing.T) {
+	r := Analyze(Signal{
+		HasUplink: true, InternetOK: true, ProfilesImported: 2, AnyServerAlive: false,
+		TCPReachesHost: true,
+		TunnelIface:    "vpnaw0", TunnelLinkUp: true, EgressOK: true, EgressIP: "203.0.113.9",
+	})
+	if !r.Healthy() || !strings.Contains(r.Summary, "Protected") {
+		t.Fatalf("a carrying tunnel is protected even when ICMP is silent: %+v", r)
+	}
+}
+
 func TestConflictVPNWhenConnected(t *testing.T) {
 	r := Analyze(Signal{
 		HasUplink: true, InternetOK: true, ProfilesImported: 10, AnyServerAlive: true,

@@ -68,6 +68,8 @@ func run(args []string) int {
 		return cmdTrace(ctx, rest)
 	case "stealth", "leaks":
 		return cmdStealth(ctx, rest)
+	case "egress":
+		return cmdEgress(ctx, rest)
 	case "mimic", "timezone":
 		return cmdMimic(ctx, rest)
 	case "dns-check", "dns":
@@ -156,7 +158,8 @@ Usage:
   mazzy-vpn netdiag [--json]          analyze the network + suggest fixes
   mazzy-vpn diagnose [--json]         root-cause analysis: what's wrong + fixes
   mazzy-vpn trace [ZONE] [--json]     packet path: DNS→server→tunnel→egress
-  mazzy-vpn stealth [--json]          detection risks (IPv6/DNS/timezone/ASN)
+	mazzy-vpn stealth [--json]          detection risks (IPv6/DNS/timezone/ASN)
+  mazzy-vpn egress [--json]           public IP, leak signals, Antigravity reachability
   sudo mazzy-vpn mimic [--apply]      align timezone to egress (look local)
   mazzy-vpn dns-check [--json]        DNS privacy: in-country + encrypted?
   mazzy-vpn control id|pair|list      control-plane identity & pairing

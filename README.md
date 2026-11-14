@@ -158,6 +158,45 @@ mazzy-vpn control id                 # this node's control-plane identity
 See the [Go CLI wiki page](https://github.com/mazurovn/mazzy-vpn/wiki/Go-CLI)
 for the full command reference in all six languages.
 
+## Linux desktop
+
+[`mazzy-vpn-desktop/`](mazzy-vpn-desktop/) is the gio window from ADR-0004. The
+top bar is the name, status, server, protocol, connect, and disconnect. Under
+it, one row holds the Panel and Log tabs and a menu bar: connection, recovery,
+network, protection, catalog, and system. Each title opens a submenu. The
+server list is the wide column on the panel. The right side is the dashboard:
+one sentence while nothing has been measured, then a strip and a chart only
+after a real measurement. Menus are solid dropdowns. Connect, reconnect, and
+disconnect talk to
+`/run/mazzy-vpn/api-v1.sock` as the current user and do not call pkexec or
+sudo. The window copy is Russian unless `MAZZY_LANG` names another catalog.
+`mazzy-vpn egress` is the check behind the egress, cleanliness, and
+Antigravity lights, and only after a tunnel is actually up. Build the window
+with `CGO_ENABLED=1` (a C compiler plus X11/Wayland headers). The window
+stays unprivileged: a missing socket or a missing `mazzy-vpn` group stays
+disconnected with one reason, and the window does not ask for a password.
+
+The same top-bar actions are in [`desktop/panels/`](desktop/panels/).
+`mazzy-panel` prints status and elevates connect and disconnect. Copy
+`desktop/panels/gnome/mazzy-vpn@mazurovn.github.com/` to
+`~/.local/share/gnome-shell/extensions/` for GNOME Shell. Copy `custom/mazzy`
+from `desktop/panels/mango/mazzy.jsonc` into `~/.config/mangobar/config.jsonc`
+and list it in a modules row; that file is also a complete bar config. Mazy OS
+has no panel format in this repo, so `desktop/panels/mazy/mazzy-indicator.py`
+registers a StatusNotifier/AppIndicator item, which is how the existing Linux
+desktop already puts status in the bar.
+
+```bash
+cd mazzy-vpn-desktop
+CGO_ENABLED=1 go build -o mazzy-vpn-desktop ./cmd/mazzy-vpn-desktop
+./mazzy-vpn-desktop
+```
+
+On a network that drops WireGuard's UDP port, connect tries the configured
+port and then UDP 443, 51820, 123, 53, and 1194. A port counts only after a
+handshake, and only if the server listens there. This client does not speak
+the HTTP/2 path AdGuard VPN CLI uses.
+
 ## Author and license
 
 Mazzy VPN was created by [Nik m (@mazurovn)](https://github.com/mazurovn).

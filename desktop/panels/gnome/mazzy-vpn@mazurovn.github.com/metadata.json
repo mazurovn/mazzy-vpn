@@ -1,0 +1,8 @@
+{
+  "uuid": "mazzy-vpn@mazurovn.github.com",
+  "name": "Mazzy VPN",
+  "description": "Top bar: status, server, protocol, connect and disconnect.",
+  "shell-version": ["45", "46", "47", "48", "49"],
+  "url": "https://github.com/mazurovn/mazzy-vpn",
+  "version": 1
+}
